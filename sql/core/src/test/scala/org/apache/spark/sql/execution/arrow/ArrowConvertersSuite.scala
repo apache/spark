@@ -1414,7 +1414,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
       spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     val arrowBatches = indexData.toArrowBatchRdd.collect().toIterator
     assert(arrowBatches.nonEmpty)
-    val allocator = ArrowUtils.getDefaultAllocator
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("ArrowConvertersSuiteTest", 0, Long.MaxValue)
     val arrowRecordBatchIter =
       arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
 
@@ -1440,6 +1441,151 @@ class ArrowConvertersSuite extends SharedSparkSession {
       val struct1 = columnarBatch.column(7).getStruct(0)
       assert(struct1.getUTF8String(0).toString == "Bobby G. can't swim")
     })
+    allocator.close()
+  }
+
+  test("convert from ColumnarBatch to ArrowRecordBatch") {
+    val data = Seq(
+      Row(
+        "0", 0, 0.1f, 0.toShort, List[Int](1, 2, 3)))
+
+    val schema = StructType(
+      Seq(
+        StructField("string", StringType, true),
+        StructField("int", IntegerType, true),
+        StructField("float", FloatType, true),
+        StructField("short", ShortType, true),
+        StructField("array", ArrayType(IntegerType), true)))
+
+    val indexData =
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val arrowBatches = indexData.toArrowBatchRdd.collect().toIterator
+    assert(arrowBatches.nonEmpty)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("ArrowConvertersSuiteTest", 0, Long.MaxValue)
+    val arrowRecordBatchIter =
+      arrowBatches.map(ArrowConverters.loadBatch(_, allocator))
+
+    val columnarBatchIter =
+      ArrowConverters.toColumnarBatchIterator(
+        arrowRecordBatchIter, schema, null, TaskContext.empty())
+
+    val outputArrowRecordBatchIter =
+      ArrowConverters.fromColumnarBatchIterator(
+        columnarBatchIter, schema, null, TaskContext.empty())
+
+    // to validate result
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "string",
+         |      "type" : {
+         |        "name" : "utf8"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    }, {
+         |      "name" : "int",
+         |      "type" : {
+         |        "name" : "int",
+         |        "isSigned" : true,
+         |        "bitWidth" : 32
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    }, {
+         |      "name" : "float",
+         |      "type" : {
+         |        "name" : "floatingpoint",
+         |        "precision" : "SINGLE"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    }, {
+         |      "name" : "short",
+         |      "type" : {
+         |        "name" : "int",
+         |        "isSigned" : true,
+         |        "bitWidth" : 16
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    }, {
+         |      "name" : "array",
+         |      "type" : {
+         |        "name" : "list"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "nullable" : false,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "nullable" : true,
+         |        "children" : [ ]
+         |      } ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 1,
+         |    "columns" : [ {
+         |      "name" : "string",
+         |      "count" : 1,
+         |      "VALIDITY" : [ 1 ],
+         |      "OFFSET" : [ 0, 1 ],
+         |      "DATA" : [ "0" ]
+         |    }, {
+         |      "name" : "int",
+         |      "count" : 1,
+         |      "VALIDITY" : [ 1 ],
+         |      "DATA" : [ 0 ]
+         |    }, {
+         |      "name" : "float",
+         |      "count" : 1,
+         |      "VALIDITY" : [ 1 ],
+         |      "DATA" : [ 0.1 ]
+         |    }, {
+         |      "name" : "short",
+         |      "count" : 1,
+         |      "VALIDITY" : [ 1 ],
+         |      "DATA" : [ 0 ]
+         |    }, {
+         |      "name" : "array",
+         |      "count" : 1,
+         |      "VALIDITY" : [ 1 ],
+         |      "OFFSET" : [ 0, 3 ],
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "count" : 3,
+         |        "VALIDITY" : [ 1, 1, 1 ],
+         |        "DATA" : [ 1, 2, 3 ]
+         |      } ]
+         |    } ]
+         |  } ]
+         |}
+      """.stripMargin
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, null)
+    val arrowRoot = VectorSchemaRoot.create(arrowSchema, allocator)
+    val vectorLoader = new VectorLoader(arrowRoot)
+    val tempFile = new File(tempDataPath, "testData-mixed-types.json")
+    Files.write(json, tempFile, StandardCharsets.UTF_8)
+    val jsonReader = new JsonFileReader(tempFile, allocator)
+    val jsonSchema = jsonReader.start()
+    Validator.compareSchemas(arrowSchema, jsonSchema)
+    val jsonRoot = jsonReader.read()
+    outputArrowRecordBatchIter.foreach(arrowRecordBatch => {
+      vectorLoader.load(arrowRecordBatch)
+      Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)
+    })
+    jsonRoot.close()
+    jsonReader.close()
+    arrowRoot.close()
+    allocator.close()
   }
 
   test("ArrowBatchStreamWriter roundtrip") {

@@ -266,14 +266,52 @@ private[sql] object ArrowConverters {
       schema: StructType,
       timeZoneId: String,
       context: TaskContext): Iterator[ArrowRecordBatch] = {
-    columnarBatchIter.map(columnarBatch => {
-      val arrowVectors = (0 until columnarBatch.numCols).map(i => {
-        columnarBatch.column(i).asInstanceOf[ArrowColumnVector].getArrowVector()
-      }).map(_.asInstanceOf[FieldVector])
-      val root = new VectorSchemaRoot(arrowVectors.asJava)
-      val unloader = new VectorUnloader(root)
-      unloader.getRecordBatch()
-    })
+    new Iterator[ArrowRecordBatch] {
+      private var nextArrowRecordBatch: ArrowRecordBatch = _
+      private var holdNext: Boolean = false
+      private var root: VectorSchemaRoot = _
+
+      context.addTaskCompletionListener[Unit] { _ =>
+        if (nextArrowRecordBatch != null) {
+          nextArrowRecordBatch.close()
+          nextArrowRecordBatch = null
+        }
+        if (root != null) root.close()
+      }
+
+      override def hasNext: Boolean = holdNext || {
+        if (nextArrowRecordBatch != null) {
+          nextArrowRecordBatch.close()
+          nextArrowRecordBatch = null
+        }
+        if (columnarBatchIter.hasNext) {
+          nextArrowRecordBatch = nextBatch()
+          holdNext = true
+          true
+        } else {
+          if (root != null) root.close()
+          false
+        }
+      }
+
+      override def next(): ArrowRecordBatch = {
+        holdNext = false
+        nextArrowRecordBatch
+      }
+
+      private def nextBatch(): ArrowRecordBatch = {
+        val columnarBatch = columnarBatchIter.next()
+        val arrowVectors = (0 until columnarBatch.numCols).map(i => {
+          columnarBatch.column(i).asInstanceOf[ArrowColumnVector].getArrowVector()
+        }).map(_.asInstanceOf[FieldVector])
+        if (root != null) root.close()
+        root = new VectorSchemaRoot(arrowVectors.asJava)
+        val unloader = new VectorUnloader(root)
+        val arrowRecordBatch = unloader.getRecordBatch()
+        columnarBatch.close()
+        arrowRecordBatch
+      }
+    }
   }
 
   /**

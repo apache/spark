@@ -31,7 +31,6 @@ import org.apache.spark.sql.types._
 private[sql] object ArrowUtils {
 
   val rootAllocator = new RootAllocator(Long.MaxValue)
-  def getDefaultAllocator: RootAllocator = rootAllocator
 
   // todo: support more types.
 
