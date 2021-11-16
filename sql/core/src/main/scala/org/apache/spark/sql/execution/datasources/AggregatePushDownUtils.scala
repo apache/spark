@@ -94,9 +94,20 @@ object AggregatePushDownUtils {
 
     if (aggregation.groupByColumns.nonEmpty &&
       partitionNames.size != aggregation.groupByColumns.length) {
+      // If there are group by columns, we only push down if the group by columns are the same as
+      // the partition columns. In theory, if group by columns are a subset of partition columns,
+      // we should still be able to push down. e.g. if table t has partition columns p1, p2, and p3,
+      // SELECT MAX(c) FROM t GROUP BY p1, p2 should still be able to push down. However, the
+      // partial aggregation pushed down to data source needs to be
+      // SELECT p1, p2, p3, MAX(c) FROM t GROUP BY p1, p2, p3, and Spark layer
+      // needs to have a final aggregation such as SELECT MAX(c) FROM t GROUP BY p1, p2, then the
+      // pushed down query schema is different from the query schema at Spark. We will keep
+      // aggregate push down simple and don't handle this complicate case for now.
       return None
     }
     aggregation.groupByColumns.foreach { col =>
+      // don't push down if the group by columns are not the same as the partition columns (orders
+      // doesn't matter because reorder can be done at data source layer)
       if (col.fieldNames.length != 1 || !isPartitionCol(col)) return None
       finalSchema = finalSchema.add(getStructFieldForCol(col))
     }
@@ -150,8 +161,8 @@ object AggregatePushDownUtils {
    * Return the schema for aggregates only (exclude group by columns)
    */
   def getSchemaWithoutGroupingExpression(
-      aggregation: Aggregation,
-      aggSchema: StructType): StructType = {
+      aggSchema: StructType,
+      aggregation: Aggregation): StructType = {
     val numOfGroupByColumns = aggregation.groupByColumns.length
     if (numOfGroupByColumns > 0) {
       new StructType(aggSchema.fields.drop(numOfGroupByColumns))

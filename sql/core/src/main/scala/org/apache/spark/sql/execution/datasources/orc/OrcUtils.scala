@@ -460,7 +460,7 @@ object OrcUtils extends Logging {
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
     val schemaWithoutGroupBy =
-      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
 
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {

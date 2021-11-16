@@ -309,7 +309,7 @@ trait FileSourceAggregatePushDownSuite
                 val expected_plan_fragment =
                   "PushedAggregation: [COUNT(*), COUNT(value), MAX(value), MIN(value)]," +
                     " PushedFilters: [], PushedGroupBy: [p1, p2, p3, p4]"
-                // checkKeywordsExistsInExplain(df, expected_plan_fragment)
+                checkKeywordsExistsInExplain(df, expected_plan_fragment)
             }
             checkAnswer(df, Seq(Row(1, 1, 5, 5, 8, 1, 5, 2), Row(1, 1, 4, 4, 9, 1, 4, 2),
               Row(2, 2, 6, 3, 8, 1, 4, 2), Row(4, 4, 10, 1, 6, 2, 5, 1),

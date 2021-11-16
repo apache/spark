@@ -170,7 +170,7 @@ object ParquetUtils {
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
     val schemaWithoutGroupBy =
-      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggregation, aggSchema)
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
 
     val schemaConverter = new ParquetToSparkSchemaConverter
     val converter = new ParquetRowConverter(schemaConverter, parquetSchema, schemaWithoutGroupBy,
