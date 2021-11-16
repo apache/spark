@@ -3271,10 +3271,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def to_koalas(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_koalas is deprecated. Use DataFrame.pandas_api instead.",
-            FutureWarning,
-        )
         return self.pandas_api(index_col)
 
 
