@@ -2371,4 +2371,8 @@ object QueryCompilationErrors {
     new AnalysisException(
       s"Invalid view text: $viewText. The view $tableName may have been tampered with")
   }
+
+  def invalidTimeTravelSpecError(errorMessage: String): Throwable = {
+    new AnalysisException(errorMessage)
+  }
 }

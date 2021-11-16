@@ -122,8 +122,8 @@ private[sql] object DataSourceV2Utils extends Logging {
         val version = hasCatalog.extractTimeTravelVersion(dsOptions)
         val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)
 
-        val timeTravelVersion = if (version.isEmpty) None else Some(version.get)
-        val timeTravelTimestamp = if (timestamp.isEmpty) None else Some(timestamp.get)
+        val timeTravelVersion = if (version.isPresent) Some(version.get) else None
+        val timeTravelTimestamp = if (timestamp.isPresent) Some(timestamp.get) else None
         val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion)
         (CatalogV2Util.loadTable(catalog, ident, timeTravel).get, Some(catalog), Some(ident))
       case _ =>
