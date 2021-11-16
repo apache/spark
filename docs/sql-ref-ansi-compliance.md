@@ -531,6 +531,8 @@ Below is a list of all the keywords in Spark SQL.
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
 |SYNC|non-reserved|non-reserved|non-reserved|
+|SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
+|SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|
 |TABLES|non-reserved|non-reserved|non-reserved|
 |TABLESAMPLE|non-reserved|non-reserved|reserved|
@@ -540,6 +542,7 @@ Below is a list of all the keywords in Spark SQL.
 |TERMINATED|non-reserved|non-reserved|non-reserved|
 |THEN|reserved|non-reserved|reserved|
 |TIME|reserved|non-reserved|reserved|
+|TIMESTAMP|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|
@@ -564,6 +567,7 @@ Below is a list of all the keywords in Spark SQL.
 |USER|reserved|non-reserved|reserved|
 |USING|reserved|strict-non-reserved|reserved|
 |VALUES|non-reserved|non-reserved|reserved|
+|VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|

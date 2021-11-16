@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -2945,6 +2946,58 @@ class DataSourceV2SQLSuite
               Row(7, Period.ofYears(8), Duration.ofDays(9))))
         }
       }
+    }
+  }
+
+  test("Mock time travel test") {
+    sql("use testcat")
+    val t1 = "testcat.tSnapshot123456789"
+    val t2 = "testcat.t2345678910"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+
+      sql(s"INSERT INTO $t1 VALUES (1)")
+      sql(s"INSERT INTO $t1 VALUES (2)")
+      sql(s"INSERT INTO $t2 VALUES (3)")
+      sql(s"INSERT INTO $t2 VALUES (4)")
+
+      assert(sql("SELECT * FROM t VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+    }
+
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val ts2 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2021-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val t3 = s"testcat.t$ts1"
+    val t4 = s"testcat.t$ts2"
+
+    withTable(t3, t4) {
+      sql(s"CREATE TABLE $t3 (id int) USING foo")
+      sql(s"CREATE TABLE $t4 (id int) USING foo")
+
+      sql(s"INSERT INTO $t3 VALUES (5)")
+      sql(s"INSERT INTO $t3 VALUES (6)")
+      sql(s"INSERT INTO $t4 VALUES (7)")
+      sql(s"INSERT INTO $t4 VALUES (8)")
+
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
     }
   }
 
