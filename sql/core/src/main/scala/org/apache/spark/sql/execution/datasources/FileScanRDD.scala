@@ -155,6 +155,7 @@ class FileScanRDD(
                     currentFile.filePath.split("/").last)
                   case FILE_SIZE => currentFile.fileSize
                   case FILE_MODIFICATION_TIME => currentFile.modificationTime
+                  case _ => None // just be exhaustive, won't happen
                 }
               )
 
@@ -203,6 +204,7 @@ class FileScanRDD(
               columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.fileSize)
             case FILE_MODIFICATION_TIME =>
               columnVector.getChild(ind).putLongs(0, c.numRows(), currentFile.modificationTime)
+            case _ => // just be exhaustive, won't happen: no-op
           }
         }
         columnVector
