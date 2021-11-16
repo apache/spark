@@ -277,20 +277,24 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   }
 
   test("mock time travel test") {
-    sql(s"create table $catalogName.tSnapshot123456789 (id bigint) using $format")
-    sql(s"create table $catalogName.t2345678910 (id bigint) using $format")
+    val t1 = s"$catalogName.tSnapshot123456789"
+    val t2 = s"$catalogName.t2345678910"
+    withTable(t1, t2) {
+      sql(s"create table $t1 (id bigint) using $format")
+      sql(s"create table $t2 (id bigint) using $format")
 
-    val df1 = spark.range(10)
-    df1.write.format(format).option("name", "tSnapshot123456789").option("catalog", catalogName)
-      .mode(SaveMode.Append).save()
+      val df1 = spark.range(10)
+      df1.write.format(format).option("name", "tSnapshot123456789").option("catalog", catalogName)
+        .mode(SaveMode.Append).save()
 
-    val df2 = spark.range(10, 20)
-    df2.write.format(format).option("name", "t2345678910").option("catalog", catalogName)
-      .mode(SaveMode.Overwrite).save()
+      val df2 = spark.range(10, 20)
+      df2.write.format(format).option("name", "t2345678910").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
 
-    // load with version
-    checkAnswer(load("t", Some(catalogName), version = Some("Snapshot123456789")), df1.toDF())
-    checkAnswer(load("t", Some(catalogName), version = Some("2345678910")), df2.toDF())
+      // load with version
+      checkAnswer(load("t", Some(catalogName), version = Some("Snapshot123456789")), df1.toDF())
+      checkAnswer(load("t", Some(catalogName), version = Some("2345678910")), df2.toDF())
+    }
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2019-01-29 00:37:58"),
@@ -298,23 +302,26 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val ts2 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2021-01-29 00:37:58"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val t3 = s"$catalogName.t$ts1"
+    val t4 = s"$catalogName.t$ts2"
+    withTable(t3, t4) {
+      sql(s"create table $t3 (id bigint) using $format")
+      sql(s"create table $t4 (id bigint) using $format")
 
-    sql(s"create table $catalogName.t$ts1 (id bigint) using $format")
-    sql(s"create table $catalogName.t$ts2 (id bigint) using $format")
+      val df3 = spark.range(30, 40)
+      df3.write.format(format).option("name", s"t$ts1").option("catalog", catalogName)
+        .mode(SaveMode.Append).save()
 
-    val df3 = spark.range(30, 40)
-    df3.write.format(format).option("name", s"t$ts1").option("catalog", catalogName)
-      .mode(SaveMode.Append).save()
+      val df4 = spark.range(50, 60)
+      df4.write.format(format).option("name", s"t$ts2").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
 
-    val df4 = spark.range(50, 60)
-    df4.write.format(format).option("name", s"t$ts2").option("catalog", catalogName)
-      .mode(SaveMode.Overwrite).save()
-
-    // load with timestamp
-    checkAnswer(load("t", Some(catalogName), version = None,
-      timestamp = Some("2019-01-29 00:37:58")), df3.toDF())
-    checkAnswer(load("t", Some(catalogName), version = None,
-      timestamp = Some("2021-01-29 00:37:58")), df4.toDF())
+      // load with timestamp
+      checkAnswer(load("t", Some(catalogName), version = None,
+        timestamp = Some("2019-01-29 00:37:58")), df3.toDF())
+      checkAnswer(load("t", Some(catalogName), version = None,
+        timestamp = Some("2021-01-29 00:37:58")), df4.toDF())
+    }
 
     val e = intercept[AnalysisException] {
       load("t", Some(catalogName), version = Some("12345678"),

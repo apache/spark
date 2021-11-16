@@ -1257,27 +1257,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val version: Option[String] =
-      if (ctx.temporalClause != null && ctx.temporalClause.version != null) {
-        if (ctx.temporalClause.version.getText.forall(Character.isDigit)) {
-          Some(ctx.temporalClause.version.getText)
-        } else {
-          Some(string(ctx.temporalClause.version))
-        }
-      } else {
-        None
-      }
     val timeTravel = if (ctx.temporalClause != null) {
-      TimeTravelSpec.create(
-        Option(ctx.temporalClause.timestamp).map(string),
-        version)
+      val v = ctx.temporalClause.version
+      val version =
+        if (ctx.temporalClause.INTEGER_VALUE != null) Some(v.getText) else Option(v).map(string)
+      TimeTravelSpec.create(Option(ctx.temporalClause.timestamp).map(string), version)
     } else {
       None
     }
 
     val table = mayApplyAliasPlan(ctx.tableAlias,
-      UnresolvedRelation(tableId,
-        timeTravelSpec = timeTravel))
+      UnresolvedRelation(tableId, timeTravelSpec = timeTravel))
     table.optionalMap(ctx.sample)(withSample)
   }
 

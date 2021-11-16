@@ -370,8 +370,7 @@ private[sql] case class AsOfVersion(version: String) extends TimeTravelSpec
 private[sql] object TimeTravelSpec {
   def create(timestamp: Option[String], version: Option[String]) : Option[TimeTravelSpec] = {
     if (timestamp.nonEmpty && version.nonEmpty) {
-      throw QueryCompilationErrors.invalidTimeTravelSpecError(
-        "Cannot specify both version and timestamp when scanning the table.")
+      throw QueryCompilationErrors.invalidTimeTravelSpecError()
     } else if (timestamp.nonEmpty) {
       val ts = DateTimeUtils.stringToTimestampAnsi(
         UTF8String.fromString(timestamp.get),

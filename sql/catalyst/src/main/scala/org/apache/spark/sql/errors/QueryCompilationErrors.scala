@@ -2372,7 +2372,7 @@ object QueryCompilationErrors {
       s"Invalid view text: $viewText. The view $tableName may have been tampered with")
   }
 
-  def invalidTimeTravelSpecError(errorMessage: String): Throwable = {
-    new AnalysisException(errorMessage)
+  def invalidTimeTravelSpecError(): Throwable = {
+    new AnalysisException("Cannot specify both version and timestamp when scanning the table.")
   }
 }
