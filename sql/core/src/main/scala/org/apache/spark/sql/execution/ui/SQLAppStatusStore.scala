@@ -79,7 +79,25 @@ class SQLAppStatusStore(
   def planGraph(executionId: Long): SparkPlanGraph = {
     store.read(classOf[SparkPlanGraphWrapper], executionId).toSparkPlanGraph()
   }
+
+  def getStageAttempt(executionId: Long): List[(Int, Int)] = {
+    store.read(classOf[StageAttempt], executionId).stageAttempts
+  }
+
+  def getGraphStages(executionId: Long): Map[Long, List[Int]] = {
+    store.read(classOf[GraphNodeToStages], executionId).stages
+  }
 }
+
+case class StageAttempt(
+ @KVIndexParam val executionId: Long,
+ val stageAttempts: List[(Int, Int)]
+)
+
+case class GraphNodeToStages(
+  @KVIndexParam val executionId: Long,
+  val stages: Map[Long, List[Int]]
+)
 
 class SQLExecutionUIData(
     @KVIndexParam val executionId: Long,

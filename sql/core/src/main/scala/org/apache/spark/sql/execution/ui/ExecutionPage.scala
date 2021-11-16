@@ -75,6 +75,12 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
+            <li>
+              <strong>Completed Stages: </strong>
+              {sqlStore.getStageAttempt(executionId).sorted.map { case (stage, attempt) =>
+              <a href={stageURL(request, stage, attempt)}>{stage}</a><span>&nbsp;</span>
+            }}
+            </li>
           </ul>
         </div>
         <div>
@@ -84,9 +90,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
+      val stagesGraph = sqlStore.getGraphStages(executionId)
 
       summary ++
-        planVisualization(request, metrics, graph) ++
+        planVisualization(request, metrics, graph, stagesGraph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(
           executionUIData.modifiedConfigs.filterKeys(
@@ -115,7 +122,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private def planVisualization(
       request: HttpServletRequest,
       metrics: Map[Long, String],
-      graph: SparkPlanGraph): Seq[Node] = {
+      graph: SparkPlanGraph,
+      stagesGraph: Map[Long, List[Int]]): Seq[Node] = {
     val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>
@@ -125,7 +133,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <div id="plan-viz-graph"></div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
-          {graph.makeDotFile(metrics)}
+          {graph.makeDotFile(metrics, stagesGraph)}
         </div>
         <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
         {metadata}
@@ -137,6 +145,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def jobURL(request: HttpServletRequest, jobId: Long): String =
     "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+
+  private def stageURL(request: HttpServletRequest, stageId: Int, attemptId: Int): String =
+    "%s/stages/stage/?id=%s&attempt=%s".format(
+      UIUtils.prependBaseUri(request, parent.basePath), stageId, attemptId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

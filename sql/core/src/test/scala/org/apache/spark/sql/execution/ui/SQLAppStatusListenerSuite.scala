@@ -551,6 +551,10 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     assertJobs(statusStore.execution(0), completed = 0 to 1)
     assert(statusStore.execution(0).get.stages === (0 to 3).toSet)
+
+    // Check stage and attemptID are gathered correctly.
+    val stageAttempt = statusStore.getStageAttempt(executionId)
+    assert(stageAttempt.length == 4)
   }
 
   test("SPARK-11126: no memory leak when running non SQL jobs") {

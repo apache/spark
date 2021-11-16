@@ -35,10 +35,10 @@ import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
-  def makeDotFile(metrics: Map[Long, String]): String = {
+  def makeDotFile(metrics: Map[Long, String], stagesGraph: Map[Long, List[Int]]): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
+    nodes.foreach(node => dotFile.append(node.makeDotNode(metrics, stagesGraph) + "\n"))
     edges.foreach(edge => dotFile.append(edge.makeDotEdge + "\n"))
     dotFile.append("}")
     dotFile.toString()
@@ -51,6 +51,12 @@ case class SparkPlanGraph(
     nodes.flatMap {
       case cluster: SparkPlanGraphCluster => cluster.nodes :+ cluster
       case node => Seq(node)
+    }
+  }
+
+  def getAllIds: Seq[Long] = {
+    allNodes.map {
+      node => node.id
     }
   }
 }
@@ -159,7 +165,7 @@ class SparkPlanGraphNode(
     val desc: String,
     val metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode(metricsValue: Map[Long, String]): String = {
+  def makeDotNode(metricsValue: Map[Long, String], stagesGraph: Map[Long, List[Int]]): String = {
     val builder = new mutable.StringBuilder("<b>" + name + "</b>")
 
     val values = for {
@@ -179,6 +185,9 @@ class SparkPlanGraphNode(
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "<br><br>"
+      if (!stagesGraph.getOrElse(id, List()).isEmpty) {
+        builder ++= "Stages: " + stagesGraph.getOrElse(id, List()).mkString(",") + "\n"
+      }
       builder ++= values.mkString("<br>")
       val labelStr = StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
       s"""  $id [labelType="html" label="${labelStr}"];"""
@@ -201,13 +210,16 @@ class SparkPlanGraphCluster(
     metrics: Seq[SQLPlanMetric])
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
-  override def makeDotNode(metricsValue: Map[Long, String]): String = {
+  override def makeDotNode(metricsValue: Map[Long, String],
+                           stagesGraph: Map[Long, List[Int]]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
+    val stageStr = if (!stagesGraph.getOrElse(id, List()).isEmpty) {
+      "Stages: " + stagesGraph.getOrElse(this.id, List()).mkString(",") + "\n" } else " "
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(id)) {
-        name + "\n \n" + duration(0).name + ": " + metricsValue(id)
+        name + "\n \n" + stageStr + duration(0).name + ": " + metricsValue(id)
       } else {
         name
       }
@@ -218,7 +230,7 @@ class SparkPlanGraphCluster(
        |  subgraph cluster${id} {
        |    isCluster="true";
        |    label="${StringEscapeUtils.escapeJava(labelStr)}";
-       |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
+       |    ${nodes.map(_.makeDotNode(metricsValue, stagesGraph)).mkString("    \n")}
        |  }
      """.stripMargin
   }

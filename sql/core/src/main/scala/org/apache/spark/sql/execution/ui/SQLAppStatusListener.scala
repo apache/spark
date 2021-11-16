@@ -51,10 +51,11 @@ class SQLAppStatusListener(
   // thread-safe.
   private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
   private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
+  private val stageAccumulators = new ConcurrentHashMap[Int, Seq[Long]]()
 
   // Returns true if this listener has no live data. Exposed for tests only.
   private[sql] def noLiveData(): Boolean = {
-    liveExecutions.isEmpty && stageMetrics.isEmpty
+    liveExecutions.isEmpty && stageMetrics.isEmpty && stageAccumulators.isEmpty
   }
 
   kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get[Int](UI_RETAINED_EXECUTIONS)) { count =>
@@ -138,6 +139,30 @@ class SQLAppStatusListener(
     }
   }
 
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    if (!isSQLStage(stageCompleted.stageInfo.stageId)) {
+      return
+    }
+    val stageNum = stageCompleted.stageInfo.stageId
+    val attemptID = stageCompleted.stageInfo.attemptNumber()
+
+    // gets the executionID that finished the stage
+    val liveExecution = liveExecutions.values().asScala
+    val execID = liveExecution.filter(_.stages.contains(stageNum)).head.executionId
+
+    // adds stage and attempt number to store for rendering on SQL UI.
+    val stageAttempt = kvstore.read(classOf[StageAttempt], execID)
+    val stageComplete = (stageNum, attemptID)
+    val addStageAttempts = stageAttempt.stageAttempts :+ stageComplete
+    val updateStageAttempt = StageAttempt(execID, addStageAttempts)
+    val stageAccumulatorIds = stageCompleted.stageInfo.accumulables.values.map { m => m.id }.toSeq
+    if (stageAccumulatorIds.nonEmpty) {
+      stageAccumulators.put(stageNum, stageAccumulatorIds)
+    }
+    kvstore.write(updateStageAttempt)
+
+  }
+
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {
     liveExecutions.values().asScala.foreach { exec =>
       if (exec.jobs.contains(event.jobId)) {
@@ -200,6 +225,47 @@ class SQLAppStatusListener(
         aggregateMetrics(exec)
       }
     }
+  }
+
+  /* Connects Operators to Stages by doing the following:
+   * 1. Read SparkGraph to get every Node's name and respective AccumulatorIDs.
+   * 2. Gets each stage's AccumulatorIDs.
+   * 3. Maps Operators to stages by checking for non-zero intersection of 1 and 2's AccumulatorIDs.
+   * 4. Connect SparkGraphNodes to respective StageIDs for rendering in SQL UI.
+   */
+  private def connectOperatorToStage(exec: LiveExecutionData): Map[Long, List[Int]] = {
+    // Reads in SparkPlanGraph to get each Node's name and respective accumulatorIDs
+    // and saves it inside nodeNameToAccumulatorIds.
+    val planGraph = kvstore.read(classOf[SparkPlanGraphWrapper], exec.executionId)
+      .toSparkPlanGraph()
+    val nodeNameToAccumulatorIds = planGraph.allNodes.map { node =>
+      (node.name, node.metrics.map(_.accumulatorId)) }
+    logDebug("each Operator's Metrics represented by AccumulatorIds are: \n %s\n"
+      .format(nodeNameToAccumulatorIds.mkString("\n ")))
+
+    // Gets each stage and its list of distinct accumulatorIDs
+    // which is retrived upon completion of a stage.
+    val stageIdToAccumulatorIDs = stageAccumulators.asScala
+    logDebug("each Stage's Metrics represented by AccumulatorIds are: \n %s\n"
+      .format(stageIdToAccumulatorIDs.mkString("\n ")))
+
+    // Maps stages to operators by checking for non-zero intersection
+    // between nodeMetrics and stageAccumulateIDs
+    val operatorToStage = nodeNameToAccumulatorIds.map { case (nodeName, accumulatorIds1) =>
+      val mappedStages = stageIdToAccumulatorIDs.flatMap { case (stageId, accumulatorIds2) =>
+        if (accumulatorIds1.intersect(accumulatorIds2).nonEmpty) Some(stageId)
+        else None
+      }.toList.sorted
+      (nodeName, accumulatorIds1, mappedStages)
+    }
+    val operatorToStageString = operatorToStage.mkString("\n")
+    logDebug(s"Each Operator's AccumulatorIds and Stages are:\n $operatorToStageString")
+
+    // Connect SparkGraphNode IDs to StageIDs for rendering in SQL UI in
+    // SparkPlanGraph's makeDotFile.
+    val operatorStageID = operatorToStage.map(x => x._3).toList
+    val sparkGraphIDs = planGraph.getAllIds
+    sparkGraphIDs.zip(operatorStageID).toMap
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
@@ -297,6 +363,10 @@ class SQLAppStatusListener(
         Array.empty[Long]))
     }.toMap
 
+    // connects operators to stages which is then shown on the UI.
+    val operatorToStageMap = connectOperatorToStage(exec)
+    kvstore.write(GraphNodeToStages(exec.executionId, operatorToStageMap))
+
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
     // running at the same time. The metrics calculated for the UI can be inaccurate in that
@@ -352,6 +422,7 @@ class SQLAppStatusListener(
       toStoredNodes(planGraph.nodes),
       planGraph.edges)
     kvstore.write(graphToStore)
+    kvstore.write(StageAttempt(event.executionId, List()))
 
     val exec = getOrCreateExecution(executionId)
     exec.description = description
@@ -418,6 +489,9 @@ class SQLAppStatusListener(
     stageMetrics.keySet().asScala
       .filter(!activeStages.contains(_))
       .foreach(stageMetrics.remove)
+    stageAccumulators.keySet().asScala
+      .filter(!activeStages.contains(_))
+      .foreach(stageAccumulators.remove)
   }
 
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
