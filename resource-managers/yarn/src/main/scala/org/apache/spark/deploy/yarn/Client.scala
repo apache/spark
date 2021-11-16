@@ -905,6 +905,10 @@ private[spark] class Client(
       env(ENV_DIST_CLASSPATH) = dcp
     }
 
+    sys.env.get(SPARK_TESTING).foreach { testing =>
+      env(SPARK_TESTING) = testing
+    }
+
     env
   }
 
@@ -1353,6 +1357,8 @@ private object Client extends Logging {
   // Subdirectory where Spark libraries will be placed.
   val LOCALIZED_LIB_DIR = "__spark_libs__"
 
+  val SPARK_TESTING = "SPARK_TESTING"
+
   /**
    * Return the path to the given application's staging directory.
    */
@@ -1675,7 +1681,6 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     conf.remove(JARS)
     conf.remove(FILES)
     conf.remove(ARCHIVES)
-
     new Client(new ClientArguments(args), conf, null).run()
   }
 
