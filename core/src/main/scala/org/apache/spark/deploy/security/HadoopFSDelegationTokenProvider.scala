@@ -121,15 +121,6 @@ private[deploy] class HadoopFSDelegationTokenProvider
     creds
   }
 
-  private def cancelDelegationTokens(hadoopConf: Configuration,
-                                     creds: Credentials) : Unit = {
-
-    creds.getAllTokens
-      .asScala
-      .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
-      .foreach { token => token.cancel(hadoopConf) }
-  }
-
   private def getTokenRenewalInterval(
       hadoopConf: Configuration,
       sparkConf: SparkConf,
@@ -154,7 +145,11 @@ private[deploy] class HadoopFSDelegationTokenProvider
         interval
       }.toOption
     }
-    cancelDelegationTokens(hadoopConf, creds)
+    // cancel the temporary delegation tokens to avoid leakage
+    creds.getAllTokens.asScala.foreach {
+      case id: AbstractDelegationTokenIdentifier => id.cancel(hadoopConf)
+      case _ => // ignore
+    }
 
     if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
   }
