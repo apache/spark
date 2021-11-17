@@ -84,7 +84,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      runBenchmark(s"Parquet Write") {
+      runBenchmark("Parquet Write") {
         val benchmark = new Benchmark(s"Write ${scaleFactor}M rows", N, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           df.write.mode("overwrite").parquet(path + "/withoutBF")
@@ -110,7 +110,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
           .option("parquet.block.size", blocksize)
           .parquet(path + "/withBF")
 
-        runBenchmark(s"Parquet Read") {
+        runBenchmark("Parquet Read") {
           val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
           benchmark.addCase("Without bloom filter, blocksize: " + blocksize) { _ =>
             spark.read.parquet(path + "/withoutBF").where("value = 0").noop()
