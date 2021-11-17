@@ -22,8 +22,8 @@ import java.util.Properties
 import scala.collection.mutable.ArrayBuffer
 
 import com.codahale.metrics.MetricRegistry
-import org.apache.spark.deploy.history.HistoryServerSource
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.internal.config._
