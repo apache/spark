@@ -39,8 +39,6 @@ case class Node private[spark](
     wholeStageCodegenId: Option[Long] = None,
     metrics: Seq[Metric])
 
-case class Metric private[spark] (name: String, value: String)
-
 class SQLDiagnosticData private[spark] (
     val id: Long,
     val physicalPlan: String,
@@ -50,3 +48,9 @@ class SQLDiagnosticData private[spark] (
     val planChanges: Seq[AdaptivePlanChange])
 
 case class AdaptivePlanChange(updateTime: Date, physicalPlan: String)
+
+case class Metric private[spark] (name: String, value: Value)
+
+case class Value private[spark] (stageId: Option[String] = None, taskId: Option[String] = None,
+     amount: Option[String] = None, min: Option[String] = None,
+     med: Option[String] = None, max: Option[String] = None)

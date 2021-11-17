@@ -41,6 +41,8 @@ object SqlResourceSuite {
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
+  val sqlResource = new SqlResource()
+
   val filterNode = new SparkPlanGraphNode(1, FILTER, "",
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
@@ -99,26 +101,28 @@ object SqlResourceSuite {
 
   private def getNodes(): Seq[Node] = {
     val node = Node(0, WHOLE_STAGE_CODEGEN_1,
-      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
+      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, Value(amount = Some("0 ms")))))
     val node2 = Node(1, FILTER,
-      wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+      wholeStageCodegenId = Some(1),
+      metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, Value(amount = Some("1")))))
     val node3 = Node(2, SCAN_TEXT, wholeStageCodegenId = None,
-      metrics = Seq(Metric(METADATA_TIME, "2 ms"),
-        Metric(NUMBER_OF_FILES_READ, "1"),
-        Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
-        Metric(SIZE_OF_FILES_READ, "330.0 B")))
+      metrics = Seq(Metric(METADATA_TIME, Value(amount = Some("2 ms"))),
+        Metric(NUMBER_OF_FILES_READ, Value(amount = Some("1"))),
+        Metric(NUMBER_OF_OUTPUT_ROWS, Value(amount = Some("1"))),
+        Metric(SIZE_OF_FILES_READ, Value(amount = Some("330.0 B")))))
 
     // reverse order because of supporting execution order by aligning with Spark-UI
     Seq(node3, node2, node)
   }
 
   private def getExpectedNodesWhenWholeStageCodegenIsOff(): Seq[Node] = {
-    val node = Node(1, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val node = Node(1, FILTER, metrics =
+      Seq(Metric(NUMBER_OF_OUTPUT_ROWS, Value(amount = Some("1")))))
     val node2 = Node(2, SCAN_TEXT,
-      metrics = Seq(Metric(METADATA_TIME, "2 ms"),
-        Metric(NUMBER_OF_FILES_READ, "1"),
-        Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
-        Metric(SIZE_OF_FILES_READ, "330.0 B")))
+      metrics = Seq(Metric(METADATA_TIME, Value(amount = Some("2 ms"))),
+        Metric(NUMBER_OF_FILES_READ, Value(amount = Some("1"))),
+        Metric(NUMBER_OF_OUTPUT_ROWS, Value(amount = Some("1"))),
+        Metric(SIZE_OF_FILES_READ, Value(amount = Some("330.0 B")))))
 
     // reverse order because of supporting execution order by aligning with Spark-UI
     Seq(node2, node)
@@ -153,6 +157,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
 
   val sqlResource = new SqlResource()
   val prepareExecutionData = PrivateMethod[ExecutionData](Symbol("prepareExecutionData"))
+  val extractMetric = PrivateMethod[Value]('extractMetric)
 
   test("Prepare ExecutionData when details = false and planDescription = false") {
     val executionData =

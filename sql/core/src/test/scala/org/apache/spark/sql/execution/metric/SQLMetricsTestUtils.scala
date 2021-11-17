@@ -155,6 +155,9 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     }
   }
 
+  protected def getSparkPlanGraph(plan: SparkPlan): SparkPlanGraph =
+    SparkPlanGraph(SparkPlanInfo.fromSparkPlan(plan))
+
   /**
    * Call `df.collect()` and collect necessary metrics from execution data.
    *

@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
@@ -38,12 +39,13 @@ case class Salary(personId: Int, salary: Double)
  * Sql Resource Public API Unit Tests running query and extracting the metrics.
  */
 class SqlResourceWithActualMetricsSuite
-  extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper {
+  extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper with PrivateMethodTester {
 
   import testImplicits._
 
   // Exclude nodes which may not have the metrics
-  val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject")
+  val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject",
+    "Execute CreateViewCommand", "AdaptiveSparkPlan")
 
   implicit val formats = new DefaultFormats {
     override def dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
@@ -53,9 +55,49 @@ class SqlResourceWithActualMetricsSuite
     super.sparkConf.set("spark.ui.enabled", "true")
   }
 
+  import SqlResourceSuite._
+
+  val extractMetricValue = PrivateMethod[Value]('extractMetricValue)
+
+  val expectedMetricNames = List(
+    "number of output rows",
+    "data size total (min, med, max)",
+    "spill size total (min, med, max)",
+    "peak memory total (min, med, max)",
+    "avg hash probe (min, med, max)",
+    "aggregate time total (min, med, max)",
+    "duration",
+    "remote bytes read to disk",
+    "remote bytes read",
+    "shuffle bytes written",
+    "shuffle write time",
+    "shuffle records written",
+    "fetch wait time",
+    "remote blocks read",
+    "local bytes read",
+    "local blocks read",
+    "records read",
+    "peak memory",
+    "avg hash probe bucket list iters",
+    "data size",
+    "spill size",
+    "time in aggregation build",
+    "sort time",
+    "sort time total (min, med, max)",
+    "time to collect",
+    "time to broadcast",
+    "time to build",
+    "number of partitions",
+    "number of skewed partitions",
+    "number of skewed partition splits",
+    "number of coalesced partitions",
+    "partition data size",
+    "number of partitions to coalesce",
+    "number of sort fallback tasks")
+
   test("Check Sql Rest Api Endpoints") {
     // Materalize result DataFrame
-    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val count = getDF().count()
       assert(count == 2, s"Expected Query Count is 2 but received: $count")
     }
@@ -64,6 +106,44 @@ class SqlResourceWithActualMetricsSuite
     // so UT is just added for existing endpoints.
     val executionId = callSqlRestEndpointAndVerifyResult()
     callSqlRestEndpointByExecutionIdAndVerifyResult(executionId)
+  }
+
+  test("Extract Metric Values according to actual query result") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val salaryDF = salary.withColumnRenamed("personId", "id")
+      val ds = person.join(salaryDF, "id")
+        .groupBy("name", "age", "salary").avg("age", "salary")
+        .filter(_.getAs[Int]("age") <= 30)
+        .sort()
+
+      val df = ds.toDF
+      val sparkPlanGraph = getSparkPlanGraph(df.queryExecution.executedPlan)
+      val nodeIds = sparkPlanGraph.allNodes.map(_.id).toSet
+      val sparkPlanMetrics = getSparkPlanMetrics(ds.toDF, 5, nodeIds, true)
+
+      sparkPlanMetrics match {
+        case Some(m: Map[Long, (String, Map[String, Any])]) =>
+          val metrics = m.map{case (_, nodeMetricsMap) => nodeMetricsMap}
+            .map{case (_, nodeMetrics) => nodeMetrics}.toList.flatten
+          assert(metrics.size > 0,
+            "No SparkPlan Metrics found. Query should have metrics before normalization.")
+          var valueList = List.empty[Value]
+          metrics.map {
+            case (metricName, metricValue) =>
+              assert(expectedMetricNames.contains(metricName))
+              val value =
+                sqlResource invokePrivate extractMetricValue(metricValue.toString)
+              valueList = valueList :+ value
+              assert(value.isInstanceOf[Value],
+                "extractMetricValue function should return 'Value' type")
+              assert(value.asInstanceOf[Value] != Value(None, None, None, None, None, None),
+                "All of Metric sub-values should not be empty per metric")
+          }
+          assert(valueList.count(value => value.productIterator.toList.forall(x => x != None)) > 3,
+            "There should be more than 3 Values that are fully populated")
+        case None => fail("No SparkPlan Metrics found!")
+      }
+    }
   }
 
   private def callSqlRestEndpointAndVerifyResult(): Long = {
@@ -97,7 +177,11 @@ class SqlResourceWithActualMetricsSuite
       s"Expected failedJobIds should be empty but actual: ${executionData.failedJobIds}")
     assert(executionData.nodes.nonEmpty, "Expected nodes should not be empty}")
     executionData.nodes.filterNot(node => excludedNodes.contains(node.nodeName)).foreach { node =>
-      assert(node.metrics.nonEmpty, "Expected metrics of nodes should not be empty")
+      assert(node.metrics.nonEmpty,
+        s"Expected metrics of nodes should not be empty - nodeName: ${node.nodeName}")
+      assert(node.metrics.forall(str => str.value.amount.getOrElse("").length < 15),
+        s"Expected metrics of nodes should be processed properly"
+      )
     }
   }
 
