@@ -47,6 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
+  private byte[] byte8 = new byte[8];
 
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
@@ -181,12 +182,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected abstract void reserveInternal(int capacity);
 
   /**
-   * Each byte of the returned value (long) has one bit from `bits`. I.e. it is equivalent to
-   *    byte[] a = {(byte)(bits >> 0 & 1), (byte)(bits >> 1 & 1),
-   *                (byte)(bits >> 2 & 1), (byte)(bits >> 3 & 1),
-   *                (byte)(bits >> 4 & 1), (byte)(bits >> 5 & 1),
-   *                (byte)(bits >> 6 & 1), (byte)(bits >> 7 & 1)};
-   *    return ByteBuffer.wrap(a).getLong();
+   * Each byte of the returned value (long) has one bit from `bits`.
+   * E.g. toBitPerByte(0x000000FF) == 0x0101010101010101L
+   * This is equivalent to (
+   *   ((long)bits << 56) | ((long)bits << 47) | ((long)bits << 38) | ((long)bits << 29) |
+   *   ((long)bits << 20) | ((long)bits << 11) | ((long)bits <<  2) | ((long)bits >>  7)
+   * ) & 0x101010101010101L
    */
   protected final long toBitPerByte(int bits) {
     return ((bits * 0x8040201008040201L) >>> 7) & 0x101010101010101L;
@@ -219,9 +220,9 @@ public abstract class WritableColumnVector extends ColumnVector {
    * src must be positive and contain 8 bits of bitmask in the lowest byte.
    */
   public void putBooleans(int rowId, int count, int src, int srcIndex) {
-    putBytes(rowId, count, ByteBuffer.allocate(8).putLong(toBitPerByte(src)).array(), srcIndex);
+    putBytes(rowId, count, ByteBuffer.wrap(byte8).putLong(toBitPerByte(src)).array(), srcIndex);
   }
-  public void putBooleans(int rowId, int src) {putBooleans(rowId, 8, src, 0);}
+  public void putBooleans(int rowId, int src) { putBooleans(rowId, 8, src, 0); }
 
   /**
    * Sets `value` to the value at rowId.

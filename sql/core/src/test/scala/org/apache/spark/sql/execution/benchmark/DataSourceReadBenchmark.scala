@@ -548,11 +548,8 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("SQL Single Boolean Column Scan") {
-      numericScanBenchmark(1024 * 1024 * 15, BooleanType)
-    }
     runBenchmark("SQL Single Numeric Column Scan") {
-      Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
+      Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
         dataType => numericScanBenchmark(1024 * 1024 * 15, dataType)
       }
     }
