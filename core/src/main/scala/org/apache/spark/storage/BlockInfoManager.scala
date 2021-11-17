@@ -441,7 +441,7 @@ private[storage] class BlockInfoManager extends Logging {
       }
     }
 
-    blocksWithReleasedLocks
+    blocksWithReleasedLocks.toSeq
   }
 
   /** Returns the number of locks held by the given task.  Used only for testing. */
