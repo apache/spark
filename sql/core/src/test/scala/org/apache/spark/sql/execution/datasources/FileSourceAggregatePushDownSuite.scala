@@ -269,7 +269,10 @@ trait FileSourceAggregatePushDownSuite
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
         val query = "SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
           "  min(id), p FROM tmp group by p"
-        val expected = sql(query).collect
+        var expected = Array.empty[Row]
+        withSQLConf(aggPushDownEnabledKey -> "false") {
+            expected = sql(query).collect
+        }
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
@@ -303,7 +306,10 @@ trait FileSourceAggregatePushDownSuite
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
         val query = "SELECT count(*), count(value), max(value), min(value)," +
           " p4, p2, p3, p1 FROM tmp GROUP BY p1, p2, p3, p4"
-        val expected = sql(query).collect
+        var expected = Array.empty[Row]
+        withSQLConf(aggPushDownEnabledKey -> "false") {
+          expected = sql(query).collect
+        }
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
