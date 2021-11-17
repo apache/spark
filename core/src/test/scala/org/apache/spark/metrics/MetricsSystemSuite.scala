@@ -22,9 +22,9 @@ import java.util.Properties
 import scala.collection.mutable.ArrayBuffer
 
 import com.codahale.metrics.MetricRegistry
+import org.apache.spark.deploy.history.HistoryServerSource
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.Sink
@@ -271,19 +271,6 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
-  test("SPARK-37032: MetricsSystem with History Server instance") {
-    val source = new Source {
-      override val sourceName = "dummySource"
-      override val metricRegistry = new MetricRegistry()
-    }
-
-    val instanceName = MetricsSystemInstances.HISTORY_SERVER
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
-
-    val metricName = executorMetricsSystem.buildRegistryName(source)
-    assert(metricName === source.sourceName)
-  }
-  
   test("SPARK-37078: Support old 3-parameter Sink constructors") {
     conf.set(
       "spark.metrics.conf.*.sink.jmx.class",
