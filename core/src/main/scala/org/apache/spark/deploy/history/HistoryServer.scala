@@ -162,7 +162,7 @@ class HistoryServer(
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
 
-    // Register source to history metrics system.
+    // Register history server source to history server metrics system.
     cacheMetrics.init()
     metricsSystem.registerSource(provider.getHistoryServerSource())
     metricsSystem.registerSource(cacheMetrics)
