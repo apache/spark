@@ -1277,27 +1277,29 @@ object IntervalUtils {
     intToYearMonthInterval(vInt, endField)
   }
 
-  def yearMonthIntervalToInt(v: Int, endFiled: Byte): Int = {
-    endFiled match {
+  def yearMonthIntervalToInt(v: Int, startField: Byte, endField: Byte): Int = {
+    endField match {
       case YEAR => v / MONTHS_PER_YEAR
       case MONTH => v
     }
   }
 
-  def yearMonthIntervalToShort(v: Int, endFiled: Byte): Short = {
-    val vInt = yearMonthIntervalToInt(v, endFiled)
+  def yearMonthIntervalToShort(v: Int, startField: Byte, endField: Byte): Short = {
+    val vInt = yearMonthIntervalToInt(v, startField, endField)
     val vShort = vInt.toShort
     if (vInt != vShort) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, ShortType.catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ShortType.catalogString)
     }
     vShort
   }
 
-  def yearMonthIntervalToByte(v: Int, endFiled: Byte): Byte = {
-    val vInt = yearMonthIntervalToInt(v, endFiled)
+  def yearMonthIntervalToByte(v: Int, startField: Byte, endField: Byte): Byte = {
+    val vInt = yearMonthIntervalToInt(v, startField, endField)
     val vByte = vInt.toByte
     if (vInt != vByte) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, ByteType.catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ByteType.catalogString)
     }
     vByte
   }
@@ -1331,8 +1333,8 @@ object IntervalUtils {
     }
   }
 
-  def dayTimeIntervalToLong(v: Long, endFiled: Byte): Long = {
-    endFiled match {
+  def dayTimeIntervalToLong(v: Long, startField: Byte, endField: Byte): Long = {
+    endField match {
       case DAY => v / MICROS_PER_DAY
       case HOUR => v / MICROS_PER_HOUR
       case MINUTE => v / MICROS_PER_MINUTE
@@ -1340,29 +1342,32 @@ object IntervalUtils {
     }
   }
 
-  def dayTimeIntervalToInt(v: Long, endFiled: Byte): Int = {
-    val vLong = dayTimeIntervalToLong(v, endFiled)
+  def dayTimeIntervalToInt(v: Long, startField: Byte, endField: Byte): Int = {
+    val vLong = dayTimeIntervalToLong(v, startField, endField)
     val vInt = vLong.toInt
     if (vLong != vInt) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, IntegerType.catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), IntegerType.catalogString)
     }
     vInt
   }
 
-  def dayTimeIntervalToShort(v: Long, endFiled: Byte): Short = {
-    val vLong = dayTimeIntervalToLong(v, endFiled)
+  def dayTimeIntervalToShort(v: Long, startField: Byte, endField: Byte): Short = {
+    val vLong = dayTimeIntervalToLong(v, startField, endField)
     val vShort = vLong.toShort
     if (vLong != vShort) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, ShortType.catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ShortType.catalogString)
     }
     vShort
   }
 
-  def dayTimeIntervalToByte(v: Long, endFiled: Byte): Byte = {
-    val vLong = dayTimeIntervalToLong(v, endFiled)
+  def dayTimeIntervalToByte(v: Long, startField: Byte, endField: Byte): Byte = {
+    val vLong = dayTimeIntervalToLong(v, startField, endField)
     val vByte = vLong.toByte
     if (vLong != vByte) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, ByteType.catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ByteType.catalogString)
     }
     vByte
   }

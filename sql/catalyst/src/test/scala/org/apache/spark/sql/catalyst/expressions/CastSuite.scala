@@ -608,15 +608,15 @@ class CastSuite extends CastSuiteBase {
           checkEvaluation(cast(v2, LongType), 25L)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
-            s"Casting ${v2.value} to tinyint causes overflow")
+            s"Casting $v2 to tinyint causes overflow")
           checkEvaluation(cast(v2, ShortType), (MINUTES_PER_HOUR * 25 + 1).toShort)
           checkEvaluation(cast(v2, IntegerType), (MINUTES_PER_HOUR * 25 + 1).toInt)
           checkEvaluation(cast(v2, LongType), MINUTES_PER_HOUR * 25 + 1)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
-            s"Casting ${v2.value} to tinyint causes overflow")
+            s"Casting $v2 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v2, ShortType),
-            s"Casting ${v2.value} to smallint causes overflow")
+            s"Casting $v2 to smallint causes overflow")
           checkEvaluation(cast(v2, IntegerType), num.toInt)
           checkEvaluation(cast(v2, LongType), num)
       }
@@ -625,34 +625,34 @@ class CastSuite extends CastSuiteBase {
       dt.endField match {
         case DAY =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting ${v3.value} to tinyint causes overflow")
+            s"Casting $v3 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting ${v3.value} to smallint causes overflow")
+            s"Casting $v3 to smallint causes overflow")
           checkEvaluation(cast(v3, IntegerType), (Long.MaxValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_DAY)
         case HOUR =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting ${v3.value} to tinyint causes overflow")
+            s"Casting $v3 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting ${v3.value} to smallint causes overflow")
+            s"Casting $v3 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting ${v3.value} to int causes overflow")
+            s"Casting $v3 to int causes overflow")
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_HOUR)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting ${v3.value} to tinyint causes overflow")
+            s"Casting $v3 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting ${v3.value} to smallint causes overflow")
+            s"Casting $v3 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting ${v3.value} to int causes overflow")
+            s"Casting $v3 to int causes overflow")
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_MINUTE)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
-            s"Casting ${v3.value} to tinyint causes overflow")
+            s"Casting $v3 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
-            s"Casting ${v3.value} to smallint causes overflow")
+            s"Casting $v3 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
-            s"Casting ${v3.value} to int causes overflow")
+            s"Casting $v3 to int causes overflow")
           checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_SECOND)
       }
 
@@ -660,34 +660,34 @@ class CastSuite extends CastSuiteBase {
       dt.endField match {
         case DAY =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting ${v4.value} to tinyint causes overflow")
+            s"Casting $v4 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting ${v4.value} to smallint causes overflow")
+            s"Casting $v4 to smallint causes overflow")
           checkEvaluation(cast(v4, IntegerType), (Long.MinValue / MICROS_PER_DAY).toInt)
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_DAY)
         case HOUR =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting ${v4.value} to tinyint causes overflow")
+            s"Casting $v4 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting ${v4.value} to smallint causes overflow")
+            s"Casting $v4 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting ${v4.value} to int causes overflow")
+            s"Casting $v4 to int causes overflow")
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_HOUR)
         case MINUTE =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting ${v4.value} to tinyint causes overflow")
+            s"Casting $v4 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting ${v4.value} to smallint causes overflow")
+            s"Casting $v4 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting ${v4.value} to int causes overflow")
+            s"Casting $v4 to int causes overflow")
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_MINUTE)
         case SECOND =>
           checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
-            s"Casting ${v4.value} to tinyint causes overflow")
+            s"Casting $v4 to tinyint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
-            s"Casting ${v4.value} to smallint causes overflow")
+            s"Casting $v4 to smallint causes overflow")
           checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
-            s"Casting ${v4.value} to int causes overflow")
+            s"Casting $v4 to int causes overflow")
           checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_SECOND)
       }
     }
@@ -788,7 +788,7 @@ class CastSuite extends CastSuiteBase {
       case (v, dt, toType) =>
         val value = Literal.create(v, dt)
         checkExceptionInExpression[ArithmeticException](cast(value, toType),
-          s"Casting ${value.value} to ${toType.catalogString} causes overflow")
+          s"Casting $value to ${toType.catalogString} causes overflow")
     }
 
     Seq(
