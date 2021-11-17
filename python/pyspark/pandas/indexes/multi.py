@@ -351,7 +351,7 @@ class MultiIndex(Index):
         """
         if not isinstance(df, DataFrame):
             raise TypeError("Input must be a DataFrame")
-        sdf = df.to_spark()
+        sdf = df._to_spark()
 
         if names is None:
             names = df._internal.column_labels
@@ -1076,9 +1076,9 @@ class MultiIndex(Index):
                 )
 
         index_name: List[Label] = [(name,) for name in self._internal.index_spark_column_names]
-        sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
-        sdf_middle = Index([item]).to_frame(name=index_name).to_spark()
-        sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
+        sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
+        sdf_middle = Index([item]).to_frame(name=index_name)._to_spark()
+        sdf_after = self.to_frame(name=index_name)[loc:]._to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
         internal = InternalFrame(
@@ -1140,7 +1140,7 @@ class MultiIndex(Index):
         elif isinstance(other, DataFrame):
             raise ValueError("Index data must be 1-dimensional")
         elif isinstance(other, MultiIndex):
-            spark_frame_other = other.to_frame().to_spark()
+            spark_frame_other = other.to_frame()._to_spark()
             keep_name = self.names == other.names
         elif isinstance(other, Index):
             # Always returns an empty MultiIndex if `other` is Index.
@@ -1149,13 +1149,13 @@ class MultiIndex(Index):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
             other = MultiIndex.from_tuples(list(other))
-            spark_frame_other = cast(MultiIndex, other).to_frame().to_spark()
+            spark_frame_other = cast(MultiIndex, other).to_frame()._to_spark()
             keep_name = True
 
         index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
         default_name: List[Name] = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]
-        spark_frame_self = self.to_frame(name=default_name).to_spark()
+        spark_frame_self = self.to_frame(name=default_name)._to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names

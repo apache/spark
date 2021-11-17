@@ -4824,6 +4824,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
 
+    def _to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+        """
+        Same as `to_spark()`, without issueing the advice log when `index_col` is not specified
+        for internal usage.
+        """
+        return self.spark.frame(index_col)
+
     def to_pandas(self) -> pd.DataFrame:
         """
         Return a pandas DataFrame.
