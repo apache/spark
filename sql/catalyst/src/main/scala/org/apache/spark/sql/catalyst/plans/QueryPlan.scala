@@ -246,19 +246,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /** Returns all of the expressions present in this query plan operator. */
   final def expressions: Seq[Expression] = {
-    // Recursively find all expressions from a traversable.
-    def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
-      case e: Expression => e :: Nil
-      case s: Iterable[_] => seqToExpressions(s)
-      case other => Nil
-    }
-
-    productIterator.flatMap {
-      case e: Expression => e :: Nil
-      case s: Some[_] => seqToExpressions(s.toSeq)
-      case seq: Iterable[_] => seqToExpressions(seq)
-      case other => Nil
-    }.toSeq
+    productIterator.flatMap(QueryPlan.extractExpressions).toSeq
   }
 
   /**
@@ -607,6 +595,25 @@ object QueryPlan extends PredicateHelper {
       plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
     } catch {
       case e: AnalysisException => append(e.toString)
+    }
+  }
+
+  /**
+   * Extracts expressions from an object.
+   */
+  def extractExpressions(o: Any): Seq[Expression] = {
+    // Recursively find all expressions from a traversable.
+    def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
+      case e: Expression => e :: Nil
+      case s: Iterable[_] => seqToExpressions(s)
+      case other => Nil
+    }
+
+    o match {
+      case e: Expression => e :: Nil
+      case s: Some[_] => seqToExpressions(s.toSeq).toSeq
+      case seq: Iterable[_] => seqToExpressions(seq).toSeq
+      case other => Nil
     }
   }
 }

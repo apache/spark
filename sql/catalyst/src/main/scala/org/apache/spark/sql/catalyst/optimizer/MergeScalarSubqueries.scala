@@ -21,6 +21,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CommonScalarSubqueries, Filter, Join, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
@@ -222,16 +223,24 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
         // Also, this implementation supports only those nodes in which children can be merged in
         // the same order.
         case (np, cp) if supportedMerge(np) && np.getClass == cp.getClass &&
-          np.children.size == cp.children.size =>
+            np.children.size == cp.children.size &&
+            np.expressions.size == cp.expressions.size &&
+            // Non-children and non-expression containing fields of the nodes should match
+            np.productIterator.filterNot(np.children.contains)
+              .filter(QueryPlan.extractExpressions(_).isEmpty).toSeq ==
+              cp.productIterator.filterNot(cp.children.contains)
+                .filter(QueryPlan.extractExpressions(_).isEmpty).toSeq =>
           val merged = np.children.zip(cp.children).map {
             case (npChild, cpChild) => tryMergePlans(npChild, cpChild)
           }
           if (merged.forall(_.isDefined)) {
             val (mergedChildren, outputMaps) = merged.map(_.get).unzip
             val outputMap = AttributeMap(outputMaps.map(_.iterator).reduce(_ ++ _).toSeq)
-            val mappedNewPlan = mapAttributes(np.withNewChildren(mergedChildren), outputMap)
             val mergedPlan = cp.withNewChildren(mergedChildren)
-            if (mappedNewPlan.canonicalized == mergedPlan.canonicalized) {
+            // We know that non-children and non-expression containing fields do match and
+            // children can be merged so we need to test expressions only
+            if (np.expressions.map(mapAttributes(_, outputMap).canonicalized) ==
+              mergedPlan.expressions.map(_.canonicalized)) {
               Some(mergedPlan -> outputMap)
             } else {
               None
