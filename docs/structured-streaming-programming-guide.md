@@ -3648,3 +3648,6 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 - Spark Summit 2016
   - A Deep Dive into Structured Streaming - [slides/video](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
 
+# Migration Guide
+
+The migration guide is now archived [on this page](ss-migration-guide.html).

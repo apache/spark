@@ -1186,8 +1186,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                 newRelation.copyTagsFrom(multi)
                 newRelation
             }).orElse {
-              val loaded = createRelation(
-                catalog, ident, CatalogV2Util.loadTable(catalog, ident), u.options, u.isStreaming)
+              val table = CatalogV2Util.loadTable(catalog, ident, u.timeTravelSpec)
+              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               loaded
             }

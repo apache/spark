@@ -599,7 +599,7 @@ private[hive] class TestHiveQueryExecution(
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     // Make sure any test tables referenced are loaded.
     val referencedTables = logical.collect {
-      case UnresolvedRelation(ident, _, _) =>
+      case UnresolvedRelation(ident, _, _, _) =>
         if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
           ident.tail.asTableIdentifier
         } else ident.asTableIdentifier

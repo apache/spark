@@ -599,6 +599,11 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
+temporalClause
+    : ((FOR SYSTEM_VERSION) | VERSION) AS OF version=(INTEGER_VALUE | STRING)
+    | ((FOR SYSTEM_TIME) | TIMESTAMP) AS OF timestamp=STRING
+    ;
+
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
@@ -711,7 +716,7 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier sample? tableAlias  #tableName
+    : multipartIdentifier temporalClause? sample? tableAlias  #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -1229,11 +1234,14 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
+    | TIMESTAMP
     | TOUCH
     | TRANSACTION
     | TRANSACTIONS
@@ -1251,6 +1259,7 @@ ansiNonReserved
     | UPDATE
     | USE
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WINDOW
@@ -1497,6 +1506,8 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1505,6 +1516,7 @@ nonReserved
     | TERMINATED
     | THEN
     | TIME
+    | TIMESTAMP
     | TO
     | TOUCH
     | TRAILING
@@ -1527,6 +1539,7 @@ nonReserved
     | USE
     | USER
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WHEN
@@ -1767,6 +1780,8 @@ STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
+SYSTEM_TIME: 'SYSTEM_TIME';
+SYSTEM_VERSION: 'SYSTEM_VERSION';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -1775,6 +1790,7 @@ TEMPORARY: 'TEMPORARY' | 'TEMP';
 TERMINATED: 'TERMINATED';
 THEN: 'THEN';
 TIME: 'TIME';
+TIMESTAMP: 'TIMESTAMP';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
@@ -1799,6 +1815,7 @@ USE: 'USE';
 USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
+VERSION: 'VERSION';
 VIEW: 'VIEW';
 VIEWS: 'VIEWS';
 WHEN: 'WHEN';
