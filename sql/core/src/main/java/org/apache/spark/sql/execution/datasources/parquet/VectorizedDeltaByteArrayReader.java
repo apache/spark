@@ -58,7 +58,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase {
 
   @Override
   public void skipBinary(int total) {
-    for(int i =0; i < total; i++) {
+    for (int i = 0; i < total; i++) {
       deltaByteArrayReader.skip();
     }
   }

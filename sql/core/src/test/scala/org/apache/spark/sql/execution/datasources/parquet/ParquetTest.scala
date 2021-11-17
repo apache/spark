@@ -170,7 +170,6 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   def withAllParquetWriters(code: => Unit): Unit = {
-    ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString
     // Parquet version 1
     withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)(code)

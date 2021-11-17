@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
-
 /**
  * An implementation of the Parquet DELTA_BINARY_PACKED decoder that supports the vectorized
  * interface. DELTA_BINARY_PACKED is a delta encoding for integer and long types that stores values
@@ -75,7 +74,6 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   int intVal;
   long longVal;
 
-  @SuppressWarnings("unused")
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     Preconditions.checkArgument(valueCount >= 1,
@@ -261,7 +259,6 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       long outValue = lastValueRead + minDeltaInCurrentBlock + unpackedValuesBuffer[i];
       lastValueRead = outValue;
       outputWriter.write(c, rowId + valuesRead, outValue);
-      remaining--;
       remainingInBlock--;
       remainingInMiniBlock--;
       valuesRead++;
