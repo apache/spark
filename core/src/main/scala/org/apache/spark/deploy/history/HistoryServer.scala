@@ -166,7 +166,7 @@ class HistoryServer(
     cacheMetrics.init()
     metricsSystem.registerSource(provider.getHistoryServerSource())
     metricsSystem.registerSource(cacheMetrics)
-    metricsSystem.start()
+    metricsSystem.start(false)
     // Attach the history metrics servlet handler to the history server.
     metricsSystem.getServletHandlers.foreach(attachHandler)
   }

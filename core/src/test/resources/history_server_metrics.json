@@ -1,0 +1,145 @@
+{
+  "version" : "4.0.0",
+  "gauges" : {
+    "historyServer.applications" : {
+      "value" : 14
+    },
+    "historyServer.uncompleted" : {
+      "value" : 0
+    },
+    "historyServer.underProcess" : {
+      "value" : 0
+    }
+  },
+  "counters" : {
+    "ApplicationCache.history.cache.eviction.count" : {
+      "count" : 0
+    },
+    "ApplicationCache.history.cache.load.count" : {
+      "count" : 0
+    },
+    "ApplicationCache.history.cache.lookup.count" : {
+      "count" : 0
+    },
+    "ApplicationCache.history.cache.lookup.failure.count" : {
+      "count" : 0
+    }
+  },
+  "meters" : { },
+  "timers" : {
+    "ApplicationCache.history.cache.load.timer" : {
+      "count" : 0,
+      "max" : 0.0,
+      "mean" : 0.0,
+      "min" : 0.0,
+      "p50" : 0.0,
+      "p75" : 0.0,
+      "p95" : 0.0,
+      "p98" : 0.0,
+      "p99" : 0.0,
+      "p999" : 0.0,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.0,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    },
+    "historyServer.checkForLogsTime" : {
+      "count" : 1,
+      "max" : 735.628517,
+      "mean" : 735.628517,
+      "min" : 735.628517,
+      "p50" : 735.628517,
+      "p75" : 735.628517,
+      "p95" : 735.628517,
+      "p98" : 735.628517,
+      "p99" : 735.628517,
+      "p999" : 735.628517,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.4121821730552311,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    },
+    "historyServer.cleanDriverLogsTime" : {
+      "count" : 0,
+      "max" : 0.0,
+      "mean" : 0.0,
+      "min" : 0.0,
+      "p50" : 0.0,
+      "p75" : 0.0,
+      "p95" : 0.0,
+      "p98" : 0.0,
+      "p99" : 0.0,
+      "p999" : 0.0,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.0,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    },
+    "historyServer.cleanLogsTime" : {
+      "count" : 0,
+      "max" : 0.0,
+      "mean" : 0.0,
+      "min" : 0.0,
+      "p50" : 0.0,
+      "p75" : 0.0,
+      "p95" : 0.0,
+      "p98" : 0.0,
+      "p99" : 0.0,
+      "p999" : 0.0,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.0,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    },
+    "historyServer.compactTime" : {
+      "count" : 0,
+      "max" : 0.0,
+      "mean" : 0.0,
+      "min" : 0.0,
+      "p50" : 0.0,
+      "p75" : 0.0,
+      "p95" : 0.0,
+      "p98" : 0.0,
+      "p99" : 0.0,
+      "p999" : 0.0,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.0,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    },
+    "historyServer.loadStoreTime" : {
+      "count" : 0,
+      "max" : 0.0,
+      "mean" : 0.0,
+      "min" : 0.0,
+      "p50" : 0.0,
+      "p75" : 0.0,
+      "p95" : 0.0,
+      "p98" : 0.0,
+      "p99" : 0.0,
+      "p999" : 0.0,
+      "stddev" : 0.0,
+      "m15_rate" : 0.0,
+      "m1_rate" : 0.0,
+      "m5_rate" : 0.0,
+      "mean_rate" : 0.0,
+      "duration_units" : "milliseconds",
+      "rate_units" : "calls/second"
+    }
+  }
+}

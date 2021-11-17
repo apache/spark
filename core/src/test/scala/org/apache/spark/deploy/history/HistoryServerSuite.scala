@@ -29,6 +29,7 @@ import scala.concurrent.duration._
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.json4s.Diff
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -702,6 +703,25 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     conn.connect()
     assert(conn.getResponseCode === 302)
     assert(conn.getHeaderField("Location") === s"http://localhost:$port/")
+  }
+
+  test("SPARK-37053: Spark History Server add metrics") {
+    val metricsUrl = new URL(s"http://localhost:$port/metrics/historyServer/json")
+    val (code, jsonOpt, errOpt) = HistoryServerSuite.getContentAndCode(metricsUrl)
+    code should be(HttpServletResponse.SC_OK)
+    jsonOpt should be(Symbol("defined"))
+    errOpt should be(None)
+
+    val jsonFile = getClass.getClassLoader.getResource("history_server_metrics.json").getFile
+    val exp = IOUtils.toString(new FileInputStream(jsonFile), StandardCharsets.UTF_8)
+    // compare the ASTs so formatting differences don't cause failures
+    import org.json4s.jackson.JsonMethods._
+    val jsonAst = parse(clearLastUpdated(jsonOpt.get))
+    val expAst = parse(exp)
+    val Diff(changed, _, _) = jsonAst.diff(expAst)
+    assert(changed.children.size == 1)
+    assert(changed.children.head.asInstanceOf[JObject].obj.head._1 ==
+      "historyServer.checkForLogsTime")
   }
 }
 
