@@ -1705,6 +1705,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     conf.remove(JARS)
     conf.remove(FILES)
     conf.remove(ARCHIVES)
+
     new Client(new ClientArguments(args), conf, null).run()
   }
 
