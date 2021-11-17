@@ -325,11 +325,7 @@ class TypesTests(ReusedSQLTestCase):
                 StructField("float1", FloatType(), False),
                 StructField("date1", DateType(), False),
                 StructField("time1", TimestampType(), False),
-                StructField(
-                    "daytime1",
-                    DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
-                    False,
-                ),
+                StructField("daytime1", DayTimeIntervalType(), False),
                 StructField("map1", MapType(StringType(), IntegerType(), False), False),
                 StructField("struct1", StructType([StructField("b", ShortType(), False)]), False),
                 StructField("list1", ArrayType(ByteType(), False), False),
@@ -940,6 +936,28 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_daytime_interval_type_constructor(self):
+        # SPARK-37277: Test constructors in day time interval.
+        self.assertEqual(DayTimeIntervalType().simpleString(), "interval day to second")
+        self.assertEqual(
+            DayTimeIntervalType(DayTimeIntervalType.DAY).simpleString(), "interval day"
+        )
+        self.assertEqual(
+            DayTimeIntervalType(
+                DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND
+            ).simpleString(),
+            "interval hour to second",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+            DayTimeIntervalType(endField=DayTimeIntervalType.SECOND)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+            DayTimeIntervalType(123)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+            DayTimeIntervalType(DayTimeIntervalType.DAY, 321)
 
     def test_daytime_interval_type(self):
         # SPARK-37277: Support DayTimeIntervalType in createDataFrame

@@ -336,12 +336,19 @@ class DayTimeIntervalType(AtomicType):
 
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
-    def __init__(self, startField: int, endField: int):
+    def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        if startField is None and endField is None:
+            # Default matched to scala side.
+            startField = DayTimeIntervalType.DAY
+            endField = DayTimeIntervalType.SECOND
+        elif startField is not None and endField is None:
+            endField = startField
+
         fields = DayTimeIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s' is invalid" % (startField, endField))
-        self.startField = startField
-        self.endField = endField
+            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+        self.startField = cast(int, startField)
+        self.endField = cast(int, endField)
 
     def _str_repr(self) -> str:
         fields = DayTimeIntervalType._fields
@@ -1098,9 +1105,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
             second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
             if first_field is not None and second_field is None:
-                second_field = first_field
-            if first_field is None or second_field is None:
-                raise ValueError("Could not parse datatype: %s" % json_value)
+                return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
@@ -1228,8 +1233,7 @@ def _infer_type(
     if dataType is TimestampType and prefer_timestamp_ntz and obj.tzinfo is None:
         return TimestampNTZType()
     if dataType is DayTimeIntervalType:
-        # Match to Python's normalized defaults (day and second).
-        return DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND)
+        return DayTimeIntervalType()
     elif dataType is not None:
         return dataType()
 
