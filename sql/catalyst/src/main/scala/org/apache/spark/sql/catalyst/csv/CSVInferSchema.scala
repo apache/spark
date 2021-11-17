@@ -40,7 +40,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     isParsing = true)
 
   private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampFormatInRead,
+    options.timestampNTZFormatInRead,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,

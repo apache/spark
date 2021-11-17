@@ -164,6 +164,20 @@ class CSVOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat").orElse {
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSS")
+    } else {
+      None
+    }
+  }
+  val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSS"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]"
+    })
+
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)

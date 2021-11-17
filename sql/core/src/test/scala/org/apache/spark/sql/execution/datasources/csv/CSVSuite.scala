@@ -1081,11 +1081,9 @@ abstract class CSVSuite
             .option("header", "true")
             .load(path)
 
-          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString &&
-              spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY.key) != "legacy") {
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
             checkAnswer(res, exp)
           } else {
-            // Timestamps are written as timestamp with timezone in the legacy mode.
             checkAnswer(
               res,
               spark.sql("""
