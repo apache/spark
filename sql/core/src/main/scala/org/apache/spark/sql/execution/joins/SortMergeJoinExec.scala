@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -364,7 +365,7 @@ case class SortMergeJoinExec(
   }
 
   private lazy val ((streamedPlan, streamedKeys), (bufferedPlan, bufferedKeys)) = joinType match {
-    case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | FullOuter =>
+    case _: InnerLike | LeftOuter | FullOuter | LeftExistence(_) =>
       ((left, leftKeys), (right, rightKeys))
     case RightOuter => ((right, rightKeys), (left, leftKeys))
     case x =>
@@ -374,12 +375,6 @@ case class SortMergeJoinExec(
 
   private lazy val streamedOutput = streamedPlan.output
   private lazy val bufferedOutput = bufferedPlan.output
-
-  // TODO(SPARK-37316): Add code-gen for existence sort merge join.
-  override def supportCodegen: Boolean = joinType match {
-    case _: ExistenceJoin => false
-    case _ => true
-  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.execute() :: bufferedPlan.execute() :: Nil
@@ -455,7 +450,7 @@ case class SortMergeJoinExec(
            |$streamedRow = null;
            |continue;
          """.stripMargin
-      case LeftOuter | RightOuter | LeftAnti =>
+      case LeftOuter | RightOuter | LeftAnti | ExistenceJoin(_) =>
         // Eagerly return streamed row. Only call `matches.clear()` when `matches.isEmpty()` is
         // false, to reduce unnecessary computation.
         s"""
@@ -474,7 +469,7 @@ case class SortMergeJoinExec(
       case _: InnerLike | LeftSemi =>
         // Skip streamed row.
         s"$streamedRow = null;"
-      case LeftOuter | RightOuter | LeftAnti =>
+      case LeftOuter | RightOuter | LeftAnti | ExistenceJoin(_) =>
         // Eagerly return with streamed row.
         "return false;"
       case x =>
@@ -511,8 +506,9 @@ case class SortMergeJoinExec(
     //            1. Inner and Left Semi join: skip the row. `matches` will be cleared later when
     //                                         hitting the next `streamedRow` with non-null join
     //                                         keys.
-    //            2. Left/Right Outer and Left Anti join: clear the previous `matches` if needed,
-    //                                                    keep the row, and return false.
+    //            2. Left/Right Outer, Left Anti and Existence join: clear the previous `matches`
+    //                                                               if needed, keep the row, and
+    //                                                               return false.
     //
     //  - Step 2: Find the `matches` from buffered side having same join keys with `streamedRow`.
     //            Clear `matches` if we hit a new `streamedRow`, as we need to find new matches.
@@ -520,8 +516,8 @@ case class SortMergeJoinExec(
     //            `matches` (`addRowToBuffer`). Return true when getting all matched rows.
     //            For `streamedRow` without `matches` (`handleStreamedWithoutMatch`):
     //            1. Inner and Left Semi join: skip the row.
-    //            2. Left/Right Outer and Left Anti join: keep the row and return false (with
-    //                                                    `matches` being empty).
+    //            2. Left/Right Outer, Left Anti and Existence join: keep the row and return false
+    //                                                               (with `matches` being empty).
     val findNextJoinRowsFuncName = ctx.freshName("findNextJoinRows")
     ctx.addNewFunction(findNextJoinRowsFuncName,
       s"""
@@ -666,6 +662,12 @@ case class SortMergeJoinExec(
     val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
     val bufferedVars = genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue)
 
+    // Create variable name for Existence join.
+    val existsVar = joinType match {
+      case ExistenceJoin(_) => Some(ctx.freshName("exists"))
+      case _ => None
+    }
+
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
     val resultVars = joinType match {
@@ -675,6 +677,9 @@ case class SortMergeJoinExec(
         bufferedVars ++ streamedVars
       case LeftSemi | LeftAnti =>
         streamedVars
+      case ExistenceJoin(_) =>
+        streamedVars ++ Seq(ExprCode.forNonNullValue(
+          JavaCode.variable(existsVar.get, BooleanType)))
       case x =>
         throw new IllegalArgumentException(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
@@ -716,7 +721,7 @@ case class SortMergeJoinExec(
       }
 
       val loadBufferedAfterCondition = joinType match {
-        case LeftSemi | LeftAnti =>
+        case LeftExistence(_) =>
           // No need to evaluate columns not used by condition from buffered side
           ""
         case _ => bufferedAfter
@@ -767,6 +772,9 @@ case class SortMergeJoinExec(
       case LeftAnti =>
         codegenAnti(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
           loadStreamed, ctx.freshName("hasMatchedRow"), outputRow, eagerCleanup)
+      case ExistenceJoin(_) =>
+        codegenExistence(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow,
+          condCheck, loadStreamed, existsVar.get, outputRow, eagerCleanup)
       case x =>
         throw new IllegalArgumentException(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
@@ -892,6 +900,45 @@ case class SortMergeJoinExec(
        |    $loadStreamed
        |    $outputRow
        |  }
+       |  if (shouldStop()) return;
+       |}
+       |$eagerCleanup
+     """.stripMargin
+  }
+
+  /**
+   * Generates the code for Existence join.
+   */
+  private def codegenExistence(
+      streamedInput: String,
+      findNextJoinRows: String,
+      beforeLoop: String,
+      matchIterator: String,
+      bufferedRow: String,
+      conditionCheck: String,
+      loadStreamed: String,
+      exists: String,
+      outputRow: String,
+      eagerCleanup: String): String = {
+    s"""
+       |while ($streamedInput.hasNext()) {
+       |  $findNextJoinRows;
+       |  $beforeLoop
+       |  boolean $exists = false;
+       |
+       |  while (!$exists && $matchIterator.hasNext()) {
+       |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
+       |    $conditionCheck
+       |    $exists = true;
+       |  }
+       |
+       |  if (!$exists) {
+       |    // load all values of streamed row, because the values not in join condition are not
+       |    // loaded yet.
+       |    $loadStreamed
+       |  }
+       |  $outputRow
+       |
        |  if (shouldStop()) return;
        |}
        |$eagerCleanup
