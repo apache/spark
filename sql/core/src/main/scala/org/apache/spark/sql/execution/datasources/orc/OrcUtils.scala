@@ -196,7 +196,18 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       reader: Reader,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
-    val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
+      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+        case (TimestampType, TimestampNTZType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
+        case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
+        case _ =>
+      }
+    }
+
+    val orcSchema = reader.getSchema
+    checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
+    val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.

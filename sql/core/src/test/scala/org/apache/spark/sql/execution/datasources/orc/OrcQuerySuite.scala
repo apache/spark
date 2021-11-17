@@ -785,7 +785,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36346: read TimestampLTZ as TimestampNTZ") {
+  test("SPARK-36346: can't read TimestampLTZ as TimestampNTZ") {
     val data = (1 to 10).map { i =>
       val ts = new Timestamp(i)
       Row(ts)
@@ -803,7 +803,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
       withAllOrcReaders {
-        checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
+        val msg = intercept[SparkException] {
+          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
+        }.getMessage
+        assert(msg.contains("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
       }
     }
   }
