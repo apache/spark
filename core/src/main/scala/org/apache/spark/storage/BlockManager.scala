@@ -620,11 +620,15 @@ private[spark] class BlockManager(
    * Note that this method must be called without any BlockInfo locks held.
    */
   def reregister(): Unit = {
-    // TODO: We might need to rate limit re-registering.
-    logInfo(s"BlockManager $blockManagerId re-registering with master")
-    master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString, maxOnHeapMemory,
-      maxOffHeapMemory, storageEndpoint)
-    reportAllBlocks()
+    SparkContext.getActive.map { context =>
+      if (!context.stopped.get()) {
+        // TODO: We might need to rate limit re-registering.
+        logInfo(s"BlockManager $blockManagerId re-registering with master")
+        master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString,
+          maxOnHeapMemory, maxOffHeapMemory, storageEndpoint)
+        reportAllBlocks()
+      }
+    }
   }
 
   /**
