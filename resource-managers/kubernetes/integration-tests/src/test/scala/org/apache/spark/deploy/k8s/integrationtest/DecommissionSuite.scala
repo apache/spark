@@ -134,9 +134,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       mainClass = "",
       expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "Decommission executors",
-        "Remove reason statistics: (gracefully decommissioned: 1, decommision unfinished: 0, " +
-          "driver killed: 0, unexpectedly exited: 0)."),
+        "Decommission executors"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = checkFirstExecutorPodGetsLabeled,
