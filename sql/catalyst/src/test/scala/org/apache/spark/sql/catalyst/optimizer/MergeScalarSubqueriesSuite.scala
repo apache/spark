@@ -116,7 +116,10 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
   test("Merging subqueries with filters") {
     val subquery1 = ScalarSubquery(testRelation.where('a > 1).select('a))
-    val subquery2 = ScalarSubquery(testRelation.where('a > 1).select('b))
+    // Despite having an extra Project node, `subquery2` is mergeable with `subquery1`
+    val subquery2 = ScalarSubquery(testRelation.where('a > 1).select('b.as("b_1")).select('b_1))
+    // Despite lacking a Project node, `subquery3` is mergeable with the result of merging
+    // `subquery1` and `subquery2`
     val subquery3 = ScalarSubquery(testRelation.select('a.as("a_2")).where('a_2 > 1).select('a_2))
     val subquery4 = ScalarSubquery(
       testRelation.select('a.as("a_2"), 'b).where('a_2 > 1).select('b.as("b_2")))
@@ -129,10 +132,11 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
     val mergedSubquery = ScalarSubquery(testRelation
       .where('a > 1)
+      .select('a, 'b, 'c)
       .select('a, 'b)
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
-        Literal("b"), 'b
+        Literal("b_1"), 'b
       )).as("mergedValue")))
     val correctAnswer = CommonScalarSubqueries(
       Seq(mergedSubquery),
