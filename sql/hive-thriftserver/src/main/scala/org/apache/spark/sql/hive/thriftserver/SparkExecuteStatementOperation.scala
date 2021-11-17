@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Map => JMap}
-import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
+import java.util.concurrent.{Executors, RejectedExecutionException, ScheduledExecutorService, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -62,6 +62,7 @@ private[hive] class SparkExecuteStatementOperation(
       queryTimeout
     }
   }
+  private var timeoutExecutor: ScheduledExecutorService = _
 
   private val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
     new VariableSubstitution().substitute(statement)
@@ -230,17 +231,20 @@ private[hive] class SparkExecuteStatementOperation(
     setHasResultSet(true) // avoid no resultset for async run
 
     if (timeout > 0) {
-      val timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+      timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
       timeoutExecutor.schedule(new Runnable {
         override def run(): Unit = {
           try {
             timeoutCancel()
           } catch {
+            case _: InterruptedException =>
             case NonFatal(e) =>
               setOperationException(new HiveSQLException(e))
               logError(s"Error cancelling the query after timeout: $timeout seconds")
           } finally {
-            timeoutExecutor.shutdown()
+            if (!timeoutExecutor.isShutdown) {
+              shutdownAndAwaitTermination(timeoutExecutor)
+            }
           }
         }
       }, timeout, TimeUnit.SECONDS)
@@ -348,6 +352,9 @@ private[hive] class SparkExecuteStatementOperation(
         if (statementId != null) {
           sqlContext.sparkContext.cancelJobGroup(statementId)
         }
+        if (timeoutExecutor !=null && !timeoutExecutor.isShutdown) {
+          shutdownAndAwaitTermination(timeoutExecutor)
+        }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
@@ -370,6 +377,9 @@ private[hive] class SparkExecuteStatementOperation(
         }
       }
       sqlContext.sparkContext.clearJobGroup()
+      if (timeoutExecutor !=null && !timeoutExecutor.isShutdown) {
+        shutdownAndAwaitTermination(timeoutExecutor)
+      }
     }
   }
 
@@ -405,6 +415,21 @@ private[hive] class SparkExecuteStatementOperation(
     // RDDs will be cleaned automatically upon garbage collection.
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
+    }
+    if (timeoutExecutor !=null && !timeoutExecutor.isShutdown) {
+      shutdownAndAwaitTermination(timeoutExecutor)
+    }
+  }
+
+  def shutdownAndAwaitTermination(timeoutExecutor: ScheduledExecutorService): Unit = {
+    timeoutExecutor.shutdown()
+    try {
+      while (!timeoutExecutor.awaitTermination(10, TimeUnit.MILLISECONDS)) {
+        timeoutExecutor.shutdownNow()
+        Thread.sleep(10)
+      }
+    } catch {
+      case _: InterruptedException => timeoutExecutor.shutdownNow()
     }
   }
 }
