@@ -335,9 +335,7 @@ def read_csv(
         reader.options(**options)
 
         if encoding is not None:
-            if encoding in encoding_mapping:
-                encoding = encoding_mapping[encoding]
-            reader.option("encoding", encoding)
+            reader.option("encoding", encoding_mapping.get(encoding, encoding))
 
         column_labels: Dict[Any, str]
         if isinstance(names, str):
