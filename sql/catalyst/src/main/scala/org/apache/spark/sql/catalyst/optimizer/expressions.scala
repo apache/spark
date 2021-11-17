@@ -644,8 +644,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   // To be conservative here: it's only a guaranteed win if all but at most only one branch
   // end up being not foldable.
   private def atMostOneUnfoldable(exprs: Seq[Expression]): Boolean = {
-    val (foldables, others) = exprs.partition(_.foldable)
-    foldables.nonEmpty && others.length < 2
+    exprs.filterNot(_.foldable).size < 2
   }
 
   // Not all UnaryExpression can be pushed into (if / case) branches, e.g. Alias.
@@ -684,8 +683,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           falseValue = u.withNewChildren(Array(falseValue)))
 
       case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
-          if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) :+
-            elseValue.getOrElse(Literal(null, c.dataType))) =>
+          if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
@@ -706,16 +704,14 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
       case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
           if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) :+
-              elseValue.getOrElse(Literal(null, c.dataType))) =>
+            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
           Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) :+
-              elseValue.getOrElse(Literal(null, c.dataType))) =>
+            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
