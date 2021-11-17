@@ -83,11 +83,10 @@ case class OrcPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val filePath = new Path(new URI(file.filePath))
-
     if (aggregation.nonEmpty) {
       return buildReaderWithAggregates(file, conf)
     }
+    val filePath = new Path(new URI(file.filePath))
 
     val resultedColPruneInfo =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
@@ -127,11 +126,10 @@ case class OrcPartitionReaderFactory(
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
-    val filePath = new Path(new URI(file.filePath))
-
     if (aggregation.nonEmpty) {
       return buildColumnarReaderWithAggregates(file, conf)
     }
+    val filePath = new Path(new URI(file.filePath))
 
     val resultedColPruneInfo =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>

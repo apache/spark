@@ -263,15 +263,17 @@ trait FileSourceAggregatePushDownSuite
 
   test("aggregate with partition group by can be pushed down") {
     withTempPath { dir =>
-      spark.range(10).selectExpr("id", "id % 3 as p")
+      spark.range(10).selectExpr("id", "id % 3 as P")
         .write.partitionBy("p").format(format).save(dir.getCanonicalPath)
       withTempView("tmp") {
         spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        val query = "SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
+          "  min(id), p FROM tmp group by p"
+        val expected = sql(query).collect
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
-            val df = sql("SELECT count(*), count(id), p, max(id), p, count(p), max(id)," +
-              "  min(id), p FROM tmp group by p")
+            val df = sql(query)
             df.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
@@ -279,8 +281,7 @@ trait FileSourceAggregatePushDownSuite
                     "PushedFilters: [], PushedGroupBy: [p]"
                 checkKeywordsExistsInExplain(df, expected_plan_fragment)
             }
-            checkAnswer(df, Seq(Row(3, 3, 1, 7, 1, 3, 7, 1, 1), Row(3, 3, 2, 8, 2, 3, 8, 2, 2),
-              Row(4, 4, 0, 9, 0, 4, 9, 0, 0)))
+            checkAnswer(df, expected)
           }
         }
       }
@@ -297,13 +298,16 @@ trait FileSourceAggregatePushDownSuite
         .partitionBy("p2", "p1", "p4", "p3")
         .format(format)
         .save(dir.getCanonicalPath)
+
       withTempView("tmp") {
-        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query = "SELECT count(*), count(value), max(value), min(value)," +
+          " p4, p2, p3, p1 FROM tmp GROUP BY p1, p2, p3, p4"
+        val expected = sql(query).collect
         Seq("false", "true").foreach { enableVectorizedReader =>
           withSQLConf(aggPushDownEnabledKey -> "true",
             vectorizedReaderEnabledKey -> enableVectorizedReader) {
-            val df = sql("SELECT count(*), count(value), max(value), min(value)," +
-              " p4, p2, p3, p1 FROM tmp GROUP BY p1, p2, p3, p4")
+            val df = sql(query)
             df.queryExecution.optimizedPlan.collect {
               case _: DataSourceV2ScanRelation =>
                 val expected_plan_fragment =
@@ -311,9 +315,7 @@ trait FileSourceAggregatePushDownSuite
                     " PushedFilters: [], PushedGroupBy: [p1, p2, p3, p4]"
                 checkKeywordsExistsInExplain(df, expected_plan_fragment)
             }
-            checkAnswer(df, Seq(Row(1, 1, 5, 5, 8, 1, 5, 2), Row(1, 1, 4, 4, 9, 1, 4, 2),
-              Row(2, 2, 6, 3, 8, 1, 4, 2), Row(4, 4, 10, 1, 6, 2, 5, 1),
-              Row(3, 3, 6, -4, 10, 2, 9, 2)))
+            checkAnswer(df, expected)
           }
         }
       }
