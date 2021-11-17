@@ -23,6 +23,7 @@ import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, NANOS_PER_MICROS}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -126,8 +127,13 @@ class OrcDeserializer(
       case DateType => (ordinal, value) =>
         updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
-      case TimestampType | TimestampNTZType => (ordinal, value) =>
+      case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+
+      case TimestampNTZType => (ordinal, value) =>
+        val ts = value.asInstanceOf[OrcTimestamp]
+        updater.setLong(ordinal, DateTimeUtils.millisToMicros(ts.getTime) +
+          (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS)
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)
