@@ -901,12 +901,8 @@ private[spark] class Client(
       sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     }
 
-    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
-      env(ENV_DIST_CLASSPATH) = dcp
-    }
-
-    sys.env.get(SPARK_TESTING).foreach { testing =>
-      env(SPARK_TESTING) = testing
+    Seq(ENV_DIST_CLASSPATH, SPARK_TESTING).foreach { envVar =>
+      sys.env.get(envVar).foreach(value => env(envVar) = value)
     }
 
     env
