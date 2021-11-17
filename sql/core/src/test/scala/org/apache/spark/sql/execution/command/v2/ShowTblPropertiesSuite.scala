@@ -17,23 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW TBLPROPERTIES` command to check V2 table catalogs.
  */
 class ShowTblPropertiesSuite extends command.ShowTblPropertiesSuiteBase with CommandSuiteBase {
-
-  test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {
-    withNamespaceAndTable("ns1", "tbl") { tbl =>
-      val nonExistingKey = "nonExistingKey"
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
-      val properties = sql(s"SHOW TBLPROPERTIES $tbl ('$nonExistingKey')")
-      val expected = Seq(Row(nonExistingKey,
-        s"Table $tbl does not have property: $nonExistingKey"))
-      assert(expected === properties.collect())
-    }
-  }
 }

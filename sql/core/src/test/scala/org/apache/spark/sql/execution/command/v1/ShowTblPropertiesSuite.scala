@@ -33,19 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     with command.TestsV1AndV2Commands {
 
-  test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {
-    withNamespaceAndTable("ns1", "tbl") { tbl =>
-      val nonExistingKey = "nonExistingKey"
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $tbl ('$nonExistingKey')")
-      val expected = Seq(Row(nonExistingKey,
-        s"Table ns1.tbl does not have property: $nonExistingKey"))
-      assert(expected === properties.collect())
-    }
-  }
-
   test("SHOW TBLPROPERTIES WITH LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA") {
     withNamespaceAndTable("ns1", "tbl") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
@@ -56,20 +43,12 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
       }
     }
   }
-}
-
-/**
- * The class contains tests for the `SHOW TBLPROPERTIES` command to check V1 In-Memory
- * table catalog.
- */
-class ShowTblPropertiesSuite extends ShowTblPropertiesSuiteBase with CommandSuiteBase {
-  override def commandVersion: String = super[ShowTblPropertiesSuiteBase].commandVersion
 
   test("SHOW TBLPROPERTIES FOR VIEW") {
     val v = "testview"
     withView(v) {
       spark.sql(s"CREATE VIEW $v TBLPROPERTIES('p1'='v1', 'p2'='v2') AS SELECT 1 AS c1")
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $v"),
+      checkAnswer(sql(s"SHOW TBLPROPERTIES $v").filter("key != 'transient_lastDdlTime'"),
         Seq(Row("p1", "v1"), Row("p2", "v2")))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p1')"), Row("p1", "v1"))
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v('p3')"),
@@ -84,4 +63,12 @@ class ShowTblPropertiesSuite extends ShowTblPropertiesSuiteBase with CommandSuit
       checkAnswer(sql(s"SHOW TBLPROPERTIES $v"), Seq.empty)
     }
   }
+}
+
+/**
+ * The class contains tests for the `SHOW TBLPROPERTIES` command to check V1 In-Memory
+ * table catalog.
+ */
+class ShowTblPropertiesSuite extends ShowTblPropertiesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[ShowTblPropertiesSuiteBase].commandVersion
 }

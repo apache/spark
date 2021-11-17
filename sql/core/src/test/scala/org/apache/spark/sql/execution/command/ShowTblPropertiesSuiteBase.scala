@@ -51,7 +51,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
         Row("user", user))
 
       assert(properties.schema === schema)
-      assert(expected === properties.collect().sortBy(_.toString))
+      checkAnswer(properties.sort("key"), expected)
     }
   }
 
@@ -64,7 +64,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       val properties = sql(s"SHOW TBLPROPERTIES $tbl ('status')")
       val expected = Seq(Row("status", status))
-      assert(expected === properties.collect())
+      checkAnswer(properties, expected)
     }
   }
 
@@ -73,5 +73,18 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql("SHOW TBLPROPERTIES BADTABLE")
     }.getMessage
     assert(message.contains("Table or view not found: BADTABLE"))
+  }
+
+  test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {
+    withNamespaceAndTable("ns1", "tbl") { tbl =>
+      val nonExistingKey = "nonExistingKey"
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
+
+      val res = sql(s"SHOW TBLPROPERTIES $tbl ('$nonExistingKey')").collect()
+      assert(res.length == 1)
+      assert(res.head.getString(0) == nonExistingKey)
+      assert(res.head.getString(1).contains(s"does not have property: $nonExistingKey"))
+    }
   }
 }
