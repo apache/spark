@@ -26,7 +26,7 @@ from typing import cast
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import rand, udf
+from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
     StructType,
     StringType,
@@ -240,6 +240,18 @@ class ArrowTests(ReusedSQLTestCase):
             pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
             assert_frame_equal(origin, pdf)
             assert_frame_equal(pdf, pdf_arrow)
+
+    def test_create_data_frame_to_pandas_day_time_internal(self):
+        # SPARK-37279: Test DayTimeInterval in createDataFrame and toPandas
+        origin = pd.DataFrame({"a": [datetime.timedelta(microseconds=123)]})
+        df = self.spark.createDataFrame(origin)
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.a.cast("string"))
+        ).collect()
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        assert_frame_equal(origin, pdf)
+        assert_frame_equal(pdf, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
