@@ -719,9 +719,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val jsonAst = parse(clearLastUpdated(jsonOpt.get))
     val expAst = parse(exp)
     val Diff(changed, _, _) = jsonAst.diff(expAst)
-    assert(changed.children.size == 1)
-    assert(changed.children.head.asInstanceOf[JObject].obj.head._1 ==
-      "historyServer.checkForLogsTime")
+    assert(changed.children.forall(_.asInstanceOf[JObject].obj.head._1.contains("timer")))
   }
 }
 

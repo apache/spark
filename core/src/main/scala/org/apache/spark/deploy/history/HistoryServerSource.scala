@@ -35,24 +35,24 @@ private[spark] class HistoryServerSource(val history: ApplicationHistoryProvider
     override def getValue: Int = history.getListing().size
   })
 
-  metricRegistry.register(MetricRegistry.name("underProcess"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("under.process"), new Gauge[Int] {
     override def getValue: Int = history.getEventLogsUnderProcess()
   })
 
   private val checkForLogsTimer: Timer =
-    metricRegistry.timer(MetricRegistry.name("checkForLogsTime"))
+    metricRegistry.timer(MetricRegistry.name("check.logs.timer"))
 
   private val cleanLogsTimer: Timer =
-    metricRegistry.timer(MetricRegistry.name("cleanLogsTime"))
+    metricRegistry.timer(MetricRegistry.name("clean.logs.timer"))
 
   private val cleanDriverLogsTimer: Timer =
-    metricRegistry.timer(MetricRegistry.name("cleanDriverLogsTime"))
+    metricRegistry.timer(MetricRegistry.name("clean.driver.logs.timer"))
 
   private val compactTimer: Timer =
-    metricRegistry.timer(MetricRegistry.name("compactTime"))
+    metricRegistry.timer(MetricRegistry.name("compact.timer"))
 
   private val loadStoreTimer: Timer =
-    metricRegistry.timer(MetricRegistry.name("loadStoreTime"))
+    metricRegistry.timer(MetricRegistry.name("load.store.timer"))
 
   def timeOfCheckForLogs[T](f: => T): T = {
     timeOfProcess(checkForLogsTimer)(f)
