@@ -130,8 +130,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("[SPARK35867] Boolean APIs", 1024, BooleanType) {
-    column => ()
+  testVector("Boolean APIs", 1024, BooleanType) {
+    column =>
       val reference = mutable.ArrayBuffer.empty[Boolean]
 
       var values = Array(true, false, true, false, false)
