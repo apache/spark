@@ -134,7 +134,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // "header", that `CreateNamedStruct(name1, attribute1, name2, attribute2, ...)` expression in a
   // [[Project]] node.
   private def cacheSubquery(plan: LogicalPlan, cache: ListBuffer[Header]): (Int, Int) = {
-    val firstOutput = plan.output.head
+    val output = plan.output.head
     cache.zipWithIndex.collectFirst(Function.unlift { case (header, subqueryIndex) =>
       checkIdenticalPlans(plan, header.plan)
         .map((subqueryIndex, header, header.plan, _, header.merged))
@@ -142,18 +142,18 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           case (mergedPlan, outputMap) => (subqueryIndex, header, mergedPlan, outputMap, true)
         })
     }).map { case (subqueryIndex, header, mergedPlan, outputMap, merged) =>
-      val mappedFirstOutput = mapAttributes(firstOutput, outputMap)
+      val mappedFirstOutput = mapAttributes(output, outputMap)
       var headerIndex = header.elements.indexWhere {
         case (_, attribute) => attribute.exprId == mappedFirstOutput.exprId
       }
       if (headerIndex == -1) {
-        val newHeaderElements = header.elements :+ (firstOutput.name -> mappedFirstOutput)
+        val newHeaderElements = header.elements :+ (output.name -> mappedFirstOutput)
         cache(subqueryIndex) = Header(newHeaderElements, mergedPlan, merged)
         headerIndex = header.elements.size
       }
       subqueryIndex -> headerIndex
     }.getOrElse {
-      cache += Header(Seq(firstOutput.name -> firstOutput), plan, false)
+      cache += Header(Seq(output.name -> output), plan, false)
       cache.length - 1 -> 0
     }
   }
@@ -203,6 +203,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
             val mappedNewGroupingExpression =
               np.groupingExpressions.map(mapAttributes(_, outputMap))
+            // Order of grouping expression doesn't matter so we can compare sets
             if (ExpressionSet(mappedNewGroupingExpression) ==
               ExpressionSet(cp.groupingExpressions)) {
               val (mergedAggregateExpressions, newOutputMap) =
@@ -367,7 +368,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
   // `GetStructField(ScalarSubquery(merged plan with CreateNamedStruct() header))` if the plan is
-  // merged from multiple subqueries or `ScalarSubquery(original plan)` it it isn't.
+  // merged from multiple subqueries or `ScalarSubquery(original plan)` if it isn't.
   private def removeReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
     val nonMergedSubqueriesBefore = cache.scanLeft(0) {
       case (nonMergedSubqueriesBefore, header) =>
@@ -388,6 +389,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             ScalarSubquery(plan = header.plan, exprId = ssr.exprId)
           }
     }
+    // Could use `filterInPlace()` in Scala 2.13
     cache.zipWithIndex.collect {
       case (header, i) if !header.merged => i
     }.reverse.foreach(cache.remove)
