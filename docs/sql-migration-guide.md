@@ -342,7 +342,7 @@ license: |
       
       | Query | Spark 2.4 | Spark 3.0 |
       | ----- | --------- | --------- |
-      |`SELECT SPLIT('SPARK SQL;Quick', '\\\\;');` | `SELECT SPLIT('SPARK SQL;Quick', '\\\;');` | `SELECT SPLIT('SPARK SQL;Quick', '\\\\;');` |
+      |`SELECT SPLIT('SPARK;SQL', '\\\\;');`| `SELECT SPLIT('SPARK;SQL', '\\\;');`| `SELECT SPLIT('SPARK;SQL', '\\\\;');`|
 
 ### Data Sources
 
