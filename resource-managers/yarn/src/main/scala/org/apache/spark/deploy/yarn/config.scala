@@ -82,12 +82,12 @@ package object config extends Logging {
     ConfigBuilder("spark.yarn.am.sendTokenConf")
         .doc("The value of this config is a regex expression used to grep a list of " +
           "config entries from the job's configuration file (e.g., hdfs-site.xml) and send to " +
-          "RM, which will then use them when renewing delegation tokens. A typical use case of " +
-          "this feature is to support delegation tokens in a multi-cluster environment, where " +
-          "the RM may not have configs for all the (HDFS) clusters a YARN job wants to talk to, " +
-          "e.g., dfs.nameservices, dfs.ha.namenodes.x, dfs.namenode.rpc-address.x, and so on. " +
-          "This config mirrors 'mapreduce.job.send-token-conf'. For more details, please check " +
-          "YARN-5910.")
+          "RM, which uses them when renewing delegation tokens. A typical use case of " +
+          "this feature is to support delegation tokens in an environment where a YARN cluster " +
+          "needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have " +
+          "configs (e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*)" +
+          "to connect to these clusters. This config is very similar to " +
+          "'mapreduce.job.send-token-conf'. Please check YARN-5910 for more details.")
         .version("3.3.0")
         .stringConf
         .createWithDefault("")

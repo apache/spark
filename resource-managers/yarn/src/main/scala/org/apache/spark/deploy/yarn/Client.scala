@@ -349,12 +349,14 @@ private[spark] class Client(
     // The feature is only supported in Hadoop 3.x and up, hence the check below.
     val regex = sparkConf.get(config.AM_SEND_TOKEN_CONF)
     if (regex != null && regex.nonEmpty && VersionUtils.isHadoop3) {
+      logInfo(s"Processing token conf (spark.yarn.am.sendTokenConf) with regex $regex")
       val dob = new DataOutputBuffer();
       val copy = new Configuration(false);
       copy.clear();
       hadoopConf.asScala.foreach { entry =>
         if (entry.getKey.matches(regex)) {
           copy.set(entry.getKey, entry.getValue)
+          logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
         }
       }
       copy.write(dob);
