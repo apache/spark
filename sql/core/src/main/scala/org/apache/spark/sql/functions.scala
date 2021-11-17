@@ -2209,7 +2209,7 @@ object functions {
    * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
-   * @since 1.5.0
+   * @since 3.3.0
    */
   def round(e: Column, scale: Int, mode: String): Column = withExpr {
     Round(e.expr, Literal(scale), Literal(mode))

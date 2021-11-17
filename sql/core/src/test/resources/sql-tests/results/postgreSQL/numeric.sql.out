@@ -3810,7 +3810,7 @@ SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
     WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
     AND t1.result != round(t2.expected, 40)
 -- !query schema
-struct<id1:int,id2:int,result:decimal(38,10),round(expected, 40):decimal(38,10)>
+struct<id1:int,id2:int,result:decimal(38,10),round(expected, 40, half_up):decimal(38,10)>
 -- !query output
 
 
@@ -4404,7 +4404,7 @@ struct<>
 -- !query
 SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round
 -- !query schema
-struct<a:decimal(38,18),CEIL(a):decimal(21,0),ceiling(a):decimal(21,0),FLOOR(a):decimal(21,0),round(a, 0):decimal(38,0)>
+struct<a:decimal(38,18),CEIL(a):decimal(21,0),ceiling(a):decimal(21,0),FLOOR(a):decimal(21,0),round(a, 0, half_up):decimal(38,0)>
 -- !query output
 -0.000001000000000000	0	0	-1	0
 -5.499999000000000000	-5	-5	-6	-5

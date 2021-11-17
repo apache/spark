@@ -40,7 +40,7 @@
 | org.apache.spark.sql.catalyst.expressions.Atan | atan | SELECT atan(0) | struct<ATAN(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Atan2 | atan2 | SELECT atan2(0, 0) | struct<ATAN2(0, 0):double> |
 | org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<ATANH(0):double> |
-| org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
+| org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<round(2.5, 0, half_even):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
@@ -242,7 +242,7 @@
 | org.apache.spark.sql.catalyst.expressions.Reverse | reverse | SELECT reverse('Spark SQL') | struct<reverse(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Right | right | SELECT right('Spark SQL', 3) | struct<right(Spark SQL, 3):string> |
 | org.apache.spark.sql.catalyst.expressions.Rint | rint | SELECT rint(12.3456) | struct<rint(12.3456):double> |
-| org.apache.spark.sql.catalyst.expressions.Round | round | SELECT round(2.5, 0) | struct<round(2.5, 0):decimal(2,0)> |
+| org.apache.spark.sql.catalyst.expressions.Round | round | SELECT round(2.5, 0) | struct<round(2.5, 0, half_up):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.RowNumber | row_number | SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,row_number() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.SchemaOfCsv | schema_of_csv | SELECT schema_of_csv('1,abc') | struct<schema_of_csv(1,abc):string> |
 | org.apache.spark.sql.catalyst.expressions.SchemaOfJson | schema_of_json | SELECT schema_of_json('[{"col":0}]') | struct<schema_of_json([{"col":0}]):string> |
