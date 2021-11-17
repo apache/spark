@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.ql.exec.vector.*;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
-import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DateType;
@@ -116,9 +114,7 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     if (isTimestamp) {
       return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
     } else if (isTimestampNTZ) {
-      Timestamp ts = timestampData.asScratchTimestamp(index);
-      return DateTimeUtils.millisToMicros(ts.getTime()) +
-        (ts.getNanos() / DateTimeConstants.NANOS_PER_MICROS) % DateTimeConstants.MICROS_PER_MILLIS;
+      return OrcUtils.fromOrcNTZ(timestampData.asScratchTimestamp(index));
     } else {
       return longData.vector[index];
     }

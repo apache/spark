@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.sql.Timestamp
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -28,6 +29,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -36,7 +38,8 @@ import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
@@ -512,5 +515,18 @@ object OrcUtils extends Logging {
 
     val orcValuesDeserializer = new OrcDeserializer(aggSchema, (0 until aggSchema.length).toArray)
     orcValuesDeserializer.deserializeFromValues(aggORCValues)
+  }
+
+  def fromOrcNTZ(ts: Timestamp): Long = {
+    DateTimeUtils.millisToMicros(ts.getTime) +
+      (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+  }
+
+  def toOrcNTZ(micros: Long): OrcTimestamp = {
+    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
+    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
+    result.setNanos(nanos.toInt)
+    result
   }
 }

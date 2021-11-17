@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.sql.Timestamp
-
 import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_SECOND, MILLIS_PER_SECOND, NANOS_PER_MICROS}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -150,15 +147,7 @@ class OrcSerializer(dataSchema: StructType) {
       result.setNanos(ts.getNanos)
       result
 
-    case TimestampNTZType => (getter, ordinal) =>
-      val micros = getter.getLong(ordinal)
-      val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
-      val ts = new Timestamp(seconds * MILLIS_PER_SECOND)
-      val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
-      ts.setNanos(nanos.toInt)
-      val result = new OrcTimestamp(ts.getTime)
-      result.setNanos(ts.getNanos)
-      result
+    case TimestampNTZType => (getter, ordinal) => OrcUtils.toOrcNTZ(getter.getLong(ordinal))
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
