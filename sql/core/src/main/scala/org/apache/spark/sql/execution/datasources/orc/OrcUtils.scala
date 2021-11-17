@@ -25,15 +25,19 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.hadoop.hive.serde2.io.DateWritable
+import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
@@ -87,7 +91,7 @@ object OrcUtils extends Logging {
     }
   }
 
-  private def toCatalystSchema(schema: TypeDescription): StructType = {
+  def toCatalystSchema(schema: TypeDescription): StructType = {
     import TypeDescription.Category
 
     def toCatalystType(orcType: TypeDescription): DataType = {
@@ -376,5 +380,117 @@ object OrcUtils extends Logging {
           supportColumnarReads(valueType, nestedColumnEnabled)
       case _ => false
     }
+  }
+
+  /**
+   * When the partial aggregates (Max/Min/Count) are pushed down to ORC, we don't need to read data
+   * from ORC and aggregate at Spark layer. Instead we want to get the partial aggregates
+   * (Max/Min/Count) result using the statistics information from ORC file footer, and then
+   * construct an InternalRow from these aggregate results.
+   *
+   * @return Aggregate results in the format of InternalRow
+   */
+  def createAggInternalRowFromFooter(
+      reader: Reader,
+      filePath: String,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      aggregation: Aggregation,
+      aggSchema: StructType): InternalRow = {
+    require(aggregation.groupByColumns.length == 0,
+      s"aggregate $aggregation with group-by column shouldn't be pushed down")
+    var columnsStatistics: OrcColumnStatistics = null
+    try {
+      columnsStatistics = OrcFooterReader.readStatistics(reader)
+    } catch { case e: Exception =>
+      throw new SparkException(
+        s"Cannot read columns statistics in file: $filePath. Please consider disabling " +
+        s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
+    }
+
+    // Get column statistics with column name.
+    def getColumnStatistics(columnName: String): ColumnStatistics = {
+      val columnIndex = dataSchema.fieldNames.indexOf(columnName)
+      columnsStatistics.get(columnIndex).getStatistics
+    }
+
+    // Get Min/Max statistics and store as ORC `WritableComparable` format.
+    // Return null if number of non-null values is zero.
+    def getMinMaxFromColumnStatistics(
+        statistics: ColumnStatistics,
+        dataType: DataType,
+        isMax: Boolean): WritableComparable[_] = {
+      if (statistics.getNumberOfValues == 0) {
+        return null
+      }
+
+      statistics match {
+        case s: BooleanColumnStatistics =>
+          val value = if (isMax) s.getTrueCount > 0 else !(s.getFalseCount > 0)
+          new BooleanWritable(value)
+        case s: IntegerColumnStatistics =>
+          val value = if (isMax) s.getMaximum else s.getMinimum
+          dataType match {
+            case ByteType => new ByteWritable(value.toByte)
+            case ShortType => new ShortWritable(value.toShort)
+            case IntegerType => new IntWritable(value.toInt)
+            case LongType => new LongWritable(value)
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+              "for IntegerColumnStatistics")
+          }
+        case s: DoubleColumnStatistics =>
+          val value = if (isMax) s.getMaximum else s.getMinimum
+          dataType match {
+            case FloatType => new FloatWritable(value.toFloat)
+            case DoubleType => new DoubleWritable(value)
+            case _ => throw new IllegalArgumentException(
+              s"getMinMaxFromColumnStatistics should not take type $dataType " +
+                "for DoubleColumnStatistics")
+          }
+        case s: DateColumnStatistics =>
+          new DateWritable(
+            if (isMax) s.getMaximumDayOfEpoch.toInt else s.getMinimumDayOfEpoch.toInt)
+        case _ => throw new IllegalArgumentException(
+          s"getMinMaxFromColumnStatistics should not take ${statistics.getClass.getName}: " +
+            s"$statistics as the ORC column statistics")
+      }
+    }
+
+    val aggORCValues: Seq[WritableComparable[_]] =
+      aggregation.aggregateExpressions.zipWithIndex.map {
+        case (max: Max, index) =>
+          val columnName = max.column.fieldNames.head
+          val statistics = getColumnStatistics(columnName)
+          val dataType = aggSchema(index).dataType
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
+        case (min: Min, index) =>
+          val columnName = min.column.fieldNames.head
+          val statistics = getColumnStatistics(columnName)
+          val dataType = aggSchema.apply(index).dataType
+          getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
+        case (count: Count, _) =>
+          val columnName = count.column.fieldNames.head
+          val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
+          // NOTE: Count(columnName) doesn't include null values.
+          // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values
+          // for ColumnStatistics of individual column. In addition to this, ORC also stores number
+          // of all values (null and non-null) separately.
+          val nonNullRowsCount = if (isPartitionColumn) {
+            columnsStatistics.getStatistics.getNumberOfValues
+          } else {
+            getColumnStatistics(columnName).getNumberOfValues
+          }
+          new LongWritable(nonNullRowsCount)
+        case (_: CountStar, _) =>
+          // Count(*) includes both null and non-null values.
+          new LongWritable(columnsStatistics.getStatistics.getNumberOfValues)
+        case (x, _) =>
+          throw new IllegalArgumentException(
+            s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
+      }
+
+    val orcValuesDeserializer = new OrcDeserializer(aggSchema, (0 until aggSchema.length).toArray)
+    orcValuesDeserializer.deserializeFromValues(aggORCValues)
   }
 }

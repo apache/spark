@@ -27,7 +27,9 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWra
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.tags.ExtendedRocksDBTest
 
+@ExtendedRocksDBTest
 class RocksDBStateStoreIntegrationSuite extends StreamTest {
   import testImplicits._
 

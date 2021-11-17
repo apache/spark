@@ -171,6 +171,7 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
@@ -466,6 +467,7 @@ Functions
     lower
     lpad
     ltrim
+    make_date
     map_concat
     map_entries
     map_filter

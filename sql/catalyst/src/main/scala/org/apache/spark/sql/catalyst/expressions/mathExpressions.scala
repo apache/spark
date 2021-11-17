@@ -1617,6 +1617,10 @@ object WidthBucket {
        1
       > SELECT _FUNC_(INTERVAL '1' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
        2
+      > SELECT _FUNC_(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       2
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -1628,9 +1632,9 @@ case class WidthBucket(
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(DoubleType, YearMonthIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
     LongType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -1638,6 +1642,8 @@ case class WidthBucket(
       case TypeCheckSuccess =>
         (value.dataType, minValue.dataType, maxValue.dataType) match {
           case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
+            TypeCheckSuccess
+          case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)

@@ -4,7 +4,7 @@
 @EXPLICIT
 https://repo.anaconda.com/pkgs/main/linux-64/_libgcc_mutex-0.1-main.conda
 https://repo.anaconda.com/pkgs/main/linux-64/blas-1.0-mkl.tar.bz2
-https://conda.anaconda.org/conda-forge/linux-64/ca-certificates-2021.5.30-ha878542_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/ca-certificates-2021.9.30-h06a4308_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/intel-openmp-2019.3-199.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/libffi-3.2.1-hd88cf55_4.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/libgcc-ng-8.2.0-hdf63c60_1.tar.bz2
@@ -21,7 +21,7 @@ https://conda.anaconda.org/conda-forge/linux-64/icu-58.2-hf484d3e_1000.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.8.3-he1b5a44_1001.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/mkl-2019.3-199.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/ncurses-6.1-he6710b0_1.tar.bz2
-https://repo.anaconda.com/pkgs/main/linux-64/openssl-1.1.1k-h27cfd23_0.conda
+https://repo.anaconda.com/pkgs/main/linux-64/openssl-1.1.1l-h7f8727e_0.conda
 https://conda.anaconda.org/conda-forge/linux-64/re2-2020.03.03-he1b5a44_0.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/snappy-1.1.8-he1b5a44_1.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/uriparser-0.9.3-he1b5a44_1.tar.bz2
@@ -42,6 +42,7 @@ https://repo.anaconda.com/pkgs/main/linux-64/python-3.6.8-h0371630_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/alabaster-0.7.12-py_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/attrs-21.2.0-pyhd8ed1ab_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/backcall-0.2.0-pyhd3eb1b0_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/certifi-2021.5.30-py36h06a4308_0.conda
 https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.4-pyh9f0ad1d_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/coverage-4.5.2-py36h7b6447c_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/decorator-5.0.9-pyhd3eb1b0_0.conda
@@ -56,8 +57,8 @@ https://repo.anaconda.com/pkgs/main/noarch/parso-0.8.2-pyhd3eb1b0_0.conda
 https://repo.anaconda.com/pkgs/main/noarch/pickleshare-0.7.5-pyhd3eb1b0_1003.conda
 https://conda.anaconda.org/conda-forge/linux-64/psutil-4.4.2-py36_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/ptyprocess-0.7.0-pyhd3eb1b0_2.conda
-https://repo.anaconda.com/pkgs/main/linux-64/pycodestyle-2.4.0-py36_0.conda
-https://repo.anaconda.com/pkgs/main/linux-64/pyflakes-2.0.0-py36_0.conda
+https://conda.anaconda.org/anaconda/noarch/pycodestyle-2.6.0-py_0.tar.bz2
+https://conda.anaconda.org/anaconda/noarch/pyflakes-2.2.0-py_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/pyparsing-2.4.7-pyh9f0ad1d_0.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/python_abi-3.6-2_cp36m.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/pytz-2018.9-py36_0.tar.bz2
@@ -72,6 +73,7 @@ https://conda.anaconda.org/conda-forge/noarch/sphinxcontrib-jsmath-1.0.1-py_0.ta
 https://conda.anaconda.org/conda-forge/noarch/sphinxcontrib-qthelp-1.0.3-py_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/sphinxcontrib-serializinghtml-1.1.5-pyhd8ed1ab_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/testpath-0.5.0-pyhd8ed1ab_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/noarch/toml-0.10.2-pyhd3eb1b0_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/typed-ast-1.4.3-py36h7f8727e_1.conda
 https://conda.anaconda.org/conda-forge/noarch/typing_extensions-3.10.0.0-pyha770c72_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/wcwidth-0.2.5-py_0.conda
@@ -80,7 +82,6 @@ https://conda.anaconda.org/conda-forge/noarch/xmlrunner-1.7.7-py_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/zipp-3.5.0-pyhd8ed1ab_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/babel-2.9.1-pyh44b312d_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/beautifulsoup4-4.9.3-pyhb0f4dca_0.tar.bz2
-https://conda.anaconda.org/conda-forge/linux-64/certifi-2021.5.30-py36h5fab9bb_0.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/docutils-0.16-py36h5fab9bb_3.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/importlib-metadata-4.6.1-py36h5fab9bb_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/jedi-0.17.0-py36_0.conda
@@ -93,14 +94,13 @@ https://repo.anaconda.com/pkgs/main/noarch/pexpect-4.8.0-pyhd3eb1b0_3.conda
 https://repo.anaconda.com/pkgs/main/noarch/prompt-toolkit-3.0.17-pyh06a4308_0.conda
 https://conda.anaconda.org/conda-forge/linux-64/pyrsistent-0.17.3-py36h1d69622_1.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/python-dateutil-2.8.0-py36_0.tar.bz2
-https://repo.anaconda.com/pkgs/main/linux-64/traitlets-4.3.3-py36_0.conda
-https://conda.anaconda.org/conda-forge/linux-64/jupyter_core-4.7.1-py36h5fab9bb_0.tar.bz2
-https://conda.anaconda.org/conda-forge/noarch/mypy-0.812-pyhd8ed1ab_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/setuptools-40.8.0-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/traitlets-4.3.3-py36_0.conda
 https://conda.anaconda.org/conda-forge/noarch/bleach-3.3.1-pyhd8ed1ab_0.tar.bz2
-https://conda.anaconda.org/conda-forge/linux-64/flake8-3.6.0-py36_1000.tar.bz2
+https://repo.anaconda.com/pkgs/main/noarch/flake8-3.9.0-pyhd3eb1b0_0.conda
 https://conda.anaconda.org/conda-forge/noarch/jinja2-2.11.3-pyh44b312d_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/jsonschema-3.2.0-pyhd8ed1ab_3.tar.bz2
+https://conda.anaconda.org/conda-forge/linux-64/jupyter_core-4.7.1-py36h5fab9bb_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/noarch/pygments-2.9.0-pyhd3eb1b0_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/wheel-0.33.1-py36_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/ipython-7.16.1-py36h5ca1d4c_0.conda

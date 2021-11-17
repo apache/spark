@@ -17,12 +17,12 @@
 #
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
-# TODO(SPARK-34943): minimum version should be 3.8+
-MINIMUM_FLAKE8="3.8.0"
+MINIMUM_FLAKE8="3.9.0"
 MINIMUM_MYPY="0.910"
 MYPY_BUILD="mypy"
 PYCODESTYLE_BUILD="pycodestyle"
 MINIMUM_PYCODESTYLE="2.7.0"
+PYTEST_BUILD="pytest"
 
 PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 
@@ -124,10 +124,66 @@ function pycodestyle_test {
     fi
 }
 
-function mypy_test {
+
+function mypy_annotation_test {
     local MYPY_REPORT=
     local MYPY_STATUS=
 
+    echo "starting mypy annotations test..."
+    MYPY_REPORT=$( ($MYPY_BUILD \
+      --config-file python/mypy.ini \
+      --cache-dir /tmp/.mypy_cache/ \
+      python/pyspark) 2>&1)
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "annotations failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+        echo "annotations passed mypy checks."
+        echo
+    fi
+}
+
+
+function mypy_data_test {
+    local PYTEST_REPORT=
+    local PYTEST_STATUS=
+
+    echo "starting mypy data test..."
+
+    $PYTHON_EXECUTABLE -c "import importlib.util; import sys; \
+               sys.exit(0 if importlib.util.find_spec('pytest_mypy_plugins') else 1)"
+
+    if [ $? -ne 0 ]; then
+      echo "pytest-mypy-plugins missing. Skipping for now."
+      return
+    fi
+
+    PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
+      -c dev/pyproject.toml \
+      --rootdir python \
+      --mypy-only-local-stub \
+      --mypy-ini-file python/mypy.ini \
+      python/pyspark ) 2>&1)
+
+    PYTEST_STATUS=$?
+
+    if [ "$PYTEST_STATUS" -ne 0 ]; then
+        echo "annotations failed data checks:"
+        echo "$PYTEST_REPORT"
+        echo "$PYTEST_STATUS"
+        exit "$PYTEST_STATUS"
+    else
+      echo "annotations passed data checks."
+      echo
+    fi
+}
+
+
+function mypy_test {
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
         return
@@ -142,20 +198,10 @@ function mypy_test {
         return
     fi
 
-    echo "starting mypy test..."
-    MYPY_REPORT=$( ($MYPY_BUILD --config-file python/mypy.ini python/pyspark) 2>&1)
-    MYPY_STATUS=$?
-
-    if [ "$MYPY_STATUS" -ne 0 ]; then
-        echo "mypy checks failed:"
-        echo "$MYPY_REPORT"
-        echo "$MYPY_STATUS"
-        exit "$MYPY_STATUS"
-    else
-        echo "mypy checks passed."
-        echo
-    fi
+    mypy_annotation_test
+    mypy_data_test
 }
+
 
 function flake8_test {
     local FLAKE8_VERSION=
@@ -209,8 +255,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    # Black is only applied for pandas API on Spark for now.
-    BLACK_REPORT=$( ($BLACK_BUILD python/pyspark/pandas --line-length 100 --check ) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

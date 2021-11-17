@@ -103,6 +103,7 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -598,7 +599,7 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "Series":
         """
         Applies sfun to each column and returns a pd.Series where the number of rows equal the
@@ -2480,6 +2481,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2720,6 +2725,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
             transformed = pdf.transform(func, axis, *args, **kwargs)
@@ -4528,8 +4537,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_table`, "
+                "the existing index is lost when converting to table."
+            )
         mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
@@ -4541,7 +4555,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a Delta Lake table.
@@ -4603,6 +4617,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.to_delta('%s/to_delta/bar' % path,
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_delta`, "
+                "the existing index is lost when converting to Delta."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4623,7 +4642,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
         """
         Write the DataFrame out as a Parquet file or directory.
@@ -4680,6 +4699,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_parquet`, "
+                "the existing index is lost when converting to Parquet."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
 
@@ -4697,7 +4721,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a ORC file or directory.
@@ -4752,6 +4776,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_orc`, "
+                "the existing index is lost when converting to ORC."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4772,7 +4801,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """An alias for :func:`DataFrame.spark.to_spark_io`.
         See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
@@ -4786,6 +4815,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_spark`, "
+                "the existing index is lost when converting to Spark DataFrame."
+            )
         return self.spark.frame(index_col)
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
@@ -4807,6 +4841,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1   0.0   0.6
         2   0.6   0.0
         3   0.2   0.1
+        """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas DataFrame is expected to be small."
+        )
+        return self._internal.to_pandas_frame.copy()
+
+    def _to_pandas(self) -> pd.DataFrame:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
         """
         return self._internal.to_pandas_frame.copy()
 
@@ -6415,7 +6459,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string  # type: ignore[attr-defined]
+        from pyspark.sql.types import _parse_datatype_string
 
         include_list: List[str]
         if not is_list_like(include):
@@ -10833,7 +10877,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
                 self.count = (  # type: ignore[assignment]
-                    lambda: count_func().to_pandas()  # type: ignore[assignment, misc, union-attr]
+                    lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
                     self,

@@ -23,15 +23,16 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc.{OrcConf, OrcFile, TypeDescription}
+import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -55,7 +56,8 @@ case class OrcPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    filters: Array[Filter]) extends FilePartitionReaderFactory {
+    filters: Array[Filter],
+    aggregation: Option[Aggregation]) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -81,17 +83,14 @@ case class OrcPartitionReaderFactory(
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-
-    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-
     val filePath = new Path(new URI(file.filePath))
 
-    pushDownPredicates(filePath, conf)
+    if (aggregation.nonEmpty) {
+      return buildReaderWithAggregates(filePath, conf)
+    }
 
-    val fs = filePath.getFileSystem(conf)
-    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val resultedColPruneInfo =
-      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+      Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
@@ -128,17 +127,14 @@ case class OrcPartitionReaderFactory(
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
     val conf = broadcastedConf.value.value
-
-    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-
     val filePath = new Path(new URI(file.filePath))
 
-    pushDownPredicates(filePath, conf)
+    if (aggregation.nonEmpty) {
+      return buildColumnarReaderWithAggregates(filePath, conf)
+    }
 
-    val fs = filePath.getFileSystem(conf)
-    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val resultedColPruneInfo =
-      Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+      Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
         OrcUtils.requestedColumnIds(
           isCaseSensitive, dataSchema, readDataSchema, reader, conf)
       }
@@ -173,4 +169,67 @@ case class OrcPartitionReaderFactory(
     }
   }
 
+  private def createORCReader(filePath: Path, conf: Configuration): Reader = {
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
+
+    pushDownPredicates(filePath, conf)
+
+    val fs = filePath.getFileSystem(conf)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    OrcFile.createReader(filePath, readerOptions)
+  }
+
+  /**
+   * Build reader with aggregate push down.
+   */
+  private def buildReaderWithAggregates(
+      filePath: Path,
+      conf: Configuration): PartitionReader[InternalRow] = {
+    new PartitionReader[InternalRow] {
+      private var hasNext = true
+      private lazy val row: InternalRow = {
+        Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+          OrcUtils.createAggInternalRowFromFooter(
+            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get, readDataSchema)
+        }
+      }
+
+      override def next(): Boolean = hasNext
+
+      override def get(): InternalRow = {
+        hasNext = false
+        row
+      }
+
+      override def close(): Unit = {}
+    }
+  }
+
+  /**
+   * Build columnar reader with aggregate push down.
+   */
+  private def buildColumnarReaderWithAggregates(
+      filePath: Path,
+      conf: Configuration): PartitionReader[ColumnarBatch] = {
+    new PartitionReader[ColumnarBatch] {
+      private var hasNext = true
+      private lazy val batch: ColumnarBatch = {
+        Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+          val row = OrcUtils.createAggInternalRowFromFooter(
+            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
+            readDataSchema)
+          AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
+        }
+      }
+
+      override def next(): Boolean = hasNext
+
+      override def get(): ColumnarBatch = {
+        hasNext = false
+        batch
+      }
+
+      override def close(): Unit = {}
+    }
+  }
 }

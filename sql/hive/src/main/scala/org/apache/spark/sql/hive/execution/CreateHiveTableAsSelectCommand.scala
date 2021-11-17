@@ -64,7 +64,8 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
-      val tableSchema = CharVarcharUtils.getRawSchema(outputColumns.toStructType)
+      val tableSchema = CharVarcharUtils.getRawSchema(
+        outputColumns.toStructType, sparkSession.sessionState.conf)
       assert(tableDesc.schema.isEmpty)
       catalog.createTable(
         tableDesc.copy(schema = tableSchema), ignoreIfExists = false)

@@ -20,6 +20,7 @@ import tarfile
 import traceback
 import urllib.request
 from shutil import rmtree
+
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
 
@@ -27,8 +28,7 @@ DEFAULT_HADOOP = "hadoop3.2"
 DEFAULT_HIVE = "hive2.3"
 SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
-UNSUPPORTED_COMBINATIONS = [  # type: ignore
-]
+UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
 def checked_package_name(spark_version, hadoop_version, hive_version):
@@ -60,8 +60,8 @@ def checked_versions(spark_version, hadoop_version, hive_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
         raise RuntimeError(
-            "Spark version should start with 'spark-' prefix; however, "
-            "got %s" % spark_version)
+            "Spark version should start with 'spark-' prefix; however, " "got %s" % spark_version
+        )
 
     if hadoop_version == "without":
         hadoop_version = "without-hadoop"
@@ -71,8 +71,8 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     if hadoop_version not in SUPPORTED_HADOOP_VERSIONS:
         raise RuntimeError(
             "Spark distribution of %s is not supported. Hadoop version should be "
-            "one of [%s]" % (hadoop_version, ", ".join(
-                SUPPORTED_HADOOP_VERSIONS)))
+            "one of [%s]" % (hadoop_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
+        )
 
     if re.match("^[0-9]+\\.[0-9]+$", hive_version):
         hive_version = "hive%s" % hive_version
@@ -80,8 +80,8 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     if hive_version not in SUPPORTED_HIVE_VERSIONS:
         raise RuntimeError(
             "Spark distribution of %s is not supported. Hive version should be "
-            "one of [%s]" % (hive_version, ", ".join(
-                SUPPORTED_HADOOP_VERSIONS)))
+            "one of [%s]" % (hive_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
+        )
 
     return spark_version, hadoop_version, hive_version
 
@@ -114,7 +114,8 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
 
     pretty_pkg_name = "%s for Hadoop %s" % (
         spark_version,
-        "Free build" if hadoop_version == "without" else hadoop_version)
+        "Free build" if hadoop_version == "without" else hadoop_version,
+    )
 
     for site in sites:
         os.makedirs(dest, exist_ok=True)
@@ -151,19 +152,22 @@ def get_preferred_mirrors():
     for _ in range(3):
         try:
             response = urllib.request.urlopen(
-                "https://www.apache.org/dyn/closer.lua?preferred=true")
-            mirror_urls.append(response.read().decode('utf-8'))
+                "https://www.apache.org/dyn/closer.lua?preferred=true"
+            )
+            mirror_urls.append(response.read().decode("utf-8"))
         except Exception:
             # If we can't get a mirror URL, skip it. No retry.
             pass
 
     default_sites = [
-        "https://archive.apache.org/dist", "https://dist.apache.org/repos/dist/release"]
+        "https://archive.apache.org/dist",
+        "https://dist.apache.org/repos/dist/release",
+    ]
     return list(set(mirror_urls)) + default_sites
 
 
 def download_to_file(response, path, chunk_size=1024 * 1024):
-    total_size = int(response.info().get('Content-Length').strip())
+    total_size = int(response.info().get("Content-Length").strip())
     bytes_so_far = 0
 
     with open(path, mode="wb") as dest:
@@ -173,7 +177,7 @@ def download_to_file(response, path, chunk_size=1024 * 1024):
             if not chunk:
                 break
             dest.write(chunk)
-            print("Downloaded %d of %d bytes (%0.2f%%)" % (
-                bytes_so_far,
-                total_size,
-                round(float(bytes_so_far) / total_size * 100, 2)))
+            print(
+                "Downloaded %d of %d bytes (%0.2f%%)"
+                % (bytes_so_far, total_size, round(float(bytes_so_far) / total_size * 100, 2))
+            )

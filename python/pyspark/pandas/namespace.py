@@ -78,6 +78,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     validate_axis,
+    log_advice,
 )
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
@@ -223,7 +224,7 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
-    **options: Any
+    **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
 
@@ -413,6 +414,10 @@ def read_csv(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
     else:
+        log_advice(
+            "If `index_col` is not specified for `read_csv`, "
+            "the default index is attached which can cause additional overhead."
+        )
         index_spark_column_names = []
         index_names = []
 
@@ -491,6 +496,11 @@ def read_json(
     0         a     b
     1         c     d
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_json`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -505,7 +515,7 @@ def read_delta(
     version: Optional[str] = None,
     timestamp: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read a Delta Lake table on some file system and return a DataFrame.
@@ -576,6 +586,11 @@ def read_delta(
     3      13
     4      14
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_delta`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
@@ -624,6 +639,11 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_table`, "
+            "the default index is attached which can cause additional overhead."
+        )
     sdf = default_session().read.table(name)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
@@ -639,7 +659,7 @@ def read_spark_io(
     format: Optional[str] = None,
     schema: Union[str, "StructType"] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a DataFrame from a Spark data source.
 
@@ -723,7 +743,7 @@ def read_parquet(
     columns: Optional[List[str]] = None,
     index_col: Optional[List[str]] = None,
     pandas_metadata: bool = False,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a parquet object from the file path, returning a DataFrame.
 
@@ -767,6 +787,11 @@ def read_parquet(
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_parquet`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -879,7 +904,7 @@ def read_excel(
     skipfooter: int = 0,
     convert_float: bool = True,
     mangle_dupe_cols: bool = True,
-    **kwds: Any
+    **kwds: Any,
 ) -> Union[DataFrame, Series, OrderedDict]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
@@ -1109,7 +1134,7 @@ def read_excel(
             skipfooter=skipfooter,
             convert_float=convert_float,
             mangle_dupe_cols=mangle_dupe_cols,
-            **kwds
+            **kwds,
         )
 
     if isinstance(io, str):
@@ -1330,7 +1355,7 @@ def read_sql_table(
     schema: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL database table into a DataFrame.
@@ -1455,7 +1480,7 @@ def read_sql(
     con: str,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL query or database table into a DataFrame.
@@ -1702,7 +1727,7 @@ def date_range(
     normalize: bool = False,
     name: Optional[str] = None,
     closed: Optional[str] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DatetimeIndex:
     """
     Return a fixed frequency DatetimeIndex.
@@ -1850,7 +1875,7 @@ def date_range(
                 normalize=normalize,
                 name=name,
                 closed=closed,
-                **kwargs
+                **kwargs,
             )
         ),
     )
@@ -3161,7 +3186,7 @@ def merge_asof(
                 for col in sdf.columns
                 if col not in HIDDEN_COLUMNS
             ],
-            *HIDDEN_COLUMNS
+            *HIDDEN_COLUMNS,
         )
         return internal.copy(
             spark_frame=sdf,
@@ -3433,7 +3458,7 @@ def read_orc(
     path: str,
     columns: Optional[List[str]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> "DataFrame":
     """
     Load an ORC object from the file path, returning a DataFrame.

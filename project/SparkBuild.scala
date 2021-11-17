@@ -250,7 +250,17 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+          // 1. `The outer reference in this type test cannot be checked at run time`
+          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+          //    has type parameters eliminated by erasure`
+          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+          "-Wconf:cat=unchecked&msg=outer reference:s",
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
         )
       }
     }
@@ -917,7 +927,8 @@ object SparkR {
   val buildRPackage = taskKey[Unit]("Build the R package")
   lazy val settings = Seq(
     buildRPackage := {
-      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      val postfix = if (File.separator == "\\") ".bat" else ".sh"
+      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
       Process(command.toString).!!
     },
     (Compile / compile) := (Def.taskDyn {
@@ -1124,10 +1135,27 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
-    // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
+        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
+        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
+        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {

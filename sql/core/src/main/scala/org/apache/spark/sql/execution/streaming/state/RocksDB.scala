@@ -499,7 +499,6 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
 case class RocksDBConf(
     minVersionsToRetain: Int,
     compactOnCommit: Boolean,
-    pauseBackgroundWorkForCommit: Boolean,
     blockSizeKB: Long,
     blockCacheSizeMB: Long,
     lockAcquireTimeoutMs: Long,
@@ -516,7 +515,6 @@ object RocksDBConf {
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
   private val COMPACT_ON_COMMIT_CONF = ConfEntry("compactOnCommit", "false")
-  private val PAUSE_BG_WORK_FOR_COMMIT_CONF = ConfEntry("pauseBackgroundWorkForCommit", "true")
   private val BLOCK_SIZE_KB_CONF = ConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = ConfEntry("blockCacheSizeMB", "8")
   private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
@@ -560,7 +558,6 @@ object RocksDBConf {
     RocksDBConf(
       storeConf.minVersionsToRetain,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
-      getBooleanConf(PAUSE_BG_WORK_FOR_COMMIT_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
       getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),

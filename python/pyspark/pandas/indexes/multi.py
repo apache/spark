@@ -699,6 +699,12 @@ class MultiIndex(Index):
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
         return super().to_pandas()
 
+    def _to_pandas(self) -> pd.MultiIndex:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
+        return super()._to_pandas()
+
     def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
 

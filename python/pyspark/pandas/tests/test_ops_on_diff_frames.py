@@ -1517,6 +1517,23 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = psdf.to_pandas()
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
 
+        # SPARK-36968: ps.Series.dot raise "matrices are not aligned" if index is not same
+        pser = pd.Series([90, 91, 85], index=[0, 1, 2])
+        psser = ps.from_pandas(pser)
+        pser_other = pd.Series([90, 91, 85], index=[0, 1, 3])
+        psser_other = ps.from_pandas(pser_other)
+
+        with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
+            psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
+        ):
+            psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", False):
+            self.assert_eq(psser.dot(psser_other), 16381)
+
     def test_frame_dot(self):
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
         psdf = ps.from_pandas(pdf)

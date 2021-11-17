@@ -57,15 +57,6 @@ case class CreateFunctionCommand(
     replace: Boolean)
   extends LeafRunnableCommand {
 
-  if (ignoreIfExists && replace) {
-    throw QueryCompilationErrors.createFuncWithBothIfNotExistsAndReplaceError()
-  }
-
-  // Disallow to define a temporary function with `IF NOT EXISTS`
-  if (ignoreIfExists && isTemp) {
-    throw QueryCompilationErrors.defineTempFuncWithIfNotExistsError()
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)

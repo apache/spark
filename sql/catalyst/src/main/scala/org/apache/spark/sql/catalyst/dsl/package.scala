@@ -218,6 +218,11 @@ package object dsl {
       BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
       BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectList(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectList(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectSet(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectSet(e).toAggregateExpression(isDistinct = false, filter = filter)
+
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)

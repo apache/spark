@@ -65,6 +65,10 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
+class PandasAPIOnSparkAdviceWarning(Warning):
+    pass
+
+
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -104,7 +108,7 @@ def combine_frames(
     this: "DataFrame",
     *args: DataFrameOrSeries,
     how: str = "full",
-    preserve_order_column: bool = False
+    preserve_order_column: bool = False,
 ) -> "DataFrame":
     """
     This method combines `this` DataFrame with a different `that` DataFrame or
@@ -155,7 +159,7 @@ def combine_frames(
                     for col in sdf.columns
                     if col not in HIDDEN_COLUMNS
                 ],
-                *HIDDEN_COLUMNS
+                *HIDDEN_COLUMNS,
             )
             return internal.copy(
                 spark_frame=sdf,
@@ -245,7 +249,7 @@ def combine_frames(
                 scol_for(that_sdf, that_internal.spark_column_name_for(label))
                 for label in that_internal.column_labels
             ),
-            *order_column
+            *order_column,
         )
 
         index_spark_columns = [scol_for(joined_df, col) for col in index_column_names]
@@ -956,6 +960,15 @@ def compare_allow_null(
     comp: Callable[[Column, Column], Column],
 ) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
+
+
+def log_advice(message: str) -> None:
+    """
+    Display advisory logs for functions to be aware of when using pandas API on Spark
+    for the existing pandas/PySpark users who may not be familiar with distributed environments
+    or the behavior of pandas.
+    """
+    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
 
 
 def _test() -> None:

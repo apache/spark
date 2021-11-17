@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -92,11 +92,6 @@ case class ParquetPartitionReaderFactory(
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
       // For aggregate push down, we will get max/min/count from footer statistics.
-      // We want to read the footer for the whole file instead of reading multiple
-      // footers for every split of the file. Basically if the start (the beginning of)
-      // the offset in PartitionedFile is 0, we will read the footer. Otherwise, it means
-      // that we have already read footer for that file, so we will skip reading again.
-      if (file.start != 0) return null
       ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
     }
   }
@@ -175,24 +170,26 @@ case class ParquetPartitionReaderFactory(
     } else {
       new PartitionReader[ColumnarBatch] {
         private var hasNext = true
-        private val row: ColumnarBatch = {
+        private val batch: ColumnarBatch = {
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
-            ParquetUtils.createAggColumnarBatchFromFooter(footer, file.filePath, dataSchema,
-              partitionSchema, aggregation.get, readDataSchema, enableOffHeapColumnVector,
+            val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath,
+              dataSchema, partitionSchema, aggregation.get, readDataSchema,
               getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+            AggregatePushDownUtils.convertAggregatesRowToBatch(
+              row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {
             null
           }
         }
 
         override def next(): Boolean = {
-          hasNext && row != null
+          hasNext && batch != null
         }
 
         override def get(): ColumnarBatch = {
           hasNext = false
-          row
+          batch
         }
 
         override def close(): Unit = {}

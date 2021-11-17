@@ -383,8 +383,16 @@ case class Join(
   override def maxRows: Option[Long] = {
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter
-        if left.maxRows.isDefined && right.maxRows.isDefined =>
-        val maxRows = BigInt(left.maxRows.get) * BigInt(right.maxRows.get)
+          if left.maxRows.isDefined && right.maxRows.isDefined =>
+        val leftMaxRows = BigInt(left.maxRows.get)
+        val rightMaxRows = BigInt(right.maxRows.get)
+        val minRows = joinType match {
+          case LeftOuter => leftMaxRows
+          case RightOuter => rightMaxRows
+          case FullOuter => leftMaxRows + rightMaxRows
+          case _ => BigInt(0)
+        }
+        val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
         if (maxRows.isValidLong) {
           Some(maxRows.toLong)
         } else {
@@ -974,7 +982,10 @@ case class Aggregate(
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
-    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    aggregateExpressions.map {
+      case Alias(child, _) => child
+      case e => e
+    }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }
 

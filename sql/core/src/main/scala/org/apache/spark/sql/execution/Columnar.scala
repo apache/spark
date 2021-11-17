@@ -260,9 +260,9 @@ private object RowToColumnConverter {
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
-      case IntegerType | DateType => IntConverter
+      case IntegerType | DateType | _: YearMonthIntervalType => IntConverter
       case FloatType => FloatConverter
-      case LongType | TimestampType => LongConverter
+      case LongType | TimestampType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
       case CalendarIntervalType => CalendarConverter

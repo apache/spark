@@ -83,46 +83,42 @@ Note that this installation way of PySpark with/without a specific Hadoop versio
 Using Conda
 -----------
 
-Conda is an open-source package management and environment management system which is a part of
-the `Anaconda <https://docs.continuum.io/anaconda/>`_ distribution. It is both cross-platform and
-language agnostic. In practice, Conda can replace both `pip <https://pip.pypa.io/en/latest/>`_ and
-`virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
+Conda is an open-source package management and environment management system (developed by
+`Anaconda <https://www.anaconda.com/>`_), which is best installed through
+`Miniconda <https://docs.conda.io/en/latest/miniconda.html/>`_ or `Miniforge <https://github.com/conda-forge/miniforge/>`_.
+The tool is both cross-platform and language agnostic, and in practice, conda can replace both
+`pip <https://pip.pypa.io/en/latest/>`_ and `virtualenv <https://virtualenv.pypa.io/en/latest/>`_.
 
-Create new virtual environment from your terminal as shown below:
+Conda uses so-called channels to distribute packages, and together with the default channels by
+Anaconda itself, the most important channel is `conda-forge <https://conda-forge.org/>`_, which
+is the community-driven packaging effort that is the most extensive & the most current (and also
+serves as the upstream for the Anaconda channels in most cases).
+
+To create a new conda environment from your terminal and activate it, proceed as shown below:
 
 .. code-block:: bash
 
     conda create -n pyspark_env
-
-After the virtual environment is created, it should be visible under the list of Conda environments
-which can be seen using the following command:
-
-.. code-block:: bash
-
-    conda env list
-
-Now activate the newly created environment with the following command:
-
-.. code-block:: bash
-
     conda activate pyspark_env
 
-You can install pyspark by `Using PyPI <#using-pypi>`_ to install PySpark in the newly created
-environment, for example as below. It will install PySpark under the new virtual environment
-``pyspark_env`` created above.
+After activating the environment, use the following command to install pyspark,
+a python version of your choice, as well as other packages you want to use in
+the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    pip install pyspark
+    conda install -c conda-forge pyspark  # can also add "python=3.8 some_package [etc.]" here
 
-Alternatively, you can install PySpark from Conda itself as below:
+Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
+separately by the community; while new versions generally get packaged quickly, the
+availability through conda(-forge) is not directly in sync with the PySpark release cycle.
 
-.. code-block:: bash
+While using pip in a conda environment is technically feasible (with the same command as
+`above <#using-pypi>`_), this approach is `discouraged <https://www.anaconda.com/blog/using-pip-in-a-conda-environment/>`_,
+because pip does not interoperate with conda.
 
-    conda install pyspark
-
-However, note that `PySpark at Conda <https://anaconda.org/conda-forge/pyspark>`_ is not necessarily
-synced with PySpark release cycle because it is maintained by the community separately.
+For a short summary about useful conda commands, see their
+`cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html/>`_.
 
 
 Manually Downloading
