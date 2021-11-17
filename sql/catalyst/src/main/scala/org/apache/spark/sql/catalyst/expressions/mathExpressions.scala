@@ -1544,8 +1544,7 @@ case class Round(
 }
 
 object Round {
-  def apply(child: Expression, scale: Expression): Round =
-    this(child, scale, Literal("half_up"))
+  def apply(child: Expression, scale: Expression): Round = new Round(child, scale)
 }
 
 /**
@@ -1571,7 +1570,7 @@ class BRound(child: Expression, scale: Expression, modeExpr: Expression)
 }
 
 object BRound {
-  def apply(child: Expression, scale: Expression): Round = this(child, scale)
+  def apply(child: Expression, scale: Expression): Round = new BRound(child, scale)
 }
 
 object WidthBucket {
