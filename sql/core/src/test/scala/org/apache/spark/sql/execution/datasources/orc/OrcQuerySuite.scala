@@ -58,9 +58,6 @@ case class AllDataTypesWithNonPrimitiveType(
     mapValueContainsNull: Map[Int, Option[Long]],
     data: (Seq[Int], (Int, String)))
 
-case class TimestampsWithNonPrimitiveType(
-    timestampField: Timestamp, timestampNTZField: LocalDateTime)
-
 case class BinaryData(binaryData: Array[Byte])
 
 case class Contact(name: String, phone: String)
