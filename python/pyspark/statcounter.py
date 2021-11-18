@@ -59,7 +59,7 @@ class StatCounter(object):
             raise TypeError("Can only merge StatCounter but got %s" % type(other))
 
         if other is self:  # reference equality holds
-            self.merge(copy.deepcopy(other))  # type: ignore[arg-type]  # Avoid overwriting fields in a weird order
+            self.mergeStats(other.copy())  # Avoid overwriting fields in a weird order
         else:
             if self.n == 0:
                 self.mu = other.mu
