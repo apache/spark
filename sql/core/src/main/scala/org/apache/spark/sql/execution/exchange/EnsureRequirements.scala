@@ -70,16 +70,23 @@ case class EnsureRequirements(
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
       case (UnspecifiedDistribution, _) => false
       case (_: BroadcastDistribution, _) => false
+      case (AllTuples, _) => false
       case _ => true
     }.map(_._2)
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
     if (childrenIndexes.length > 1) {
+      childrenIndexes.map(requiredChildDistributions(_)).foreach { d =>
+        if (!d.isInstanceOf[ClusteredDistribution]) {
+          throw new IllegalStateException(s"Expected ClusteredDistribution but found " +
+              s"${d.getClass.getSimpleName}")
+        }
+      }
       val specs = childrenIndexes.map(i =>
         i -> children(i).outputPartitioning.createShuffleSpec(
           requiredChildDistributions(i).requiredNumPartitions.getOrElse(conf.numShufflePartitions),
-          requiredChildDistributions(i))
+          requiredChildDistributions(i).asInstanceOf[ClusteredDistribution])
       ).toMap
 
       // Find out the shuffle spec that gives better parallelism.

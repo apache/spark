@@ -44,9 +44,9 @@ class ShuffleSpecSuite extends SparkFunSuite {
 
   protected def checkCreatePartitioning(
       spec: ShuffleSpec,
-      dist: Distribution,
+      dist: ClusteredDistribution,
       expected: Partitioning): Unit = {
-    val actual = spec.createPartitioning(dist)
+    val actual = spec.createPartitioning(dist.clustering)
     if (actual != expected) {
       fail(
         s"""
@@ -398,16 +398,5 @@ class ShuffleSpecSuite extends SparkFunSuite {
       ClusteredDistribution(Seq($"c", $"d")),
       HashPartitioning(Seq($"c"), 10)
     )
-  }
-
-  test("createPartitioning: AllTuples") {
-    Seq(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 1), ClusteredDistribution(Seq($"a", $"b"))),
-      SinglePartitionShuffleSpec,
-      RangeShuffleSpec(1, ClusteredDistribution(Seq($"a", $"b"))),
-      ShuffleSpecCollection(Seq(SinglePartitionShuffleSpec,
-        RangeShuffleSpec(1, ClusteredDistribution(Seq($"a")))))).foreach { spec =>
-      checkCreatePartitioning(spec, AllTuples, SinglePartition)
-    }
   }
 }

@@ -156,18 +156,12 @@ trait Partitioning {
    *
    * @param defaultNumPartitions the default number of partitions to use when creating a new
    *                             partitioning using this spec
-   * @param distribution the required distribution for this partitioning
+   * @param distribution the required clustered distribution for this partitioning
    */
-  final def createShuffleSpec(defaultNumPartitions: Int, distribution: Distribution): ShuffleSpec =
-    distribution match {
-      case AllTuples =>
-        SinglePartitionShuffleSpec
-      case clustered: ClusteredDistribution =>
-        createShuffleSpec0(defaultNumPartitions, clustered)
-      case _ =>
-        throw new IllegalStateException(s"Unexpected distribution: " +
-            s"${distribution.getClass.getSimpleName}")
-    }
+  def createShuffleSpec(
+      defaultNumPartitions: Int,
+      distribution: ClusteredDistribution): ShuffleSpec =
+    throw new IllegalStateException(s"Unexpected partitioning: ${getClass.getSimpleName}")
 
   /**
    * The actual method that defines whether this [[Partitioning]] can satisfy the given
@@ -182,11 +176,6 @@ trait Partitioning {
     case AllTuples => numPartitions == 1
     case _ => false
   }
-
-  protected def createShuffleSpec0(
-      defaultNumPartitions: Int,
-      distribution: ClusteredDistribution): ShuffleSpec =
-    throw new IllegalStateException(s"Unexpected partitioning: ${getClass.getSimpleName}")
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning
@@ -206,7 +195,7 @@ case object SinglePartition extends Partitioning {
     case _ => true
   }
 
-  override protected def createShuffleSpec0(
+  override def createShuffleSpec(
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = SinglePartitionShuffleSpec
 }
@@ -233,7 +222,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
-  override def createShuffleSpec0(
+  override def createShuffleSpec(
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = HashShuffleSpec(this, distribution)
 
@@ -295,7 +284,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     }
   }
 
-  override def createShuffleSpec0(
+  override def createShuffleSpec(
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = {
     // Since range partitioning is not even compatible with itself, we need to treat it especially.
@@ -350,7 +339,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
-  override def createShuffleSpec0(
+  override def createShuffleSpec(
       defaultNumPartitions: Int,
       distribution: ClusteredDistribution): ShuffleSpec = {
     require(satisfies(distribution), "createShuffleSpec should only be called after satisfies " +
@@ -400,33 +389,22 @@ trait ShuffleSpec {
   def numPartitions: Int
 
   /**
-   * Returns true iff this spec is compatible with the other [[Partitioning]] and
-   * clustering expressions (e.g., from [[ClusteredDistribution]]).
+   * Returns true iff this spec is compatible with the provided shuffle spec.
    *
    * A true return value means that the data partitioning from this spec can be seen as
-   * co-partitioned with the `otherPartitioning`, and therefore no shuffle is required when
-   * joining the two sides.
+   * co-partitioned with the `other`, and therefore no shuffle is required when joining the two
+   * sides.
    */
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
    * Creates a partitioning that can be used to re-partitioned the other side with the given
-   * required distribution.
+   * clustering expressions.
    *
    * Note: this will only be called after `isCompatibleWith` returns true on the side where the
    * `clustering` is returned from.
    */
-  final def createPartitioning(distribution: Distribution): Partitioning = distribution match {
-    case AllTuples =>
-      SinglePartition
-    case ClusteredDistribution(clustering, _) =>
-      createPartitioning0(clustering)
-    case _ =>
-      throw new IllegalStateException("unexpected distribution: " +
-          s"${distribution.getClass.getSimpleName}")
-  }
-
-  def createPartitioning0(clustering: Seq[Expression]): Partitioning
+  def createPartitioning(clustering: Seq[Expression]): Partitioning
 }
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {
@@ -434,7 +412,7 @@ case object SinglePartitionShuffleSpec extends ShuffleSpec {
     other.numPartitions == numPartitions
   }
 
-  override def createPartitioning0(clustering: Seq[Expression]): Partitioning =
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
     SinglePartition
 
   override def numPartitions: Int = 1
@@ -450,7 +428,7 @@ case class RangeShuffleSpec(
     case _ => false
   }
 
-  override def createPartitioning0(clustering: Seq[Expression]): Partitioning =
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
     HashPartitioning(clustering, numPartitions)
 }
 
@@ -483,7 +461,7 @@ case class HashShuffleSpec(
       false
   }
 
-  override def createPartitioning0(clustering: Seq[Expression]): Partitioning = {
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val exprs = hashKeyPositions.map(v => clustering(v.head))
     HashPartitioning(exprs, partitioning.numPartitions)
   }
@@ -512,10 +490,10 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
     specs.exists(_.isCompatibleWith(other))
   }
 
-  override def createPartitioning0(clustering: Seq[Expression]): Partitioning = {
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     // as we only consider # of partitions as the cost now, it doesn't matter which one we choose
     // since they should all have the same # of partitions.
-    specs.head.createPartitioning0(clustering)
+    specs.head.createPartitioning(clustering)
   }
 
   override def numPartitions: Int = specs.head.numPartitions
