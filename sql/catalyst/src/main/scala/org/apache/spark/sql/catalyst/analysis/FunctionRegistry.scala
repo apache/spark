@@ -346,6 +346,7 @@ object FunctionRegistry {
     expression[Randn]("randn"),
     expression[Stack]("stack"),
     expression[CaseWhen]("when"),
+    expression[ZOrder]("zorder"),
 
     // math functions
     expression[Acos]("acos"),
