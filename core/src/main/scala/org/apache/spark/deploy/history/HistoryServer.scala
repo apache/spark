@@ -166,6 +166,7 @@ class HistoryServer(
     cacheMetrics.init()
     metricsSystem.registerSource(provider.getHistoryServerSource())
     metricsSystem.registerSource(cacheMetrics)
+    // Since this is history server metrics, here Spark don't need to register static sources.
     metricsSystem.start(false)
     // Attach the history metrics servlet handler to the history server.
     metricsSystem.getServletHandlers.foreach(attachHandler)
