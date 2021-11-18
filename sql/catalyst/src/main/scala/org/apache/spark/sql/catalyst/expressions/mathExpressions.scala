@@ -1567,6 +1567,7 @@ class BRound(child: Expression, scale: Expression, modeExpr: Expression)
   extends Round(child, scale, modeExpr) {
   def this(child: Expression, scale: Expression) = this(child, scale, Literal("half_even"))
   def this(child: Expression) = this(child, Literal(0))
+  override def nodeName: String = "round"
 }
 
 object BRound {

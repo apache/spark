@@ -715,6 +715,20 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
+
+      case r @ Round(i @ If(_, trueValue, falseValue), second, third)
+        if second.foldable && third.foldable &&
+          atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = r.withNewChildren(Array(trueValue, second, third)),
+          falseValue = r.withNewChildren(Array(falseValue, second, third)))
+
+      case r @ Round(c @ CaseWhen(branches, elseValue), second, third)
+        if second.foldable && third.foldable &&
+          atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = r.withNewChildren(Array(e._2, second, third)))),
+          elseValue.map(e => r.withNewChildren(Array(e, second, third))))
     }
   }
 }
