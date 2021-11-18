@@ -267,6 +267,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           // If we've requested the executor figure out when we did.
+          println(s"Exec map ${execRequestTimes}")
           val reqTs: Option[Long] = {
             execRequestTimes.get(resourceProfileId).flatMap {
               times =>
@@ -820,6 +821,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   private def updateExecRequestTimes(oldProfile: Map[Int, Int], newProfile: Map[Int, Int]): Unit = {
+    println(s"Updating exec request times ${oldProfile} ${newProfile}")
     newProfile.map {
       case (k, v) =>
         val delta = v - oldProfile.getOrElse(k, 0)

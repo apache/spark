@@ -53,9 +53,6 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
     assert(listener.addedExecutorInfo("0").totalCores == 1)
     assert(listener.addedExecutorInfo("1").totalCores == 1)
     assert(listener.addedExecutorInfo("0").registrationTime.get > 0 )
-    assert(listener.addedExecutorInfo("0").requestTime.get > 0)
-    assert(listener.addedExecutorInfo("0").registrationTime.get >
-      listener.addedExecutorInfo("0").requestTime.get)
   }
 
   private class SaveExecutorInfo extends SparkListener {
