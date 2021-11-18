@@ -1958,7 +1958,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows</td>
-    <td>Whether we track the total number of rows in state store. Please refer the details in "Performance-aspect considerations".</td>
+    <td>Whether we track the total number of rows in state store. Please refer the details in <a href="#performance-aspect-considerations">Performance-aspect considerations</a>.</td>
     <td>True</td>
   </tr>
 </table>

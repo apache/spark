@@ -212,25 +212,19 @@ class RocksDB(
 
   private def countKeys(): Long = {
     // This is being called when opening DB, so doesn't need to deal with writeBatch.
-    val iter = db.newIterator()
-    logInfo(s"Counting keys - getting iterator from version $loadedVersion")
-    iter.seekToFirst()
+    Utils.tryWithResource(db.newIterator()) { iter =>
+      logInfo(s"Counting keys - getting iterator from version $loadedVersion")
 
-    // Attempt to close this iterator if there is a task failure, or a task interruption.
-    // This is a hack because it assumes that the RocksDB is running inside a task.
-    Option(TaskContext.get()).foreach { tc =>
-      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
+      iter.seekToFirst()
+
+      var keys = 0L
+      while (iter.isValid) {
+        keys += 1
+        iter.next()
+      }
+
+      keys
     }
-
-    var keys = 0L
-    while (iter.isValid) {
-      keys += 1
-      iter.next()
-    }
-
-    iter.close()
-
-    keys
   }
 
   def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
