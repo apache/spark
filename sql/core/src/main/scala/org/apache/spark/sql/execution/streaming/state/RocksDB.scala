@@ -212,7 +212,8 @@ class RocksDB(
 
   private def countKeys(): Long = {
     // This is being called when opening DB, so doesn't need to deal with writeBatch.
-    Utils.tryWithResource(db.newIterator()) { iter =>
+    val iter = db.newIterator()
+    try {
       logInfo(s"Counting keys - getting iterator from version $loadedVersion")
 
       iter.seekToFirst()
@@ -224,6 +225,8 @@ class RocksDB(
       }
 
       keys
+    } finally {
+      iter.close()
     }
   }
 
