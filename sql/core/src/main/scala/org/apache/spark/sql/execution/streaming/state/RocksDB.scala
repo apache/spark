@@ -112,8 +112,20 @@ class RocksDB(
         closeDB()
         val metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
         openDB()
-        numKeysOnWritingVersion = metadata.numKeys
-        numKeysOnLoadedVersion = metadata.numKeys
+
+        val numKeys = if (!conf.trackTotalNumberOfRows) {
+          // we don't track the total number of rows - discard the number being track
+          -1L
+        } else if (metadata.numKeys < 0) {
+          // we track the total number of rows, but the snapshot doesn't have tracking number
+          // need to count keys now
+          countKeys()
+        } else {
+          metadata.numKeys
+        }
+        numKeysOnWritingVersion = numKeys
+        numKeysOnLoadedVersion = numKeys
+
         loadedVersion = version
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
@@ -144,26 +156,28 @@ class RocksDB(
    * Put the given value for the given key and return the last written value.
    * @note This update is not committed to disk until commit() is called.
    */
-  def put(key: Array[Byte], value: Array[Byte]): Array[Byte] = {
-    val oldValue = writeBatch.getFromBatchAndDB(db, readOptions, key)
-    writeBatch.put(key, value)
-    if (oldValue == null) {
-      numKeysOnWritingVersion += 1
+  def put(key: Array[Byte], value: Array[Byte]): Unit = {
+    if (conf.trackTotalNumberOfRows) {
+      val oldValue = writeBatch.getFromBatchAndDB(db, readOptions, key)
+      if (oldValue == null) {
+        numKeysOnWritingVersion += 1
+      }
     }
-    oldValue
+    writeBatch.put(key, value)
   }
 
   /**
    * Remove the key if present, and return the previous value if it was present (null otherwise).
    * @note This update is not committed to disk until commit() is called.
    */
-  def remove(key: Array[Byte]): Array[Byte] = {
-    val value = writeBatch.getFromBatchAndDB(db, readOptions, key)
-    if (value != null) {
-      writeBatch.remove(key)
-      numKeysOnWritingVersion -= 1
+  def remove(key: Array[Byte]): Unit = {
+    if (conf.trackTotalNumberOfRows) {
+      val value = writeBatch.getFromBatchAndDB(db, readOptions, key)
+      if (value != null) {
+        numKeysOnWritingVersion -= 1
+      }
     }
-    value
+    writeBatch.remove(key)
   }
 
   /**
@@ -193,6 +207,26 @@ class RocksDB(
         }
       }
       override protected def close(): Unit = { iter.close() }
+    }
+  }
+
+  private def countKeys(): Long = {
+    // This is being called when opening DB, so doesn't need to deal with writeBatch.
+    val iter = db.newIterator()
+    try {
+      logInfo(s"Counting keys - getting iterator from version $loadedVersion")
+
+      iter.seekToFirst()
+
+      var keys = 0L
+      while (iter.isValid) {
+        keys += 1
+        iter.next()
+      }
+
+      keys
+    } finally {
+      iter.close()
     }
   }
 
@@ -503,7 +537,8 @@ case class RocksDBConf(
     blockCacheSizeMB: Long,
     lockAcquireTimeoutMs: Long,
     resetStatsOnLoad : Boolean,
-    formatVersion: Int)
+    formatVersion: Int,
+    trackTotalNumberOfRows: Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -531,6 +566,14 @@ object RocksDBConf {
   // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION`. These two
   // places should be updated together.
   private val FORMAT_VERSION = ConfEntry("formatVersion", "5")
+
+  // Flag to enable/disable tracking the total number of rows.
+  // When this is enabled, this class does additional lookup on write operations (put/delete) to
+  // track the changes of total number of rows, which would help observability on state store.
+  // The additional lookups bring non-trivial overhead on write-heavy workloads - if your query
+  // does lots of writes on state, it would be encouraged to turn off the config and turn on
+  // again when you really need the know the number for observability/debuggability.
+  private val TRACK_TOTAL_NUMBER_OF_ROWS = ConfEntry("trackTotalNumberOfRows", "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val confs = CaseInsensitiveMap[String](storeConf.confs)
@@ -562,7 +605,8 @@ object RocksDBConf {
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
       getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),
       getBooleanConf(RESET_STATS_ON_LOAD),
-      getPositiveIntConf(FORMAT_VERSION))
+      getPositiveIntConf(FORMAT_VERSION),
+      getBooleanConf(TRACK_TOTAL_NUMBER_OF_ROWS))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

@@ -1956,7 +1956,20 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows</td>
+    <td>Whether we track the total number of rows in state store. Please refer the details in <a href="#performance-aspect-considerations">Performance-aspect considerations</a>.</td>
+    <td>True</td>
+  </tr>
 </table>
+
+##### Performance-aspect considerations
+
+1. For write-heavy workloads, you may want to disable the track of total number of rows.
+
+Tracking the number of rows brings additional lookup on write operations - for heavy-write workloads you're encouraged to turn off the config.
+You can change the config during restarting the query, which enables you to change the trade-off decision on "observability vs performance".
+If the config is disabled, the number of rows in state (`numTotalStateRows`) will be reported as 0.
 
 #### State Store and task locality
 
