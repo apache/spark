@@ -1367,11 +1367,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         case p if targetPlan(p) => p
       }
       assert(target.nonEmpty)
-      if (isColumnar) {
-        assert(target.forall(_.supportsColumnar))
-      } else {
-        assert(target.forall(!_.supportsColumnar))
-      }
+      assert(target.forall(_.supportsColumnar == isColumnar))
     }
 
     Seq(true, false).foreach { supported =>
