@@ -38,7 +38,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   // Only used for booleans.
   private int bitOffset;
-  private int currentByte = 0;
+  private byte currentByte = 0;
 
   public VectorizedPlainValuesReader() {
   }
@@ -55,7 +55,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   private void updateCurrentByte() {
     try {
-      currentByte = in.read();
+      currentByte = (byte) in.read();
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read a byte", e);
     }
@@ -88,7 +88,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       try {
         in.skipFully(skipBytes);
         if (bitOffset > 0) {
-          currentByte = in.read();
+          currentByte = (byte) in.read();
         }
       } catch (IOException e) {
         throw new ParquetDecodingException("Failed to skip bytes", e);

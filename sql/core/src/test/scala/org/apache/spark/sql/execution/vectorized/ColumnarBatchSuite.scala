@@ -135,10 +135,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val reference = mutable.ArrayBuffer.empty[Boolean]
 
       var values = Array(true, false, true, false, false)
-      column.appendBooleans(2, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 0)
+      var bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.appendBooleans(2, bits, 0)
       reference ++= values.take(2)
 
-      column.appendBooleans(3, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 2)
+      column.appendBooleans(3, bits, 2)
       reference ++= values.takeRight(3)
 
       column.appendBooleans(6, true)
@@ -150,11 +151,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       var idx = column.elementsAppended
 
       values = Array(true, true, false, true, false)
-      column.putBooleans(idx, 2, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 0)
+      bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.putBooleans(idx, 2, bits, 0)
       reference ++= values.take(2)
       idx += 2
 
-      column.putBooleans(idx, 3, values.foldRight(0)((b, i) => (i << 1) | (if (b) 1 else 0)), 2)
+      column.putBooleans(idx, 3, bits, 2)
       reference ++= values.takeRight(3)
       idx += 3
 

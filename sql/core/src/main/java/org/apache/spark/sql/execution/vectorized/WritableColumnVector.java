@@ -47,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
-  private final ByteBuffer byteBuf = ByteBuffer.allocate(8);
+  private final byte[] byte8 = new byte[8];
 
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
@@ -182,21 +182,6 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected abstract void reserveInternal(int capacity);
 
   /**
-   * Return a long value that has one bit from `bits` in each byte.
-   * E.g. toBitPerByte(0x000000FF) == 0x0101010101010101L
-   * By converting to long, we can put 8 bytes (booleans) at once inside `putBooleans()`.
-   *
-   * ((bits * 0x8040201008040201L) >>> 7) is equivalent to
-   *   ((long)bits << 56) + ((long)bits << 47) + ((long)bits << 38) + ((long)bits << 29) +
-   *   ((long)bits << 20) + ((long)bits << 11) + ((long)bits <<  2) + ((long)bits >>  7)
-   * The former requires 2 ops (1 Mul, 1 Shift) vs. the latter requires 15 ops (7 Adds, 8 Shifts.)
-   * Multiplication is as fast as 1 clock cycle in modern CPUs. Thus, this code should save 13 ops.
-   */
-  protected final long toBitPerByte(int bits) {
-    return ((bits * 0x8040201008040201L) >>> 7) & 0x101010101010101L;
-  }
-
-  /**
    * Sets null/not null to the value at rowId.
    */
   public abstract void putNotNull(int rowId);
@@ -220,13 +205,20 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Sets bits from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
-   * src must be positive and contain bit-packed 8 Booleans in the lowest byte.
+   * src must contain bit-packed 8 Booleans in the byte.
    */
-  public void putBooleans(int rowId, int count, int src, int srcIndex) {
-    putBytes(rowId, count, byteBuf.putLong(toBitPerByte(src)).array(), srcIndex);
-    byteBuf.rewind();
+  public void putBooleans(int rowId, int count, byte src, int srcIndex) {
+    byte8[0] = (byte)(src & 1);
+    byte8[1] = (byte)(src >>> 1 & 1);
+    byte8[2] = (byte)(src >>> 2 & 1);
+    byte8[3] = (byte)(src >>> 3 & 1);
+    byte8[4] = (byte)(src >>> 4 & 1);
+    byte8[5] = (byte)(src >>> 5 & 1);
+    byte8[6] = (byte)(src >>> 6 & 1);
+    byte8[7] = (byte)(src >>> 7 & 1);
+    putBytes(rowId, count, byte8, srcIndex);
   }
-  public void putBooleans(int rowId, int src) {
+  public void putBooleans(int rowId, byte src) {
     putBooleans(rowId, 8, src, 0);
   }
 
@@ -501,9 +493,9 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Append bits from [src[offset], src[offset + count])
-   * src must be positive and contain bit-packed 8 Booleans in the lowest byte.
+   * src must contain bit-packed 8 Booleans in the byte.
    */
-  public final int appendBooleans(int count, int src, int offset) {
+  public final int appendBooleans(int count, byte src, int offset) {
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putBooleans(elementsAppended, count, src, offset);
