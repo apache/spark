@@ -35,6 +35,12 @@ class ExecutorInfo(
     val registrationTime: Option[Long],
     val requestTime: Option[Long]) {
 
+  def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String],
+      attributes: Map[String, String], resourcesInfo: Map[String, ResourceInformation],
+      resourceProfileId: Int) = {
+    this(executorHost, totalCores, logUrlMap, attributes, resourcesInfo, resourceProfileId,
+      None, None)
+  }
   def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
     this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID,
       None, None)
