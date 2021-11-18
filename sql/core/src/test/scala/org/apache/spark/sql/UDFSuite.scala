@@ -869,19 +869,30 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-37018: Spark SQL should support create function with Aggregator") {
     val avgFuncClass = "org.apache.spark.sql.MyDoubleAverage"
-    val functionName = "test_udf"
+    val avgFunction = "my_avg"
+    val sumFuncClass = "org.apache.spark.sql.MyDoubleSum"
+    val sumFunction = "my_sum"
     withTempDatabase { dbName =>
       withUserDefinedFunction(
-        s"default.$functionName" -> false,
-        s"$dbName.$functionName" -> false,
-        functionName -> true) {
+        s"default.$avgFunction" -> false,
+        s"default.$sumFunction" -> false,
+        s"$dbName.$avgFunction" -> false,
+        s"$dbName.$sumFunction" -> false,
+        avgFunction -> true,
+        sumFunction -> true) {
         // create a function in default database
         sql("USE DEFAULT")
-        sql(s"CREATE FUNCTION $functionName AS '$avgFuncClass'")
+        sql(s"CREATE FUNCTION $avgFunction AS '$avgFuncClass'")
+        sql(s"CREATE FUNCTION $sumFunction AS '$sumFuncClass'")
         // create a view using a function in 'default' database
         withView("v1") {
-          sql(s"CREATE VIEW v1 AS SELECT $functionName(col1) AS func FROM VALUES (1), (2), (3)")
+          sql(s"CREATE VIEW v1 AS SELECT $avgFunction(col1) AS func FROM VALUES (1), (2), (3)")
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(102.0)))
+
+          val e = intercept[RuntimeException] {
+            sql(s"CREATE VIEW v2 AS SELECT $sumFunction(col1) AS func FROM VALUES (1), (2), (3)")
+          }
+          assert(e.getMessage.contains("not provides parameterless constructor is not supported"))
         }
       }
     }
