@@ -1374,18 +1374,27 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    val df1 = Seq(1, 2, 3).toDF("i").cache()
-    val df2 = Seq(4, 5, 6).toDF("j").cache()
+    Seq(true, false).foreach { supported =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> supported.toString) {
+        val df1 = Seq(1, 2, 3).toDF("i").cache()
+        val df2 = Seq(4, 5, 6).toDF("j").cache()
 
-    checkIfColumnar(df1.queryExecution.executedPlan, _.isInstanceOf[InMemoryTableScanExec], true)
-    checkIfColumnar(df2.queryExecution.executedPlan, _.isInstanceOf[InMemoryTableScanExec], true)
+        checkIfColumnar(df1.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+        checkIfColumnar(df2.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
 
-    val union = df1.union(df2)
-    checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], true)
+        val union = df1.union(df2)
+        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
+        checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
 
-    val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
-    checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
-      _.isInstanceOf[UnionExec], false)
+        val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
+        checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
+          _.isInstanceOf[UnionExec], false)
+        checkAnswer(nonColumnarUnion,
+          Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
+      }
+    }
   }
 }
 
