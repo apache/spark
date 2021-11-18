@@ -1965,9 +1965,10 @@ Here are the configs regarding to RocksDB instance of the state store provider:
 
 ##### Performance-aspect considerations
 
-1. For write-heavy workloads, you may want to disable the track of total number of rows.
+1. You may want to disable the track of total number of rows to aim the better performance on RocksDB state store.
 
-Tracking the number of rows brings additional lookup on write operations - for heavy-write workloads you're encouraged to turn off the config.
+Tracking the number of rows brings additional lookup on write operations - you're encouraged to try turning off the config on tuning RocksDB state store, especially the values of metrics for state operator are big - `numRowsUpdated`, `numRowsRemoved`.
+
 You can change the config during restarting the query, which enables you to change the trade-off decision on "observability vs performance".
 If the config is disabled, the number of rows in state (`numTotalStateRows`) will be reported as 0.
 

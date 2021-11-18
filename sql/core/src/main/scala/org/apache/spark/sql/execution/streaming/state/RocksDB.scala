@@ -153,7 +153,7 @@ class RocksDB(
   }
 
   /**
-   * Put the given value for the given key and return the last written value.
+   * Put the given value for the given key.
    * @note This update is not committed to disk until commit() is called.
    */
   def put(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -167,7 +167,7 @@ class RocksDB(
   }
 
   /**
-   * Remove the key if present, and return the previous value if it was present (null otherwise).
+   * Remove the key if present.
    * @note This update is not committed to disk until commit() is called.
    */
   def remove(key: Array[Byte]): Unit = {
