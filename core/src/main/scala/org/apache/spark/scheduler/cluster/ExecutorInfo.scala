@@ -76,6 +76,6 @@ class ExecutorInfo(
   override def hashCode(): Int = {
     val state = Seq(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
       resourceProfileId)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+    state.filter(_ != null).map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }
