@@ -1034,10 +1034,10 @@ object QueryExecutionErrors {
         s"[$token] as target spark data type [$dataType].")
   }
 
-  def cannotParseStringAsDataTypeError(name: String, value: String, dataType: DataType)
+  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
   : Throwable = {
     new RuntimeException(
-      s"Cannot parse field name ${name}, field value ${value}, " +
+      s"Cannot parse field value ${value} for pattern ${pattern} " +
         s"as target spark data type [$dataType].")
   }
 
