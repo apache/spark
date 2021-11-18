@@ -1012,27 +1012,41 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-37326: Write TIMESTAMP_NTZ in legacy time parser policy") {
+  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_NTZ values") {
     withTempDir { dir =>
       val path = s"${dir.getCanonicalPath}/csv"
 
-      val exp = spark.sql("select timestamp_ltz'2020-12-12 12:12:12' as col1").coalesce(1)
+      val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+      exp.write.format("csv").option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss").save(path)
 
-      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
-        exp.write.format("csv")
-          .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss")
-          .option("header", "true")
-          .save(path)
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        val res = spark.read
+          .format("csv")
+          .option("inferSchema", "true")
+          .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss")
+          .load(path)
+
+        checkAnswer(res, exp)
       }
+    }
+  }
 
-      val res = spark.read
-        .format("csv")
-        .option("inferSchema", "true")
-        .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss")
-        .option("header", "true")
-        .load(path)
+  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_LTZ values") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/csv"
 
-      checkAnswer(res, exp)
+      val exp = spark.sql("select timestamp_ltz'2020-12-12 12:12:12' as col0")
+      exp.write.format("csv").option("timestampFormat", "yyyy-MM-dd HH:mm:ss").save(path)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val res = spark.read
+          .format("csv")
+          .option("inferSchema", "true")
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+          .load(path)
+
+        checkAnswer(res, exp)
+      }
     }
   }
 
@@ -1130,6 +1144,26 @@ abstract class CSVSuite
           select timestamp_ltz'2020-12-12T12:12:12.000' as col0
           """)
         checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("SPARK-37326: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
+    val patterns = Seq(
+      "yyyy-MM-dd HH:mm:ss XXX",
+      "yyyy-MM-dd HH:mm:ss Z",
+      "yyyy-MM-dd HH:mm:ss z")
+
+    val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+    for (pattern <- patterns) {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/csv"
+        val err = intercept[SparkException] {
+          exp.write.format("csv").option("timestampNTZFormat", pattern).save(path)
+        }
+        assert(
+          err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
+          err.getCause.getMessage.contains("Unable to extract value"))
       }
     }
   }
