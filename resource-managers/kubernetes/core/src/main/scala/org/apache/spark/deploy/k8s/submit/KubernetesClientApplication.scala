@@ -133,7 +133,7 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
-    // setup resources before pod create
+    // setup resources before pod creation
     val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
     createOrReplaceResource(kubernetesClient, preKubernetesResources)
 
@@ -147,7 +147,7 @@ private[spark] class Client(
         throw e
     }
 
-    // setup resources after pod create, and refresh all resources owner references
+    // setup resources after pod creation, and refresh all resources owner references
     val driverKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
     createOrReplaceResource(kubernetesClient, driverKubernetesResources, createdDriverPod)
 
