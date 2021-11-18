@@ -178,6 +178,7 @@ DataFrame APIs
     DataFrame.limit
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
+    DataFrame.mapInArrow
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
