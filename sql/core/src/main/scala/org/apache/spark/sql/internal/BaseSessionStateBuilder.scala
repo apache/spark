@@ -428,10 +428,7 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
       val cls = mirror.runtimeClass(tpe)
       val serializer = ScalaReflection.serializerForType(tpe)
       val deserializer = ScalaReflection.deserializerForType(tpe)
-      val inputEncoder = new ExpressionEncoder[Any](
-        serializer,
-        deserializer,
-        ClassTag(cls))
+      val inputEncoder = new ExpressionEncoder[Any](serializer, deserializer, ClassTag(cls))
 
       val expr = ScalaAggregator[Any, Any, Any](
         input,
