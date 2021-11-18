@@ -83,6 +83,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val requestedTotalExecutorsPerResourceProfile = new HashMap[ResourceProfile, Int]
 
   // Profile IDs to the times that executors were requested for.
+  // The operations we do on queue are all amortized constant cost
+  // see https://www.scala-lang.org/api/2.13.x/scala/collection/mutable/ArrayDeque.html
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private val execRequestTimes = new HashMap[Int, Queue[(Int, Long)]]
 
@@ -270,7 +272,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               times =>
               times.headOption.map {
                 h =>
+                // Take off the top element
                 times.dequeue()
+                // If we requested more than one exec reduce the req count by 1 and prepend it back
                 if (h._1 > 1) {
                   ((h._1 - 1, h._2)) +=: times
                 }
