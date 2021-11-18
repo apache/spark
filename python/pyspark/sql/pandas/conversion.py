@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     MapType,
     TimestampType,
     TimestampNTZType,
+    DayTimeIntervalType,
     StructType,
     DataType,
 )
@@ -85,6 +86,7 @@ class PandasConversionMixin(object):
 
         import numpy as np
         import pandas as pd
+        from pandas.core.dtypes.common import is_timedelta64_dtype
 
         timezone = self.sql_ctx._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
 
@@ -225,7 +227,10 @@ class PandasConversionMixin(object):
             else:
                 series = pdf[column_name]
 
-            if t is not None:
+            # No need to cast for empty series for timedelta.
+            should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
+
+            if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
                 series = series.astype(t, copy=False)
 
             # `insert` API makes copy of data, we only do it for Series of duplicate column names.
@@ -278,6 +283,8 @@ class PandasConversionMixin(object):
             return np.datetime64
         elif type(dt) == TimestampNTZType:
             return np.datetime64
+        elif type(dt) == DayTimeIntervalType:
+            return np.timedelta64
         else:
             return None
 
