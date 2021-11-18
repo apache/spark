@@ -180,9 +180,11 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(name) {
         val goldenFile = new File(s"$baseResourcePath/v1_4", s"$name.sql.out")
+        System.gc()  // Workaround for GitHub Actions memory limitation, see also SPARK-37368
         runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
         if (!regenerateGoldenFiles) {
           joinConfSet.tail.foreach { conf =>
+            System.gc()  // SPARK-37368
             runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
@@ -194,9 +196,11 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
         classLoader = Thread.currentThread().getContextClassLoader)
       test(s"$name-v2.7") {
         val goldenFile = new File(s"$baseResourcePath/v2_7", s"$name.sql.out")
+        System.gc()  // SPARK-37368
         runQuery(queryString, goldenFile, joinConfSet.head.toSeq, false)
         if (!regenerateGoldenFiles) {
           joinConfSet.tail.foreach { conf =>
+            System.gc()  // SPARK-37368
             runQuery(queryString, goldenFile, conf.toSeq, true)
           }
         }
