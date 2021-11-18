@@ -76,6 +76,10 @@ private[spark] class Client(
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
+  // ContainerLaunchContext.setTokensConf is only available in Hadoop 2.9+ and 3.x, so here we use
+  // reflection to avoid compilation for Hadoop 2.7 profile.
+  private val SET_TOKENS_CONF_METHOD = "setTokensConf"
+
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
@@ -348,19 +352,29 @@ private[spark] class Client(
     // for fetching delegation tokens. See YARN-5910 for more details.
     // The feature is only supported in Hadoop 3.x and up, hence the check below.
     val regex = sparkConf.get(config.AM_SEND_TOKEN_CONF)
-    if (regex != null && regex.nonEmpty && VersionUtils.isHadoop3) {
+    if (regex.nonEmpty && VersionUtils.isHadoop3) {
       logInfo(s"Processing token conf (spark.yarn.am.sendTokenConf) with regex $regex")
       val dob = new DataOutputBuffer();
       val copy = new Configuration(false);
       copy.clear();
       hadoopConf.asScala.foreach { entry =>
-        if (entry.getKey.matches(regex)) {
+        if (entry.getKey.matches(regex.get)) {
           copy.set(entry.getKey, entry.getValue)
           logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
         }
       }
       copy.write(dob);
-      amContainer.setTokensConf(ByteBuffer.wrap(dob.getData))
+
+      // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
+      // compilation error for Hadoop 2.7 profile.
+      val setTokensConfMethod = try {
+        amContainer.getClass.getMethod(SET_TOKENS_CONF_METHOD, classOf[ByteBuffer])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
+              s" Please check YARN version and make sure it is 2.9+ or 3.x")
+      }
+      setTokensConfMethod.invoke(ByteBuffer.wrap(dob.getData))
     }
   }
 
