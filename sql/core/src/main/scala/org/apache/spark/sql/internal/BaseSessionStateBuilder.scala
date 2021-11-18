@@ -18,6 +18,7 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe
+
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.ScalaReflection
