@@ -118,7 +118,8 @@ case class EnsureRequirements(
             child
           } else {
             // Use the best spec to create a new partitioning to re-shuffle this child
-            val newPartitioning = bestSpec.createPartitioning(dist)
+            val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
+            val newPartitioning = bestSpec.createPartitioning(clustering)
             child match {
               case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
               case _ => ShuffleExchangeExec(newPartitioning, child)
