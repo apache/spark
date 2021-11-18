@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
