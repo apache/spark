@@ -227,7 +227,7 @@ class PandasConversionMixin(object):
             else:
                 series = pdf[column_name]
 
-            # No need to cast for empty series for timedelta.
+            # No need to cast for non-empty series for timedelta. The type is already correct.
             should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
 
             if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
