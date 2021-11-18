@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     FloatType,
     DateType,
     TimestampType,
+    DayTimeIntervalType,
     MapType,
     StringType,
     StructType,
@@ -144,6 +145,7 @@ class TypesTests(ReusedSQLTestCase):
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.timedelta(microseconds=123456678),
             1.0,
             array.array("d", [1]),
             [1],
@@ -165,6 +167,7 @@ class TypesTests(ReusedSQLTestCase):
             "string",
             "date",
             "timestamp",
+            "interval day to second",
             "double",
             "array<double>",
             "array<bigint>",
@@ -186,6 +189,7 @@ class TypesTests(ReusedSQLTestCase):
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
             [1],
@@ -290,7 +294,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
-        from datetime import date, datetime
+        from datetime import date, datetime, timedelta
 
         rdd = self.sc.parallelize(
             [
@@ -303,6 +307,7 @@ class TypesTests(ReusedSQLTestCase):
                     1.0,
                     date(2010, 1, 1),
                     datetime(2010, 1, 1, 1, 1, 1),
+                    timedelta(days=1),
                     {"a": 1},
                     (2,),
                     [1, 2, 3],
@@ -320,6 +325,7 @@ class TypesTests(ReusedSQLTestCase):
                 StructField("float1", FloatType(), False),
                 StructField("date1", DateType(), False),
                 StructField("time1", TimestampType(), False),
+                StructField("daytime1", DayTimeIntervalType(), False),
                 StructField("map1", MapType(StringType(), IntegerType(), False), False),
                 StructField("struct1", StructType([StructField("b", ShortType(), False)]), False),
                 StructField("list1", ArrayType(ByteType(), False), False),
@@ -337,6 +343,7 @@ class TypesTests(ReusedSQLTestCase):
                 x.float1,
                 x.date1,
                 x.time1,
+                x.daytime1,
                 x.map1["a"],
                 x.struct1.b,
                 x.list1,
@@ -352,6 +359,7 @@ class TypesTests(ReusedSQLTestCase):
             1.0,
             date(2010, 1, 1),
             datetime(2010, 1, 1, 1, 1, 1),
+            timedelta(days=1),
             1,
             2,
             [1, 2, 3],
@@ -928,6 +936,74 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_daytime_interval_type_constructor(self):
+        # SPARK-37277: Test constructors in day time interval.
+        self.assertEqual(DayTimeIntervalType().simpleString(), "interval day to second")
+        self.assertEqual(
+            DayTimeIntervalType(DayTimeIntervalType.DAY).simpleString(), "interval day"
+        )
+        self.assertEqual(
+            DayTimeIntervalType(
+                DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND
+            ).simpleString(),
+            "interval hour to second",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+            DayTimeIntervalType(endField=DayTimeIntervalType.SECOND)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+            DayTimeIntervalType(123)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+            DayTimeIntervalType(DayTimeIntervalType.DAY, 321)
+
+    def test_daytime_interval_type(self):
+        # SPARK-37277: Support DayTimeIntervalType in createDataFrame
+        timedetlas = [
+            (datetime.timedelta(microseconds=123),),
+            (
+                datetime.timedelta(
+                    days=1, seconds=23, microseconds=123, milliseconds=4, minutes=5, hours=11
+                ),
+            ),
+            (datetime.timedelta(microseconds=-123),),
+            (datetime.timedelta(days=-1),),
+        ]
+        df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
+        self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
+
+        exprs = [
+            "INTERVAL '1 02:03:04' DAY TO SECOND AS a",
+            "INTERVAL '1 02:03' DAY TO MINUTE AS b",
+            "INTERVAL '1 02' DAY TO HOUR AS c",
+            "INTERVAL '1' DAY AS d",
+            "INTERVAL '26:03:04' HOUR TO SECOND AS e",
+            "INTERVAL '26:03' HOUR TO MINUTE AS f",
+            "INTERVAL '26' HOUR AS g",
+            "INTERVAL '1563:04' MINUTE TO SECOND AS h",
+            "INTERVAL '1563' MINUTE AS i",
+            "INTERVAL '93784' SECOND AS j",
+        ]
+        df = self.spark.range(1).selectExpr(exprs)
+
+        actual = list(df.first())
+        expected = [
+            datetime.timedelta(days=1, hours=2, minutes=3, seconds=4),
+            datetime.timedelta(days=1, hours=2, minutes=3),
+            datetime.timedelta(days=1, hours=2),
+            datetime.timedelta(days=1),
+            datetime.timedelta(hours=26, minutes=3, seconds=4),
+            datetime.timedelta(hours=26, minutes=3),
+            datetime.timedelta(hours=26),
+            datetime.timedelta(minutes=1563, seconds=4),
+            datetime.timedelta(minutes=1563),
+            datetime.timedelta(seconds=93784),
+        ]
+
+        for n, (a, e) in enumerate(zip(actual, expected)):
+            self.assertEqual(a, e, "%s does not match with %s" % (exprs[n], expected[n]))
 
 
 class DataTypeTests(unittest.TestCase):

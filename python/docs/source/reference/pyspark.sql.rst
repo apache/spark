@@ -302,6 +302,7 @@ Data Types
     StructType
     TimestampNTZType
     TimestampType
+    DayTimeIntervalType
 
 
 Observation
