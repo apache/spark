@@ -112,7 +112,7 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed aggregation.
    */
   def pushAggregates(
-      scanBuilder: ScanBuilder,
+      scanBuilder: SupportsPushDownAggregates,
       aggregates: Seq[AggregateExpression],
       groupBy: Seq[Expression]): Option[Aggregation] = {
 
@@ -122,20 +122,16 @@ object PushDownUtils extends PredicateHelper {
       case _ => None
     }
 
-    scanBuilder match {
-      case r: SupportsPushDownAggregates if aggregates.nonEmpty =>
-        val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
-        val translatedGroupBys = groupBy.flatMap(columnAsString)
+    val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+    val translatedGroupBys = groupBy.flatMap(columnAsString)
 
-        if (translatedAggregates.length != aggregates.length ||
-          translatedGroupBys.length != groupBy.length) {
-          return None
-        }
-
-        val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
-        Some(agg).filter(r.pushAggregation)
-      case _ => None
+    if (translatedAggregates.length != aggregates.length ||
+      translatedGroupBys.length != groupBy.length) {
+      return None
     }
+
+    val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
+    Some(agg).filter(scanBuilder.pushAggregation)
   }
 
   /**

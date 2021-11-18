@@ -24,8 +24,14 @@ from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
-__all__ = ['DecisionTreeModel', 'DecisionTree', 'RandomForestModel',
-           'RandomForest', 'GradientBoostedTreesModel', 'GradientBoostedTrees']
+__all__ = [
+    "DecisionTreeModel",
+    "DecisionTree",
+    "RandomForestModel",
+    "RandomForest",
+    "GradientBoostedTreesModel",
+    "GradientBoostedTrees",
+]
 
 
 class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
@@ -33,6 +39,7 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
 
     .. versionadded:: 1.3.0
     """
+
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points using
@@ -67,12 +74,12 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
         return self.call("totalNumNodes")
 
     def __repr__(self):
-        """ Summary of model """
+        """Summary of model"""
         return self._java_model.toString()
 
     @since("1.3.0")
     def toDebugString(self):
-        """ Full model """
+        """Full model"""
         return self._java_model.toDebugString()
 
 
@@ -82,6 +89,7 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     .. versionadded:: 1.1.0
     """
+
     def predict(self, x):
         """
         Predict the label of one or more examples.
@@ -120,12 +128,12 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return self._java_model.depth()
 
     def __repr__(self):
-        """ summary of model. """
+        """summary of model."""
         return self._java_model.toString()
 
     @since("1.2.0")
     def toDebugString(self):
-        """ full model. """
+        """full model."""
         return self._java_model.toDebugString()
 
     @classmethod
@@ -142,18 +150,46 @@ class DecisionTree(object):
     """
 
     @classmethod
-    def _train(cls, data, type, numClasses, features, impurity="gini", maxDepth=5, maxBins=32,
-               minInstancesPerNode=1, minInfoGain=0.0):
+    def _train(
+        cls,
+        data,
+        type,
+        numClasses,
+        features,
+        impurity="gini",
+        maxDepth=5,
+        maxBins=32,
+        minInstancesPerNode=1,
+        minInfoGain=0.0,
+    ):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
-        model = callMLlibFunc("trainDecisionTreeModel", data, type, numClasses, features,
-                              impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        model = callMLlibFunc(
+            "trainDecisionTreeModel",
+            data,
+            type,
+            numClasses,
+            features,
+            impurity,
+            maxDepth,
+            maxBins,
+            minInstancesPerNode,
+            minInfoGain,
+        )
         return DecisionTreeModel(model)
 
     @classmethod
-    def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo,
-                        impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
-                        minInfoGain=0.0):
+    def trainClassifier(
+        cls,
+        data,
+        numClasses,
+        categoricalFeaturesInfo,
+        impurity="gini",
+        maxDepth=5,
+        maxBins=32,
+        minInstancesPerNode=1,
+        minInfoGain=0.0,
+    ):
         """
         Train a decision tree model for classification.
 
@@ -224,14 +260,30 @@ class DecisionTree(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "classification", numClasses, categoricalFeaturesInfo,
-                          impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        return cls._train(
+            data,
+            "classification",
+            numClasses,
+            categoricalFeaturesInfo,
+            impurity,
+            maxDepth,
+            maxBins,
+            minInstancesPerNode,
+            minInfoGain,
+        )
 
     @classmethod
     @since("1.1.0")
-    def trainRegressor(cls, data, categoricalFeaturesInfo,
-                       impurity="variance", maxDepth=5, maxBins=32, minInstancesPerNode=1,
-                       minInfoGain=0.0):
+    def trainRegressor(
+        cls,
+        data,
+        categoricalFeaturesInfo,
+        impurity="variance",
+        maxDepth=5,
+        maxBins=32,
+        minInstancesPerNode=1,
+        minInfoGain=0.0,
+    ):
         """
         Train a decision tree model for regression.
 
@@ -288,8 +340,17 @@ class DecisionTree(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "regression", 0, categoricalFeaturesInfo,
-                          impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
+        return cls._train(
+            data,
+            "regression",
+            0,
+            categoricalFeaturesInfo,
+            impurity,
+            maxDepth,
+            maxBins,
+            minInstancesPerNode,
+            minInfoGain,
+        )
 
 
 @inherit_doc
@@ -316,23 +377,53 @@ class RandomForest(object):
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
 
     @classmethod
-    def _train(cls, data, algo, numClasses, categoricalFeaturesInfo, numTrees,
-               featureSubsetStrategy, impurity, maxDepth, maxBins, seed):
+    def _train(
+        cls,
+        data,
+        algo,
+        numClasses,
+        categoricalFeaturesInfo,
+        numTrees,
+        featureSubsetStrategy,
+        impurity,
+        maxDepth,
+        maxBins,
+        seed,
+    ):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         if featureSubsetStrategy not in cls.supportedFeatureSubsetStrategies:
             raise ValueError("unsupported featureSubsetStrategy: %s" % featureSubsetStrategy)
         if seed is None:
             seed = random.randint(0, 1 << 30)
-        model = callMLlibFunc("trainRandomForestModel", data, algo, numClasses,
-                              categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity,
-                              maxDepth, maxBins, seed)
+        model = callMLlibFunc(
+            "trainRandomForestModel",
+            data,
+            algo,
+            numClasses,
+            categoricalFeaturesInfo,
+            numTrees,
+            featureSubsetStrategy,
+            impurity,
+            maxDepth,
+            maxBins,
+            seed,
+        )
         return RandomForestModel(model)
 
     @classmethod
-    def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo, numTrees,
-                        featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
-                        seed=None):
+    def trainClassifier(
+        cls,
+        data,
+        numClasses,
+        categoricalFeaturesInfo,
+        numTrees,
+        featureSubsetStrategy="auto",
+        impurity="gini",
+        maxDepth=4,
+        maxBins=32,
+        seed=None,
+    ):
         """
         Train a random forest model for binary or multiclass
         classification.
@@ -423,13 +514,31 @@ class RandomForest(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "classification", numClasses,
-                          categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity,
-                          maxDepth, maxBins, seed)
+        return cls._train(
+            data,
+            "classification",
+            numClasses,
+            categoricalFeaturesInfo,
+            numTrees,
+            featureSubsetStrategy,
+            impurity,
+            maxDepth,
+            maxBins,
+            seed,
+        )
 
     @classmethod
-    def trainRegressor(cls, data, categoricalFeaturesInfo, numTrees, featureSubsetStrategy="auto",
-                       impurity="variance", maxDepth=4, maxBins=32, seed=None):
+    def trainRegressor(
+        cls,
+        data,
+        categoricalFeaturesInfo,
+        numTrees,
+        featureSubsetStrategy="auto",
+        impurity="variance",
+        maxDepth=4,
+        maxBins=32,
+        seed=None,
+    ):
         """
         Train a random forest model for regression.
 
@@ -501,8 +610,18 @@ class RandomForest(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.5]
         """
-        return cls._train(data, "regression", 0, categoricalFeaturesInfo, numTrees,
-                          featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
+        return cls._train(
+            data,
+            "regression",
+            0,
+            categoricalFeaturesInfo,
+            numTrees,
+            featureSubsetStrategy,
+            impurity,
+            maxDepth,
+            maxBins,
+            seed,
+        )
 
 
 @inherit_doc
@@ -527,18 +646,43 @@ class GradientBoostedTrees(object):
     """
 
     @classmethod
-    def _train(cls, data, algo, categoricalFeaturesInfo,
-               loss, numIterations, learningRate, maxDepth, maxBins):
+    def _train(
+        cls,
+        data,
+        algo,
+        categoricalFeaturesInfo,
+        loss,
+        numIterations,
+        learningRate,
+        maxDepth,
+        maxBins,
+    ):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
-        model = callMLlibFunc("trainGradientBoostedTreesModel", data, algo, categoricalFeaturesInfo,
-                              loss, numIterations, learningRate, maxDepth, maxBins)
+        model = callMLlibFunc(
+            "trainGradientBoostedTreesModel",
+            data,
+            algo,
+            categoricalFeaturesInfo,
+            loss,
+            numIterations,
+            learningRate,
+            maxDepth,
+            maxBins,
+        )
         return GradientBoostedTreesModel(model)
 
     @classmethod
-    def trainClassifier(cls, data, categoricalFeaturesInfo,
-                        loss="logLoss", numIterations=100, learningRate=0.1, maxDepth=3,
-                        maxBins=32):
+    def trainClassifier(
+        cls,
+        data,
+        categoricalFeaturesInfo,
+        loss="logLoss",
+        numIterations=100,
+        learningRate=0.1,
+        maxDepth=3,
+        maxBins=32,
+    ):
         """
         Train a gradient-boosted trees model for classification.
 
@@ -607,13 +751,28 @@ class GradientBoostedTrees(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "classification", categoricalFeaturesInfo,
-                          loss, numIterations, learningRate, maxDepth, maxBins)
+        return cls._train(
+            data,
+            "classification",
+            categoricalFeaturesInfo,
+            loss,
+            numIterations,
+            learningRate,
+            maxDepth,
+            maxBins,
+        )
 
     @classmethod
-    def trainRegressor(cls, data, categoricalFeaturesInfo,
-                       loss="leastSquaresError", numIterations=100, learningRate=0.1, maxDepth=3,
-                       maxBins=32):
+    def trainRegressor(
+        cls,
+        data,
+        categoricalFeaturesInfo,
+        loss="leastSquaresError",
+        numIterations=100,
+        learningRate=0.1,
+        maxDepth=3,
+        maxBins=32,
+    ):
         """
         Train a gradient-boosted trees model for regression.
 
@@ -680,23 +839,31 @@ class GradientBoostedTrees(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "regression", categoricalFeaturesInfo,
-                          loss, numIterations, learningRate, maxDepth, maxBins)
+        return cls._train(
+            data,
+            "regression",
+            categoricalFeaturesInfo,
+            loss,
+            numIterations,
+            learningRate,
+            maxDepth,
+            maxBins,
+        )
 
 
 def _test():
     import doctest
+
     globs = globals().copy()
     from pyspark.sql import SparkSession
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("mllib.tree tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+
+    spark = SparkSession.builder.master("local[4]").appName("mllib.tree tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

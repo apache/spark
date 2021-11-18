@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-__all__ = ['functions']
+__all__ = ["functions"]

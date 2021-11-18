@@ -88,15 +88,11 @@ def pandas_udf(
 ) -> Callable[[PandasScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
-    *,
-    returnType: Union[AtomicDataTypeOrString, ArrayType],
-    functionType: PandasScalarIterUDFType
+    *, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: PandasScalarIterUDFType
 ) -> Callable[[PandasScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
-    f: Union[AtomicDataTypeOrString, ArrayType],
-    *,
-    functionType: PandasScalarIterUDFType
+    f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: PandasScalarIterUDFType
 ) -> Callable[[PandasScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
@@ -128,15 +124,11 @@ def pandas_udf(
 ) -> Callable[[PandasGroupedAggFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
-    *,
-    returnType: Union[AtomicDataTypeOrString, ArrayType],
-    functionType: PandasGroupedAggUDFType
+    *, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: PandasGroupedAggUDFType
 ) -> Callable[[PandasGroupedAggFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
-    f: Union[AtomicDataTypeOrString, ArrayType],
-    *,
-    functionType: PandasGroupedAggUDFType
+    f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: PandasGroupedAggUDFType
 ) -> Callable[[PandasGroupedAggFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(

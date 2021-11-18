@@ -27,8 +27,8 @@ from pyspark.sql.udf import _create_udf
 
 
 class PandasUDFType(object):
-    """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`.
-    """
+    """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`."""
+
     SCALAR = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
     SCALAR_ITER = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
@@ -360,16 +360,19 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     if return_type is None:
         raise ValueError("Invalid return type: returnType can not be None")
 
-    if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-                         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-                         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-                         None]:  # None means it should infer the type from type hints.
+    if eval_type not in [
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        None,
+    ]:  # None means it should infer the type from type hints.
 
-        raise ValueError("Invalid function type: "
-                         "functionType must be one the values from PandasUDFType")
+        raise ValueError(
+            "Invalid function type: " "functionType must be one the values from PandasUDFType"
+        )
 
     if is_decorator:
         return functools.partial(_create_pandas_udf, returnType=return_type, evalType=eval_type)
@@ -383,16 +386,22 @@ def _create_pandas_udf(f, returnType, evalType):
     # pandas UDF by type hints.
     from inspect import signature
 
-    if evalType in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-                    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
+    if evalType in [
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+    ]:
         warnings.warn(
             "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
             "pandas UDF instead of specifying pandas UDF type which will be deprecated "
-            "in the future releases. See SPARK-28264 for more details.", UserWarning)
-    elif evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-                      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:
+            "in the future releases. See SPARK-28264 for more details.",
+            UserWarning,
+        )
+    elif evalType in [
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+    ]:
         # In case of 'SQL_GROUPED_MAP_PANDAS_UDF',  deprecation warning is being triggered
         # at `apply` instead.
         # In case of 'SQL_MAP_PANDAS_ITER_UDF' and 'SQL_COGROUPED_MAP_PANDAS_UDF', the
@@ -406,27 +415,31 @@ def _create_pandas_udf(f, returnType, evalType):
         # Set default is scalar UDF.
         evalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
-    if (evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
-            evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF) and \
-            len(argspec.args) == 0 and \
-            argspec.varargs is None:
+    if (
+        (
+            evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+        )
+        and len(argspec.args) == 0
+        and argspec.varargs is None
+    ):
         raise ValueError(
             "Invalid function: 0-arg pandas_udfs are not supported. "
             "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
         )
 
-    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
-            and len(argspec.args) not in (1, 2):
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (1, 2):
         raise ValueError(
             "Invalid function: pandas_udf with function type GROUPED_MAP or "
             "the function in groupby.applyInPandas "
-            "must take either one argument (data) or two arguments (key, data).")
+            "must take either one argument (data) or two arguments (key, data)."
+        )
 
-    if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF \
-            and len(argspec.args) not in (2, 3):
+    if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):
         raise ValueError(
             "Invalid function: the function in cogroup.applyInPandas "
             "must take either two arguments (left, right) "
-            "or three arguments (key, left, right).")
+            "or three arguments (key, left, right)."
+        )
 
     return _create_udf(f, returnType, evalType)

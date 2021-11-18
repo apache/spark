@@ -37,11 +37,11 @@ class ProfilerCollector(object):
         self.profilers = []
 
     def new_profiler(self, ctx):
-        """ Create a new profiler using class `profiler_cls` """
+        """Create a new profiler using class `profiler_cls`"""
         return self.profiler_cls(ctx)
 
     def add_profiler(self, id, profiler):
-        """ Add a profiler for RDD `id` """
+        """Add a profiler for RDD `id`"""
         if not self.profilers:
             if self.profile_dump_path:
                 atexit.register(self.dump_profiles, self.profile_dump_path)
@@ -51,13 +51,13 @@ class ProfilerCollector(object):
         self.profilers.append([id, profiler, False])
 
     def dump_profiles(self, path):
-        """ Dump the profile stats into directory `path` """
+        """Dump the profile stats into directory `path`"""
         for id, profiler, _ in self.profilers:
             profiler.dump(id, path)
         self.profilers = []
 
     def show_profiles(self):
-        """ Print the profile stats to stdout """
+        """Print the profile stats to stdout"""
         for i, (id, profiler, showed) in enumerate(self.profilers):
             if not showed and profiler:
                 profiler.show(id)
@@ -107,15 +107,15 @@ class Profiler(object):
         pass
 
     def profile(self, func):
-        """ Do profiling on the function `func`"""
+        """Do profiling on the function `func`"""
         raise NotImplementedError
 
     def stats(self):
-        """ Return the collected profiling stats (pstats.Stats)"""
+        """Return the collected profiling stats (pstats.Stats)"""
         raise NotImplementedError
 
     def show(self, id):
-        """ Print the profile stats to stdout, id is the RDD id """
+        """Print the profile stats to stdout, id is the RDD id"""
         stats = self.stats()
         if stats:
             print("=" * 60)
@@ -124,7 +124,7 @@ class Profiler(object):
             stats.sort_stats("time", "cumulative").print_stats()
 
     def dump(self, id, path):
-        """ Dump the profile into path, id is the RDD id """
+        """Dump the profile into path, id is the RDD id"""
         if not os.path.exists(path):
             os.makedirs(path)
         stats = self.stats()
@@ -153,6 +153,7 @@ class BasicProfiler(Profiler):
     BasicProfiler is the default profiler, which is implemented based on
     cProfile and Accumulator
     """
+
     def __init__(self, ctx):
         Profiler.__init__(self, ctx)
         # Creates a new accumulator for combining the profiles of different
@@ -160,7 +161,7 @@ class BasicProfiler(Profiler):
         self._accumulator = ctx.accumulator(None, PStatsParam)
 
     def profile(self, func):
-        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
+        """Runs and profiles the method to_profile passed in. A profile object is returned."""
         pr = cProfile.Profile()
         pr.runcall(func)
         st = pstats.Stats(pr)
@@ -176,6 +177,7 @@ class BasicProfiler(Profiler):
 
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

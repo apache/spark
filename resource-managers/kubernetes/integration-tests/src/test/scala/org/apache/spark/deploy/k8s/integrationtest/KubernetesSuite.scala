@@ -422,6 +422,8 @@ class KubernetesSuite extends SparkFunSuite
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
               podsDeleted += name
+            case Action.BOOKMARK =>
+              assert(false)
           }
         }
       })

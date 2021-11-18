@@ -250,7 +250,17 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+          // 1. `The outer reference in this type test cannot be checked at run time`
+          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+          //    has type parameters eliminated by erasure`
+          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+          "-Wconf:cat=unchecked&msg=outer reference:s",
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
         )
       }
     }

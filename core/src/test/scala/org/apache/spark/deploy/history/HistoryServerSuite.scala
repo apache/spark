@@ -191,10 +191,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // Enable "spark.eventLog.logBlockUpdates.enabled", to get the storage information
     // in the history server.
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0",
-    "miscellaneous process" ->
-      "applications/application_1555004656427_0144/allmiscellaneousprocess",
-    "stage with speculation summary" ->
-      "applications/application_1628109047826_1317105/stages/0/0/"
+    "miscellaneous process" -> "applications/application_1555004656427_0144/allmiscellaneousprocess"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved

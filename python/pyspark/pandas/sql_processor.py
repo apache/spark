@@ -41,7 +41,7 @@ def sql(
     index_col: Optional[Union[str, List[str]]] = None,
     globals: Optional[Dict[str, Any]] = None,
     locals: Optional[Dict[str, Any]] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DataFrame:
     """
     Execute a SQL query and return the result as a pandas-on-Spark DataFrame.

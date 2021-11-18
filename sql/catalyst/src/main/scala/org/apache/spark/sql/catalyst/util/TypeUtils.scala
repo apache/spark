@@ -98,8 +98,8 @@ object TypeUtils {
     case _ => false
   }
 
-  def failWithIntervalType(dataType: DataType): Unit = {
-    invokeOnceForInterval(dataType, forbidAnsiIntervals = true) {
+  def failWithIntervalType(dataType: DataType, forbidAnsiIntervals: Boolean = true): Unit = {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }

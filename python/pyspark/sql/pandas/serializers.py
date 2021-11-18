@@ -57,8 +57,10 @@ class ArrowCollectSerializer(Serializer):
         num = read_int(stream)
         if num == -1:
             error_msg = UTF8Deserializer().loads(stream)
-            raise RuntimeError("An error occurred while calling "
-                               "ArrowCollectSerializer.load_stream: {}".format(error_msg))
+            raise RuntimeError(
+                "An error occurred while calling "
+                "ArrowCollectSerializer.load_stream: {}".format(error_msg)
+            )
         batch_order = []
         for i in range(num):
             index = read_int(stream)
@@ -76,6 +78,7 @@ class ArrowStreamSerializer(Serializer):
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
+
         writer = None
         try:
             for batch in iterator:
@@ -88,6 +91,7 @@ class ArrowStreamSerializer(Serializer):
 
     def load_stream(self, stream):
         import pyarrow as pa
+
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
@@ -117,8 +121,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
-            _convert_map_items_to_dict
+        from pyspark.sql.pandas.types import (
+            _check_series_localize_timestamps,
+            _convert_map_items_to_dict,
+        )
         import pyarrow
 
         # If the given column is a date type column, creates a series of datetime.date directly
@@ -150,12 +156,16 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         import pandas as pd
         import pyarrow as pa
-        from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal, \
-            _convert_dict_to_map_items
+        from pyspark.sql.pandas.types import (
+            _check_series_convert_timestamps_internal,
+            _convert_dict_to_map_items,
+        )
         from pandas.api.types import is_categorical_dtype
+
         # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or \
-                (len(series) == 2 and isinstance(series[1], pa.DataType)):
+        if not isinstance(series, (list, tuple)) or (
+            len(series) == 2 and isinstance(series[1], pa.DataType)
+        ):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
@@ -173,11 +183,13 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except ValueError as e:
                 if self._safecheck:
-                    error_msg = "Exception thrown when converting pandas.Series (%s) to " + \
-                                "Arrow Array (%s). It can be caused by overflows or other " + \
-                                "unsafe conversions warned by Arrow. Arrow safe type check " + \
-                                "can be disabled by using SQL config " + \
-                                "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    error_msg = (
+                        "Exception thrown when converting pandas.Series (%s) to "
+                        + "Arrow Array (%s). It can be caused by overflows or other "
+                        + "unsafe conversions warned by Arrow. Arrow safe type check "
+                        + "can be disabled by using SQL config "
+                        + "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                    )
                     raise ValueError(error_msg % (s.dtype, t)) from e
                 else:
                     raise e
@@ -187,21 +199,25 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         for s, t in series:
             if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
-                    raise ValueError("A field of type StructType expects a pandas.DataFrame, "
-                                     "but got: %s" % str(type(s)))
+                    raise ValueError(
+                        "A field of type StructType expects a pandas.DataFrame, "
+                        "but got: %s" % str(type(s))
+                    )
 
                 # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
                 if len(s) == 0 and len(s.columns) == 0:
                     arrs_names = [(pa.array([], type=field.type), field.name) for field in t]
                 # Assign result columns by schema name if user labeled with strings
-                elif self._assign_cols_by_name and any(isinstance(name, str)
-                                                       for name in s.columns):
-                    arrs_names = [(create_array(s[field.name], field.type), field.name)
-                                  for field in t]
+                elif self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
+                    arrs_names = [
+                        (create_array(s[field.name], field.type), field.name) for field in t
+                    ]
                 # Assign result columns by  position
                 else:
-                    arrs_names = [(create_array(s[s.columns[i]], field.type), field.name)
-                                  for i, field in enumerate(t)]
+                    arrs_names = [
+                        (create_array(s[s.columns[i]], field.type), field.name)
+                        for i, field in enumerate(t)
+                    ]
 
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
@@ -224,6 +240,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         import pyarrow as pa
+
         for batch in batches:
             yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
@@ -237,8 +254,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
 
     def __init__(self, timezone, safecheck, assign_cols_by_name, df_for_struct=False):
-        super(ArrowStreamPandasUDFSerializer, self) \
-            .__init__(timezone, safecheck, assign_cols_by_name)
+        super(ArrowStreamPandasUDFSerializer, self).__init__(
+            timezone, safecheck, assign_cols_by_name
+        )
         self._df_for_struct = df_for_struct
 
     def arrow_to_pandas(self, arrow_column):
@@ -246,9 +264,13 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         if self._df_for_struct and types.is_struct(arrow_column.type):
             import pandas as pd
-            series = [super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(column)
-                      .rename(field.name)
-                      for column, field in zip(arrow_column.flatten(), arrow_column.type)]
+
+            series = [
+                super(ArrowStreamPandasUDFSerializer, self)
+                .arrow_to_pandas(column)
+                .rename(field.name)
+                for column, field in zip(arrow_column.flatten(), arrow_column.type)
+            ]
             s = pd.concat(series, axis=1)
         else:
             s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(arrow_column)
@@ -277,13 +299,13 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
 
 class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
-
     def load_stream(self, stream):
         """
         Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
         lists of pandas.Series.
         """
         import pyarrow as pa
+
         dataframes_in_group = None
 
         while dataframes_in_group is None or dataframes_in_group > 0:
@@ -294,9 +316,10 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
                 batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 yield (
                     [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
-                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()],
                 )
 
             elif dataframes_in_group != 0:
                 raise ValueError(
-                    'Invalid number of pandas.DataFrames in group {0}'.format(dataframes_in_group))
+                    "Invalid number of pandas.DataFrames in group {0}".format(dataframes_in_group)
+                )

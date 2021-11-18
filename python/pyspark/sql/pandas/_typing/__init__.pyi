@@ -327,12 +327,8 @@ PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLi
 
 PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
 
-MapIterPandasUserDefinedFunction = NewType(
-    "MapIterPandasUserDefinedFunction", FunctionType
-)
-GroupedMapPandasUserDefinedFunction = NewType(
-    "GroupedMapPandasUserDefinedFunction", FunctionType
-)
+MapIterPandasUserDefinedFunction = NewType("MapIterPandasUserDefinedFunction", FunctionType)
+GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
 CogroupedMapPandasUserDefinedFunction = NewType(
     "CogroupedMapPandasUserDefinedFunction", FunctionType
 )

@@ -24,9 +24,7 @@ from pyspark.mllib.util import JavaSaveable, JavaLoader
 
 T = TypeVar("T")
 
-class FPGrowthModel(
-    JavaModelWrapper, JavaSaveable, JavaLoader[FPGrowthModel], Generic[T]
-):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader[FPGrowthModel], Generic[T]):
     def freqItemsets(self) -> RDD[FPGrowth.FreqItemset[T]]: ...
     @classmethod
     def load(cls, sc: SparkContext, path: str) -> FPGrowthModel: ...

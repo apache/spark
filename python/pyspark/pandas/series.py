@@ -3602,7 +3602,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         *,
-        part_cols: Sequence["ColumnOrName"] = ()
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
             msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
@@ -6260,7 +6260,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Scalar:
         """
         Applies sfun to the column and returns a scalar

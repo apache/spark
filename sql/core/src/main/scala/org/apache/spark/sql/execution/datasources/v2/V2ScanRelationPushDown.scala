@@ -85,7 +85,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
-            case _: SupportsPushDownAggregates =>
+            case r: SupportsPushDownAggregates =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               var ordinal = 0
               val aggregates = resultExpressions.flatMap { expr =>
@@ -105,7 +105,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
                 groupingExpressions, sHolder.relation.output)
               val pushedAggregates = PushDownUtils.pushAggregates(
-                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
+                r, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {

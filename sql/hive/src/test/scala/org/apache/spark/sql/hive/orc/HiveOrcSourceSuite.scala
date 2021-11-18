@@ -116,7 +116,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       var msg = intercept[AnalysisException] {
         sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      assert(msg.contains("Cannot save interval data type into external storage."))
+      assert(msg.contains("ORC data source does not support interval day data type"))
 
       msg = intercept[AnalysisException] {
         sql("select null").write.mode("overwrite").orc(orcDir)

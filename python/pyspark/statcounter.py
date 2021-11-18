@@ -29,11 +29,10 @@ except ImportError:
 
 
 class StatCounter(object):
-
     def __init__(self, values=None):
         if values is None:
             values = list()
-        self.n = 0    # Running count of our values
+        self.n = 0  # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)
         self.maxValue = float("-inf")
@@ -106,7 +105,7 @@ class StatCounter(object):
     # Return the variance of the values.
     def variance(self):
         if self.n == 0:
-            return float('nan')
+            return float("nan")
         else:
             return self.m2 / self.n
 
@@ -116,7 +115,7 @@ class StatCounter(object):
     #
     def sampleVariance(self):
         if self.n <= 1:
-            return float('nan')
+            return float("nan")
         else:
             return self.m2 / (self.n - 1)
 
@@ -146,15 +145,20 @@ class StatCounter(object):
          'variance': 1.6666666666666667}
         """
         return {
-            'count': self.count(),
-            'mean': self.mean(),
-            'sum': self.sum(),
-            'min': self.min(),
-            'max': self.max(),
-            'stdev': self.stdev() if sample else self.sampleStdev(),
-            'variance': self.variance() if sample else self.sampleVariance()
+            "count": self.count(),
+            "mean": self.mean(),
+            "sum": self.sum(),
+            "min": self.min(),
+            "max": self.max(),
+            "stdev": self.stdev() if sample else self.sampleStdev(),
+            "variance": self.variance() if sample else self.sampleVariance(),
         }
 
     def __repr__(self):
-        return ("(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" %
-                (self.count(), self.mean(), self.stdev(), self.max(), self.min()))
+        return "(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" % (
+            self.count(),
+            self.mean(),
+            self.stdev(),
+            self.max(),
+            self.min(),
+        )
