@@ -1148,6 +1148,33 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-37326: Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/csv"
+
+      Seq(
+        "2020-12-12T12:12:12.000",
+        "2020-12-12T17:12:12.000Z",
+        "2020-12-12T17:12:12.000+05:00",
+        "2020-12-12T12:12:12.000"
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path)
+
+      val res = spark.read.format("csv").schema("col0 TIMESTAMP_NTZ").load(path)
+
+      checkAnswer(
+        res,
+        Seq(
+          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
+          Row(null),
+          Row(null),
+          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+        )
+      )
+    }
+  }
+
   test("SPARK-37326: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
     val patterns = Seq(
       "yyyy-MM-dd HH:mm:ss XXX",
@@ -2645,10 +2672,6 @@ abstract class CSVSuite
   }
 
   test("SPARK-36536: use casting when datetime pattern is not set") {
-    def isLegacy: Boolean = {
-      spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY).toUpperCase(Locale.ROOT) ==
-        SQLConf.LegacyBehaviorPolicy.LEGACY.toString
-    }
     withSQLConf(
       SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.UTC.getId) {
@@ -2667,13 +2690,13 @@ abstract class CSVSuite
           readback,
           Seq(
             Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
-              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+              LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
-              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+              LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
-              if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
+              LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
             Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
-              if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+              LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
       }
     }
   }

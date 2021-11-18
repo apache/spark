@@ -204,6 +204,9 @@ class UnivocityParser(
 
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
+        if (timestampNTZFormatter.isTimeZoneSet(datum)) {
+          throw QueryExecutionErrors.cannotParseStringAsDataTypeError(name, datum, TimestampNTZType)
+        }
         timestampNTZFormatter.parseWithoutTimeZone(datum)
       }
 

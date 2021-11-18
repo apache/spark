@@ -141,11 +141,9 @@ class Iso8601TimestampFormatter(
   }
 
   override def isTimeZoneSet(s: String): Boolean = {
-    try {
-      val parsed = formatter.parse(s)
-      val parsedZoneId = parsed.query(TemporalQueries.zone())
-      parsedZoneId != null
-    } catch checkParsedDiff(s, legacyFormatter.isTimeZoneSet)
+    val parsed = formatter.parse(s)
+    val parsedZoneId = parsed.query(TemporalQueries.zone())
+    parsedZoneId != null
   }
 
   override def format(instant: Instant): String = {
@@ -214,10 +212,8 @@ class DefaultTimestampFormatter(
   }
 
   override def isTimeZoneSet(s: String): Boolean = {
-    try {
-      val (_, zoneIdOpt, _) = parseTimestampString(UTF8String.fromString(s))
-      zoneIdOpt.isDefined
-    } catch checkParsedDiff(s, legacyFormatter.isTimeZoneSet)
+    val (_, zoneIdOpt, _) = parseTimestampString(UTF8String.fromString(s))
+    zoneIdOpt.isDefined
   }
 }
 
