@@ -106,6 +106,14 @@ private class BlockInfoWrapper(
       lock.unlock()
     }
   }
+
+  def tryLock(f: (BlockInfo, Condition) => Unit): Unit = {
+    if (lock.tryLock()) {
+      try f(info, condition) finally {
+        lock.unlock()
+      }
+    }
+  }
 }
 
 private[storage] object BlockInfo {
@@ -146,7 +154,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Stripe used to control multi-threaded access to block information.
    *
    * We are using this instead of the synchronizing on the [[BlockInfo]] objects to avoid race
-   * conditions in the `lockNewBlockForWriting` method. When this method returns successfully is is
+   * conditions in the `lockNewBlockForWriting` method. When this method returns successfully it is
    * assumed that the passed in [[BlockInfo]] object is persisted by the info manager and that it is
    * safe to modify it. The only way we can guarantee this is by having a unique lock per block ID
    * that has a longer lifespan than the blocks' info object.
@@ -503,7 +511,7 @@ private[storage] class BlockInfoManager extends Logging {
    */
   def clear(): Unit = {
     blockInfoWrappers.values().forEach { wrapper =>
-      wrapper.withLock { (info, condition) =>
+      wrapper.tryLock { (info, condition) =>
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
         condition.signalAll()
