@@ -2910,9 +2910,18 @@ class DataSourceV2SQLSuite
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
+      assert(sql("SELECT * FROM t FOR VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t FOR VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+
       assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
     }
 
@@ -2938,9 +2947,18 @@ class DataSourceV2SQLSuite
         === Array(Row(5), Row(6)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
         === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
+
       assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
         === Array(Row(5), Row(6)))
       assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
         === Array(Row(7), Row(8)))
     }
   }
