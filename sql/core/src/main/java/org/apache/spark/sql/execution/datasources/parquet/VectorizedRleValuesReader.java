@@ -182,8 +182,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector values,
       WritableColumnVector nulls,
       WritableColumnVector defLevels,
-      VectorizedValuesReader data) {
-    readBatchInternal(state, values, nulls, defLevels, data,
+      VectorizedValuesReader valueReader) {
+    readBatchInternal(state, values, nulls, defLevels, valueReader,
       new ParquetVectorUpdaterFactory.IntegerUpdater());
   }
 

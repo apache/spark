@@ -63,7 +63,7 @@ final class ParquetColumnVector {
 
     DataType sparkType = column.sparkType();
     if (!sparkType.sameType(vector.dataType())) {
-      throw new IllegalArgumentException("Spark type: " + column.sparkType() +
+      throw new IllegalArgumentException("Spark type: " + sparkType +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }
 
@@ -119,6 +119,16 @@ final class ParquetColumnVector {
     List<ParquetColumnVector> result = new ArrayList<>();
     getLeavesHelper(this, result);
     return result;
+  }
+
+  private static void getLeavesHelper(ParquetColumnVector vector, List<ParquetColumnVector> coll) {
+    if (vector.isPrimitive) {
+      coll.add(vector);
+    } else {
+      for (ParquetColumnVector child : vector.children) {
+        getLeavesHelper(child, coll);
+      }
+    }
   }
 
   /**
@@ -180,16 +190,6 @@ final class ParquetColumnVector {
       throw new IllegalStateException("can't set reader for non-primitive column");
     }
     this.columnReader = reader;
-  }
-
-  private static void getLeavesHelper(ParquetColumnVector vector, List<ParquetColumnVector> coll) {
-    if (vector.isPrimitive) {
-      coll.add(vector);
-    } else {
-      for (ParquetColumnVector child : vector.children) {
-        getLeavesHelper(child, coll);
-      }
-    }
   }
 
   private void calculateCollectionOffsets() {

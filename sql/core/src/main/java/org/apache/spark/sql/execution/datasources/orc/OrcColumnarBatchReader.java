@@ -176,8 +176,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         // Initialize the missing columns once.
         if (colId == -1) {
           OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
-          missingCol.putNulls(0, capacity);
-          missingCol.setIsConstant();
+          missingCol.setAllNull();
           orcVectorWrappers[i] = missingCol;
         } else {
           orcVectorWrappers[i] = OrcColumnVectorUtils.toOrcColumnVector(
