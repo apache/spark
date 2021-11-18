@@ -2457,6 +2457,14 @@ class DataSourceV2SQLSuite
       .head().getString(1) === expectedComment)
   }
 
+  test("SPARK-30799: temp view name can't contain catalog name") {
+    val sessionCatalogName = CatalogManager.SESSION_CATALOG_NAME
+    val e2 = intercept[AnalysisException] {
+      sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
+    }
+    assert(e2.message.contains("It is not allowed to add database prefix"))
+  }
+
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
