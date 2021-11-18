@@ -2911,6 +2911,36 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("Check HasPartitionKey from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+          .loadTable(Identifier.of(Array(), "tbl"))
+          .asInstanceOf[InMemoryPartitionTable]
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      var partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 3))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 2)
+      assert(partKeys.toSet == Set(1, 2))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 4))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 5)
+      assert(partKeys.toSet == Set(1, 2, 3, 4, 5))
+    }
+  }
+
   test("time travel") {
     sql("use testcat")
     // The testing in-memory table simply append the version/timestamp to the table name when
