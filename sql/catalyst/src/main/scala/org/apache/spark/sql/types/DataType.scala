@@ -392,6 +392,8 @@ object DataType {
               equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
           }
 
+      case (TimestampNTZType, TimestampType) => true
+
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }

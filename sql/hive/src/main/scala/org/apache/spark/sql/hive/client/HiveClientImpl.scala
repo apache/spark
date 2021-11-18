@@ -992,15 +992,19 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
+    val field = c.dataType match {
+      case TimestampNTZType => c.copy(dataType = TimestampType)
+      case _ => c
+    }
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      c.dataType.catalogString
+      field.dataType.catalogString
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+      CharVarcharUtils.getRawTypeString(field.metadata).getOrElse(field.dataType.catalogString)
     }
-    new FieldSchema(c.name, typeString, c.getComment().orNull)
+    new FieldSchema(field.name, typeString, field.getComment().orNull)
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */

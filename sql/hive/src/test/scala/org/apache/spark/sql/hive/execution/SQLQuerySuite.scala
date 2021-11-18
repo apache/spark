@@ -46,6 +46,8 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 
+import java.time.LocalDateTime
+
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
 case class Nested3(f3: Int)
@@ -2686,6 +2688,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           }
         }
       }
+    }
+  }
+
+  test("SPARK-36180: Support TimestampNTZ type in Hive") {
+    withTable("tb") {
+      val dt = "2018-11-17 13:33:33.0"
+      val ddl =
+        s"CREATE TABLE tb as SELECT TIMESTAMP_LTZ'$dt' as c0, TIMESTAMP_NTZ '$dt' as c1"
+      sql(ddl)
+      val df = sql("SELECT c0, c1 FROM tb")
+      checkAnswer(df, Row(
+        Timestamp.valueOf(dt),
+        LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
     }
   }
 }
