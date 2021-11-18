@@ -30,7 +30,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
-    @transient relation: InMemoryRelation)
+    @transient relation: InMemoryRelation,
+    outputColumnar: Boolean = true)
   extends LeafExecNode {
 
   override lazy val metrics = Map(
@@ -62,7 +63,7 @@ case class InMemoryTableScanExec(
   override val supportsColumnar: Boolean = {
     conf.cacheVectorizedReaderEnabled  &&
         !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
-        relation.cacheBuilder.serializer.supportsColumnarOutput(relation.schema)
+        relation.cacheBuilder.serializer.supportsColumnarOutput(relation.schema) && outputColumnar
   }
 
   private lazy val columnarInputRDD: RDD[ColumnarBatch] = {

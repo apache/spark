@@ -68,7 +68,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
+      case InMemoryTableScanExec(_, _, relation, _) =>
         relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
@@ -107,7 +107,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     collect(plan) {
-      case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
+      case inMemoryTable @ InMemoryTableScanExec(_, _, relation, _) =>
         getNumInMemoryTablesRecursively(relation.cachedPlan) +
           getNumInMemoryTablesInSubquery(inMemoryTable) + 1
       case p =>
