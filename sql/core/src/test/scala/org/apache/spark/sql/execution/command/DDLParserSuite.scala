@@ -360,7 +360,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       LocalTempView)
     comparePlans(parsed2, expected2)
 
-    // TODO(SPARK-37367): Reeable exception test in DDLParserSuite.create view -- basic
+    // TODO(SPARK-37367): Reenable exception test in DDLParserSuite.create view -- basic
     // val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     // intercept(v3, "It is not allowed to add database prefix")
   }
