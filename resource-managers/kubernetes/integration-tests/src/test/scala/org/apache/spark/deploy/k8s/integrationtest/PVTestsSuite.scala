@@ -61,7 +61,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .withKind("PersistentVolume")
       .withApiVersion("v1")
       .withNewMetadata()
-        .withName(f"{PV_NAME}-{i}")
+      .withName(s"${PV_NAME}-${i}")
       .endMetadata()
       .withNewSpec()
         .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
@@ -85,7 +85,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .withKind("PersistentVolumeClaim")
       .withApiVersion("v1")
       .withNewMetadata()
-        .withName(f"{PVC_NAME}-{i}")
+        .withName(s"${PVC_NAME}-${i}")
       .endMetadata()
       .withNewSpec()
         .withAccessModes("ReadWriteOnce")
@@ -109,13 +109,13 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
-      .withName(f"{PVC_NAME}-{i}")
+      .withName(s"${PVC_NAME}-${i}")
       .delete()
 
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumes()
-      .withName(f"{PV_NAME}-{i}")
+      .withName(s"${PV_NAME}-${i}")
       .delete()
 
     kubernetesTestComponents
