@@ -1920,4 +1920,9 @@ object QueryExecutionErrors {
         s". To solve this try to set $maxDynamicPartitionsKey" +
         s" to at least $numWrittenParts.")
   }
+
+  def registerFunctionWithoutParameterlessConstructorError(className: String): Throwable = {
+    new RuntimeException(s"Register aggregate function with '$className' which not provides " +
+      "parameterless constructor is not supported")
+  }
 }

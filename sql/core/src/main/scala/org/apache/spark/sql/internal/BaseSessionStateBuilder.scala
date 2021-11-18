@@ -18,7 +18,6 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlan, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -417,7 +416,13 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
       }
       expr
     } else if (classOf[Aggregator[_, _, _]].isAssignableFrom(clazz)) {
-      val aggregator = clazz.getConstructor().newInstance().asInstanceOf[Aggregator[Any, Any, Any]]
+      val noParameterConstructor = clazz.getConstructors.find(_.getParameterCount == 0)
+      if (noParameterConstructor.isEmpty) {
+        throw QueryExecutionErrors.registerFunctionWithoutParameterlessConstructorError(
+          clazz.getCanonicalName)
+      }
+      val aggregator =
+        noParameterConstructor.get.newInstance().asInstanceOf[Aggregator[Any, Any, Any]]
 
       // Construct the input encoder
       val mirror = universe.runtimeMirror(clazz.getClassLoader)

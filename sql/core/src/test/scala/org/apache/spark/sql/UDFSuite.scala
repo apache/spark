@@ -65,6 +65,10 @@ class MyDoubleAverage extends Aggregator[jlDouble, (Double, Long), jlDouble] {
   def outputEncoder: Encoder[jlDouble] = Encoders.DOUBLE
 }
 
+class MyDoubleSum(test: Boolean) extends MyDoubleAverage {
+  override def finish(r: (Double, Long)): jlDouble = if (r._2 > 0L) r._1 else null
+}
+
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
