@@ -29,7 +29,6 @@ import scala.concurrent.duration._
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s.Diff
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -712,14 +711,49 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     jsonOpt should be(Symbol("defined"))
     errOpt should be(None)
 
-    val jsonFile = getClass.getClassLoader.getResource("history_server_metrics.json").getFile
-    val exp = IOUtils.toString(new FileInputStream(jsonFile), StandardCharsets.UTF_8)
-    // compare the ASTs so formatting differences don't cause failures
-    import org.json4s.jackson.JsonMethods._
-    val jsonAst = parse(clearLastUpdated(jsonOpt.get))
-    val expAst = parse(exp)
-    val Diff(changed, _, _) = jsonAst.diff(expAst)
-    assert(changed.children.forall(_.asInstanceOf[JObject].obj.head._1.contains("timer")))
+    def getMetricsValue(json: JValue, metricType: String, metricName: String): Int = {
+      json match {
+        case JNothing => 0
+        case jsonAst: JObject =>
+          getCountFromJson(jsonAst, metricType, metricName)
+        case _ => 0
+      }
+    }
+
+    def getCountFromJson(json: JValue, metricType: String, metricName: String): Int = {
+      var count = 0
+      json.filter(json => {
+        (json \ metricType) match {
+          case keyValues: JObject => keyValues.filter(metrics => {
+            (metrics \ metricName) match {
+              case metric: JObject =>
+                metricType match {
+                  case "gauges" =>
+                    count = metric.values.getOrElse("value", 0).asInstanceOf[BigInt].toInt
+                  case _ =>
+                    count = metric.values.getOrElse("count", 0).asInstanceOf[BigInt].toInt
+                }
+                true
+              case _ => false
+            }
+          }).nonEmpty
+          case _ => false
+        }
+      })
+      count
+    }
+
+    var json = parse(jsonOpt.get)
+    assert(getMetricsValue(json, "gauges", "historyServer.applications") == 14)
+    assert(getMetricsValue(json, "timers", "historyServer.check.logs.timer") == 1)
+    assert(getMetricsValue(json, "timers", "historyServer.clean.logs.timer") == 0)
+
+    provider.checkForLogs()
+    json = parse(HistoryServerSuite.getContentAndCode(metricsUrl)._2.get)
+    assert(getMetricsValue(json, "timers", "historyServer.check.logs.timer") == 2)
+    provider.cleanLogs()
+    json = parse(HistoryServerSuite.getContentAndCode(metricsUrl)._2.get)
+    assert(getMetricsValue(json, "timers", "historyServer.clean.logs.timer") == 1)
   }
 }
 
