@@ -2789,7 +2789,7 @@ abstract class JsonSuite
         select
           timestamp_ntz'2020-12-12 12:12:12' as col1,
           timestamp_ltz'2020-12-12 12:12:12' as col2
-      """)
+        """)
 
       exp.write.json(path)
 
@@ -2808,7 +2808,7 @@ abstract class JsonSuite
       val exp = spark.sql("""
         select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
         select timestamp_ntz'2020-12-12 12:12:12' as col0
-      """)
+        """)
 
       exp.write.json(path)
 
