@@ -2746,6 +2746,141 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_NTZ values") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+      exp.write.option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss").json(path)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        val res = spark.read
+          .option("inferTimestamp", "true")
+          .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss")
+          .json(path)
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_LTZ values") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      val exp = spark.sql("select timestamp_ltz'2020-12-12 12:12:12' as col0")
+      exp.write.option("timestampFormat", "yyyy-MM-dd HH:mm:ss").json(path)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val res = spark.read
+          .option("inferTimestamp", "true")
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+          .json(path)
+
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("SPARK-37326: Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      val exp = spark.sql("""
+        select
+          timestamp_ntz'2020-12-12 12:12:12' as col1,
+          timestamp_ltz'2020-12-12 12:12:12' as col2
+      """)
+
+      exp.write.json(path)
+
+      val res = spark.read
+        .schema("col1 TIMESTAMP_NTZ, col2 TIMESTAMP_LTZ")
+        .json(path)
+
+      checkAnswer(res, exp)
+    }
+  }
+
+  test("SPARK-37326: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      val exp = spark.sql("""
+        select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ntz'2020-12-12 12:12:12' as col0
+      """)
+
+      exp.write.json(path)
+
+      val timestampTypes = Seq(
+        SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+        SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+      for (timestampType <- timestampTypes) {
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+          val res = spark.read.option("inferTimestamp", "true").json(path)
+
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+            checkAnswer(res, exp)
+          } else {
+            checkAnswer(
+              res,
+              spark.sql("""
+                select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+                select timestamp_ltz'2020-12-12 12:12:12' as col0
+              """)
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37326: Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      Seq(
+        """{"c0":"2020-12-12T12:12:12.000"}""",
+        """{"c0":"2020-12-12T17:12:12.000Z"}""",
+        """{"c0":"2020-12-12T17:12:12.000+05:00"}""",
+        """{"c0":"2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path)
+
+      val res = spark.read.option("inferTimestamp", "true").json(path)
+
+      val exp = spark.sql("""
+        select timestamp_ltz'2020-12-12T12:12:12.000' as col0 union all
+        select timestamp_ltz'2020-12-12T17:12:12.000Z' as col0 union all
+        select timestamp_ltz'2020-12-12T17:12:12.000+05:00' as col0 union all
+        select timestamp_ltz'2020-12-12T12:12:12.000' as col0
+      """)
+      checkAnswer(res, exp)
+    }
+  }
+
+  test("SPARK-37326: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
+    val patterns = Seq(
+      "yyyy-MM-dd HH:mm:ss XXX",
+      "yyyy-MM-dd HH:mm:ss Z",
+      "yyyy-MM-dd HH:mm:ss z")
+
+    val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+    for (pattern <- patterns) {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/json"
+        val err = intercept[SparkException] {
+          exp.write.option("timestampNTZFormat", pattern).json(path)
+        }
+        assert(
+          err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
+          err.getCause.getMessage.contains("Unable to extract value"))
+      }
+    }
+  }
+
   test("filters push down") {
     withTempPath { path =>
       val t = "2019-12-17 00:01:02"

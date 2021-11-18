@@ -106,6 +106,20 @@ private[sql] class JSONOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat").orElse {
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSS")
+    } else {
+      None
+    }
+  }
+  val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSS"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]"
+    })
+
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /**
@@ -138,8 +152,9 @@ private[sql] class JSONOptions(
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Enables inferring of TimestampType from strings matched to the timestamp pattern
-   * defined by the timestampFormat option.
+   * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
+   * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
+   * respectively.
    */
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 
