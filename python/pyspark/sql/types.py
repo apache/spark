@@ -1101,7 +1101,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
         elif _INTERVAL_DAYTIME.match(json_value):
             m = _INTERVAL_DAYTIME.match(json_value)
-            inverted_fields = DayTimeIntervalType._inverted_fields  # type: ignore[union-attr]
+            inverted_fields = DayTimeIntervalType._inverted_fields
             first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
             second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
             if first_field is not None and second_field is None:
