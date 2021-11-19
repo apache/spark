@@ -127,7 +127,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("SC-88419: Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
+  test("Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
     val schema = MessageTypeParser.parseMessageType(
       """message root {
         |  required int64 timestamp_ltz_millis_depr(TIMESTAMP_MILLIS);
