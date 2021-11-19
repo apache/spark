@@ -122,7 +122,63 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-36182: TimestampNTZ") {
     val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
       .map(ts => Tuple1(LocalDateTime.parse(ts)))
-    checkParquetFile(data)
+    withAllParquetReaders {
+      checkParquetFile(data)
+    }
+  }
+
+  test("Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 timestamp_ltz_millis_depr(TIMESTAMP_MILLIS);
+        |  required int64 timestamp_ltz_micros_depr(TIMESTAMP_MICROS);
+        |  required int64 timestamp_ltz_millis(TIMESTAMP(MILLIS,true));
+        |  required int64 timestamp_ltz_micros(TIMESTAMP(MICROS,true));
+        |  required int64 timestamp_ntz_millis(TIMESTAMP(MILLIS,false));
+        |  required int64 timestamp_ntz_micros(TIMESTAMP(MICROS,false));
+        |}
+      """.stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/timestamps.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).map { i =>
+          val record = new SimpleGroup(schema)
+          for (group <- Seq(0, 2, 4)) {
+            record.add(group, 1000L) // millis
+            record.add(group + 1, 1000000L) // micros
+          }
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            StructType(
+              StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
+              StructField("timestamp_ntz_millis", TimestampNTZType, nullable = true) ::
+              StructField("timestamp_ntz_micros", TimestampNTZType, nullable = true) ::
+              Nil
+            )
+          }
+
+          val exp = (0 until numRecords).map { _ =>
+            val ltz_value = new java.sql.Timestamp(1000L)
+            val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
+            (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
+          }.toDF()
+
+          checkAnswer(df, exp)
+        }
+      }
+    }
   }
 
   testStandardAndLegacyModes("fixed-length decimals") {
