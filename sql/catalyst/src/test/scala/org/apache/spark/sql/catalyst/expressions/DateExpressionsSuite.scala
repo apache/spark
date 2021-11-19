@@ -1440,7 +1440,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(
             GetTimestamp(Literal(input), Literal("yyyy-MM-dd HH:mm:ss"), TimestampNTZType),
             expectedTs)
-          Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
+          Seq(".123456").foreach { segment =>
             val input2 = input + segment
             val expectedTs2 = LocalDateTime.parse(s + ".123456")
             checkEvaluation(
@@ -1451,7 +1451,29 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+  }
 
+  test("to_timestamp_ntz fail to parse timestamp with timezone") {
+    val specialTs = Seq(
+      "0001-01-01T00:00:00", // the fist timestamp of Common Era
+      "1582-10-15T23:59:59", // the cutover date from Julian to Gregorian calendar
+      "1970-01-01T00:00:00", // the epoch timestamp
+      "9999-12-31T23:59:59"  // the last supported timestamp according to SQL standard
+    )
+    outstandingZoneIds.foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
+        specialTs.foreach { s =>
+          val input = s.replace("T", " ")
+          Seq(".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
+            val input2 = input + segment
+            checkExceptionInExpression[RuntimeException](
+              GetTimestamp(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]"),
+                TimestampNTZType),
+              "Cannot parse field value")
+          }
+        }
+      }
+    }
   }
 
   test("to_timestamp exception mode") {
