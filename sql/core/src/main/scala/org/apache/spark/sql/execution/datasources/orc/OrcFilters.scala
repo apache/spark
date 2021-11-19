@@ -172,7 +172,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
       val orcTimestamp = OrcUtils.toOrcNTZ(localDateTimeToMicros(value.asInstanceOf[LocalDateTime]))
       // Hive meets OrcTimestamp will throw ClassNotFoundException, So convert it.
-      new Timestamp(orcTimestamp.getTime).setNanos(orcTimestamp.getNanos)
+      val timestamp = new Timestamp(orcTimestamp.getTime)
+      timestamp.setNanos(orcTimestamp.getNanos)
+      timestamp
     case _: YearMonthIntervalType =>
       IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
     case _: DayTimeIntervalType =>
