@@ -1735,7 +1735,7 @@ def when(condition: Column, value: Any) -> Column:
 
 
 @overload  # type: ignore[no-redef]
-def log(arg1: "ColumnOrName") -> Column:
+def log(arg1: "ColumnOrName") -> Column:  # noqa: F811
     ...
 
 
