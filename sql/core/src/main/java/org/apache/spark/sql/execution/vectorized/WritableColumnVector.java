@@ -217,9 +217,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     byte8[7] = (byte)(src >>> 7 & 1);
     putBytes(rowId, count, byte8, srcIndex);
   }
-  public void putBooleans(int rowId, byte src) {
-    putBooleans(rowId, 8, src, 0);
-  }
+
+  /**
+   * Sets bits from [src[0], src[7]] to [rowId, rowId + 7]
+   * src must contain bit-packed 8 Booleans in the byte.
+   */
+  public abstract void putBooleans(int rowId, byte src);
 
   /**
    * Sets `value` to the value at rowId.

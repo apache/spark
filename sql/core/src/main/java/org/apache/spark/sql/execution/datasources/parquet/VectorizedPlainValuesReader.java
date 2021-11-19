@@ -82,16 +82,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void skipBooleans(int total) {
-    int skipBytes = (bitOffset + total) / 8 - 1;
+    int numBytesToSkip = (bitOffset + total) / 8 - 1;
     bitOffset = (bitOffset + total) & 7;
-    if (skipBytes >= 0) {
+    if (numBytesToSkip >= 0) {
       try {
-        in.skipFully(skipBytes);
-        if (bitOffset > 0) {
-          currentByte = (byte) in.read();
-        }
+        in.skipFully(numBytesToSkip);
       } catch (IOException e) {
         throw new ParquetDecodingException("Failed to skip bytes", e);
+      }
+      if (bitOffset > 0) {
+        updateCurrentByte();
       }
     }
   }
