@@ -168,7 +168,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
     case _: TimestampType if value.isInstanceOf[Instant] =>
       toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
-    case _: TimestampNTZType =>
+    case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
       toJavaTimestamp(localDateTimeToMicros(value.asInstanceOf[LocalDateTime]))
     case _: YearMonthIntervalType =>
       IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
