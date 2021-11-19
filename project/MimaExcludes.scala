@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
+    // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
+    // This is necessary for Scala 2.13.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
   )
 
   // Exclude rules for 3.2.x from 3.1.1
