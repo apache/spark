@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
+from typing import Any, TypeVar
+
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
 from py4j.java_collections import JavaArray, JavaList
 
+import pyspark.context
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
@@ -34,7 +37,7 @@ _float_str_mapping = {
 }
 
 
-def _new_smart_decode(obj):
+def _new_smart_decode(obj: Any) -> str:
     if isinstance(obj, float):
         s = str(obj)
         return _float_str_mapping.get(s, s)
@@ -85,7 +88,7 @@ def _py2java(sc, obj):
     return obj
 
 
-def _java2py(sc, r, encoding="bytes"):
+def _java2py(sc: SparkContext, r, encoding="bytes"):
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -94,17 +97,17 @@ def _java2py(sc, r, encoding="bytes"):
             clsName = "JavaRDD"
 
         if clsName == "JavaRDD":
-            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
+            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)  # type: ignore[attr-defined]
             return RDD(jrdd, sc)
 
         if clsName == "Dataset":
             return DataFrame(r, SparkSession(sc)._wrapped)
 
         if clsName in _picklable_classes:
-            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
+            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
+                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
             except Py4JJavaError:
                 pass  # not pickable
 
@@ -113,16 +116,16 @@ def _java2py(sc, r, encoding="bytes"):
     return r
 
 
-def callJavaFunc(sc, func, *args):
+def callJavaFunc(sc: pyspark.context.SparkContext, func, *args):
     """Call Java Function"""
-    args = [_py2java(sc, a) for a in args]
-    return _java2py(sc, func(*args))
+    java_args = [_py2java(sc, a) for a in args]
+    return _java2py(sc, func(*java_args))
 
 
-def callMLlibFunc(name, *args):
+def callMLlibFunc(name: str, *args):
     """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
-    api = getattr(sc._jvm.PythonMLLibAPI(), name)
+    api = getattr(sc._jvm.PythonMLLibAPI(), name)  # type: ignore[attr-defined]
     return callJavaFunc(sc, api, *args)
 
 
@@ -131,19 +134,22 @@ class JavaModelWrapper(object):
     Wrapper for the model in JVM
     """
 
-    def __init__(self, java_model):
+    def __init__(self, java_model: JavaObject):
         self._sc = SparkContext.getOrCreate()
         self._java_model = java_model
 
     def __del__(self):
         self._sc._gateway.detach(self._java_model)
 
-    def call(self, name, *a):
+    def call(self, name: str, *a):
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 
 
-def inherit_doc(cls):
+C = TypeVar("C", bound=type)
+
+
+def inherit_doc(cls: C) -> C:
     """
     A decorator that makes a class inherit documentation from its parents.
     """
