@@ -160,6 +160,56 @@ class PlanParserSuite extends AnalysisTest {
       """.stripMargin, plan)
   }
 
+  test("nested bracketed comment case seven") {
+    val plan = OneRowRelation().select(Literal(1).as("a"))
+    assertEqual(
+      """
+        |/*abc*/
+        |select 1 as a
+        |/*
+        |
+        |2 as b
+        |/*abc */
+        |, 3 as c
+        |
+        |/**/
+        |*/
+      """.stripMargin, plan)
+  }
+
+  test("unclosed bracketed comment one") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |""".stripMargin
+    val e = intercept[RuntimeException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment: $query, position: 58"))
+  }
+
+  test("unclosed bracketed comment two") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |select 4 as d
+                  |""".stripMargin
+    val e = intercept[RuntimeException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment: $query, position: 72"))
+  }
+
   test("case insensitive") {
     val plan = table("a").select(star())
     assertEqual("sELEct * FroM a", plan)

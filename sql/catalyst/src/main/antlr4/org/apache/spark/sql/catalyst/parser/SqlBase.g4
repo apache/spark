@@ -73,6 +73,25 @@ grammar SqlBase;
       return false;
     }
   }
+
+ /**
+   * This method will be called when the character stream ends and try to find out the
+   * unclosed bracketed comment.
+   * If the next character is -1, it means the end of the entire character stream match,
+   * and we throw exception to prevent executing the query.
+   *
+   * Returns false if the next character is not -1.
+   */
+  public boolean isEnd() {
+    int nextChar = _input.LA(1);
+    if (nextChar == -1) {
+      int pos = _input.index();
+      String str = _input.getText(new Interval(0, pos));
+      throw new RuntimeException("Unclosed bracketed comment: " + str + ", position: " + pos);
+    } else {
+      return false;
+    }
+  }
 }
 
 singleStatement
@@ -1926,7 +1945,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {isEnd();} EOF) -> channel(HIDDEN)
     ;
 
 WS
