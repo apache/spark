@@ -39,4 +39,4 @@ class TimedeltaIndex(Index):
             else:
                 return partial(property_or_func, self)
 
-    raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
+        raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
