@@ -38,4 +38,5 @@ class TimedeltaIndex(Index):
                 return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
+
     raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
