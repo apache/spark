@@ -169,7 +169,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
     case _: TimestampType if value.isInstanceOf[Instant] =>
       toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
-    case _: TimestampNTZType =>
+    case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
       val orcTimestamp = OrcUtils.toOrcNTZ(localDateTimeToMicros(value.asInstanceOf[LocalDateTime]))
       // Hive meets OrcTimestamp will throw ClassNotFoundException, So convert it.
       new Timestamp(orcTimestamp.getTime).setNanos(orcTimestamp.getNanos)
