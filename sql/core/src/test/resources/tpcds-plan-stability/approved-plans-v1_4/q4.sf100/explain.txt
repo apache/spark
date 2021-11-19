@@ -473,7 +473,7 @@ Arguments: [customer_id#111 ASC NULLS FIRST], false, 0
 (78) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#26]
 Right keys [1]: [customer_id#111]
-Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#27 > 0.000000) THEN CheckOverflow((promote_precision(year_total#59) / promote_precision(year_total#27)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) END > CASE WHEN (year_total#27 > 0.000000) THEN CheckOverflow((promote_precision(year_total#59) / promote_precision(year_total#27)), DecimalType(38,14), true) END)
 
 (79) Project [codegen id : 35]
 Output [10]: [customer_id#26, customer_id#52, customer_first_name#53, customer_last_name#54, customer_preferred_cust_flag#55, customer_birth_country#56, customer_login#57, customer_email_address#58, year_total#87, year_total#112]
@@ -653,7 +653,7 @@ Arguments: [customer_id#164 ASC NULLS FIRST], false, 0
 (118) SortMergeJoin [codegen id : 53]
 Left keys [1]: [customer_id#26]
 Right keys [1]: [customer_id#164]
-Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#140 > 0.000000) THEN CheckOverflow((promote_precision(year_total#165) / promote_precision(year_total#140)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#87 > 0.000000) THEN CheckOverflow((promote_precision(year_total#112) / promote_precision(year_total#87)), DecimalType(38,14), true) END > CASE WHEN (year_total#140 > 0.000000) THEN CheckOverflow((promote_precision(year_total#165) / promote_precision(year_total#140)), DecimalType(38,14), true) END)
 
 (119) Project [codegen id : 53]
 Output [7]: [customer_id#52, customer_first_name#53, customer_last_name#54, customer_preferred_cust_flag#55, customer_birth_country#56, customer_login#57, customer_email_address#58]

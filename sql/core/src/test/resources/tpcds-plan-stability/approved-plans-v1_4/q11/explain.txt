@@ -407,7 +407,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=
 (71) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [customer_id#21]
 Right keys [1]: [customer_id#88]
-Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) ELSE null END > CASE WHEN (year_total#22 > 0.00) THEN CheckOverflow((promote_precision(year_total#44) / promote_precision(year_total#22)), DecimalType(38,20), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) END > CASE WHEN (year_total#22 > 0.00) THEN CheckOverflow((promote_precision(year_total#44) / promote_precision(year_total#22)), DecimalType(38,20), true) END)
 
 (72) Project [codegen id : 16]
 Output [1]: [customer_preferred_cust_flag#43]
