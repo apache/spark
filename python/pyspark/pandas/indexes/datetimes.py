@@ -138,7 +138,7 @@ class DatetimeIndex(Index):
         if hasattr(MissingPandasLikeDatetimeIndex, item):
             property_or_func = getattr(MissingPandasLikeDatetimeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'DatetimeIndex' object has no attribute '{}'".format(item))

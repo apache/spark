@@ -83,6 +83,10 @@ class AppStatusStoreSuite extends SparkFunSuite {
     if (live) {
       return AppStatusStore.createLiveStore(conf)
     }
+    // LevelDB doesn't support Apple Silicon yet
+    if (Utils.isMac && System.getProperty("os.arch").equals("aarch64") && disk) {
+      return null
+    }
 
     val store: KVStore = if (disk) {
       val testDir = Utils.createTempDir()
@@ -100,6 +104,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     "in memory live" -> createAppStore(disk = false, live = true)
   ).foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
+      assume(appStore != null)
       val store = appStore.store
 
       // Success and failed tasks metrics

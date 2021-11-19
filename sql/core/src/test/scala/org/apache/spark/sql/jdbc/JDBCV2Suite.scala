@@ -21,10 +21,10 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -42,6 +42,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.url", url)
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
+    .set("spark.sql.catalog.h2.pushDownLimit", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -90,6 +91,83 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SELECT * FROM h2.test.empty_table"), Seq())
     checkAnswer(sql("SELECT * FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
     checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
+  }
+
+  // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
+  // TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
+  // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS
+  test("TABLESAMPLE (integer_expression ROWS) is the same as LIMIT") {
+    val df = sql("SELECT NAME FROM h2.test.employee TABLESAMPLE (3 ROWS)")
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkPushedLimit(df, true, 3)
+    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
+  }
+
+  test("simple scan with LIMIT") {
+    val df1 = spark.read.table("h2.test.employee")
+      .where($"dept" === 1).limit(1)
+    checkPushedLimit(df1, true, 1)
+    checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .filter($"dept" > 1)
+      .limit(1)
+    checkPushedLimit(df2, true, 1)
+    checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
+
+    val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1")
+    val scan = df3.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkPushedLimit(df3, true, 1)
+    checkAnswer(df3, Seq(Row("alex")))
+
+    val df4 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .limit(1)
+    checkPushedLimit(df4, false, 0)
+    checkAnswer(df4, Seq(Row(1, 19000.00)))
+
+    val df5 = spark.read
+      .table("h2.test.employee")
+      .sort("SALARY")
+      .limit(1)
+    checkPushedLimit(df5, false, 0)
+    checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+
+    val name = udf { (x: String) => x.matches("cat|dav|amy") }
+    val sub = udf { (x: String) => x.substring(0, 3) }
+    val df6 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
+      .filter(name($"shortName"))
+      .limit(1)
+    // LIMIT is pushed down only if all the filters are pushed down
+    checkPushedLimit(df6, false, 0)
+    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
+  }
+
+  private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          if (pushed) {
+            assert(v1.pushedDownOperators.limit === Some(limit))
+          } else {
+            assert(v1.pushedDownOperators.limit.isEmpty)
+          }
+      }
+    }
   }
 
   test("scan with filter push-down") {
@@ -250,7 +328,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
@@ -267,7 +345,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(ID), MIN(ID)], " +
             "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
-            "PushedGroupby: []"
+            "PushedGroupByColumns: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(2, 1)))
@@ -346,7 +424,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
@@ -359,7 +437,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(DISTINCT SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
@@ -377,7 +455,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT, NAME]"
+            "PushedGroupByColumns: [DEPT, NAME]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(9000, 1200), Row(12000, 1200), Row(10000, 1300),
@@ -396,7 +474,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
           "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-          "PushedGroupby: [DEPT]"
+          "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(12000, 1200), Row(12000, 1200)))
@@ -411,7 +489,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [MIN(SALARY)], " +
             "PushedFilters: [], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1, 9000), Row(2, 10000), Row(6, 12000)))
@@ -434,7 +512,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val expected_plan_fragment =
           "PushedAggregates: [SUM(SALARY)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-            "PushedGroupby: [DEPT]"
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
     checkAnswer(query, Seq(Row(6, 12000), Row(1, 19000), Row(2, 22000)))
@@ -458,10 +536,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df1 = sql("select * from h2.test.employee").toDF(cols: _*)
     val df2 = df1.groupBy().sum("c")
     df2.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expected_plan_fragment =
-          "PushedAggregates: []"  // aggregate over alias not push down
-        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.aggregation.isEmpty)
+      }
     }
     checkAnswer(df2, Seq(Row(53000.00)))
   }
@@ -476,10 +554,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(name($"shortName"))
       .agg(sum($"SALARY").as("sum_salary"))
     query.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expected_plan_fragment =
-          "PushedAggregates: []"
-        checkKeywordsExistsInExplain(query, expected_plan_fragment)
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.aggregation.isEmpty)
+      }
     }
     checkAnswer(query, Seq(Row(29000.0)))
   }

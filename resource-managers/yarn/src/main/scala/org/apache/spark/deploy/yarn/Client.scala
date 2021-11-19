@@ -57,7 +57,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
-import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
@@ -391,7 +391,7 @@ private[spark] class Client(
   private[yarn] def copyFileToRemote(
       destDir: Path,
       srcPath: Path,
-      replication: Short,
+      replication: Option[Short],
       symlinkCache: Map[URI, Path],
       force: Boolean = false,
       destName: Option[String] = None): Path = {
@@ -408,7 +408,7 @@ private[spark] class Client(
         case e: PathOperationException
             if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
       }
-      destFs.setReplication(destPath, replication)
+      replication.foreach(repl => destFs.setReplication(destPath, repl))
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
       logInfo(s"Source and destination file systems are the same. Not copying $srcPath")
@@ -448,7 +448,6 @@ private[spark] class Client(
     val distributedNames = new HashSet[String]
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
-      .getOrElse(fs.getDefaultReplication(destDir))
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
@@ -932,6 +931,11 @@ private[spark] class Client(
     amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
+
+    // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
+    // is added by default. It will not affect Java 8 and Java 11 due to existence of
+    // `-XX:+IgnoreUnrecognizedVMOptions`.
+    javaOpts += JavaModuleOptions.defaultModuleOptions()
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -1473,7 +1477,8 @@ private[spark] object Client extends Logging {
   /**
    * Returns a list of local, absolute file URLs representing the user classpath. Note that this
    * must be executed on the same host which will access the URLs, as it will resolve relative
-   * paths based on the current working directory.
+   * paths based on the current working directory, as well as environment variables.
+   * See SPARK-35672 for discussion of why it is necessary to do environment variable substitution.
    *
    * @param conf Spark configuration.
    * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
@@ -1492,7 +1497,8 @@ private[spark] object Client extends Logging {
           "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
         inputPath
       }
-      Paths.get(replacedFilePath).toAbsolutePath.toUri.toURL
+      val envVarResolvedFilePath = YarnSparkHadoopUtil.replaceEnvVars(replacedFilePath, sys.env)
+      Paths.get(envVarResolvedFilePath).toAbsolutePath.toUri.toURL
     }
   }
 

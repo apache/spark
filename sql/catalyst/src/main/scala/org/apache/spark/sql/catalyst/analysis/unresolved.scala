@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.expressions.TimeTravelSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -40,12 +41,13 @@ class UnresolvedException(function: String)
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name
- * @param options options to scan this relation. Only applicable to v2 table scan.
+ * @param options options to scan this relation.
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
-    override val isStreaming: Boolean = false)
+    override val isStreaming: Boolean = false,
+    timeTravelSpec: Option[TimeTravelSpec] = None)
   extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -65,9 +67,13 @@ object UnresolvedRelation {
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
-      isStreaming: Boolean): UnresolvedRelation = {
+      isStreaming: Boolean,
+      timeTravelSpec: Option[TimeTravelSpec]): UnresolvedRelation = {
     UnresolvedRelation(
-      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+      tableIdentifier.database.toSeq :+ tableIdentifier.table,
+      extraOptions,
+      isStreaming,
+      timeTravelSpec)
   }
 
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =

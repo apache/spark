@@ -148,7 +148,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
         setOpId(p)
       case other: QueryPlan[_] =>
         setOpId(other)
-        other.innerChildren.foldLeft(currentOperationID) {
+        currentOperationID = other.innerChildren.foldLeft(currentOperationID) {
           (curId, plan) => generateOperatorIDs(plan, curId)
         }
     }

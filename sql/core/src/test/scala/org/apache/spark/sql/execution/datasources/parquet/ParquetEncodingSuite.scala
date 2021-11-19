@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.{Duration, Period}
+
 import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -27,12 +29,14 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
   import testImplicits._
 
-  val ROW = ((1).toByte, 2, 3L, "abc")
+  val ROW = ((1).toByte, 2, 3L, "abc", Period.of(1, 1, 0), Duration.ofMillis(100))
   val NULL_ROW = (
     null.asInstanceOf[java.lang.Byte],
     null.asInstanceOf[Integer],
     null.asInstanceOf[java.lang.Long],
-    null.asInstanceOf[String])
+    null.asInstanceOf[String],
+    null.asInstanceOf[Period],
+    null.asInstanceOf[Duration])
 
   test("All Types Dictionary") {
     (1 :: 1000 :: Nil).foreach { n => {
@@ -53,6 +57,8 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           assert(batch.column(1).getInt(i) == 2)
           assert(batch.column(2).getLong(i) == 3)
           assert(batch.column(3).getUTF8String(i).toString == "abc")
+          assert(batch.column(4).getInt(i) == 13)
+          assert(batch.column(5).getLong(i) == 100000)
           i += 1
         }
         reader.close()
@@ -80,6 +86,8 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           assert(batch.column(1).isNullAt(i))
           assert(batch.column(2).isNullAt(i))
           assert(batch.column(3).isNullAt(i))
+          assert(batch.column(4).isNullAt(i))
+          assert(batch.column(5).isNullAt(i))
           i += 1
         }
         reader.close()

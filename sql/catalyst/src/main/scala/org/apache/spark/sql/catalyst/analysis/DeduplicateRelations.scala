@@ -41,7 +41,8 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(JOIN, LATERAL_JOIN, INTERSECT, EXCEPT, UNION, COMMAND), ruleId) {
+      _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
+      ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
@@ -49,6 +50,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       // Resolve duplicate output for LateralJoin.
       case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
+      // Resolve duplicate output for AsOfJoin.
+      case j @ AsOfJoin(left, right, _, _, _, _, _) if !j.duplicateResolved =>
+        j.copy(right = dedupRight(left, right))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
@@ -177,13 +181,16 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
       case oldVersion: SerializeFromObject
           if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(
-          serializer = oldVersion.serializer.map(_.newInstance()))))
+        val newVersion = oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       // Handle projects that create conflicting aliases.
       case oldVersion @ Project(projectList, _)
           if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
+        val newVersion = oldVersion.copy(projectList = newAliases(projectList))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       // Handle projects that create conflicting outer references.
       case oldVersion @ Project(projectList, _)
@@ -193,7 +200,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           case o @ OuterReference(a) if conflictingAttributes.contains(a) => Alias(o, a.name)()
           case other => other
         }
-        Seq((oldVersion, oldVersion.copy(projectList = aliasedProjectList)))
+        val newVersion = oldVersion.copy(projectList = aliasedProjectList)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       // We don't need to search child plan recursively if the projectList of a Project
       // is only composed of Alias and doesn't contain any conflicting attributes.
@@ -205,8 +214,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
       case oldVersion @ Aggregate(_, aggregateExpressions, _)
           if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(
-          aggregateExpressions = newAliases(aggregateExpressions))))
+        val newVersion = oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       // We don't search the child plan recursively for the same reason as the above Project.
       case _ @ Aggregate(_, aggregateExpressions, _)
@@ -215,24 +225,40 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
       case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
           if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion @ MapInPandas(_, output, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion @ PythonMapInArrow(_, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion @ AttachDistributedSequence(sequenceAttr, _)
         if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())))
+        val newVersion = oldVersion.copy(sequenceAttr = sequenceAttr.newInstance())
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion: Generate
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-        Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
+        val newVersion = oldVersion.copy(generatorOutput = newOutput)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion: Expand
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
@@ -244,16 +270,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
             attr
           }
         }
-        Seq((oldVersion, oldVersion.copy(output = newOutput)))
+        val newVersion = oldVersion.copy(output = newOutput)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion @ Window(windowExpressions, _, _, child)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+        val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case oldVersion @ ScriptTransformation(_, output, _, _)
           if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
-        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
 
       case _ => plan.children.flatMap(collectConflictPlans)
     }

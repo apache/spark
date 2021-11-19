@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -1705,6 +1705,89 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-34980: Support coalesce partition through union") {
+    def checkResultPartition(
+        df: Dataset[Row],
+        numUnion: Int,
+        numShuffleReader: Int,
+        numPartition: Int): Unit = {
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case u: UnionExec => u
+      }.size == numUnion)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+
+    Seq(true, false).foreach { combineUnionEnabled =>
+      val combineUnionConfig = if (combineUnionEnabled) {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ""
+      } else {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
+      }
+      // advisory partition size 1048576 has no special meaning, just a big enough value
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+          combineUnionConfig) {
+        withTempView("t1", "t2") {
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+            .toDF().createOrReplaceTempView("t1")
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+            .toDF().createOrReplaceTempView("t2")
+
+          // positive test that could be coalesced
+          checkResultPartition(
+            sql("""
+                |SELECT key, count(*) FROM t1 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t2
+              """.stripMargin),
+            numUnion = 1,
+            numShuffleReader = 1,
+            numPartition = 1 + 4)
+
+          checkResultPartition(
+            sql("""
+                |SELECT key, count(*) FROM t1 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t2
+                |UNION ALL
+                |SELECT * FROM t1
+              """.stripMargin),
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 1,
+            numPartition = 1 + 4 + 2)
+
+          checkResultPartition(
+            sql("""
+                |SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key
+                |UNION ALL
+                |SELECT key, count(*) FROM t2 GROUP BY key
+                |UNION ALL
+                |SELECT * FROM t1
+              """.stripMargin),
+            numUnion = if (combineUnionEnabled) 1 else 2,
+            numShuffleReader = 3,
+            numPartition = 1 + 1 + 2)
+
+          // negative test
+          checkResultPartition(
+            sql("SELECT * FROM t1 UNION ALL SELECT * FROM t2"),
+            numUnion = if (combineUnionEnabled) 1 else 1,
+            numShuffleReader = 0,
+            numPartition = 2 + 4
+          )
+        }
+      }
+    }
+  }
+
   test("SPARK-35239: Coalesce shuffle partition should handle empty input RDD") {
     withTable("t") {
       withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
@@ -2106,6 +2189,37 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-37063: OptimizeSkewInRebalancePartitions support optimize non-root node") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 2) 2 else i, i.toString)), 2)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkRebalance(query: String, numShufflePartitions: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(adaptive.collect {
+            case sort: SortExec => sort
+          }.size == 1)
+          val read = collect(adaptive) {
+            case read: AQEShuffleReadExec => read
+          }
+          assert(read.size == 1)
+          assert(read.head.partitionSpecs.forall(_.isInstanceOf[PartialReducerPartitionSpec]))
+          assert(read.head.partitionSpecs.size == numShufflePartitions)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "50") {
+          checkRebalance("SELECT /*+ REBALANCE(c1) */ * FROM v SORT BY c1", 2)
+          checkRebalance("SELECT /*+ REBALANCE */ * FROM v SORT BY c1", 2)
+        }
       }
     }
   }

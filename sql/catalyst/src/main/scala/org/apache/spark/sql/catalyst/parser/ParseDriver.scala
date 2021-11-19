@@ -73,6 +73,11 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
+  /** Creates LogicalPlan for a given SQL string of query. */
+  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+    astBuilder.visitQuery(parser.query())
+  }
+
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
@@ -100,7 +105,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
+    parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
 
     try {
       try {

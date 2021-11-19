@@ -121,6 +121,16 @@ class CollapseProjectSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-36718: do not collapse project if non-cheap expressions will be repeated") {
+    val query = testRelation
+      .select(('a + 1).as('a_plus_1))
+      .select(('a_plus_1 + 'a_plus_1).as('a_2_plus_2))
+      .analyze
+
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
+  }
+
   test("preserve top-level alias metadata while collapsing projects") {
     def hasMetadata(logicalPlan: LogicalPlan): Boolean = {
       logicalPlan.asInstanceOf[Project].projectList.exists(_.metadata.contains("key"))

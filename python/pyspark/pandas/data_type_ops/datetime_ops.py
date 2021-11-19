@@ -160,7 +160,7 @@ class DatetimeNTZOps(DatetimeOps):
     """
 
     def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
-        jvm = SparkContext._active_spark_context._jvm  # type: ignore
+        jvm = SparkContext._active_spark_context._jvm  # type: ignore[attr-defined]
         return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:

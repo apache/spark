@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -179,6 +180,9 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
+   * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
+   *                is not pushed down.
+   * @param sample - The pushed down tableSample.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -190,7 +194,9 @@ object JDBCRDD extends Logging {
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
-      groupByColumns: Option[Array[String]] = None): RDD[InternalRow] = {
+      groupByColumns: Option[Array[String]] = None,
+      sample: Option[TableSampleInfo] = None,
+      limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -208,7 +214,9 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      groupByColumns)
+      groupByColumns,
+      sample,
+      limit)
   }
 }
 
@@ -226,7 +234,9 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[String]])
+    groupByColumns: Option[Array[String]],
+    sample: Option[TableSampleInfo],
+    limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -349,8 +359,16 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
-      s" $getGroupByClause"
+    val myTableSampleClause: String = if (sample.nonEmpty) {
+      JdbcDialects.get(url).getTableSample(sample.get)
+    } else {
+      ""
+    }
+
+    val myLimitClause: String = dialect.getLimitClause(limit)
+
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
+      s" $myWhereClause $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

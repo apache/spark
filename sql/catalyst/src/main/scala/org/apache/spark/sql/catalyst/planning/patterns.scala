@@ -26,46 +26,32 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
-trait OperationHelper {
-  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+trait OperationHelper extends AliasHelper with PredicateHelper {
+  import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
 
-  protected def collectAliases(fields: Seq[Expression]): AttributeMap[Expression] =
-    AttributeMap(fields.collect {
-      case a: Alias => (a.toAttribute, a.child)
-    })
-
-  protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
-    // use transformUp instead of transformDown to avoid dead loop
-    // in case of there's Alias whose exprId is the same as its child attribute.
-    expr.transformUp {
-      case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier))
-          .getOrElse(a)
-
-      case a: AttributeReference =>
-        aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
-    }
-  }
-}
-
-/**
- * A pattern that matches any number of project or filter operations on top of another relational
- * operator.  All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator.
- * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
- * necessary.
- */
-object PhysicalOperation extends OperationHelper with PredicateHelper {
+  type ReturnType =
+    (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+  type IntermediateType =
+    (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Alias])
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    val (fields, filters, child, _) = collectProjectsAndFilters(plan)
+    val alwaysInline = SQLConf.get.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
     Some((fields.getOrElse(child.output), filters, child))
   }
 
   /**
-   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * This legacy mode is for PhysicalOperation which has been there for years and we want to be
+   * extremely safe to not change its behavior. There are two differences when legacy mode is off:
+   *   1. We postpone the deterministic check to the very end (calling `canCollapseExpressions`),
+   *      so that it's more likely to collect more projects and filters.
+   *   2. We follow CollapseProject and only collect adjacent projects if they don't produce
+   *      repeated expensive expressions.
+   */
+  protected def legacyMode: Boolean
+
+  /**
+   * Collects all adjacent projects and filters, in-lining/substituting aliases if necessary.
    * Here are two examples for alias in-lining/substitution.
    * Before:
    * {{{
@@ -78,25 +64,60 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Expression]) =
+  private def collectProjectsAndFilters(
+      plan: LogicalPlan,
+      alwaysInline: Boolean): IntermediateType = {
+    def empty: IntermediateType = (None, Nil, plan, AttributeMap.empty)
+
     plan match {
-      case Project(fields, child) if fields.forall(_.deterministic) =>
-        val (_, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-        (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
+      case Project(fields, child) if !legacyMode || fields.forall(_.deterministic) =>
+        val (_, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
+        if (legacyMode || canCollapseExpressions(fields, aliases, alwaysInline)) {
+          val replaced = fields.map(replaceAliasButKeepName(_, aliases))
+          (Some(replaced), filters, other, getAliasMap(replaced))
+        } else {
+          empty
+        }
 
-      case Filter(condition, child) if condition.deterministic =>
-        val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedCondition = substitute(aliases)(condition)
-        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+      case Filter(condition, child) if !legacyMode || condition.deterministic =>
+        val (fields, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
+        val canIncludeThisFilter = if (legacyMode) {
+          true
+        } else {
+          // When collecting projects and filters, we effectively push down filters through
+          // projects. We need to meet the following conditions to do so:
+          //   1) no Project collected so far or the collected Projects are all deterministic
+          //   2) the collected filters and this filter are all deterministic, or this is the
+          //      first collected filter.
+          //   3) this filter does not repeat any expensive expressions from the collected
+          //      projects.
+          fields.forall(_.forall(_.deterministic)) && {
+            filters.isEmpty || (filters.forall(_.deterministic) && condition.deterministic)
+          } && canCollapseExpressions(Seq(condition), aliases, alwaysInline)
+        }
+        if (canIncludeThisFilter) {
+          val replaced = replaceAlias(condition, aliases)
+          (fields, filters ++ splitConjunctivePredicates(replaced), other, aliases)
+        } else {
+          empty
+        }
 
-      case h: ResolvedHint =>
-        collectProjectsAndFilters(h.child)
+      case h: ResolvedHint => collectProjectsAndFilters(h.child, alwaysInline)
 
-      case other =>
-        (None, Nil, other, AttributeMap(Seq()))
+      case _ => empty
     }
+  }
+}
+
+/**
+ * A pattern that matches any number of project or filter operations on top of another relational
+ * operator.  All filter operators are collected and their conditions are broken up and returned
+ * together with the top project operator.
+ * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
+ * necessary.
+ */
+object PhysicalOperation extends OperationHelper with PredicateHelper {
+  override protected def legacyMode: Boolean = true
 }
 
 /**
@@ -105,68 +126,7 @@ object PhysicalOperation extends OperationHelper with PredicateHelper {
  * requirement of CollapseProject and CombineFilters.
  */
 object ScanOperation extends OperationHelper with PredicateHelper {
-  type ScanReturnType = Option[(Option[Seq[NamedExpression]],
-    Seq[Expression], LogicalPlan, AttributeMap[Expression])]
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = {
-    collectProjectsAndFilters(plan) match {
-      case Some((fields, filters, child, _)) =>
-        Some((fields.getOrElse(child.output), filters, child))
-      case None => None
-    }
-  }
-
-  private def hasCommonNonDeterministic(
-      expr: Seq[Expression],
-      aliases: AttributeMap[Expression]): Boolean = {
-    expr.exists(_.collect {
-      case a: AttributeReference if aliases.contains(a) => aliases(a)
-    }.exists(!_.deterministic))
-  }
-
-  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
-    plan match {
-      case Project(fields, child) =>
-        collectProjectsAndFilters(child) match {
-          case Some((_, filters, other, aliases)) =>
-            // Follow CollapseProject and only keep going if the collected Projects
-            // do not have common non-deterministic expressions.
-            if (!hasCommonNonDeterministic(fields, aliases)) {
-              val substitutedFields =
-                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
-              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
-            } else {
-              None
-            }
-          case None => None
-        }
-
-      case Filter(condition, child) =>
-        collectProjectsAndFilters(child) match {
-          case Some((fields, filters, other, aliases)) =>
-            // Follow CombineFilters and only keep going if 1) the collected Filters
-            // and this filter are all deterministic or 2) if this filter is the first
-            // collected filter and doesn't have common non-deterministic expressions
-            // with lower Project.
-            val substitutedCondition = substitute(aliases)(condition)
-            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
-              substitutedCondition.deterministic) || filters.isEmpty
-            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
-              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, aliases))
-            } else {
-              None
-            }
-          case None => None
-        }
-
-      case h: ResolvedHint =>
-        collectProjectsAndFilters(h.child)
-
-      case other =>
-        Some((None, Nil, other, AttributeMap(Seq())))
-    }
-  }
+  override protected def legacyMode: Boolean = false
 }
 
 /**

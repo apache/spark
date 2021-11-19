@@ -391,4 +391,38 @@ object QueryParsingErrors {
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
   }
+
+  def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
+    new ParseException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+  }
+
+  def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
+    new ParseException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.", ctx)
+  }
+
+  def notAllowedToAddDBPrefixForTempViewError(
+      database: String,
+      ctx: CreateViewContext): Throwable = {
+    new ParseException(
+      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.", ctx)
+  }
+
+  def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
+    new ParseException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+  }
+
+  def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
+    new ParseException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.", ctx)
+  }
+
+  def unsupportedFunctionNameError(quoted: String, ctx: CreateFunctionContext): Throwable = {
+    new ParseException(s"Unsupported function name '$quoted'", ctx)
+  }
+
+  def specifyingDBInCreateTempFuncError(
+      databaseName: String,
+      ctx: CreateFunctionContext): Throwable = {
+    new ParseException(
+      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+  }
 }

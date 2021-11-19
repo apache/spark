@@ -171,12 +171,14 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
     DataFrame.limit
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
+    DataFrame.mapInArrow
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
@@ -259,6 +261,7 @@ Column APIs
     Column.eqNullSafe
     Column.getField
     Column.getItem
+    Column.ilike
     Column.isNotNull
     Column.isNull
     Column.isin
@@ -300,6 +303,7 @@ Data Types
     StructType
     TimestampNTZType
     TimestampType
+    DayTimeIntervalType
 
 
 Observation
@@ -394,6 +398,7 @@ Functions
     covar_samp
     crc32
     create_map
+    csc
     cume_dist
     current_date
     current_timestamp
@@ -464,6 +469,7 @@ Functions
     lower
     lpad
     ltrim
+    make_date
     map_concat
     map_entries
     map_filter
@@ -473,9 +479,11 @@ Functions
     map_values
     map_zip_with
     max
+    max_by
     md5
     mean
     min
+    min_by
     minute
     monotonically_increasing_id
     month
@@ -511,9 +519,11 @@ Functions
     rtrim
     schema_of_csv
     schema_of_json
+    sec
     second
     sentences
     sequence
+    session_window
     sha1
     sha2
     shiftleft

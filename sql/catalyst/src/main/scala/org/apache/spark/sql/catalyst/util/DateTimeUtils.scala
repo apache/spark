@@ -30,7 +30,7 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{DateType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -51,8 +51,13 @@ object DateTimeUtils {
   val TIMEZONE_OPTION = "timeZone"
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+    val formattedZoneId = timeZoneId
+      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d):", "$10$2:")
+      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+      .replaceFirst("(\\+|\\-)(\\d\\d):(\\d)$", "$1$2:0$3")
+
+    ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
@@ -328,16 +333,7 @@ object DateTimeUtils {
             return (Array.empty, None, false)
           }
         } else if (i == 5 || i == 6) {
-          if (b == '-' || b == '+') {
-            if (!isValidDigits(i, currentSegmentDigits)) {
-              return (Array.empty, None, false)
-            }
-            segments(i) = currentSegmentValue
-            currentSegmentValue = 0
-            currentSegmentDigits = 0
-            i += 1
-            tz = Some(new String(bytes, j, 1))
-          } else if (b == '.' && i == 5) {
+          if (b == '.' && i == 5) {
             if (!isValidDigits(i, currentSegmentDigits)) {
               return (Array.empty, None, false)
             }
@@ -397,11 +393,7 @@ object DateTimeUtils {
     }
 
     // This step also validates time zone part
-    val zoneId = tz.map {
-      case "+" => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-      case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-      case zoneName: String => getZoneId(zoneName.trim)
-    }
+    val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
     segments(0) *= yearSign.getOrElse(1)
     (segments, zoneId, justTime)
   }
@@ -436,7 +428,15 @@ object DateTimeUtils {
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     stringToTimestamp(s, timeZoneId).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampType)
+    }
+  }
+
+  def doubleToTimestampAnsi(d: Double): Long = {
+    if (d.isNaN || d.isInfinite) {
+      throw QueryExecutionErrors.cannotCastToDateTimeError(d, TimestampType)
+    } else {
+      DoubleExactNumeric.toLong(d * MICROS_PER_SECOND)
     }
   }
 
@@ -467,7 +467,7 @@ object DateTimeUtils {
 
   def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
     stringToTimestampWithoutTimeZone(s).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, TimestampNTZType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampNTZType)
     }
   }
 
@@ -585,7 +585,7 @@ object DateTimeUtils {
 
   def stringToDateAnsi(s: UTF8String): Int = {
     stringToDate(s).getOrElse {
-      throw QueryExecutionErrors.cannotCastUTF8StringToDataTypeError(s, DateType)
+      throw QueryExecutionErrors.cannotCastToDateTimeError(s, DateType)
     }
   }
 
@@ -778,8 +778,10 @@ object DateTimeUtils {
   def dateAddInterval(
      start: Int,
      interval: CalendarInterval): Int = {
-    require(interval.microseconds == 0,
-      "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    if (interval.microseconds != 0) {
+      throw QueryExecutionErrors.ansiIllegalArgumentError(
+        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+    }
     val ld = daysToLocalDate(start).plusMonths(interval.months).plusDays(interval.days)
     localDateToDays(ld)
   }

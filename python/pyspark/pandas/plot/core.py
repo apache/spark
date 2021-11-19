@@ -20,7 +20,7 @@ import importlib
 import pandas as pd
 import numpy as np
 from pyspark.ml.feature import Bucketizer
-from pyspark.mllib.stat import KernelDensity  # type: ignore
+from pyspark.mllib.stat import KernelDensity  # type: ignore[no-redef]
 from pyspark.sql import functions as F
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
@@ -39,7 +39,7 @@ class TopNPlotBase:
         # Simply use the first 1k elements and make it into a pandas dataframe
         # For categorical variables, it is likely called from df.x.value_counts().plot.xxx().
         if isinstance(data, (Series, DataFrame)):
-            data = data.head(max_rows + 1).to_pandas()
+            data = data.head(max_rows + 1)._to_pandas()
         else:
             raise TypeError("Only DataFrame and Series are supported for plotting.")
 
@@ -79,7 +79,7 @@ class SampledPlotBase:
             if isinstance(data, Series):
                 data = data.to_frame()
             sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
-            return DataFrame(data._internal.with_new_sdf(sampled)).to_pandas()
+            return DataFrame(data._internal.with_new_sdf(sampled))._to_pandas()
         else:
             raise TypeError("Only DataFrame and Series are supported for plotting.")
 
@@ -98,10 +98,9 @@ class SampledPlotBase:
             )
 
 
-class HistogramPlotBase:
+class NumericPlotBase:
     @staticmethod
-    def prepare_hist_data(data, bins):
-        # TODO: this logic is similar with KdePlotBase. Might have to deduplicate it.
+    def prepare_numeric_data(data):
         from pyspark.pandas.series import Series
 
         if isinstance(data, Series):
@@ -117,9 +116,16 @@ class HistogramPlotBase:
                 "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
             )
 
+        return data, numeric_data
+
+
+class HistogramPlotBase(NumericPlotBase):
+    @staticmethod
+    def prepare_hist_data(data, bins):
+        data, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
-            bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
+            bins = HistogramPlotBase.get_bins(data._to_spark(), bins)
 
         return numeric_data, bins
 
@@ -340,25 +346,10 @@ class BoxPlotBase:
         return fliers
 
 
-class KdePlotBase:
+class KdePlotBase(NumericPlotBase):
     @staticmethod
     def prepare_kde_data(data):
-        # TODO: this logic is similar with HistogramPlotBase. Might have to deduplicate it.
-        from pyspark.pandas.series import Series
-
-        if isinstance(data, Series):
-            data = data.to_frame()
-
-        numeric_data = data.select_dtypes(
-            include=["byte", "decimal", "integer", "float", "long", "double", np.datetime64]
-        )
-
-        # no empty frames or series allowed
-        if len(numeric_data.columns) == 0:
-            raise TypeError(
-                "Empty {0!r}: no numeric data to " "plot".format(numeric_data.__class__.__name__)
-            )
-
+        _, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         return numeric_data
 
     @staticmethod
@@ -428,7 +419,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         "area": SampledPlotBase().get_sampled,
         "line": SampledPlotBase().get_sampled,
     }
-    _backends = {}  # type: ignore
+    _backends = {}  # type: ignore[var-annotated]
 
     def __init__(self, data):
         self.data = data

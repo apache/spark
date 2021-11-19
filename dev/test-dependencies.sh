@@ -28,8 +28,10 @@ export LC_ALL=C
 
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
-# NOTE: These should match those in the release publishing script
-HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive"
+# NOTE: These should match those in the release publishing script, and be kept in sync with
+#   dev/create-release/release-build.sh
+HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
+    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
     hadoop-2.7-hive-2.3
@@ -47,6 +49,11 @@ OLD_VERSION=$($MVN -q \
     -Dexec.args='${project.version}' \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
+# dependency:get for guava and jetty-io are workaround for SPARK-37302.
+GUAVA_VERSION=`build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout`
+build/mvn dependency:get -Dartifact=com.google.guava:guava:${GUAVA_VERSION} -q
+JETTY_VERSION=`build/mvn help:evaluate -Dexpression=jetty.version -q -DforceStdout`
+build/mvn dependency:get -Dartifact=org.eclipse.jetty:jetty-io:${JETTY_VERSION} -q
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1

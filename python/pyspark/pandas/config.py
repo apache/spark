@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
 
@@ -88,7 +88,7 @@ class Option:
         doc: str,
         default: Any,
         types: Union[Tuple[type, ...], type] = str,
-        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, "")
+        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, ""),
     ):
         self.key = key
         self.doc = doc
@@ -116,7 +116,7 @@ class Option:
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
-_options = [
+_options: List[Option] = [
     Option(
         key="display.max_rows",
         doc=(
@@ -195,6 +195,18 @@ _options = [
         types=bool,
     ),
     Option(
+        key="compute.eager_check",
+        doc=(
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas. "
+            "Affected APIs: `Series.dot`."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="compute.isin_limit",
         doc=(
             "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
@@ -246,9 +258,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict: Dict[str, Option] = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 

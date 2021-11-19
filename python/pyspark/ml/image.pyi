@@ -20,7 +20,7 @@ from typing import Dict, List
 
 from pyspark.sql.types import Row, StructType
 
-from numpy import ndarray  # type: ignore[import]
+from numpy import ndarray
 
 class _ImageSchema:
     def __init__(self) -> None: ...

@@ -725,6 +725,9 @@ setGeneric("like", function(x, ...) { standardGeneric("like") })
 #' @rdname columnfunctions
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
+#' @rdname columnfunctions
+setGeneric("ilike", function(x, ...) { standardGeneric("ilike") })
+
 #' @rdname startsWith
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
@@ -955,6 +958,10 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("csc", function(x) { standardGeneric("csc") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
@@ -1151,6 +1158,10 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @name NULL
 setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("make_date", function(x, y, z) { standardGeneric("make_date") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("map_concat", function(x, ...) { standardGeneric("map_concat") })
@@ -1183,9 +1194,17 @@ setGeneric("map_values", function(x) { standardGeneric("map_values") })
 #' @name NULL
 setGeneric("map_zip_with", function(x, y, f) { standardGeneric("map_zip_with") })
 
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("max_by", function(x, y) { standardGeneric("max_by") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("md5", function(x) { standardGeneric("md5") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("min_by", function(x, y) { standardGeneric("min_by") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
@@ -1331,6 +1350,10 @@ setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json"
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("sec", function(x) { standardGeneric("sec") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
