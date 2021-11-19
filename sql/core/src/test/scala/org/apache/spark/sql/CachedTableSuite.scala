@@ -881,10 +881,28 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   test("SPARK-23312: vectorized cache reader can be disabled") {
     Seq(true, false).foreach { vectorized =>
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        val df = spark.range(10).cache()
-        df.queryExecution.executedPlan.foreach {
+        val df1 = spark.range(10).cache()
+        val df2 = spark.range(10).cache()
+        val union = df1.union(df2)
+        union.queryExecution.executedPlan.foreach {
           case i: InMemoryTableScanExec =>
             assert(i.supportsColumnar == vectorized)
+          case _ =>
+        }
+      }
+    }
+  }
+
+  test("SPARK-37369: Avoid redundant ColumnarToRow transistion on InMemoryTableScan") {
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val cache = spark.range(10).cache()
+        val df = cache.filter($"id" > 0)
+        df.queryExecution.executedPlan.foreach {
+          case i: InMemoryTableScanExec =>
+            // No matter if vectorized cache reader is enabled or not, the in-memory relation
+            // scan is row-based because its parent node cannot take columnar input.
+            assert(i.supportsColumnar == false)
           case _ =>
         }
       }
