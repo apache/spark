@@ -1953,10 +1953,24 @@ class DatetimeNTZConverter(object):
         )
 
 
+class DayTimeIntervalTypeConverter(object):
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.timedelta)
+
+    def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
+        from pyspark import SparkContext
+
+        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
+            (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
+        )
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+register_input_converter(DayTimeIntervalTypeConverter())
 
 
 def _test() -> None:

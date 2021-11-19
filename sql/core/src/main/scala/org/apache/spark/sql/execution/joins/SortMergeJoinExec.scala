@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.collection.BitSet
 
@@ -375,6 +376,12 @@ case class SortMergeJoinExec(
 
   private lazy val streamedOutput = streamedPlan.output
   private lazy val bufferedOutput = bufferedPlan.output
+
+  override def supportCodegen: Boolean = joinType match {
+    case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN)
+    case _: ExistenceJoin => conf.getConf(SQLConf.ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN)
+    case _ => true
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.execute() :: bufferedPlan.execute() :: Nil

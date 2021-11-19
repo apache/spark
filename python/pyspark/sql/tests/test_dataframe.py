@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     FloatType,
+    DayTimeIntervalType,
 )
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import (
@@ -678,7 +679,7 @@ class DataFrameTests(ReusedSQLTestCase):
             )
 
     def _to_pandas(self):
-        from datetime import datetime, date
+        from datetime import datetime, date, timedelta
 
         schema = (
             StructType()
@@ -689,6 +690,7 @@ class DataFrameTests(ReusedSQLTestCase):
             .add("dt", DateType())
             .add("ts", TimestampType())
             .add("ts_ntz", TimestampNTZType())
+            .add("dt_interval", DayTimeIntervalType())
         )
         data = [
             (
@@ -699,8 +701,9 @@ class DataFrameTests(ReusedSQLTestCase):
                 date(1969, 1, 1),
                 datetime(1969, 1, 1, 1, 1, 1),
                 datetime(1969, 1, 1, 1, 1, 1),
+                timedelta(days=1),
             ),
-            (2, "foo", True, 5.0, None, None, None),
+            (2, "foo", True, 5.0, None, None, None, None),
             (
                 3,
                 "bar",
@@ -709,6 +712,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 date(2012, 3, 3),
                 datetime(2012, 3, 3, 3, 3, 3),
                 datetime(2012, 3, 3, 3, 3, 3),
+                timedelta(hours=-1, milliseconds=421),
             ),
             (
                 4,
@@ -718,6 +722,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 date(2100, 4, 4),
                 datetime(2100, 4, 4, 4, 4, 4),
                 datetime(2100, 4, 4, 4, 4, 4),
+                timedelta(microseconds=123),
             ),
         ]
         df = self.spark.createDataFrame(data, schema)
@@ -736,6 +741,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(types[4], np.object)  # datetime.date
         self.assertEqual(types[5], "datetime64[ns]")
         self.assertEqual(types[6], "datetime64[ns]")
+        self.assertEqual(types[7], "timedelta64[ns]")
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
@@ -808,7 +814,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(1 AS BOOLEAN) AS boolean,
             CAST('foo' AS STRING) AS string,
             CAST('2019-01-01' AS TIMESTAMP) AS timestamp,
-            CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz
+            CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
+            INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
             dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
             dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
@@ -830,7 +837,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS BOOLEAN) AS boolean,
             CAST(NULL AS STRING) AS string,
             CAST(NULL AS TIMESTAMP) AS timestamp,
-            CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz
+            CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
+            INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
             pdf = self.spark.sql(sql).toPandas()
             types = pdf.dtypes
@@ -844,6 +852,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.assertEqual(types[7], np.object)
             self.assertTrue(np.can_cast(np.datetime64, types[8]))
             self.assertTrue(np.can_cast(np.datetime64, types[9]))
+            self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
@@ -861,9 +870,10 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(col7 AS BOOLEAN) AS boolean,
             CAST(col8 AS STRING) AS string,
             timestamp_seconds(col9) AS timestamp,
-            timestamp_seconds(col10) AS timestamp_ntz
-            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+            timestamp_seconds(col10) AS timestamp_ntz,
+            INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
+            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """
             pdf_with_some_nulls = self.spark.sql(sql).toPandas()
             pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
@@ -936,6 +946,15 @@ class DataFrameTests(ReusedSQLTestCase):
             if orig_env_tz is not None:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_create_dataframe_from_pandas_with_day_time_interval(self):
+        # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
+        import pandas as pd
+        from datetime import timedelta
+
+        df = self.spark.createDataFrame(pd.DataFrame({"a": [timedelta(microseconds=123)]}))
+        self.assertEqual(df.toPandas().a.iloc[0], timedelta(microseconds=123))
 
     def test_repr_behaviors(self):
         import re

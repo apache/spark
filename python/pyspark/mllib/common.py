@@ -22,7 +22,7 @@ from py4j.java_collections import JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql import DataFrame, SQLContext
+from pyspark.sql import DataFrame, SparkSession
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
@@ -98,7 +98,7 @@ def _java2py(sc, r, encoding="bytes"):
             return RDD(jrdd, sc)
 
         if clsName == "Dataset":
-            return DataFrame(r, SQLContext.getOrCreate(sc))
+            return DataFrame(r, SparkSession(sc)._wrapped)
 
         if clsName in _picklable_classes:
             r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)

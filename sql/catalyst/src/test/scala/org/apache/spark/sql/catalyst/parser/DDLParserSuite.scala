@@ -2440,9 +2440,25 @@ class DDLParserSuite extends AnalysisTest {
           new CaseInsensitiveStringMap(properties),
           timeTravelSpec = timeTravel)))
 
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c FOR VERSION AS OF 'Snapshot123456789'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
     timeTravel = TimeTravelSpec.create(None, Some("123456789"))
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_VERSION AS OF 123456789"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_VERSION AS OF 123456789"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
@@ -2457,8 +2473,25 @@ class DDLParserSuite extends AnalysisTest {
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
           timeTravelSpec = timeTravel)))
+
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c FOR TIMESTAMP AS OF '2019-01-29 00:37:58'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),
@@ -2473,8 +2506,25 @@ class DDLParserSuite extends AnalysisTest {
           Seq("a", "b", "c"),
           new CaseInsensitiveStringMap(properties),
           timeTravelSpec = timeTravel)))
+
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c FOR TIMESTAMP AS OF '2019-01-29'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
     comparePlans(
       parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29'"),
+      Project(Seq(UnresolvedStar(None)),
+        UnresolvedRelation(
+          Seq("a", "b", "c"),
+          new CaseInsensitiveStringMap(properties),
+          timeTravelSpec = timeTravel)))
+
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29'"),
       Project(Seq(UnresolvedStar(None)),
         UnresolvedRelation(
           Seq("a", "b", "c"),

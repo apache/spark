@@ -21,8 +21,8 @@ from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CH
 
 from pyspark.rdd import _load_from_socket  # type: ignore[attr-defined]
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
-from pyspark.sql.types import IntegralType
 from pyspark.sql.types import (
+    IntegralType,
     ByteType,
     ShortType,
     IntegerType,
@@ -33,6 +33,7 @@ from pyspark.sql.types import (
     MapType,
     TimestampType,
     TimestampNTZType,
+    DayTimeIntervalType,
     StructType,
     DataType,
 )
@@ -85,6 +86,7 @@ class PandasConversionMixin(object):
 
         import numpy as np
         import pandas as pd
+        from pandas.core.dtypes.common import is_timedelta64_dtype
 
         timezone = self.sql_ctx._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
 
@@ -225,7 +227,10 @@ class PandasConversionMixin(object):
             else:
                 series = pdf[column_name]
 
-            if t is not None:
+            # No need to cast for non-empty series for timedelta. The type is already correct.
+            should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
+
+            if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
                 series = series.astype(t, copy=False)
 
             # `insert` API makes copy of data, we only do it for Series of duplicate column names.
@@ -278,6 +283,8 @@ class PandasConversionMixin(object):
             return np.datetime64
         elif type(dt) == TimestampNTZType:
             return np.datetime64
+        elif type(dt) == DayTimeIntervalType:
+            return np.timedelta64
         else:
             return None
 
@@ -424,13 +431,14 @@ class SparkConversionMixin(object):
         list
             list of records
         """
+        import pandas as pd
         from pyspark.sql import SparkSession
 
         assert isinstance(self, SparkSession)
 
         if timezone is not None:
             from pyspark.sql.pandas.types import _check_series_convert_timestamps_tz_local
-            from pandas.core.dtypes.common import is_datetime64tz_dtype
+            from pandas.core.dtypes.common import is_datetime64tz_dtype, is_timedelta64_dtype
 
             copied = False
             if isinstance(schema, StructType):
@@ -458,6 +466,19 @@ class SparkConversionMixin(object):
                             pdf = pdf.copy()
                             copied = True
                         pdf[column] = s
+
+            for column, series in pdf.iteritems():
+                if is_timedelta64_dtype(series):
+                    if not copied:
+                        pdf = pdf.copy()
+                        copied = True
+                    # Explicitly set the timedelta as object so the output of numpy records can
+                    # hold the timedelta instances as are. Otherwise, it converts to the internal
+                    # numeric values.
+                    ser = pdf[column]
+                    pdf[column] = pd.Series(
+                        ser.dt.to_pytimedelta(), index=ser.index, dtype="object", name=ser.name
+                    )
 
         # Convert pandas.DataFrame to list of numpy records
         np_records = pdf.to_records(index=False)
