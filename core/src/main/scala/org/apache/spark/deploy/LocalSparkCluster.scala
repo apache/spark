@@ -82,7 +82,7 @@ class LocalSparkCluster private (
   }
 
   def workerLogfiles(): Seq[File] = {
-    workerDirs.flatMap { dir =>
+    workerDirs.toSeq.flatMap { dir =>
       Utils.recursiveList(new File(dir))
         .filter(f => f.isFile && """.*\.log$""".r.findFirstMatchIn(f.getName).isDefined)
     }
