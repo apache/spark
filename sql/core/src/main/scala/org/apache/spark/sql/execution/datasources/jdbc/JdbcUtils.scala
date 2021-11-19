@@ -658,6 +658,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       isolationLevel: Int,
       options: JDBCOptions): Unit = {
+
+    if (iterator.isEmpty) {
+      return
+    }
+
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = getConnection()

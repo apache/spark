@@ -23,8 +23,16 @@ from numpy import array, array_equal, zeros, arange, tile, ones, inf
 import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import PickleSerializer
 from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
-    Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,
-    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+    Vector,
+    SparseVector,
+    DenseVector,
+    VectorUDT,
+    _convert_to_vector,
+    DenseMatrix,
+    SparseMatrix,
+    Vectors,
+    Matrices,
+    MatrixUDT,
 )
 from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix, IndexedRow
 from pyspark.mllib.regression import LabeledPoint
@@ -34,7 +42,6 @@ from pyspark.testing.utils import have_scipy
 
 
 class VectorTests(MLlibTestCase):
-
     def _test_serialize(self, v):
         ser = PickleSerializer()
         self.assertEqual(v, ser.loads(ser.dumps(v)))
@@ -48,30 +55,28 @@ class VectorTests(MLlibTestCase):
 
     def test_serialize(self):
         self._test_serialize(DenseVector(range(10)))
-        self._test_serialize(DenseVector(array([1., 2., 3., 4.])))
-        self._test_serialize(DenseVector(pyarray.array('d', range(10))))
+        self._test_serialize(DenseVector(array([1.0, 2.0, 3.0, 4.0])))
+        self._test_serialize(DenseVector(pyarray.array("d", range(10))))
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
         self._test_serialize(SparseVector(3, {}))
         self._test_serialize(DenseMatrix(2, 3, range(6)))
-        sm1 = SparseMatrix(
-            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        sm1 = SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
         self._test_serialize(sm1)
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
-        dv = DenseVector(array([1., 2., 3., 4.]))
+        dv = DenseVector(array([1.0, 2.0, 3.0, 4.0]))
         lst = DenseVector([1, 2, 3, 4])
-        mat = array([[1., 2., 3., 4.],
-                     [1., 2., 3., 4.],
-                     [1., 2., 3., 4.],
-                     [1., 2., 3., 4.]])
-        arr = pyarray.array('d', [0, 1, 2, 3])
+        mat = array(
+            [[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]]
+        )
+        arr = pyarray.array("d", [0, 1, 2, 3])
         self.assertEqual(10.0, sv.dot(dv))
-        self.assertTrue(array_equal(array([3., 6., 9., 12.]), sv.dot(mat)))
+        self.assertTrue(array_equal(array([3.0, 6.0, 9.0, 12.0]), sv.dot(mat)))
         self.assertEqual(30.0, dv.dot(dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
+        self.assertTrue(array_equal(array([10.0, 20.0, 30.0, 40.0]), dv.dot(mat)))
         self.assertEqual(30.0, lst.dot(dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
+        self.assertTrue(array_equal(array([10.0, 20.0, 30.0, 40.0]), lst.dot(mat)))
         self.assertEqual(7.0, sv.dot(arr))
 
     def test_squared_distance(self):
@@ -82,10 +87,10 @@ class VectorTests(MLlibTestCase):
                 return b.squared_distance(a)
 
         sv = SparseVector(4, {1: 1, 3: 2})
-        dv = DenseVector(array([1., 2., 3., 4.]))
+        dv = DenseVector(array([1.0, 2.0, 3.0, 4.0]))
         lst = DenseVector([4, 3, 2, 1])
         lst1 = [4, 3, 2, 1]
-        arr = pyarray.array('d', [0, 2, 1, 3])
+        arr = pyarray.array("d", [0, 2, 1, 3])
         narr = array([0, 2, 1, 3])
         self.assertEqual(15.0, squared_distance(sv, dv))
         self.assertEqual(25.0, squared_distance(sv, lst))
@@ -132,36 +137,40 @@ class VectorTests(MLlibTestCase):
 
     def test_equals(self):
         indices = [1, 2, 4]
-        values = [1., 3., 2.]
-        self.assertTrue(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 0., 2.]))
-        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 1., 0., 2.]))
-        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 0., 2.]))
-        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.]))
+        values = [1.0, 3.0, 2.0]
+        self.assertTrue(Vectors._equals(indices, values, list(range(5)), [0.0, 1.0, 3.0, 0.0, 2.0]))
+        self.assertFalse(
+            Vectors._equals(indices, values, list(range(5)), [0.0, 3.0, 1.0, 0.0, 2.0])
+        )
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0.0, 3.0, 0.0, 2.0]))
+        self.assertFalse(
+            Vectors._equals(indices, values, list(range(5)), [0.0, 1.0, 3.0, 2.0, 2.0])
+        )
 
     def test_conversion(self):
         # numpy arrays should be automatically upcast to float64
         # tests for fix of [SPARK-5089]
-        v = array([1, 2, 3, 4], dtype='float64')
+        v = array([1, 2, 3, 4], dtype="float64")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == 'float64')
-        v = array([1, 2, 3, 4], dtype='float32')
+        self.assertTrue(dv.array.dtype == "float64")
+        v = array([1, 2, 3, 4], dtype="float32")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == 'float64')
+        self.assertTrue(dv.array.dtype == "float64")
 
     def test_sparse_vector_indexing(self):
         sv = SparseVector(5, {1: 1, 3: 2})
-        self.assertEqual(sv[0], 0.)
-        self.assertEqual(sv[3], 2.)
-        self.assertEqual(sv[1], 1.)
-        self.assertEqual(sv[2], 0.)
-        self.assertEqual(sv[4], 0.)
-        self.assertEqual(sv[-1], 0.)
-        self.assertEqual(sv[-2], 2.)
-        self.assertEqual(sv[-3], 0.)
-        self.assertEqual(sv[-5], 0.)
+        self.assertEqual(sv[0], 0.0)
+        self.assertEqual(sv[3], 2.0)
+        self.assertEqual(sv[1], 1.0)
+        self.assertEqual(sv[2], 0.0)
+        self.assertEqual(sv[4], 0.0)
+        self.assertEqual(sv[-1], 0.0)
+        self.assertEqual(sv[-2], 2.0)
+        self.assertEqual(sv[-3], 0.0)
+        self.assertEqual(sv[-5], 0.0)
         for ind in [5, -6]:
             self.assertRaises(IndexError, sv.__getitem__, ind)
-        for ind in [7.8, '1']:
+        for ind in [7.8, "1"]:
             self.assertRaises(TypeError, sv.__getitem__, ind)
 
         zeros = SparseVector(4, {})
@@ -190,55 +199,56 @@ class VectorTests(MLlibTestCase):
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
-        self.assertTrue(
-            repr(mat),
-            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
+        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
-        self.assertTrue(
-            repr(mat),
-            'DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)')
+        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(6, 3, zeros(18))
         self.assertTrue(
             repr(mat),
-            'DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)')
+            "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
+        )
 
     def test_repr_sparse_matrix(self):
         sm1t = SparseMatrix(
-            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
-            isTransposed=True)
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], isTransposed=True
+        )
         self.assertTrue(
             repr(sm1t),
-            'SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)')
+            "SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)",
+        )
 
         indices = tile(arange(6), 3)
         values = ones(18)
         sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
         self.assertTrue(
-            repr(sm), "SparseMatrix(6, 3, [0, 6, 12, 18], \
+            repr(sm),
+            "SparseMatrix(6, 3, [0, 6, 12, 18], \
                 [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
                 [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., \
-                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)")
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
+        )
 
         self.assertTrue(
             str(sm),
             "6 X 3 CSCMatrix\n\
             (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
             (0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n\
-            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..")
+            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..",
+        )
 
         sm = SparseMatrix(1, 18, zeros(19), [], [])
         self.assertTrue(
             repr(sm),
-            'SparseMatrix(1, 18, \
-                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)')
+            "SparseMatrix(1, 18, \
+                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
+        )
 
     def test_sparse_matrix(self):
         # Test sparse matrix creation.
-        sm1 = SparseMatrix(
-            3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
+        sm1 = SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
         self.assertEqual(sm1.numRows, 3)
         self.assertEqual(sm1.numCols, 4)
         self.assertEqual(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
@@ -246,13 +256,11 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
         self.assertTrue(
             repr(sm1),
-            'SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)')
+            "SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)",
+        )
 
         # Test indexing
-        expected = [
-            [0, 0, 0, 0],
-            [1, 0, 4, 0],
-            [2, 0, 5, 0]]
+        expected = [[0, 0, 0, 0], [1, 0, 4, 0], [2, 0, 5, 0]]
 
         for i in range(3):
             for j in range(4):
@@ -271,18 +279,15 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm1.values, smnew.values))
 
         sm1t = SparseMatrix(
-            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
-            isTransposed=True)
+            3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], isTransposed=True
+        )
         self.assertEqual(sm1t.numRows, 3)
         self.assertEqual(sm1t.numCols, 4)
         self.assertEqual(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
         self.assertEqual(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
         self.assertEqual(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
 
-        expected = [
-            [3, 2, 0, 0],
-            [0, 0, 4, 0],
-            [9, 0, 8, 0]]
+        expected = [[3, 2, 0, 0], [0, 0, 4, 0], [9, 0, 8, 0]]
 
         for i in range(3):
             for j in range(4):
@@ -307,19 +312,19 @@ class VectorTests(MLlibTestCase):
 
     def test_parse_vector(self):
         a = DenseVector([])
-        self.assertEqual(str(a), '[]')
+        self.assertEqual(str(a), "[]")
         self.assertEqual(Vectors.parse(str(a)), a)
         a = DenseVector([3, 4, 6, 7])
-        self.assertEqual(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertEqual(str(a), "[3.0,4.0,6.0,7.0]")
         self.assertEqual(Vectors.parse(str(a)), a)
         a = SparseVector(4, [], [])
-        self.assertEqual(str(a), '(4,[],[])')
+        self.assertEqual(str(a), "(4,[],[])")
         self.assertEqual(SparseVector.parse(str(a)), a)
         a = SparseVector(4, [0, 2], [3, 4])
-        self.assertEqual(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertEqual(str(a), "(4,[0,2],[3.0,4.0])")
         self.assertEqual(Vectors.parse(str(a)), a)
         a = SparseVector(10, [0, 1], [4, 5])
-        self.assertEqual(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+        self.assertEqual(SparseVector.parse(" (10, [0,1 ],[ 4.0,5.0] )"), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
@@ -436,6 +441,7 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_row_matrix_from_dataframe(self):
         from pyspark.sql.utils import IllegalArgumentException
+
         df = self.spark.createDataFrame([Row(Vectors.dense(1))])
         row_matrix = RowMatrix(df)
         self.assertEqual(row_matrix.numRows(), 1)
@@ -445,6 +451,7 @@ class VectorUDTTests(MLlibTestCase):
 
     def test_indexed_row_matrix_from_dataframe(self):
         from pyspark.sql.utils import IllegalArgumentException
+
         df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
         self.assertEqual(matrix.numRows(), 1)
@@ -458,8 +465,7 @@ class VectorUDTTests(MLlibTestCase):
         matrix = RowMatrix(rows)
         self.assertRaises(TypeError, matrix.multiply, invalid_type)
 
-        irows = self.sc.parallelize([IndexedRow(0, [1, 2, 3]),
-                                     IndexedRow(1, [4, 5, 6])])
+        irows = self.sc.parallelize([IndexedRow(0, [1, 2, 3]), IndexedRow(1, [4, 5, 6])])
         imatrix = IndexedRowMatrix(irows)
         self.assertRaises(TypeError, imatrix.multiply, invalid_type)
 
@@ -519,6 +525,7 @@ class SciPyTests(MLlibTestCase):
 
         def serialize(l):
             return ser.loads(ser.dumps(_convert_to_vector(l)))
+
         self.assertEqual(sv, serialize(lil))
         self.assertEqual(sv, serialize(lil.tocsc()))
         self.assertEqual(sv, serialize(lil.tocsr()))
@@ -526,6 +533,7 @@ class SciPyTests(MLlibTestCase):
 
     def test_convert_to_vector(self):
         from scipy.sparse import csc_matrix
+
         # Create a CSC matrix with non-sorted indices
         indptr = array([0, 2])
         indices = array([3, 1])
@@ -537,18 +545,20 @@ class SciPyTests(MLlibTestCase):
 
     def test_dot(self):
         from scipy.sparse import lil_matrix
+
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
         lil[3, 0] = 2
-        dv = DenseVector(array([1., 2., 3., 4.]))
+        dv = DenseVector(array([1.0, 2.0, 3.0, 4.0]))
         self.assertEqual(10.0, dv.dot(lil))
 
     def test_squared_distance(self):
         from scipy.sparse import lil_matrix
+
         lil = lil_matrix((4, 1))
         lil[1, 0] = 3
         lil[3, 0] = 2
-        dv = DenseVector(array([1., 2., 3., 4.]))
+        dv = DenseVector(array([1.0, 2.0, 3.0, 4.0]))
         sv = SparseVector(4, {0: 1, 1: 2, 2: 3, 3: 4})
         self.assertEqual(15.0, dv.squared_distance(lil))
         self.assertEqual(15.0, sv.squared_distance(lil))
@@ -556,6 +566,7 @@ class SciPyTests(MLlibTestCase):
     def scipy_matrix(self, size, values):
         """Create a column SciPy matrix from a dictionary of values"""
         from scipy.sparse import lil_matrix
+
         lil = lil_matrix((size, 1))
         for key, value in values.items():
             lil[key, 0] = value
@@ -563,11 +574,12 @@ class SciPyTests(MLlibTestCase):
 
     def test_clustering(self):
         from pyspark.mllib.clustering import KMeans
+
         data = [
             self.scipy_matrix(3, {1: 1.0}),
             self.scipy_matrix(3, {1: 1.1}),
             self.scipy_matrix(3, {2: 1.0}),
-            self.scipy_matrix(3, {2: 1.1})
+            self.scipy_matrix(3, {2: 1.1}),
         ]
         clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
         self.assertEqual(clusters.predict(data[0]), clusters.predict(data[1]))
@@ -576,11 +588,12 @@ class SciPyTests(MLlibTestCase):
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         from pyspark.mllib.tree import DecisionTree
+
         data = [
             LabeledPoint(0.0, self.scipy_matrix(2, {0: 1.0})),
             LabeledPoint(1.0, self.scipy_matrix(2, {1: 1.0})),
             LabeledPoint(0.0, self.scipy_matrix(2, {0: 2.0})),
-            LabeledPoint(1.0, self.scipy_matrix(2, {1: 2.0}))
+            LabeledPoint(1.0, self.scipy_matrix(2, {1: 2.0})),
         ]
         rdd = self.sc.parallelize(data)
         features = [p.features for p in data]
@@ -604,22 +617,27 @@ class SciPyTests(MLlibTestCase):
         self.assertTrue(nb_model.predict(features[3]) > 0)
 
         categoricalFeaturesInfo = {0: 3}  # feature 0 has 3 categories
-        dt_model = DecisionTree.trainClassifier(rdd, numClasses=2,
-                                                categoricalFeaturesInfo=categoricalFeaturesInfo)
+        dt_model = DecisionTree.trainClassifier(
+            rdd, numClasses=2, categoricalFeaturesInfo=categoricalFeaturesInfo
+        )
         self.assertTrue(dt_model.predict(features[0]) <= 0)
         self.assertTrue(dt_model.predict(features[1]) > 0)
         self.assertTrue(dt_model.predict(features[2]) <= 0)
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
     def test_regression(self):
-        from pyspark.mllib.regression import LinearRegressionWithSGD, LassoWithSGD, \
-            RidgeRegressionWithSGD
+        from pyspark.mllib.regression import (
+            LinearRegressionWithSGD,
+            LassoWithSGD,
+            RidgeRegressionWithSGD,
+        )
         from pyspark.mllib.tree import DecisionTree
+
         data = [
             LabeledPoint(-1.0, self.scipy_matrix(2, {1: -1.0})),
             LabeledPoint(1.0, self.scipy_matrix(2, {1: 1.0})),
             LabeledPoint(-1.0, self.scipy_matrix(2, {1: -2.0})),
-            LabeledPoint(1.0, self.scipy_matrix(2, {1: 2.0}))
+            LabeledPoint(1.0, self.scipy_matrix(2, {1: 2.0})),
         ]
         rdd = self.sc.parallelize(data)
         features = [p.features for p in data]
@@ -655,7 +673,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

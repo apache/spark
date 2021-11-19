@@ -281,8 +281,9 @@ class JavaMLReader(MLReader):
             raise TypeError("path should be a string, got type %s" % type(path))
         java_obj = self._jread.load(path)
         if not hasattr(self._clazz, "_from_java"):
-            raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
-                                      % self._clazz)
+            raise NotImplementedError(
+                "This Java ML type cannot be loaded into Python currently: %r" % self._clazz
+            )
         return self._clazz._from_java(java_obj)
 
     def session(self, sparkSession):
@@ -364,8 +365,11 @@ class DefaultParamsWritable(MLWritable):
         if isinstance(self, Params):
             return DefaultParamsWriter(self)
         else:
-            raise TypeError("Cannot use DefautParamsWritable with type %s because it does not " +
-                            " extend Params.", type(self))
+            raise TypeError(
+                "Cannot use DefautParamsWritable with type %s because it does not "
+                + " extend Params.",
+                type(self),
+            )
 
 
 @inherit_doc
@@ -388,8 +392,9 @@ class DefaultParamsWriter(MLWriter):
     @staticmethod
     def extractJsonParams(instance, skipParams):
         paramMap = instance.extractParamMap()
-        jsonParams = {param.name: value for param, value in paramMap.items()
-                      if param.name not in skipParams}
+        jsonParams = {
+            param.name: value for param, value in paramMap.items() if param.name not in skipParams
+        }
         return jsonParams
 
     @staticmethod
@@ -413,10 +418,9 @@ class DefaultParamsWriter(MLWriter):
             If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
-        metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
-                                                                 sc,
-                                                                 extraMetadata,
-                                                                 paramMap)
+        metadataJson = DefaultParamsWriter._get_metadata_to_save(
+            instance, sc, extraMetadata, paramMap
+        )
         sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
 
     @staticmethod
@@ -430,7 +434,7 @@ class DefaultParamsWriter(MLWriter):
         See :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
         """
         uid = instance.uid
-        cls = instance.__module__ + '.' + instance.__class__.__name__
+        cls = instance.__module__ + "." + instance.__class__.__name__
 
         # User-supplied param values
         params = instance._paramMap
@@ -446,12 +450,17 @@ class DefaultParamsWriter(MLWriter):
         for p in instance._defaultParamMap:
             jsonDefaultParams[p.name] = instance._defaultParamMap[p]
 
-        basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)),
-                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
-                         "defaultParamMap": jsonDefaultParams}
+        basicMetadata = {
+            "class": cls,
+            "timestamp": int(round(time.time() * 1000)),
+            "sparkVersion": sc.version,
+            "uid": uid,
+            "paramMap": jsonParams,
+            "defaultParamMap": jsonDefaultParams,
+        }
         if extraMetadata is not None:
             basicMetadata.update(extraMetadata)
-        return json.dumps(basicMetadata, separators=[',',  ':'])
+        return json.dumps(basicMetadata, separators=[",", ":"])
 
 
 @inherit_doc
@@ -494,7 +503,7 @@ class DefaultParamsReader(MLReader):
         """
         Loads Python class from its name.
         """
-        parts = clazz.split('.')
+        parts = clazz.split(".")
         module = ".".join(parts[:-1])
         m = __import__(module)
         for comp in parts[1:]:
@@ -503,9 +512,9 @@ class DefaultParamsReader(MLReader):
 
     def load(self, path):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        py_type = DefaultParamsReader.__get_class(metadata['class'])
+        py_type = DefaultParamsReader.__get_class(metadata["class"])
         instance = py_type()
-        instance._resetUid(metadata['uid'])
+        instance._resetUid(metadata["uid"])
         DefaultParamsReader.getAndSetParams(instance, metadata)
         return instance
 
@@ -540,10 +549,12 @@ class DefaultParamsReader(MLReader):
             If non empty, this is checked against the loaded metadata.
         """
         metadata = json.loads(metadataStr)
-        className = metadata['class']
+        className = metadata["class"]
         if len(expectedClassName) > 0:
-            assert className == expectedClassName, "Error loading metadata: Expected " + \
-                "class name {} but found class name {}".format(expectedClassName, className)
+            assert className == expectedClassName, (
+                "Error loading metadata: Expected "
+                + "class name {} but found class name {}".format(expectedClassName, className)
+            )
         return metadata
 
     @staticmethod
@@ -552,29 +563,30 @@ class DefaultParamsReader(MLReader):
         Extract Params from metadata, and set them in the instance.
         """
         # Set user-supplied param values
-        for paramName in metadata['paramMap']:
+        for paramName in metadata["paramMap"]:
             param = instance.getParam(paramName)
             if skipParams is None or paramName not in skipParams:
-                paramValue = metadata['paramMap'][paramName]
+                paramValue = metadata["paramMap"][paramName]
                 instance.set(param, paramValue)
 
         # Set default param values
-        majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
+        majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata["sparkVersion"])
         major = majorAndMinorVersions[0]
         minor = majorAndMinorVersions[1]
 
         # For metadata file prior to Spark 2.4, there is no default section.
         if major > 2 or (major == 2 and minor >= 4):
-            assert 'defaultParamMap' in metadata, "Error loading metadata: Expected " + \
-                "`defaultParamMap` section not found"
+            assert "defaultParamMap" in metadata, (
+                "Error loading metadata: Expected " + "`defaultParamMap` section not found"
+            )
 
-            for paramName in metadata['defaultParamMap']:
-                paramValue = metadata['defaultParamMap'][paramName]
+            for paramName in metadata["defaultParamMap"]:
+                paramValue = metadata["defaultParamMap"][paramName]
                 instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
     def isPythonParamsInstance(metadata):
-        return metadata['class'].startswith('pyspark.ml.')
+        return metadata["class"].startswith("pyspark.ml.")
 
     @staticmethod
     def loadParamsInstance(path, sc):
@@ -584,9 +596,9 @@ class DefaultParamsReader(MLReader):
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
         if DefaultParamsReader.isPythonParamsInstance(metadata):
-            pythonClassName = metadata['class']
+            pythonClassName = metadata["class"]
         else:
-            pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
+            pythonClassName = metadata["class"].replace("org.apache.spark", "pyspark")
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
@@ -616,18 +628,21 @@ class HasTrainingSummary(object):
         Gets summary of the model trained on the training set. An exception is thrown if
         no summary exists.
         """
-        return (self._call_java("summary"))
+        return self._call_java("summary")
 
 
 class MetaAlgorithmReadWrite:
-
     @staticmethod
     def isMetaEstimator(pyInstance):
         from pyspark.ml import Estimator, Pipeline
         from pyspark.ml.tuning import _ValidatorParams
         from pyspark.ml.classification import OneVsRest
-        return isinstance(pyInstance, Pipeline) or isinstance(pyInstance, OneVsRest) or \
-            (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
+
+        return (
+            isinstance(pyInstance, Pipeline)
+            or isinstance(pyInstance, OneVsRest)
+            or (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
+        )
 
     @staticmethod
     def getAllNestedStages(pyInstance):
@@ -642,7 +657,7 @@ class MetaAlgorithmReadWrite:
         elif isinstance(pyInstance, PipelineModel):
             pySubStages = pyInstance.stages
         elif isinstance(pyInstance, _ValidatorParams):
-            raise ValueError('PySpark does not support nested validator.')
+            raise ValueError("PySpark does not support nested validator.")
         elif isinstance(pyInstance, OneVsRest):
             pySubStages = [pyInstance.getClassifier()]
         elif isinstance(pyInstance, OneVsRestModel):
@@ -661,7 +676,9 @@ class MetaAlgorithmReadWrite:
         nestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance)
         uidMap = {stage.uid: stage for stage in nestedStages}
         if len(nestedStages) != len(uidMap):
-            raise RuntimeError(f'{instance.__class__.__module__}.{instance.__class__.__name__}'
-                               f'.load found a compound estimator with stages with duplicate '
-                               f'UIDs. List of UIDs: {list(uidMap.keys())}.')
+            raise RuntimeError(
+                f"{instance.__class__.__module__}.{instance.__class__.__name__}"
+                f".load found a compound estimator with stages with duplicate "
+                f"UIDs. List of UIDs: {list(uidMap.keys())}."
+            )
         return uidMap

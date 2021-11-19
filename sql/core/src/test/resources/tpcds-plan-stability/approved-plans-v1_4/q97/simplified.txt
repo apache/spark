@@ -5,8 +5,8 @@ WholeStageCodegen (8)
         WholeStageCodegen (7)
           HashAggregate [customer_sk,customer_sk] [sum,sum,sum,sum,sum,sum]
             Project [customer_sk,customer_sk]
-              InputAdapter
-                SortMergeJoin [customer_sk,item_sk,customer_sk,item_sk]
+              SortMergeJoin [customer_sk,item_sk,customer_sk,item_sk]
+                InputAdapter
                   WholeStageCodegen (3)
                     Sort [customer_sk,item_sk]
                       HashAggregate [ss_customer_sk,ss_item_sk] [customer_sk,item_sk]
@@ -29,6 +29,7 @@ WholeStageCodegen (8)
                                                         Scan parquet default.date_dim [d_date_sk,d_month_seq]
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #3
+                InputAdapter
                   WholeStageCodegen (6)
                     Sort [customer_sk,item_sk]
                       HashAggregate [cs_bill_customer_sk,cs_item_sk] [customer_sk,item_sk]

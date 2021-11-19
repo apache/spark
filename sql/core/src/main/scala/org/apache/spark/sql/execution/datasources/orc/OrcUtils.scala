@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.sql.Timestamp
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -28,6 +29,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -35,11 +37,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -196,7 +200,18 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       reader: Reader,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
-    val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
+      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+        case (TimestampType, TimestampNTZType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
+        case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
+        case _ =>
+      }
+    }
+
+    val orcSchema = reader.getSchema
+    checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
+    val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
@@ -277,6 +292,7 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
     case _: DayTimeIntervalType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
@@ -286,14 +302,22 @@ object OrcUtils extends Logging {
     def getInnerTypeDecription(dt: DataType): Option[TypeDescription] = {
       dt match {
         case y: YearMonthIntervalType =>
-          val typeDesc = orcTypeDescription(IntegerType)
+          val typeDesc = new TypeDescription(TypeDescription.Category.INT)
           typeDesc.setAttribute(
             CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
           Some(typeDesc)
         case d: DayTimeIntervalType =>
-          val typeDesc = orcTypeDescription(LongType)
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(
             CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          Some(typeDesc)
+        case n: TimestampNTZType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
+          Some(typeDesc)
+        case t: TimestampType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
           Some(typeDesc)
         case _ => None
       }
@@ -396,9 +420,8 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
-      aggSchema: StructType): InternalRow = {
-    require(aggregation.groupByColumns.length == 0,
-      s"aggregate $aggregation with group-by column shouldn't be pushed down")
+      aggSchema: StructType,
+      partitionValues: InternalRow): InternalRow = {
     var columnsStatistics: OrcColumnStatistics = null
     try {
       columnsStatistics = OrcFooterReader.readStatistics(reader)
@@ -457,17 +480,22 @@ object OrcUtils extends Logging {
       }
     }
 
+    // if there are group by columns, we will build result row first,
+    // and then append group by columns values (partition columns values) to the result row.
+    val schemaWithoutGroupBy =
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
+
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {
         case (max: Max, index) =>
           val columnName = max.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = aggSchema(index).dataType
+          val dataType = schemaWithoutGroupBy(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
         case (min: Min, index) =>
           val columnName = min.column.fieldNames.head
           val statistics = getColumnStatistics(columnName)
-          val dataType = aggSchema.apply(index).dataType
+          val dataType = schemaWithoutGroupBy.apply(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
         case (count: Count, _) =>
           val columnName = count.column.fieldNames.head
@@ -490,7 +518,28 @@ object OrcUtils extends Logging {
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
       }
 
-    val orcValuesDeserializer = new OrcDeserializer(aggSchema, (0 until aggSchema.length).toArray)
-    orcValuesDeserializer.deserializeFromValues(aggORCValues)
+    val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
+      (0 until schemaWithoutGroupBy.length).toArray)
+    val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
+    if (aggregation.groupByColumns.nonEmpty) {
+      val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
+        partitionSchema, aggregation, partitionValues)
+      new JoinedRow(reOrderedPartitionValues, resultRow)
+    } else {
+      resultRow
+    }
+  }
+
+  def fromOrcNTZ(ts: Timestamp): Long = {
+    DateTimeUtils.millisToMicros(ts.getTime) +
+      (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+  }
+
+  def toOrcNTZ(micros: Long): OrcTimestamp = {
+    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
+    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
+    result.setNanos(nanos.toInt)
+    result
   }
 }

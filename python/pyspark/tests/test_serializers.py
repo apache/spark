@@ -19,31 +19,49 @@ import sys
 import unittest
 
 from pyspark import serializers
-from pyspark.serializers import CloudPickleSerializer, CompressedSerializer, \
-    AutoBatchedSerializer, BatchedSerializer, AutoSerializer, NoOpSerializer, PairDeserializer, \
-    FlattenedValuesSerializer, CartesianDeserializer, PickleSerializer, UTF8Deserializer, \
-    MarshalSerializer
-from pyspark.testing.utils import PySparkTestCase, read_int, write_int, ByteArrayOutput, \
-    have_numpy, have_scipy
+from pyspark.serializers import (
+    CloudPickleSerializer,
+    CompressedSerializer,
+    AutoBatchedSerializer,
+    BatchedSerializer,
+    AutoSerializer,
+    NoOpSerializer,
+    PairDeserializer,
+    FlattenedValuesSerializer,
+    CartesianDeserializer,
+    PickleSerializer,
+    UTF8Deserializer,
+    MarshalSerializer,
+)
+from pyspark.testing.utils import (
+    PySparkTestCase,
+    read_int,
+    write_int,
+    ByteArrayOutput,
+    have_numpy,
+    have_scipy,
+)
 
 
 class SerializationTestCase(unittest.TestCase):
-
     def test_namedtuple(self):
         from collections import namedtuple
         from pickle import dumps, loads
+
         P = namedtuple("P", "x y")
         p1 = P(1, 3)
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
 
         from pyspark.cloudpickle import dumps
+
         P2 = loads(dumps(P))
         p3 = P2(1, 3)
         self.assertEqual(p1, p3)
 
     def test_itemgetter(self):
         from operator import itemgetter
+
         ser = CloudPickleSerializer()
         d = range(10)
         getter = itemgetter(1)
@@ -62,11 +80,13 @@ class SerializationTestCase(unittest.TestCase):
 
     def test_attrgetter(self):
         from operator import attrgetter
+
         ser = CloudPickleSerializer()
 
         class C(object):
             def __getattr__(self, item):
                 return item
+
         d = C()
         getter = attrgetter("a")
         getter2 = ser.loads(ser.dumps(getter))
@@ -95,7 +115,6 @@ class SerializationTestCase(unittest.TestCase):
             self.assertEqual(out1, out2)
 
     def test_func_globals(self):
-
         class Unpicklable(object):
             def __reduce__(self):
                 raise RuntimeError("not picklable")
@@ -115,13 +134,14 @@ class SerializationTestCase(unittest.TestCase):
     def test_compressed_serializer(self):
         ser = CompressedSerializer(PickleSerializer())
         from io import BytesIO as StringIO
+
         io = StringIO()
-        ser.dump_stream(["abc", u"123", range(5)], io)
+        ser.dump_stream(["abc", "123", range(5)], io)
         io.seek(0)
-        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
+        self.assertEqual(["abc", "123", range(5)], list(ser.load_stream(io)))
         ser.dump_stream(range(1000), io)
         io.seek(0)
-        self.assertEqual(["abc", u"123", range(5)] + list(range(1000)), list(ser.load_stream(io)))
+        self.assertEqual(["abc", "123", range(5)] + list(range(1000)), list(ser.load_stream(io)))
         io.close()
 
     def test_hash_serializer(self):
@@ -141,7 +161,7 @@ class SerializationTestCase(unittest.TestCase):
 @unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
-    """General PySpark tests that depend on scipy """
+    """General PySpark tests that depend on scipy"""
 
     def test_serialize(self):
         from scipy.special import gammaln
@@ -155,7 +175,7 @@ class SciPyTests(PySparkTestCase):
 @unittest.skipIf(not have_numpy, "NumPy not installed")
 class NumPyTests(PySparkTestCase):
 
-    """General PySpark tests that depend on numpy """
+    """General PySpark tests that depend on numpy"""
 
     def test_statcounter_array(self):
         import numpy as np
@@ -168,28 +188,29 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
         stats_dict = s.asDict()
-        self.assertEqual(3, stats_dict['count'])
-        self.assertSequenceEqual([2.0, 2.0], stats_dict['mean'].tolist())
-        self.assertSequenceEqual([1.0, 1.0], stats_dict['min'].tolist())
-        self.assertSequenceEqual([3.0, 3.0], stats_dict['max'].tolist())
-        self.assertSequenceEqual([6.0, 6.0], stats_dict['sum'].tolist())
-        self.assertSequenceEqual([1.0, 1.0], stats_dict['stdev'].tolist())
-        self.assertSequenceEqual([1.0, 1.0], stats_dict['variance'].tolist())
+        self.assertEqual(3, stats_dict["count"])
+        self.assertSequenceEqual([2.0, 2.0], stats_dict["mean"].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict["min"].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_dict["max"].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_dict["sum"].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict["stdev"].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict["variance"].tolist())
 
         stats_sample_dict = s.asDict(sample=True)
-        self.assertEqual(3, stats_dict['count'])
-        self.assertSequenceEqual([2.0, 2.0], stats_sample_dict['mean'].tolist())
-        self.assertSequenceEqual([1.0, 1.0], stats_sample_dict['min'].tolist())
-        self.assertSequenceEqual([3.0, 3.0], stats_sample_dict['max'].tolist())
-        self.assertSequenceEqual([6.0, 6.0], stats_sample_dict['sum'].tolist())
+        self.assertEqual(3, stats_dict["count"])
+        self.assertSequenceEqual([2.0, 2.0], stats_sample_dict["mean"].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_sample_dict["min"].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_sample_dict["max"].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_sample_dict["sum"].tolist())
         self.assertSequenceEqual(
-            [0.816496580927726, 0.816496580927726], stats_sample_dict['stdev'].tolist())
+            [0.816496580927726, 0.816496580927726], stats_sample_dict["stdev"].tolist()
+        )
         self.assertSequenceEqual(
-            [0.6666666666666666, 0.6666666666666666], stats_sample_dict['variance'].tolist())
+            [0.6666666666666666, 0.6666666666666666], stats_sample_dict["variance"].tolist()
+        )
 
 
 class SerializersTest(unittest.TestCase):
-
     def test_chunked_stream(self):
         original_bytes = bytearray(range(100))
         for data_length in [1, 10, 100]:
@@ -205,7 +226,7 @@ class SerializersTest(unittest.TestCase):
                 dest_pos = 0
                 data_pos = 0
                 for chunk_idx in range(num_chunks):
-                    chunk_length = read_int(dest.buffer[dest_pos:(dest_pos + 4)])
+                    chunk_length = read_int(dest.buffer[dest_pos : (dest_pos + 4)])
                     if chunk_idx == num_chunks - 1:
                         exp_length = data_length % buffer_length
                         if exp_length == 0:
@@ -214,8 +235,8 @@ class SerializersTest(unittest.TestCase):
                         exp_length = buffer_length
                     self.assertEqual(chunk_length, exp_length)
                     dest_pos += 4
-                    dest_chunk = dest.buffer[dest_pos:dest_pos + chunk_length]
-                    orig_chunk = original_bytes[data_pos:data_pos + chunk_length]
+                    dest_chunk = dest.buffer[dest_pos : dest_pos + chunk_length]
+                    orig_chunk = original_bytes[data_pos : data_pos + chunk_length]
                     self.assertEqual(dest_chunk, orig_chunk)
                     dest_pos += chunk_length
                     data_pos += chunk_length
@@ -228,7 +249,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
