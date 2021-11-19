@@ -275,8 +275,7 @@ SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-# skipping local ruby bundle directory from the search
-PYTHON_SOURCE="$(find . -path ./docs/.local_ruby_bundle -prune -false -o -name "*.py")"
+PYTHON_SOURCE="$(git ls-files '*.py')"
 
 compile_python_test "$PYTHON_SOURCE"
 black_test
