@@ -336,6 +336,13 @@ DatatimeIndex
 
    DatetimeIndex
 
+TimedeltaIndex
+-------------
+.. autosummary::
+   :toctree: api/
+
+   TimedeltaIndex
+
 Time/date components
 ~~~~~~~~~~~~~~~~~~~~
 .. autosummary::
