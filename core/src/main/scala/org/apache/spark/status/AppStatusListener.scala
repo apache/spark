@@ -603,9 +603,7 @@ private[spark] class AppStatusListener(
       if (event.taskInfo.speculative) {
         stage.speculationStageSummary.numActiveTasks += 1
         stage.speculationStageSummary.numTasks += 1
-      }
-      if (stage.speculationStageSummary.numTasks > 0) {
-        maybeUpdate(stage.speculationStageSummary, now)
+        update(stage.speculationStageSummary, now)
       }
 
       stage.activeTasks += 1
@@ -761,11 +759,7 @@ private[spark] class AppStatusListener(
         speculationStageSummary.numCompletedTasks += completedDelta
         speculationStageSummary.numFailedTasks += failedDelta
         speculationStageSummary.numKilledTasks += killedDelta
-      }
-      if (isLastTask && event.taskInfo.speculative) {
         update(speculationStageSummary, now)
-      } else if (stage.speculationStageSummary.numTasks > 0) {
-        maybeUpdate(speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
