@@ -22,7 +22,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry, Timer}
 import org.apache.spark.metrics.source.Source
 
 private[spark] class HistoryServerSource(val history: ApplicationHistoryProvider) extends Source {
-  override val sourceName: String = "historyServer"
+  override val sourceName: String = "HistoryServer"
   override val metricRegistry: MetricRegistry = new MetricRegistry()
 
   metricRegistry.register(MetricRegistry.name("incompleted"), new Gauge[Int] {
