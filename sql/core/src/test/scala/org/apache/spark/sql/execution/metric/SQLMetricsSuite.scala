@@ -743,19 +743,19 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
       sql("CACHE TABLE inMemoryTable")
       testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
-        Map(1L -> (("Scan In-memory table inMemoryTable", Map.empty)))
+        Map(0L -> (("Scan In-memory table inMemoryTable", Map.empty)))
       )
 
       sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
       sql("CACHE TABLE ```a``b```")
       testSparkPlanMetrics(spark.table("```a``b```"), 1,
-        Map(1L -> (("Scan In-memory table ```a``b```", Map.empty)))
+        Map(0L -> (("Scan In-memory table ```a``b```", Map.empty)))
       )
     }
 
     // Show InMemoryTableScan on UI
     testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
-      Map(1L -> (("InMemoryTableScan", Map.empty)))
+      Map(0L -> (("InMemoryTableScan", Map.empty)))
     )
   }
 
