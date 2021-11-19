@@ -604,7 +604,9 @@ private[spark] class AppStatusListener(
         stage.speculationStageSummary.numActiveTasks += 1
         stage.speculationStageSummary.numTasks += 1
       }
-      maybeUpdate(stage.speculationStageSummary, now)
+      if (stage.speculationStageSummary.numTasks > 0) {
+        maybeUpdate(stage.speculationStageSummary, now)
+      }
 
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
@@ -762,7 +764,7 @@ private[spark] class AppStatusListener(
       }
       if (isLastTask && event.taskInfo.speculative) {
         update(speculationStageSummary, now)
-      } else {
+      } else if (stage.speculationStageSummary.numTasks > 0) {
         maybeUpdate(speculationStageSummary, now)
       }
 
