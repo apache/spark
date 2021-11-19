@@ -893,7 +893,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-37369: Avoid redundant ColumnarToRow transistion on InMemoryTableScan") {
+  test("SPARK-37369: Avoid redundant ColumnarToRow transition on InMemoryTableScan") {
     Seq(true, false).foreach { vectorized =>
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val cache = spark.range(10).cache()
