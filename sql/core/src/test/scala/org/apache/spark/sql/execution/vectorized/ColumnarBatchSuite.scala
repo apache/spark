@@ -41,7 +41,6 @@ import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
