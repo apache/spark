@@ -1555,6 +1555,7 @@ object WidthBucket {
     }
   }
 
+  /** This function is called by generated Java code, so it needs to be public. */
   def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
     numBucket <= 0 ||
       numBucket == Long.MaxValue ||
@@ -1564,6 +1565,7 @@ object WidthBucket {
       jl.Double.isNaN(max) || jl.Double.isInfinite(max)
   }
 
+  /** This function is called by generated Java code, so it needs to be public. */
   def computeBucketNumberNotNull(
       value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
