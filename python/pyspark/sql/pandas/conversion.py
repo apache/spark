@@ -173,16 +173,18 @@ class PandasConversionMixin(object):
                                 pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
                         return pdf
                     else:
-                        corrected_panda_types = []
+                        corrected_panda_types = {}
                         for index, field in enumerate(self.schema):
                             panda_type = PandasConversionMixin._to_corrected_pandas_type(
                                 field.dataType
                             )
-                            if panda_type is None:
-                                corrected_panda_types.append((tmp_column_names[index], np.object0))
-                            else:
-                                corrected_panda_types.append((tmp_column_names[index], panda_type))
-                        pdf = pd.DataFrame(np.empty(0, dtype=corrected_panda_types), index=[])
+                            corrected_panda_types[tmp_column_names[index]] = (
+                                np.object0 if panda_type is None else panda_type
+                            )
+
+                        pdf = pd.DataFrame(columns=tmp_column_names).astype(
+                            dtype=corrected_panda_types
+                        )
                         pdf.columns = self.columns
                         return pdf
                 except Exception as e:

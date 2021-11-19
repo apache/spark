@@ -860,6 +860,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 self.assertEqual(types[7], np.object)
                 self.assertTrue(np.can_cast(np.datetime64, types[8]))
                 self.assertTrue(np.can_cast(np.datetime64, types[9]))
+                self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
@@ -878,9 +879,10 @@ class DataFrameTests(ReusedSQLTestCase):
         CAST(col7 AS BOOLEAN) AS boolean,
         CAST(col8 AS STRING) AS string,
         timestamp_seconds(col9) AS timestamp,
-        timestamp_seconds(col10) AS timestamp_ntz
-        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+        timestamp_seconds(col10) AS timestamp_ntz,
+        INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
+        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
         arrow_enabled_status = [True, False]
         for value in arrow_enabled_status:
