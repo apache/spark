@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.internal.Logging
-
 import scala.collection.JavaConverters._
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -134,9 +134,9 @@ class QueryPlanningTracker extends Logging {
       totalTimeSpent += duration
     }
     logInfo(
-      s"""
-				 |Query planning time spent:\n ${timeSpentSummary.toString}
-         |Total time spent: $totalTimeSpent""".stripMargin)
+      s"""Query planning time spent:\n ${timeSpentSummary.toString}
+         |Total time spent: $totalTimeSpent
+       """.stripMargin)
   }
 
   /**
