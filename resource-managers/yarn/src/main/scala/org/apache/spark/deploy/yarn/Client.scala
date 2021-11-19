@@ -351,9 +351,9 @@ private[spark] class Client(
     // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
     // for fetching delegation tokens. See YARN-5910 for more details.
     // The feature is only supported in Hadoop 3.x and up, hence the check below.
-    val regex = sparkConf.get(config.AM_SEND_TOKEN_CONF)
+    val regex = sparkConf.get(config.AM_TOKEN_CONF_REGEX)
     if (regex.nonEmpty && VersionUtils.isHadoop3) {
-      logInfo(s"Processing token conf (spark.yarn.am.sendTokenConf) with regex $regex")
+      logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
       val dob = new DataOutputBuffer();
       val copy = new Configuration(false);
       copy.clear();
