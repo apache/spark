@@ -51,7 +51,7 @@ class StreamingSessionWindowSuite extends StreamTest
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
     }
     // RocksDB doesn't support Apple Silicon yet
-    if (Utils.isAppleSilicon) {
+    if (Utils.isMacOnAppleSilicon) {
       providerOptions = providerOptions
         .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }

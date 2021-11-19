@@ -84,7 +84,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
       return AppStatusStore.createLiveStore(conf)
     }
     // LevelDB doesn't support Apple Silicon yet
-    if (Utils.isAppleSilicon && disk) {
+    if (Utils.isMacOnAppleSilicon && disk) {
       return null
     }
 

@@ -1964,7 +1964,7 @@ private[spark] object Utils extends Logging {
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
-  val isAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
+  val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
 
   /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
