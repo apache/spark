@@ -2861,6 +2861,33 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-37326: Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
+    withTempDir { dir =>
+      val path = s"${dir.getCanonicalPath}/json"
+
+      Seq(
+        """{"col0": "2020-12-12T12:12:12.000"}""",
+        """{"col0": "2020-12-12T12:12:12.000Z"}""",
+        """{"col0": "2020-12-12T12:12:12.000+05:00"}""",
+        """{"col0": "2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path)
+
+      val res = spark.read.schema("col0 TIMESTAMP_NTZ").json(path)
+
+      checkAnswer(
+        res,
+        Seq(
+          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
+          Row(null),
+          Row(null),
+          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+        )
+      )
+    }
+  }
+
   test("SPARK-37326: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
     val patterns = Seq(
       "yyyy-MM-dd HH:mm:ss XXX",
