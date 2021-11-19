@@ -560,13 +560,22 @@ private[spark] class BlockManager(
   }
 
   private def registerWithExternalShuffleServer(): Unit = {
+    val shuffleManagerName = shuffleManager.getClass.getName
+    if (shuffleManagerName != classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName) {
+      // there is no need to register with the default external shuffle server
+      // when a customized shuffle manager is configured
+      logInfo(s"Customized shuffle manager ${shuffleManagerName} configured, " +
+        s"skip registering with the default external shuffle service")
+      return
+    }
+
     logInfo("Registering executor with local external shuffle service.")
     val shuffleManagerMeta =
       if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
-        s"${shuffleManager.getClass.getName}:" +
+        s"${shuffleManagerName}:" +
           s"${diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()}}}"
       } else {
-        shuffleManager.getClass.getName
+        shuffleManagerName
       }
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
