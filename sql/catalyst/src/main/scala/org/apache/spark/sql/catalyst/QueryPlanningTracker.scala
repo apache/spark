@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.collection.JavaConverters._
+import org.apache.spark.internal.Logging
 
+import scala.collection.JavaConverters._
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -90,7 +91,7 @@ object QueryPlanningTracker {
 }
 
 
-class QueryPlanningTracker {
+class QueryPlanningTracker extends Logging {
 
   import QueryPlanningTracker._
 
@@ -118,6 +119,24 @@ class QueryPlanningTracker {
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
+  }
+
+  /**
+   * print out the timeSpent for each phase of a SQL
+   */
+  def logTimeSpent(): Unit = {
+    var totalTimeSpent = 0L
+    val timeSpentSummary: StringBuffer = new StringBuffer()
+    Seq(QueryPlanningTracker.PARSING, QueryPlanningTracker.ANALYSIS,
+      QueryPlanningTracker.OPTIMIZATION, QueryPlanningTracker.PLANNING).foreach { phase =>
+      val duration = phasesMap.getOrDefault(phase, new PhaseSummary(-1, -1)).durationMs
+      timeSpentSummary.append(s"phase: $phase, timeSpent: $duration ms\n")
+      totalTimeSpent += duration
+    }
+    logInfo(
+      s"""
+				 |Query planning time spent:\n ${timeSpentSummary.toString}
+         |Total time spent: $totalTimeSpent""".stripMargin)
   }
 
   /**
