@@ -104,11 +104,36 @@ if __name__ == "__main__":
     print("from typing import List\n")
     print("from pyspark.ml.param import *\n\n")
     shared = [
-        ("maxIter", "max number of iterations (>= 0).", None, "TypeConverters.toInt"),
-        ("regParam", "regularization parameter (>= 0).", None, "TypeConverters.toFloat"),
-        ("featuresCol", "features column name.", '"features"', "TypeConverters.toString"),
-        ("labelCol", "label column name.", '"label"', "TypeConverters.toString"),
-        ("predictionCol", "prediction column name.", '"prediction"', "TypeConverters.toString"),
+        (
+            "maxIter",
+            "max number of iterations (>= 0).",
+            None,
+            "TypeConverters.toInt",
+        ),
+        (
+            "regParam",
+            "regularization parameter (>= 0).",
+            None,
+            "TypeConverters.toFloat",
+        ),
+        (
+            "featuresCol",
+            "features column name.",
+            '"features"',
+            "TypeConverters.toString",
+        ),
+        (
+            "labelCol",
+            "label column name.",
+            '"label"',
+            "TypeConverters.toString",
+        ),
+        (
+            "predictionCol",
+            "prediction column name.",
+            '"prediction"',
+            "TypeConverters.toString",
+        ),
         (
             "probabilityCol",
             "Column name for predicted class conditional probabilities. "
@@ -123,10 +148,30 @@ if __name__ == "__main__":
             '"rawPrediction"',
             "TypeConverters.toString",
         ),
-        ("inputCol", "input column name.", None, "TypeConverters.toString"),
-        ("inputCols", "input column names.", None, "TypeConverters.toListString"),
-        ("outputCol", "output column name.", 'self.uid + "__output"', "TypeConverters.toString"),
-        ("outputCols", "output column names.", None, "TypeConverters.toListString"),
+        (
+            "inputCol",
+            "input column name.",
+            None,
+            "TypeConverters.toString",
+        ),
+        (
+            "inputCols",
+            "input column names.",
+            None,
+            "TypeConverters.toListString",
+        ),
+        (
+            "outputCol",
+            "output column name.",
+            'self.uid + "__output"',
+            "TypeConverters.toString",
+        ),
+        (
+            "outputCols",
+            "output column names.",
+            None,
+            "TypeConverters.toListString",
+        ),
         (
             "numFeatures",
             "Number of features. Should be greater than 0.",
@@ -141,7 +186,12 @@ if __name__ == "__main__":
             None,
             "TypeConverters.toInt",
         ),
-        ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
+        (
+            "seed",
+            "random seed.",
+            "hash(type(self).__name__)",
+            "TypeConverters.toInt",
+        ),
         (
             "tol",
             "the convergence tolerance for iterative algorithms (>= 0).",
@@ -176,7 +226,12 @@ if __name__ == "__main__":
             "0.0",
             "TypeConverters.toFloat",
         ),
-        ("fitIntercept", "whether to fit an intercept term.", "True", "TypeConverters.toBoolean"),
+        (
+            "fitIntercept",
+            "whether to fit an intercept term.",
+            "True",
+            "TypeConverters.toBoolean",
+        ),
         (
             "standardization",
             "whether to standardize the training features before fitting the " + "model.",
@@ -240,7 +295,12 @@ if __name__ == "__main__":
             "False",
             "TypeConverters.toBoolean",
         ),
-        ("loss", "the loss function to be optimized.", None, "TypeConverters.toString"),
+        (
+            "loss",
+            "the loss function to be optimized.",
+            None,
+            "TypeConverters.toString",
+        ),
         (
             "distanceMeasure",
             "the distance measure. Supported options: 'euclidean' and 'cosine'.",
