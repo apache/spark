@@ -160,7 +160,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-36038: speculation summary without any task completed") {
+  test("SPARK-36038: speculation summary should not be present if there are no speculative tasks") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
 
@@ -177,14 +177,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
         listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
     }
-
-    assert(statusStore.speculationSummary(0, 0).isDefined)
-  }
-
-  test("SPARK-36038: speculation summary for unknown stages" +
-      " like SKIPPED stages should not fail with NoSuchElementException") {
-    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val statusStore = AppStatusStore.createLiveStore(conf)
 
     assert(statusStore.speculationSummary(0, 0).isEmpty)
   }

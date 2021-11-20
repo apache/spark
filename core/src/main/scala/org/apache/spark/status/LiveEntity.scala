@@ -448,8 +448,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   val peakExecutorMetrics = new ExecutorMetrics()
 
-  lazy val speculationStageSummary: LiveSpeculationStageSummary =
-    new LiveSpeculationStageSummary(info.stageId, info.attemptNumber)
+  var speculationStageSummary: Option[LiveSpeculationStageSummary] = None
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false

@@ -601,9 +601,14 @@ private[spark] class AppStatusListener(
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (event.taskInfo.speculative) {
-        stage.speculationStageSummary.numActiveTasks += 1
-        stage.speculationStageSummary.numTasks += 1
-        update(stage.speculationStageSummary, now)
+        stage.speculationStageSummary = Some(stage.speculationStageSummary
+          .getOrElse(new LiveSpeculationStageSummary(event.stageId, event.stageAttemptId)))
+        val speculationSummary = stage.speculationStageSummary.get
+        speculationSummary.numActiveTasks += 1
+        speculationSummary.numTasks += 1
+      }
+      if(stage.speculationStageSummary.isDefined) {
+        maybeUpdate(stage.speculationStageSummary.get, now)
       }
 
       stage.activeTasks += 1
@@ -753,13 +758,22 @@ private[spark] class AppStatusListener(
         maybeUpdate(esummary, now)
       }
 
-      val speculationStageSummary = stage.speculationStageSummary
       if (event.taskInfo.speculative) {
+        stage.speculationStageSummary = Some(stage.speculationStageSummary.getOrElse(
+            new LiveSpeculationStageSummary(event.stageId, event.stageAttemptId)))
+        val speculationStageSummary = stage.speculationStageSummary.get
         speculationStageSummary.numActiveTasks -= 1
         speculationStageSummary.numCompletedTasks += completedDelta
         speculationStageSummary.numFailedTasks += failedDelta
         speculationStageSummary.numKilledTasks += killedDelta
-        update(speculationStageSummary, now)
+      }
+
+      if(stage.speculationStageSummary.isDefined) {
+        if (isLastTask) {
+          update(stage.speculationStageSummary.get, now)
+        } else {
+          maybeUpdate(stage.speculationStageSummary.get, now)
+        }
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
