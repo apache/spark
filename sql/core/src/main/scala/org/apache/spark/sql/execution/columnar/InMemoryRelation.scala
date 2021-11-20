@@ -259,6 +259,12 @@ case class CachedRDDBuilder(
       rowCountStats.add(batch.numRows)
       batch
     }.persist(storageLevel)
+    // AQE can try re-planning before the cached rdd is executed. In this case, all
+    // InMemoryRelations reading this cache will have statistics saying the size in bytes is 0
+    // This can cause a problem where a BroadcastHashJoin will be mistakenly planned
+    if (SQLConf.get.adaptiveExecutionEnabled) {
+      cached.count()
+    }
     cached.setName(cachedName)
     cached
   }

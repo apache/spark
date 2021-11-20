@@ -318,22 +318,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("CACHE LAZY TABLE tableName") {
-    sql("CACHE LAZY TABLE testData")
-    assertCached(spark.table("testData"))
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      sql("CACHE LAZY TABLE testData")
+      assertCached(spark.table("testData"))
 
-    val rddId = rddIdOf("testData")
-    assert(
-      !isMaterialized(rddId),
-      "Lazily cached in-memory table shouldn't be materialized eagerly")
+      val rddId = rddIdOf("testData")
+      assert(
+        !isMaterialized(rddId),
+        "Lazily cached in-memory table shouldn't be materialized eagerly")
 
-    sql("SELECT COUNT(*) FROM testData").collect()
-    assert(
-      isMaterialized(rddId),
-      "Lazily cached in-memory table should have been materialized")
+      sql("SELECT COUNT(*) FROM testData").collect()
+      assert(
+        isMaterialized(rddId),
+        "Lazily cached in-memory table should have been materialized")
 
-    uncacheTable("testData")
-    eventually(timeout(10.seconds)) {
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      uncacheTable("testData")
+      eventually(timeout(10.seconds)) {
+        assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      }
     }
   }
 
@@ -373,19 +375,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("SQL interface support storageLevel(with LAZY)") {
-    sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
-    assertCached(spark.table("testData"))
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
+      assertCached(spark.table("testData"))
 
-    val rddId = rddIdOf("testData")
-    assert(
-      !isMaterialized(rddId),
-      "Lazily cached in-memory table shouldn't be materialized eagerly")
+      val rddId = rddIdOf("testData")
+      assert(
+        !isMaterialized(rddId),
+        "Lazily cached in-memory table shouldn't be materialized eagerly")
 
-    sql("SELECT COUNT(*) FROM testData").collect()
-    assert(
-      isMaterialized(rddId),
-      "Lazily cached in-memory table should have been materialized")
-    assert(isExpectStorageLevel(rddId, Disk))
+      sql("SELECT COUNT(*) FROM testData").collect()
+      assert(
+        isMaterialized(rddId),
+        "Lazily cached in-memory table should have been materialized")
+      assert(isExpectStorageLevel(rddId, Disk))
+    }
   }
 
   test("InMemoryRelation statistics") {
