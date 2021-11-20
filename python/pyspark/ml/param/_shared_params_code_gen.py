@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from typing import Optional
+
 header = """#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -35,7 +37,6 @@ header = """#
 # Code generator for shared params (shared.py). Run under this folder with:
 # python _shared_params_code_gen.py > shared.py
 
-
 _type_for_type_converter = {
     "TypeConverters.toBoolean": "bool",
     "TypeConverters.toFloat": "float",
@@ -46,7 +47,9 @@ _type_for_type_converter = {
 }
 
 
-def _gen_param_header(name, doc, defaultValueStr, typeConverter, paramType):
+def _gen_param_header(
+    name: str, doc: str, defaultValueStr: Optional[str], typeConverter: str, paramType: str
+) -> str:
     """
     Generates the header part for shared variables
 
@@ -77,7 +80,7 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter, paramType):
     return template
 
 
-def _gen_param_code(name, doc, defaultValueStr, paramType):
+def _gen_param_code(name: str, doc: str, defaultValueStr: Optional[str], paramType: str) -> str:
     """
     Generates Python code for a shared param class.
 
