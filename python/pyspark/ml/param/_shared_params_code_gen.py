@@ -56,9 +56,9 @@ def _gen_param_header(
     :param name: param name
     :param doc: param doc
     """
-    Name = name[0].upper() + name[1:]
+    Name = f"Has{name[0].upper()}{name[1:]}"
 
-    template = f'''class Has{Name}(Params):
+    template = f'''class {Name}(Params):
     """
     Mixin for param {name}: {doc}
     """
@@ -71,7 +71,7 @@ def _gen_param_header(
     )
 
     def __init__(self) -> None:
-        super(Has{Name}, self).__init__()'''
+        super({Name}, self).__init__()'''
 
     if defaultValueStr is not None:
         template += f"""
@@ -91,7 +91,7 @@ def _gen_param_code(name: str, paramType: str) -> str:
     """
     # TODO: How to correctly inherit instance attributes?
     return f'''
-    def get{name[0].upper() + name[1:]}(self) -> {paramType}:
+    def get{name[0].upper()}{name[1:]}(self) -> {paramType}:
         """
         Gets the value of {name} or its default value.
         """
