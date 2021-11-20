@@ -80,7 +80,7 @@ def _gen_param_header(
     return template
 
 
-def _gen_param_code(name: str, doc: str, defaultValueStr: Optional[str], paramType: str) -> str:
+def _gen_param_code(name: str, paramType: str) -> str:
     """
     Generates Python code for a shared param class.
 
@@ -338,6 +338,6 @@ if __name__ == "__main__":
         paramType = _type_for_type_converter.get(typeConverter, "None")
 
         param_code = _gen_param_header(name, doc, defaultValueStr, typeConverter, paramType)
-        code.append(param_code + "\n" + _gen_param_code(name, doc, defaultValueStr, paramType))
+        code.append(param_code + "\n" + _gen_param_code(name, paramType))
 
     print("\n\n\n".join(code))
