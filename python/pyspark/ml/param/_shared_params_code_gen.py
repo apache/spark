@@ -53,36 +53,28 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter, paramType):
     :param name: param name
     :param doc: param doc
     """
-    template = '''class Has$Name(Params):
+    Name = name[0].upper() + name[1:]
+
+    template = f'''class Has{Name}(Params):
     """
-    Mixin for param $name: $doc
+    Mixin for param {name}: {doc}
     """
 
-    $name: Param[$paramType] = Param(
+    {name}: Param[{paramType}] = Param(
         Params._dummy(),
-        "$name",
-        "$doc",
-        typeConverter=$typeConverter,
+        "{name}",
+        "{doc}",
+        typeConverter={typeConverter},
     )
 
     def __init__(self) -> None:
-        super(Has$Name, self).__init__()'''
+        super(Has{Name}, self).__init__()'''
 
     if defaultValueStr is not None:
-        template += """
-        self._setDefault($name=$defaultValueStr)"""
+        template += f"""
+        self._setDefault({name}={defaultValueStr})"""
 
-    Name = name[0].upper() + name[1:]
-    if typeConverter is None:
-        typeConverter = str(None)
-    return (
-        template.replace("$name", name)
-        .replace("$Name", Name)
-        .replace("$doc", doc)
-        .replace("$defaultValueStr", str(defaultValueStr))
-        .replace("$typeConverter", typeConverter)
-        .replace("$paramType", paramType)
-    )
+    return template
 
 
 def _gen_param_code(name, doc, defaultValueStr, paramType):
@@ -95,21 +87,12 @@ def _gen_param_code(name, doc, defaultValueStr, paramType):
     :return: code string
     """
     # TODO: How to correctly inherit instance attributes?
-    template = '''
-    def get$Name(self) -> $paramType:
+    return f'''
+    def get{name[0].upper() + name[1:]}(self) -> {paramType}:
         """
-        Gets the value of $name or its default value.
+        Gets the value of {name} or its default value.
         """
-        return self.getOrDefault(self.$name)'''
-
-    Name = name[0].upper() + name[1:]
-    return (
-        template.replace("$name", name)
-        .replace("$Name", Name)
-        .replace("$doc", doc)
-        .replace("$defaultValueStr", str(defaultValueStr))
-        .replace("$paramType", paramType)
-    )
+        return self.getOrDefault(self.{name})'''
 
 
 if __name__ == "__main__":
