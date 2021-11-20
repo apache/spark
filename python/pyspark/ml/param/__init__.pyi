@@ -19,7 +19,7 @@
 import abc
 from typing import overload
 from typing import Any, Callable, Generic, List, Optional
-from pyspark.ml._typing import T, P
+from pyspark.ml._typing import P, T
 import pyspark.ml._typing
 
 import pyspark.ml.util
