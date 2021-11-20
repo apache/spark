@@ -63,7 +63,7 @@ def _gen_param_header(
     Mixin for param {name}: {doc}
     """
 
-    {name}: Param[{paramType}] = Param(
+    {name}: "Param[{paramType}]" = Param(
         Params._dummy(),
         "{name}",
         "{doc}",

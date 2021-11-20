@@ -27,7 +27,7 @@ class HasMaxIter(Params):
     Mixin for param maxIter: max number of iterations (>= 0).
     """
 
-    maxIter: Param[int] = Param(
+    maxIter: "Param[int]" = Param(
         Params._dummy(),
         "maxIter",
         "max number of iterations (>= 0).",
@@ -49,7 +49,7 @@ class HasRegParam(Params):
     Mixin for param regParam: regularization parameter (>= 0).
     """
 
-    regParam: Param[float] = Param(
+    regParam: "Param[float]" = Param(
         Params._dummy(),
         "regParam",
         "regularization parameter (>= 0).",
@@ -71,7 +71,7 @@ class HasFeaturesCol(Params):
     Mixin for param featuresCol: features column name.
     """
 
-    featuresCol: Param[str] = Param(
+    featuresCol: "Param[str]" = Param(
         Params._dummy(),
         "featuresCol",
         "features column name.",
@@ -94,7 +94,7 @@ class HasLabelCol(Params):
     Mixin for param labelCol: label column name.
     """
 
-    labelCol: Param[str] = Param(
+    labelCol: "Param[str]" = Param(
         Params._dummy(),
         "labelCol",
         "label column name.",
@@ -117,7 +117,7 @@ class HasPredictionCol(Params):
     Mixin for param predictionCol: prediction column name.
     """
 
-    predictionCol: Param[str] = Param(
+    predictionCol: "Param[str]" = Param(
         Params._dummy(),
         "predictionCol",
         "prediction column name.",
@@ -140,7 +140,7 @@ class HasProbabilityCol(Params):
     Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
     """
 
-    probabilityCol: Param[str] = Param(
+    probabilityCol: "Param[str]" = Param(
         Params._dummy(),
         "probabilityCol",
         "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.",
@@ -163,7 +163,7 @@ class HasRawPredictionCol(Params):
     Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.
     """
 
-    rawPredictionCol: Param[str] = Param(
+    rawPredictionCol: "Param[str]" = Param(
         Params._dummy(),
         "rawPredictionCol",
         "raw prediction (a.k.a. confidence) column name.",
@@ -186,7 +186,7 @@ class HasInputCol(Params):
     Mixin for param inputCol: input column name.
     """
 
-    inputCol: Param[str] = Param(
+    inputCol: "Param[str]" = Param(
         Params._dummy(),
         "inputCol",
         "input column name.",
@@ -208,7 +208,7 @@ class HasInputCols(Params):
     Mixin for param inputCols: input column names.
     """
 
-    inputCols: Param[List[str]] = Param(
+    inputCols: "Param[List[str]]" = Param(
         Params._dummy(),
         "inputCols",
         "input column names.",
@@ -230,7 +230,7 @@ class HasOutputCol(Params):
     Mixin for param outputCol: output column name.
     """
 
-    outputCol: Param[str] = Param(
+    outputCol: "Param[str]" = Param(
         Params._dummy(),
         "outputCol",
         "output column name.",
@@ -253,7 +253,7 @@ class HasOutputCols(Params):
     Mixin for param outputCols: output column names.
     """
 
-    outputCols: Param[List[str]] = Param(
+    outputCols: "Param[List[str]]" = Param(
         Params._dummy(),
         "outputCols",
         "output column names.",
@@ -275,7 +275,7 @@ class HasNumFeatures(Params):
     Mixin for param numFeatures: Number of features. Should be greater than 0.
     """
 
-    numFeatures: Param[int] = Param(
+    numFeatures: "Param[int]" = Param(
         Params._dummy(),
         "numFeatures",
         "Number of features. Should be greater than 0.",
@@ -298,7 +298,7 @@ class HasCheckpointInterval(Params):
     Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval: Param[int] = Param(
+    checkpointInterval: "Param[int]" = Param(
         Params._dummy(),
         "checkpointInterval",
         "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.",
@@ -320,7 +320,7 @@ class HasSeed(Params):
     Mixin for param seed: random seed.
     """
 
-    seed: Param[int] = Param(
+    seed: "Param[int]" = Param(
         Params._dummy(),
         "seed",
         "random seed.",
@@ -343,7 +343,7 @@ class HasTol(Params):
     Mixin for param tol: the convergence tolerance for iterative algorithms (>= 0).
     """
 
-    tol: Param[float] = Param(
+    tol: "Param[float]" = Param(
         Params._dummy(),
         "tol",
         "the convergence tolerance for iterative algorithms (>= 0).",
@@ -365,7 +365,7 @@ class HasRelativeError(Params):
     Mixin for param relativeError: the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]
     """
 
-    relativeError: Param[float] = Param(
+    relativeError: "Param[float]" = Param(
         Params._dummy(),
         "relativeError",
         "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]",
@@ -388,7 +388,7 @@ class HasStepSize(Params):
     Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).
     """
 
-    stepSize: Param[float] = Param(
+    stepSize: "Param[float]" = Param(
         Params._dummy(),
         "stepSize",
         "Step size to be used for each iteration of optimization (>= 0).",
@@ -410,7 +410,7 @@ class HasHandleInvalid(Params):
     Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
     """
 
-    handleInvalid: Param[str] = Param(
+    handleInvalid: "Param[str]" = Param(
         Params._dummy(),
         "handleInvalid",
         "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.",
@@ -432,7 +432,7 @@ class HasElasticNetParam(Params):
     Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
     """
 
-    elasticNetParam: Param[float] = Param(
+    elasticNetParam: "Param[float]" = Param(
         Params._dummy(),
         "elasticNetParam",
         "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
@@ -455,7 +455,7 @@ class HasFitIntercept(Params):
     Mixin for param fitIntercept: whether to fit an intercept term.
     """
 
-    fitIntercept: Param[bool] = Param(
+    fitIntercept: "Param[bool]" = Param(
         Params._dummy(),
         "fitIntercept",
         "whether to fit an intercept term.",
@@ -478,7 +478,7 @@ class HasStandardization(Params):
     Mixin for param standardization: whether to standardize the training features before fitting the model.
     """
 
-    standardization: Param[bool] = Param(
+    standardization: "Param[bool]" = Param(
         Params._dummy(),
         "standardization",
         "whether to standardize the training features before fitting the model.",
@@ -501,7 +501,7 @@ class HasThresholds(Params):
     Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
     """
 
-    thresholds: Param[List[float]] = Param(
+    thresholds: "Param[List[float]]" = Param(
         Params._dummy(),
         "thresholds",
         "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.",
@@ -523,7 +523,7 @@ class HasThreshold(Params):
     Mixin for param threshold: threshold in binary classification prediction, in range [0, 1]
     """
 
-    threshold: Param[float] = Param(
+    threshold: "Param[float]" = Param(
         Params._dummy(),
         "threshold",
         "threshold in binary classification prediction, in range [0, 1]",
@@ -546,7 +546,7 @@ class HasWeightCol(Params):
     Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
     """
 
-    weightCol: Param[str] = Param(
+    weightCol: "Param[str]" = Param(
         Params._dummy(),
         "weightCol",
         "weight column name. If this is not set or empty, we treat all instance weights as 1.0.",
@@ -568,7 +568,7 @@ class HasSolver(Params):
     Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
     """
 
-    solver: Param[str] = Param(
+    solver: "Param[str]" = Param(
         Params._dummy(),
         "solver",
         "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.",
@@ -591,7 +591,7 @@ class HasVarianceCol(Params):
     Mixin for param varianceCol: column name for the biased sample variance of prediction.
     """
 
-    varianceCol: Param[str] = Param(
+    varianceCol: "Param[str]" = Param(
         Params._dummy(),
         "varianceCol",
         "column name for the biased sample variance of prediction.",
@@ -613,7 +613,7 @@ class HasAggregationDepth(Params):
     Mixin for param aggregationDepth: suggested depth for treeAggregate (>= 2).
     """
 
-    aggregationDepth: Param[int] = Param(
+    aggregationDepth: "Param[int]" = Param(
         Params._dummy(),
         "aggregationDepth",
         "suggested depth for treeAggregate (>= 2).",
@@ -636,7 +636,7 @@ class HasParallelism(Params):
     Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
     """
 
-    parallelism: Param[int] = Param(
+    parallelism: "Param[int]" = Param(
         Params._dummy(),
         "parallelism",
         "the number of threads to use when running parallel algorithms (>= 1).",
@@ -659,7 +659,7 @@ class HasCollectSubModels(Params):
     Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
     """
 
-    collectSubModels: Param[bool] = Param(
+    collectSubModels: "Param[bool]" = Param(
         Params._dummy(),
         "collectSubModels",
         "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.",
@@ -682,7 +682,7 @@ class HasLoss(Params):
     Mixin for param loss: the loss function to be optimized.
     """
 
-    loss: Param[str] = Param(
+    loss: "Param[str]" = Param(
         Params._dummy(),
         "loss",
         "the loss function to be optimized.",
@@ -704,7 +704,7 @@ class HasDistanceMeasure(Params):
     Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
     """
 
-    distanceMeasure: Param[str] = Param(
+    distanceMeasure: "Param[str]" = Param(
         Params._dummy(),
         "distanceMeasure",
         "the distance measure. Supported options: 'euclidean' and 'cosine'.",
@@ -727,7 +727,7 @@ class HasValidationIndicatorCol(Params):
     Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
     """
 
-    validationIndicatorCol: Param[str] = Param(
+    validationIndicatorCol: "Param[str]" = Param(
         Params._dummy(),
         "validationIndicatorCol",
         "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.",
@@ -749,7 +749,7 @@ class HasBlockSize(Params):
     Mixin for param blockSize: block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
     """
 
-    blockSize: Param[int] = Param(
+    blockSize: "Param[int]" = Param(
         Params._dummy(),
         "blockSize",
         "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.",
@@ -771,7 +771,7 @@ class HasMaxBlockSizeInMB(Params):
     Mixin for param maxBlockSizeInMB: maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.
     """
 
-    maxBlockSizeInMB: Param[float] = Param(
+    maxBlockSizeInMB: "Param[float]" = Param(
         Params._dummy(),
         "maxBlockSizeInMB",
         "maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.",
