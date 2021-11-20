@@ -171,12 +171,14 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (null),
         ("1965-01-01 10:11:12.123456"))
         .toDS().select($"value".cast("timestamp_ntz"))
-      checkAnswer(sql("select * from ts"), expected)
+      withAllParquetReaders {
+        checkAnswer(sql("select * from ts"), expected)
+      }
     }
   }
 
   test("SPARK-36182: can't read TimestampLTZ as TimestampNTZ") {
-    val data = (1 to 10).map { i =>
+    val data = (1 to 1000).map { i =>
       val ts = new java.sql.Timestamp(i)
       Row(ts)
     }
@@ -184,16 +186,20 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
 
     Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType) {
-        withTempPath { file =>
-          val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-          df.write.parquet(file.getCanonicalPath)
-          withAllParquetReaders {
-            val msg = intercept[SparkException] {
-              spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
-            }.getMessage
-            assert(msg.contains(
-              "Unable to create Parquet converter for data type \"timestamp_ntz\""))
+      Seq(true, false).foreach { dictionaryEnabled =>
+        withSQLConf(
+            SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType,
+            ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val msg = intercept[SparkException] {
+                spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
+              }.getMessage
+              assert(msg.contains(
+                "Unable to create Parquet converter for data type \"timestamp_ntz\""))
+            }
           }
         }
       }
@@ -201,13 +207,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-36182: read TimestampNTZ as TimestampLTZ") {
-    val data = (1 to 10).map { i =>
+    val data = (1 to 1000).map { i =>
       // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
       // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
+      val ts = LocalDateTime.ofEpochSecond(i / 1000, (i % 1000) * 1000000, ZoneOffset.UTC)
       Row(ts)
     }
-    val answer = (1 to 10).map { i =>
+    val answer = (1 to 1000).map { i =>
       val ts = new java.sql.Timestamp(i)
       Row(ts)
     }
@@ -218,7 +224,11 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.parquet(file.getCanonicalPath)
       withAllParquetReaders {
-        checkAnswer(spark.read.schema(providedSchema).parquet(file.getCanonicalPath), answer)
+        Seq(true, false).foreach { dictionaryEnabled =>
+          withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
+            checkAnswer(spark.read.schema(providedSchema).parquet(file.getCanonicalPath), answer)
+          }
+        }
       }
     }
   }

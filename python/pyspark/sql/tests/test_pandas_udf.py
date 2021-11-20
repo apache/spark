@@ -19,8 +19,8 @@ import unittest
 import datetime
 from typing import cast
 
-from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import DoubleType, StructType, StructField, LongType
+from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
+from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
 from pyspark.sql.utils import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import (
@@ -271,6 +271,25 @@ class PandasUDFTests(ReusedSQLTestCase):
             df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
             self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
             self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+    def test_pandas_udf_day_time_interval_type(self):
+        # SPARK-37277: Test DayTimeIntervalType in pandas UDF
+        import pandas as pd
+
+        @pandas_udf(DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND))
+        def noop(s: pd.Series) -> pd.Series:
+            assert s.iloc[0] == datetime.timedelta(microseconds=123)
+            return s
+
+        df = self.spark.createDataFrame(
+            [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
+        ).select(noop("td").alias("td"))
+
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
+        ).collect()
+        self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
+        self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
 
 if __name__ == "__main__":

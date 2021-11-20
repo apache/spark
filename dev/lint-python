@@ -182,6 +182,31 @@ function mypy_data_test {
     fi
 }
 
+function mypy_examples_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    echo "starting mypy examples test..."
+
+    MYPY_REPORT=$( (MYPYPATH=python $MYPY_BUILD \
+      --allow-untyped-defs \
+      --config-file python/mypy.ini \
+      --exclude "mllib/*" \
+      examples/src/main/python/) 2>&1)
+
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "examples failed mypy checks:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+      echo "examples passed mypy checks."
+      echo
+    fi
+}
+
 
 function mypy_test {
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
@@ -189,16 +214,8 @@ function mypy_test {
         return
     fi
 
-    _MYPY_VERSION=($($MYPY_BUILD --version))
-    MYPY_VERSION="${_MYPY_VERSION[1]}"
-    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
-
-    if [[ "$EXPECTED_MYPY" == "False" ]]; then
-        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
-        return
-    fi
-
     mypy_annotation_test
+    mypy_examples_test
     mypy_data_test
 }
 

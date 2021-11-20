@@ -2122,62 +2122,6 @@ class DataSourceV2SQLSuite
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
 
-  test("SHOW TBLPROPERTIES: v2 table") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      val user = "andrew"
-      val status = "new"
-      val provider = "foo"
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $t")
-
-      val schema = new StructType()
-        .add("key", StringType, nullable = false)
-        .add("value", StringType, nullable = false)
-
-      val expected = Seq(
-        Row("status", status),
-        Row("user", user))
-
-      assert(properties.schema === schema)
-      assert(expected === properties.collect())
-    }
-  }
-
-  test("SHOW TBLPROPERTIES(key): v2 table") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      val user = "andrew"
-      val status = "new"
-      val provider = "foo"
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
-        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $t ('status')")
-
-      val expected = Seq(Row("status", status))
-
-      assert(expected === properties.collect())
-    }
-  }
-
-  test("SHOW TBLPROPERTIES(key): v2 table, key not found") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      val nonExistingKey = "nonExistingKey"
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo " +
-        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $t ('$nonExistingKey')")
-
-      val expected = Seq(Row(nonExistingKey, s"Table $t does not have property: $nonExistingKey"))
-
-      assert(expected === properties.collect())
-    }
-  }
-
   test("DESCRIBE FUNCTION: only support session catalog") {
     val e = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
@@ -2966,9 +2910,18 @@ class DataSourceV2SQLSuite
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
+      assert(sql("SELECT * FROM t FOR VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t FOR VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+
       assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
+        === Array(Row(3), Row(4)))
+      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
+        === Array(Row(1), Row(2)))
+      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
     }
 
@@ -2994,9 +2947,18 @@ class DataSourceV2SQLSuite
         === Array(Row(5), Row(6)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
         === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
+
       assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
         === Array(Row(5), Row(6)))
       assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
+        === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
+        === Array(Row(5), Row(6)))
+      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
         === Array(Row(7), Row(8)))
     }
   }

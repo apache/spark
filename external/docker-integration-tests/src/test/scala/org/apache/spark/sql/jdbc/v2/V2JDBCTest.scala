@@ -300,7 +300,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df3))
         assert(limitPushed(df3, 2))
         assert(columnPruned(df3, "col1"))
-        assert(df3.collect().length == 2)
+        assert(df3.collect().length <= 2)
 
         // sample(... PERCENT) push down + limit push down + column pruning
         val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
@@ -308,7 +308,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df4))
         assert(limitPushed(df4, 2))
         assert(columnPruned(df4, "col1"))
-        assert(df4.collect().length == 2)
+        assert(df4.collect().length <= 2)
 
         // sample push down + filter push down + limit push down
         val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
@@ -316,7 +316,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df5))
         assert(filterPushed(df5))
         assert(limitPushed(df5, 2))
-        assert(df5.collect().length == 2)
+        assert(df5.collect().length <= 2)
 
         // sample + filter + limit + column pruning
         // sample pushed down, filer/limit not pushed down, column pruned
@@ -327,7 +327,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(!filterPushed(df6))
         assert(!limitPushed(df6, 2))
         assert(columnPruned(df6, "col1"))
-        assert(df6.collect().length == 2)
+        assert(df6.collect().length <= 2)
 
         // sample + limit
         // Push down order is sample -> filter -> limit
