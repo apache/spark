@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 /**
@@ -49,8 +48,6 @@ abstract class DynamicPartitionPruningSuiteBase
 
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
-
-  var originalFilteringSideThreshold = 1000
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -160,9 +157,6 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("ANALYZE TABLE dim_store COMPUTE STATISTICS FOR COLUMNS store_id")
       sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
     }
-
-    originalFilteringSideThreshold = conf.getConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT)
-    conf.setConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT, 0)
   }
 
   override protected def afterAll(): Unit = {
@@ -173,8 +167,6 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("DROP TABLE IF EXISTS dim_store")
       sql("DROP TABLE IF EXISTS fact_stats")
       sql("DROP TABLE IF EXISTS dim_stats")
-
-      conf.setConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT, originalFilteringSideThreshold)
     } finally {
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)
@@ -367,7 +359,8 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "0") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -572,7 +565,8 @@ abstract class DynamicPartitionPruningSuiteBase
   test("filtering ratio policy with stats when the broadcast pruning is disabled") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "0") {
       Given("disabling the use of stats in the DPP heuristic")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false") {
