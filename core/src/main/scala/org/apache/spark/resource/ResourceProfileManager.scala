@@ -57,8 +57,10 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
-  // If we use anything except the default profile, its only supported on YARN right now.
-  // Throw an exception if not supported.
+  /**
+   * If we use anything except the default profile, it's only supported on YARN and Kubernetes
+   * with dynamic allocation enabled. Throw an exception if not supported.
+   */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     val notYarnOrK8sAndNotDefaultProfile = isNotDefaultProfile && !(isYarn || isK8s)
