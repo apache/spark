@@ -17,13 +17,15 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                      SubqueryBroadcast [d_date_sk] #1
+                                        BroadcastExchange #2
+                                          WholeStageCodegen (1)
+                                            Filter [d_date_sk,d_week_seq]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
                               InputAdapter
-                                BroadcastExchange #2
-                                  WholeStageCodegen (1)
-                                    Filter [d_date_sk,d_week_seq]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
+                                ReusedExchange [d_date_sk,d_week_seq,d_day_name] #2
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (3)
@@ -57,6 +59,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                            ReusedSubquery [d_date_sk] #1
                                     InputAdapter
                                       ReusedExchange [d_date_sk,d_week_seq,d_day_name] #2
                       InputAdapter

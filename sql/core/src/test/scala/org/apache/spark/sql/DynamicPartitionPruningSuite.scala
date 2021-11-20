@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
@@ -32,6 +31,7 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 /**
@@ -49,6 +49,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
+
+  var originalFilteringSideThreshold = 1000
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -158,6 +160,9 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("ANALYZE TABLE dim_store COMPUTE STATISTICS FOR COLUMNS store_id")
       sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
     }
+
+    originalFilteringSideThreshold = conf.getConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT)
+    conf.setConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT, 0)
   }
 
   override protected def afterAll(): Unit = {
@@ -168,6 +173,8 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("DROP TABLE IF EXISTS dim_store")
       sql("DROP TABLE IF EXISTS fact_stats")
       sql("DROP TABLE IF EXISTS dim_stats")
+
+      conf.setConf(DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT, originalFilteringSideThreshold)
     } finally {
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)
@@ -1482,6 +1489,20 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
     }
   }
+
+  test("SPARK-36840: Support DPP if there is no selective predicate on the filtering side") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "1000") {
+      val df = sql(
+        """
+          |SELECT count(*) FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(13) :: Nil)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -1609,32 +1630,6 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         assert(scan3.metrics("filesSize").value == partFilesSize)
         assert(scan3.metrics("numPartitions").value === 1)
         assert(scan3.metrics("pruningTime").value !== -1)
-      }
-    }
-  }
-
-  test("SPARK-36840: Support DPP if there is no selective predicate on the filtering side") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.CBO_ENABLED.key -> "true") {
-      withTable("big_table") {
-        spark.table("fact_sk")
-          .write
-          .partitionBy("store_id")
-          .format(tableFormat)
-          .saveAsTable("big_table")
-        spark.sessionState.catalog.externalCatalog
-          .alterTableStats("default", "big_table",
-            Some(CatalogStatistics(Long.MaxValue, Some(Int.MaxValue))))
-
-        val df = sql(
-          """
-            |SELECT count(*) FROM big_table f
-            |JOIN dim_store s ON f.store_id = s.store_id
-        """.stripMargin)
-
-        checkPartitionPruningPredicate(df, false, true)
-        checkAnswer(df, Row(13) :: Nil)
       }
     }
   }

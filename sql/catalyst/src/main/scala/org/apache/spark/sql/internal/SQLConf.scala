@@ -341,6 +341,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.filteringSideThreshold")
+      .internal()
+      .doc("We assume it has partition pruning filter if it has no selective predicate and " +
+        "the maximum number of rows less than this threshold.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(threshold => threshold >= 0, "The maximum row count must be non-negative.")
+      .createWithDefault(1000)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
