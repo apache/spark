@@ -67,17 +67,13 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = bindReferences[Expression](projectList, child.output)
-    val (subExprsCode, resultVars, localValInputs) = if (conf.subexpressionEliminationEnabled) {
-      // subexpression elimination
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
-      val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
-        exprs.map(_.genCode(ctx))
-      }
-      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
-        subExprs.exprCodesNeedEvaluate)
+    val localValInputs = if (conf.subexpressionEliminationEnabled) {
+      ctx.subexpressionElimination(exprs).exprCodesNeedEvaluate
     } else {
-      ("", exprs.map(_.genCode(ctx)), Seq.empty)
+      Seq.empty
     }
+    val resultVars = exprs.map(_.genCode(ctx))
+    val subExprsCode = ctx.subexprFunctionsCode
 
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)

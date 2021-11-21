@@ -728,12 +728,14 @@ case class HashAggregateExec(
       val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+      val subExprs = if (conf.subexpressionEliminationEnabled) {
+        ctx.subexpressionElimination(boundUpdateExprs.flatten).states
+      } else {
+        Map.empty[ExpressionEquals, SubExprEliminationState]
+      }
+      val effectiveCodes = ctx.subexprFunctionsCode
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-        ctx.withSubExprEliminationExprs(subExprs.states) {
-          boundUpdateExprsForOneFunc.map(_.genCode(ctx))
-        }
+        boundUpdateExprsForOneFunc.map(_.genCode(ctx))
       }
 
       val aggCodeBlocks = updateExprs.indices.map { i =>
@@ -774,12 +776,14 @@ case class HashAggregateExec(
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
-          val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+          val subExprs = if (conf.subexpressionEliminationEnabled) {
+            ctx.subexpressionElimination(boundUpdateExprs.flatten).states
+          } else {
+            Map.empty[ExpressionEquals, SubExprEliminationState]
+          }
+          val effectiveCodes = ctx.subexprFunctionsCode
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
-            ctx.withSubExprEliminationExprs(subExprs.states) {
-              boundUpdateExprsForOneFunc.map(_.genCode(ctx))
-            }
+            boundUpdateExprsForOneFunc.map(_.genCode(ctx))
           }
 
           val aggCodeBlocks = fastRowEvals.zipWithIndex.map { case (fastRowEvalsForOneFunc, i) =>
