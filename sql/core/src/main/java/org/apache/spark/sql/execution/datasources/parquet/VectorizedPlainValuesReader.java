@@ -82,7 +82,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void skipBooleans(int total) {
-    int numBytesToSkip = (bitOffset + total) / 8 - 1;
+    int numBytesToSkip = (bitOffset + total - 8) >> 3;
     bitOffset = (bitOffset + total) & 7;
     if (numBytesToSkip >= 0) {
       try {
