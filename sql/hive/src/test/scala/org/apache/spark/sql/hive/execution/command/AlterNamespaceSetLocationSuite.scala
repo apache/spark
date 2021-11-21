@@ -29,7 +29,7 @@ class AlterNamespaceSetLocationSuite extends v1.AlterNamespaceSetLocationSuiteBa
   override def commandVersion: String = super[AlterNamespaceSetLocationSuiteBase].commandVersion
 
   test("Hive catalog not supported") {
-    val ns = "db1"
+    val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
       val e = intercept[AnalysisException] {

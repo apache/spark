@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 
 /**
  * This base suite contains unified tests for the `ALTER NAMESPACE ... SET LOCATION` command that
@@ -36,6 +37,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER NAMESPACE ... SET LOCATION"
 
+  protected def namespace: String
+
   protected def notFoundMsgPrefix: String
 
   test("Namespace does not exist") {
@@ -44,5 +47,28 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"ALTER DATABASE $catalog.$ns SET LOCATION 'loc'")
     }.getMessage
     assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
+  }
+
+  // Hive catalog does not support "ALTER NAMESPACE ... SET LOCATION", thus
+  // this is called from non-Hive v1 and v2 tests.
+  protected def runBasicTest(): Unit = {
+    val ns = s"$catalog.$namespace"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
+        "'test namespace' LOCATION '/tmp/loc_test_1'")
+      sql(s"ALTER NAMESPACE $ns SET LOCATION '/tmp/loc_test_2'")
+      // v1 command stores the location as URI ("file:/tmp/loc_test_2") whereas
+      // v2 command stores the location as string ("/tmp/loc_test_2").
+      assert(getLocation(ns).contains("/tmp/loc_test_2"))
+    }
+  }
+
+  protected def getLocation(namespace: String): String = {
+    val locationRow = sql(s"DESCRIBE NAMESPACE EXTENDED $namespace")
+      .toDF("key", "value")
+      .where(s"key like '${SupportsNamespaces.PROP_LOCATION.capitalize}%'")
+      .collect()
+    assert(locationRow.length == 1)
+    locationRow(0).getString(1)
   }
 }

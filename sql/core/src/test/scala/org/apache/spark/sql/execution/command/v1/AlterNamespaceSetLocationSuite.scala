@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.execution.command
 
 /**
@@ -33,14 +31,15 @@ import org.apache.spark.sql.execution.command
  */
 trait AlterNamespaceSetLocationSuiteBase extends command.AlterNamespaceSetLocationSuiteBase
     with command.TestsV1AndV2Commands {
+  override def namespace: String = "db"
   override def notFoundMsgPrefix: String = "Database"
 
-  test ("Empty location string") {
-    val ns = "db1"
+  test("Empty location string") {
+    val ns = s"$catalog.$namespace"
     withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $catalog.$ns")
+      sql(s"CREATE NAMESPACE $ns")
       val message = intercept[IllegalArgumentException] {
-        sql(s"ALTER DATABASE $catalog.$ns SET LOCATION ''")
+        sql(s"ALTER NAMESPACE $ns SET LOCATION ''")
       }.getMessage
       assert(message.contains("Can not create a Path from an empty string"))
     }
@@ -55,17 +54,7 @@ class AlterNamespaceSetLocationSuite extends AlterNamespaceSetLocationSuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetLocationSuiteBase].commandVersion
 
-  test("basic v1 test") {
-    val ns = "db1"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $catalog.$ns")
-      withTempDir { tmpDir =>
-        sql(s"ALTER NAMESPACE $catalog.$ns SET LOCATION '${tmpDir.toURI}'")
-        val sessionCatalog = spark.sessionState.catalog
-        val uriInCatalog = sessionCatalog.getDatabaseMetadata(ns).locationUri
-        assert("file" === uriInCatalog.getScheme)
-        assert(new Path(tmpDir.getPath).toUri.getPath === uriInCatalog.getPath)
-      }
-    }
+  test("basic test") {
+    runBasicTest()
   }
 }
