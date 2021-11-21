@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.ParseException
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -59,7 +59,10 @@ trait TimeZoneAwareExpression extends Expression {
   /** Returns a copy of this expression with the specified timeZoneId. */
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
-  @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
+  @transient lazy val zoneId: ZoneId = timeZoneId match {
+    case Some(x) => DateTimeUtils.getZoneId(x)
+    case None => TimeZone.getDefault.toZoneId
+  }
 
   def zoneIdForType(dataType: DataType): ZoneId = dataType match {
     case _: TimestampNTZType => java.time.ZoneOffset.UTC
