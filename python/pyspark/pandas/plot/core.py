@@ -125,7 +125,7 @@ class HistogramPlotBase(NumericPlotBase):
         data, numeric_data = NumericPlotBase.prepare_numeric_data(data)
         if is_integer(bins):
             # computes boundaries for the column
-            bins = HistogramPlotBase.get_bins(data.to_spark(), bins)
+            bins = HistogramPlotBase.get_bins(data._to_spark(), bins)
 
         return numeric_data, bins
 

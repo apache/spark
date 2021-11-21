@@ -402,6 +402,7 @@ pyspark_core = Module(
         "pyspark.tests.test_readwrite",
         "pyspark.tests.test_serializers",
         "pyspark.tests.test_shuffle",
+        "pyspark.tests.test_statcounter",
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",

@@ -792,6 +792,11 @@ class FunctionsTests(ReusedSQLTestCase):
             assert_true(shiftRightUnsigned(col("id"), 2) == shiftrightunsigned(col("id"), 2))
         ).collect()
 
+    def test_lit_day_time_interval(self):
+        td = datetime.timedelta(days=1, hours=12, milliseconds=123)
+        actual = self.spark.range(1).select(lit(td)).first()[0]
+        self.assertEqual(actual, td)
+
 
 if __name__ == "__main__":
     import unittest

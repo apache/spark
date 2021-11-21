@@ -455,6 +455,66 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+
+      var curVersion: Long = 0
+      // starting with the config "trackTotalNumberOfRows = true"
+      // this should track the number of rows correctly
+      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = true)) { db =>
+        db.load(curVersion)
+        db.put("a", "5")
+        db.put("b", "5")
+
+        assert(db.metrics.numUncommittedKeys === 2)
+        assert(db.metrics.numCommittedKeys === 0)
+
+        curVersion = db.commit()
+
+        assert(db.metrics.numUncommittedKeys === 2)
+        assert(db.metrics.numCommittedKeys === 2)
+      }
+
+      // restart with config "trackTotalNumberOfRows = false"
+      // this should reset the number of keys as -1, and keep the number as -1
+      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = false)) { db =>
+        db.load(curVersion)
+
+        assert(db.metrics.numUncommittedKeys === -1)
+        assert(db.metrics.numCommittedKeys === -1)
+
+        db.put("b", "7")
+        db.put("c", "7")
+
+        curVersion = db.commit()
+
+        assert(db.metrics.numUncommittedKeys === -1)
+        assert(db.metrics.numCommittedKeys === -1)
+      }
+
+      // restart with config "trackTotalNumberOfRows = true" again
+      // this should count the number of keys at the load phase, and continue tracking the number
+      withDB(remoteDir, conf = RocksDBConf().copy(trackTotalNumberOfRows = true)) { db =>
+        db.load(curVersion)
+
+        assert(db.metrics.numUncommittedKeys === 3)
+        assert(db.metrics.numCommittedKeys === 3)
+
+        db.put("c", "8")
+        db.put("d", "8")
+
+        assert(db.metrics.numUncommittedKeys === 4)
+        assert(db.metrics.numCommittedKeys === 3)
+
+        curVersion = db.commit()
+
+        assert(db.metrics.numUncommittedKeys === 4)
+        assert(db.metrics.numCommittedKeys === 4)
+      }
+    }
+  }
+
   def withDB[T](
       remoteDir: String,
       version: Int = 0,

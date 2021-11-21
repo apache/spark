@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,6 +30,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -579,5 +583,274 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-36286: invalid string cast to timestamp") {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
+  }
+
+  test("SPARK-36924: Cast DayTimeIntervalType to IntegralType") {
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val v1 = Literal.create(Duration.ZERO, dt)
+      checkEvaluation(cast(v1, ByteType), 0.toByte)
+      checkEvaluation(cast(v1, ShortType), 0.toShort)
+      checkEvaluation(cast(v1, IntegerType), 0)
+      checkEvaluation(cast(v1, LongType), 0L)
+
+      val num = SECONDS_PER_DAY + SECONDS_PER_HOUR + SECONDS_PER_MINUTE + 1
+      val v2 = Literal.create(Duration.ofSeconds(num), dt)
+      dt.endField match {
+        case DAY =>
+          checkEvaluation(cast(v2, ByteType), 1.toByte)
+          checkEvaluation(cast(v2, ShortType), 1.toShort)
+          checkEvaluation(cast(v2, IntegerType), 1)
+          checkEvaluation(cast(v2, LongType), 1.toLong)
+        case HOUR =>
+          checkEvaluation(cast(v2, ByteType), 25.toByte)
+          checkEvaluation(cast(v2, ShortType), 25.toShort)
+          checkEvaluation(cast(v2, IntegerType), 25)
+          checkEvaluation(cast(v2, LongType), 25L)
+        case MINUTE =>
+          checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
+            s"Casting $v2 to tinyint causes overflow")
+          checkEvaluation(cast(v2, ShortType), (MINUTES_PER_HOUR * 25 + 1).toShort)
+          checkEvaluation(cast(v2, IntegerType), (MINUTES_PER_HOUR * 25 + 1).toInt)
+          checkEvaluation(cast(v2, LongType), MINUTES_PER_HOUR * 25 + 1)
+        case SECOND =>
+          checkExceptionInExpression[ArithmeticException](cast(v2, ByteType),
+            s"Casting $v2 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v2, ShortType),
+            s"Casting $v2 to smallint causes overflow")
+          checkEvaluation(cast(v2, IntegerType), num.toInt)
+          checkEvaluation(cast(v2, LongType), num)
+      }
+
+      val v3 = Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), dt)
+      dt.endField match {
+        case DAY =>
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
+            s"Casting $v3 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
+            s"Casting $v3 to smallint causes overflow")
+          checkEvaluation(cast(v3, IntegerType), (Long.MaxValue / MICROS_PER_DAY).toInt)
+          checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_DAY)
+        case HOUR =>
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
+            s"Casting $v3 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
+            s"Casting $v3 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
+            s"Casting $v3 to int causes overflow")
+          checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_HOUR)
+        case MINUTE =>
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
+            s"Casting $v3 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
+            s"Casting $v3 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
+            s"Casting $v3 to int causes overflow")
+          checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_MINUTE)
+        case SECOND =>
+          checkExceptionInExpression[ArithmeticException](cast(v3, ByteType),
+            s"Casting $v3 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, ShortType),
+            s"Casting $v3 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v3, IntegerType),
+            s"Casting $v3 to int causes overflow")
+          checkEvaluation(cast(v3, LongType), Long.MaxValue / MICROS_PER_SECOND)
+      }
+
+      val v4 = Literal.create(Duration.of(Long.MinValue, ChronoUnit.MICROS), dt)
+      dt.endField match {
+        case DAY =>
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
+            s"Casting $v4 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
+            s"Casting $v4 to smallint causes overflow")
+          checkEvaluation(cast(v4, IntegerType), (Long.MinValue / MICROS_PER_DAY).toInt)
+          checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_DAY)
+        case HOUR =>
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
+            s"Casting $v4 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
+            s"Casting $v4 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
+            s"Casting $v4 to int causes overflow")
+          checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_HOUR)
+        case MINUTE =>
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
+            s"Casting $v4 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
+            s"Casting $v4 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
+            s"Casting $v4 to int causes overflow")
+          checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_MINUTE)
+        case SECOND =>
+          checkExceptionInExpression[ArithmeticException](cast(v4, ByteType),
+            s"Casting $v4 to tinyint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, ShortType),
+            s"Casting $v4 to smallint causes overflow")
+          checkExceptionInExpression[ArithmeticException](cast(v4, IntegerType),
+            s"Casting $v4 to int causes overflow")
+          checkEvaluation(cast(v4, LongType), Long.MinValue / MICROS_PER_SECOND)
+      }
+    }
+  }
+
+  test("SPARK-36924: Cast IntegralType to DayTimeIntervalType") {
+    Seq(
+      (0, ByteType, 0L, 0L, 0L, 0L),
+      (0, ShortType, 0L, 0L, 0L, 0L),
+      (0, IntegerType, 0L, 0L, 0L, 0L),
+      (0, LongType, 0L, 0L, 0L, 0L),
+      (1, ByteType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
+      (1, ShortType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
+      (1, IntegerType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
+      (1, LongType, MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND),
+      (Byte.MaxValue, ByteType, Byte.MaxValue * MICROS_PER_DAY, Byte.MaxValue * MICROS_PER_HOUR,
+        Byte.MaxValue * MICROS_PER_MINUTE, Byte.MaxValue * MICROS_PER_SECOND),
+      (Byte.MinValue, ByteType, Byte.MinValue * MICROS_PER_DAY, Byte.MinValue * MICROS_PER_HOUR,
+        Byte.MinValue * MICROS_PER_MINUTE, Byte.MinValue * MICROS_PER_SECOND),
+      (Short.MaxValue, ShortType, Short.MaxValue * MICROS_PER_DAY, Short.MaxValue * MICROS_PER_HOUR,
+        Short.MaxValue * MICROS_PER_MINUTE, Short.MaxValue * MICROS_PER_SECOND),
+      (Short.MinValue, ShortType, Short.MinValue * MICROS_PER_DAY, Short.MinValue * MICROS_PER_HOUR,
+        Short.MinValue * MICROS_PER_MINUTE, Short.MinValue * MICROS_PER_SECOND)
+    ).foreach { case (v, dt, r1, r2, r3, r4) =>
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(DAY)), r1)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(HOUR)), r2)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(MINUTE)), r3)
+      checkEvaluation(cast(
+        cast(v, dt), DayTimeIntervalType(SECOND)), r4)
+    }
+
+    Seq(
+      (Int.MaxValue,
+        Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_HOUR),
+        Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_MINUTE),
+        Math.multiplyExact(Int.MaxValue.toLong, MICROS_PER_SECOND)),
+      (Int.MinValue,
+        Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_HOUR),
+        Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_MINUTE),
+        Math.multiplyExact(Int.MinValue.toLong, MICROS_PER_SECOND))
+    ).foreach { case (v, r1, r2, r3) =>
+      checkEvaluation(cast(v, DayTimeIntervalType(HOUR)), r1)
+      checkEvaluation(cast(v, DayTimeIntervalType(MINUTE)), r2)
+      checkEvaluation(cast(v, DayTimeIntervalType(SECOND)), r3)
+    }
+
+    Seq(
+      (Int.MaxValue, DayTimeIntervalType(DAY)),
+      (Int.MinValue, DayTimeIntervalType(DAY)),
+      (Long.MaxValue, DayTimeIntervalType(DAY)),
+      (Long.MinValue, DayTimeIntervalType(DAY)),
+      (Long.MaxValue, DayTimeIntervalType(HOUR)),
+      (Long.MinValue, DayTimeIntervalType(HOUR)),
+      (Long.MaxValue, DayTimeIntervalType(MINUTE)),
+      (Long.MinValue, DayTimeIntervalType(MINUTE)),
+      (Long.MaxValue, DayTimeIntervalType(SECOND)),
+      (Long.MinValue, DayTimeIntervalType(SECOND))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          s"Casting $v to ${toType.catalogString} causes overflow")
+    }
+  }
+
+  test("SPARK-36924: Cast YearMonthIntervalType to IntegralType") {
+    Seq(
+      (Period.ofYears(0), YearMonthIntervalType(YEAR), 0.toByte, 0.toShort, 0, 0L),
+      (Period.ofYears(1), YearMonthIntervalType(YEAR), 1.toByte, 1.toShort, 1, 1L),
+      (Period.ofYears(0), YearMonthIntervalType(YEAR, MONTH), 0.toByte, 0.toShort, 0, 0L),
+      (Period.ofMonths(1), YearMonthIntervalType(YEAR, MONTH), 1.toByte, 1.toShort, 1, 1L),
+      (Period.ofMonths(0), YearMonthIntervalType(MONTH), 0.toByte, 0.toShort, 0, 0L),
+      (Period.ofMonths(1), YearMonthIntervalType(MONTH), 1.toByte, 1.toShort, 1, 1L)
+    ).foreach { case (v, dt, r1, r2, r3, r4) =>
+      val value = Literal.create(v, dt)
+      checkEvaluation(cast(value, ByteType), r1)
+      checkEvaluation(cast(value, ShortType), r2)
+      checkEvaluation(cast(value, IntegerType), r3)
+      checkEvaluation(cast(value, LongType), r4)
+    }
+
+    Seq(
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), ByteType),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), ShortType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), ByteType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), ShortType),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH), ByteType),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH), ShortType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH), ByteType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH), ShortType),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ByteType),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), ShortType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ByteType),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), ShortType)
+    ).foreach {
+      case (v, dt, toType) =>
+        val value = Literal.create(v, dt)
+        checkExceptionInExpression[ArithmeticException](cast(value, toType),
+          s"Casting $value to ${toType.catalogString} causes overflow")
+    }
+
+    Seq(
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), IntegerType, Int.MaxValue / 12),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR), LongType, Int.MaxValue /12L),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), IntegerType, Int.MinValue / 12),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR), LongType, Int.MinValue /12L),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MaxValue),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MaxValue.toLong),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        IntegerType, Int.MinValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(YEAR, MONTH),
+        LongType, Int.MinValue.toLong),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), IntegerType, Int.MaxValue),
+      (Period.ofMonths(Int.MaxValue), YearMonthIntervalType(MONTH), LongType, Int.MaxValue.toLong),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), IntegerType, Int.MinValue),
+      (Period.ofMonths(Int.MinValue), YearMonthIntervalType(MONTH), LongType, Int.MinValue.toLong)
+    ).foreach {
+      case (v, dt, toType, expect) =>
+        val value = Literal.create(v, dt)
+        checkEvaluation(cast(value, toType), expect)
+    }
+  }
+
+  test("SPARK-36924: Cast IntegralType to YearMonthIntervalType") {
+    Seq(
+      (0, 0, 0, ByteType),
+      (0, 0, 0, ShortType),
+      (0, 0, 0, IntegerType),
+      (0, 0, 0, LongType),
+      (1, 12, 1, ByteType),
+      (Byte.MaxValue, Byte.MaxValue * 12, Byte.MaxValue.toInt, ByteType),
+      (Byte.MinValue, Byte.MinValue * 12, Byte.MinValue.toInt, ByteType),
+      (1, 12, 1, ShortType),
+      (Short.MaxValue, Short.MaxValue * 12, Short.MaxValue.toInt, ShortType),
+      (Short.MinValue, Short.MinValue * 12, Short.MinValue.toInt, ShortType),
+      (1, 12, 1, IntegerType),
+      (1, 12, 1, LongType)
+    ).foreach { case (v, r1, r2, dt) =>
+      checkEvaluation(cast(
+        cast(v, dt), YearMonthIntervalType(YEAR)), r1)
+      checkEvaluation(cast(
+        cast(v, dt), YearMonthIntervalType(MONTH)), r2)
+    }
+
+    Seq(Int.MaxValue, Int.MinValue).foreach { v =>
+      checkEvaluation(cast(v, YearMonthIntervalType(MONTH)), v)
+    }
+
+    Seq(
+      (Int.MaxValue, YearMonthIntervalType(YEAR)),
+      (Int.MinValue, YearMonthIntervalType(YEAR)),
+      (Long.MaxValue, YearMonthIntervalType(YEAR)),
+      (Long.MinValue, YearMonthIntervalType(YEAR)),
+      (Long.MaxValue, YearMonthIntervalType(MONTH)),
+      (Long.MinValue, YearMonthIntervalType(MONTH))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          s"Casting $v to ${toType.catalogString} causes overflow")
+    }
   }
 }

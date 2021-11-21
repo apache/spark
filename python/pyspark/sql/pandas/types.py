@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     DateType,
     TimestampType,
     TimestampNTZType,
+    DayTimeIntervalType,
     ArrayType,
     MapType,
     StructType,
@@ -81,6 +82,8 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.timestamp("us", tz="UTC")
     elif type(dt) == TimestampNTZType:
         arrow_type = pa.timestamp("us", tz=None)
+    elif type(dt) == DayTimeIntervalType:
+        arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
         if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
@@ -153,6 +156,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
         spark_type = TimestampType()
+    elif types.is_duration(at):
+        spark_type = DayTimeIntervalType()
     elif types.is_list(at):
         if types.is_timestamp(at.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))

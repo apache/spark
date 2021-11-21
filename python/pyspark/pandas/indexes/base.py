@@ -493,7 +493,7 @@ class Index(IndexOpsMixin):
             "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas Index is expected to be small."
         )
-        return self._to_internal_pandas().copy()
+        return self._to_pandas()
 
     def _to_pandas(self) -> pd.Index:
         """
@@ -2429,24 +2429,24 @@ class Index(IndexOpsMixin):
             return self._psdf.head(0).index.rename(None)
         elif isinstance(other, Index):
             other_idx = other
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = self.name == other_idx.name
         elif isinstance(other, Series):
             other_idx = Index(other)
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         elif is_list_like(other):
             other_idx = Index(other)
             if isinstance(other_idx, MultiIndex):
                 return other_idx.to_frame().head(0).index
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         else:
             raise TypeError("Input must be Index or array-like")
 
         index_fields = self._index_fields_for_union_like(other_idx, func_name="intersection")
 
-        spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME).to_spark()
+        spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME)._to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names
@@ -2517,9 +2517,9 @@ class Index(IndexOpsMixin):
             loc = 0 if loc < 0 else loc
 
         index_name = self._internal.index_spark_column_names[0]
-        sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
-        sdf_middle = Index([item], dtype=self.dtype).to_frame(name=index_name).to_spark()
-        sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
+        sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
+        sdf_middle = Index([item], dtype=self.dtype).to_frame(name=index_name)._to_spark()
+        sdf_after = self.to_frame(name=index_name)[loc:]._to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
         internal = InternalFrame(
