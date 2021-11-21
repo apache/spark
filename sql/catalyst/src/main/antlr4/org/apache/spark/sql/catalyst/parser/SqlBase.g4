@@ -82,14 +82,12 @@ grammar SqlBase;
    *
    * Returns false if the next character is not -1.
    */
-  public boolean isEnd() {
+  public void end() {
     int nextChar = _input.LA(1);
     if (nextChar == -1) {
       int pos = _input.index();
       String str = _input.getText(new Interval(0, pos));
       throw new RuntimeException("Unclosed bracketed comment: " + str + ", position: " + pos);
-    } else {
-      return false;
     }
   }
 }
@@ -1945,7 +1943,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {isEnd();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {end();} EOF) -> channel(HIDDEN)
     ;
 
 WS
