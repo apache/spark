@@ -392,7 +392,7 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow. You can set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -572,7 +572,7 @@ select bigint('9223372036854775800') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. You can use 'try_divide' or set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -581,7 +581,7 @@ select bigint('-9223372036854775808') / smallint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. You can use 'try_divide' or set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -590,7 +590,7 @@ select smallint('100') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. You can use 'try_divide' or set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -607,7 +607,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789 to int causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting 4567890123456789 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -624,7 +624,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789 to smallint causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting 4567890123456789 to smallint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -661,7 +661,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 9.223372036854776E20 to long causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting 9.223372036854776E20 to long causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -733,7 +733,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9223372036854775808 to int causes overflow. You can use 'try_cast' or set spark.sql.ansi.enabled to false to bypass this error.
+Casting -9223372036854775808 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -742,7 +742,7 @@ SELECT bigint((-9223372036854775808)) * bigint((-1))
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow. You can set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -767,7 +767,7 @@ SELECT bigint((-9223372036854775808)) * int((-1))
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow. You can set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -792,7 +792,7 @@ SELECT bigint((-9223372036854775808)) * smallint((-1))
 struct<>
 -- !query output
 java.lang.ArithmeticException
-long overflow. You can set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query

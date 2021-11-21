@@ -41,6 +41,7 @@ class HivePartitionFilteringSuite(version: String)
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
+  private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key
 
   // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
   private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
@@ -61,6 +62,9 @@ class HivePartitionFilteringSuite(version: String)
     compressed = false,
     properties = Map.empty
   )
+
+  // Avoid repeatedly constructing multiple hive instances that do not use direct sql
+  private var clientWithoutDirectSql: HiveClient = _
 
   private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
@@ -111,12 +115,13 @@ class HivePartitionFilteringSuite(version: String)
   override def beforeAll(): Unit = {
     super.beforeAll()
     client = init(true)
+    clientWithoutDirectSql = init(false)
   }
 
   test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true") {
-      val client = init(false)
-      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+      val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
+        clientWithoutDirectSql.getTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == testPartitionCount)
@@ -125,9 +130,9 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
     withSQLConf(fallbackKey -> "false") {
-      val client = init(false)
       val e = intercept[RuntimeException](
-        client.getPartitionsByFilter(client.getTable("default", "test"),
+        clientWithoutDirectSql.getPartitionsByFilter(
+          clientWithoutDirectSql.getTable("default", "test"),
           Seq(attr("ds") === 20170101)))
       assert(e.getMessage.contains("Caught Hive MetaException"))
     }
@@ -575,6 +580,60 @@ class HivePartitionFilteringSuite(version: String)
       chunkValue,
       dateValue,
       dateStrValue)
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: substr(chunk,0,1)=a") {
+    Seq("true" -> Seq("aa", "ab"), "false" -> chunkValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          Substring(attr("chunk"), Literal(0), Literal(1)) === "a",
+          dsValue,
+          hValue,
+          t._2,
+          dateValue,
+          dateStrValue)
+      }
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: year(d)=2019") {
+    Seq("true" -> Seq("2019-01-01", "2019-01-02", "2019-01-03"),
+      "false" -> dateValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          Year(attr("d")) === 2019,
+          dsValue,
+          hValue,
+          chunkValue,
+          t._2,
+          dateStrValue)
+      }
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
+    Seq("true" -> Seq("2020-01-01"), "false" -> dateStrValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          attr("datestr") === Concat(Seq("2020-", "01-", "01")),
+          dsValue,
+          hValue,
+          chunkValue,
+          dateValue,
+          t._2)
+      }
+    }
+  }
+
+  test(s"SPARK-35437: getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
+    withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
+      val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
+        clientWithoutDirectSql.getTable("default", "test"),
+        Seq(attr("ds") === 20170101))
+
+      assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
+        dateValue.size * dateStrValue.size)
+    }
   }
 
   private def testMetastorePartitionFiltering(

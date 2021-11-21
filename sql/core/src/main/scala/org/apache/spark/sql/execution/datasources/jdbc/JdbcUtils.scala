@@ -658,6 +658,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       isolationLevel: Int,
       options: JDBCOptions): Unit = {
+
+    if (iterator.isEmpty) {
+      return
+    }
+
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = getConnection()
@@ -1018,7 +1023,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def createIndex(
       conn: Connection,
       indexName: String,
-      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
@@ -1026,7 +1030,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options,
-      dialect.createIndex(indexName, indexType, tableName, columns, columnsProperties, properties))
+      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
   }
 
   /**

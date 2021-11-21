@@ -171,12 +171,14 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
     DataFrame.limit
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
+    DataFrame.mapInArrow
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
@@ -301,6 +303,7 @@ Data Types
     StructType
     TimestampNTZType
     TimestampType
+    DayTimeIntervalType
 
 
 Observation

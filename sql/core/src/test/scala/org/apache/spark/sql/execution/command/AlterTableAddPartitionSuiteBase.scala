@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import java.time.{Duration, Period}
+
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.internal.SQLConf
 
@@ -187,6 +189,42 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
       sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
       checkPartitions(t, Map("part" ->"2020-01-01"))
+    }
+  }
+
+  test("SPARK-37261: Add ANSI intervals as partition values") {
+    assume(!catalogVersion.contains("Hive")) // Hive catalog doesn't support the interval types
+
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(
+        s"""CREATE TABLE $t (
+           | ym INTERVAL YEAR,
+           | dt INTERVAL DAY,
+           | data STRING) $defaultUsing
+           |PARTITIONED BY (ym, dt)""".stripMargin)
+      sql(
+        s"""ALTER TABLE $t ADD PARTITION (
+           | ym = INTERVAL '100' YEAR,
+           | dt = INTERVAL '10' DAY
+           |) LOCATION 'loc'""".stripMargin)
+
+      checkPartitions(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"))
+      checkLocation(t, Map("ym" -> "INTERVAL '100' YEAR", "dt" -> "INTERVAL '10' DAY"), "loc")
+
+      sql(
+        s"""INSERT INTO $t PARTITION (
+           | ym = INTERVAL '100' YEAR,
+           | dt = INTERVAL '10' DAY) SELECT 'aaa'""".stripMargin)
+      sql(
+        s"""INSERT INTO $t PARTITION (
+           | ym = INTERVAL '1' YEAR,
+           | dt = INTERVAL '-1' DAY) SELECT 'bbb'""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT ym, dt, data FROM $t"),
+        Seq(
+          Row(Period.ofYears(100), Duration.ofDays(10), "aaa"),
+          Row(Period.ofYears(1), Duration.ofDays(-1), "bbb")))
     }
   }
 }

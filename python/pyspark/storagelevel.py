@@ -57,7 +57,12 @@ class StorageLevel(object):
 
     def __repr__(self) -> str:
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
-            self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
+            self.useDisk,
+            self.useMemory,
+            self.useOffHeap,
+            self.deserialized,
+            self.replication,
+        )
 
     def __str__(self) -> str:
         result = ""
@@ -67,6 +72,7 @@ class StorageLevel(object):
         result += "Deserialized " if self.deserialized else "Serialized "
         result += "%sx Replicated" % self.replication
         return result
+
 
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)

@@ -23,20 +23,19 @@ from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
 
 
-__all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
+__all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
 
 T = TypeVar("T")
 
 
 def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
-    """ Decode the unicode as UTF-8 """
+    """Decode the unicode as UTF-8"""
     if s is None:
         return None
-    return s.decode('utf-8')
+    return s.decode("utf-8")
 
 
 class KinesisUtils(object):
-
     @staticmethod
     @overload
     def createStream(
@@ -90,8 +89,7 @@ class KinesisUtils(object):
         awsAccessKeyId: Optional[str] = None,
         awsSecretKey: Optional[str] = None,
         decoder: Union[
-            Callable[[Optional[bytes]], T],
-            Callable[[Optional[bytes]], Optional[str]]
+            Callable[[Optional[bytes]], T], Callable[[Optional[bytes]], Optional[str]]
         ] = utf8_decoder,
         stsAssumeRoleArn: Optional[str] = None,
         stsSessionName: Optional[str] = None,
@@ -160,8 +158,7 @@ class KinesisUtils(object):
 
         try:
             helper = (
-                ssc._jvm.org.apache.spark.streaming.kinesis  # type: ignore[attr-defined]
-                .KinesisUtilsPythonHelper()
+                ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()  # type: ignore[attr-defined]
             )
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
@@ -169,7 +166,8 @@ class KinesisUtils(object):
                     "Streaming's Kinesis",
                     "streaming-kinesis-asl",
                     "streaming-kinesis-asl-assembly",
-                    ssc.sparkContext.version)
+                    ssc.sparkContext.version,
+                )
             raise
         jstream = helper.createStream(
             ssc._jssc,  # type: ignore[attr-defined]
@@ -184,7 +182,7 @@ class KinesisUtils(object):
             awsSecretKey,
             stsAssumeRoleArn,
             stsSessionName,
-            stsExternalId
+            stsExternalId,
         )
         stream: DStream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))

@@ -27,9 +27,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status.KVUtils
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
+@ExtendedLevelDBTest
 class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)

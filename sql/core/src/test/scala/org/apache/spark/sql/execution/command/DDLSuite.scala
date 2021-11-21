@@ -1718,8 +1718,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SHOW COLUMNS IN tbl FROM a.b.c")
       }.getMessage
-      assert(message.contains(
-        "Table or view not found: a.b.c.tbl"))
+      assert(message.contains("requires a single-part namespace"))
     }
   }
 

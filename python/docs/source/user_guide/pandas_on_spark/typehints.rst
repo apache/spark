@@ -91,7 +91,7 @@ plans to move gradually towards using pandas instances only as the stability bec
 Type Hinting with Names
 -----------------------
 
-This apporach is to overcome the limitations in the existing type
+This approach is to overcome the limitations in the existing type
 hinting especially for DataFrame. When you use a DataFrame as the return type hint, for example,
 ``DataFrame[int, int]``, there is no way to specify the names of each Series. In the old way, pandas API on Spark just generates
 the column names as ``c#`` and this easily leads users to lose or forgot the Series mappings. See the example below:

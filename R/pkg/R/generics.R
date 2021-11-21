@@ -1158,6 +1158,10 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @name NULL
 setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("make_date", function(x, y, z) { standardGeneric("make_date") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("map_concat", function(x, ...) { standardGeneric("map_concat") })

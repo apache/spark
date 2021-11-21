@@ -224,7 +224,8 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
-    **options: Any
+    encoding: Optional[str] = None,
+    **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
 
@@ -276,6 +277,8 @@ def read_csv(
         One-character string used to escape delimiter
     comment: str, optional
         Indicates the line should not be parsed.
+    encoding: str, optional
+        Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
 
@@ -291,6 +294,9 @@ def read_csv(
     --------
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
+    # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
+    encoding_mapping = {"latin-1": "iso-8859-1"}
+
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -327,6 +333,9 @@ def read_csv(
             reader.option("comment", comment)
 
         reader.options(**options)
+
+        if encoding is not None:
+            reader.option("encoding", encoding_mapping.get(encoding, encoding))
 
         column_labels: Dict[Any, str]
         if isinstance(names, str):
@@ -515,7 +524,7 @@ def read_delta(
     version: Optional[str] = None,
     timestamp: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read a Delta Lake table on some file system and return a DataFrame.
@@ -659,7 +668,7 @@ def read_spark_io(
     format: Optional[str] = None,
     schema: Union[str, "StructType"] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a DataFrame from a Spark data source.
 
@@ -743,7 +752,7 @@ def read_parquet(
     columns: Optional[List[str]] = None,
     index_col: Optional[List[str]] = None,
     pandas_metadata: bool = False,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a parquet object from the file path, returning a DataFrame.
 
@@ -904,7 +913,7 @@ def read_excel(
     skipfooter: int = 0,
     convert_float: bool = True,
     mangle_dupe_cols: bool = True,
-    **kwds: Any
+    **kwds: Any,
 ) -> Union[DataFrame, Series, OrderedDict]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
@@ -1134,7 +1143,7 @@ def read_excel(
             skipfooter=skipfooter,
             convert_float=convert_float,
             mangle_dupe_cols=mangle_dupe_cols,
-            **kwds
+            **kwds,
         )
 
     if isinstance(io, str):
@@ -1355,7 +1364,7 @@ def read_sql_table(
     schema: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL database table into a DataFrame.
@@ -1480,7 +1489,7 @@ def read_sql(
     con: str,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL query or database table into a DataFrame.
@@ -1727,7 +1736,7 @@ def date_range(
     normalize: bool = False,
     name: Optional[str] = None,
     closed: Optional[str] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DatetimeIndex:
     """
     Return a fixed frequency DatetimeIndex.
@@ -1875,7 +1884,7 @@ def date_range(
                 normalize=normalize,
                 name=name,
                 closed=closed,
-                **kwargs
+                **kwargs,
             )
         ),
     )
@@ -3186,7 +3195,7 @@ def merge_asof(
                 for col in sdf.columns
                 if col not in HIDDEN_COLUMNS
             ],
-            *HIDDEN_COLUMNS
+            *HIDDEN_COLUMNS,
         )
         return internal.copy(
             spark_frame=sdf,
@@ -3458,7 +3467,7 @@ def read_orc(
     path: str,
     columns: Optional[List[str]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> "DataFrame":
     """
     Load an ORC object from the file path, returning a DataFrame.

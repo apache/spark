@@ -106,9 +106,14 @@ object QueryExecutionErrors {
         decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key))
   }
 
+  def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
+    new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+  }
+
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString))
+      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -215,7 +220,7 @@ object QueryExecutionErrors {
   }
 
   def overflowInIntegralDivideError(): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", Some("try_divide"))
+    arithmeticOverflowError("Overflow in integral divide", "try_divide")
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
@@ -430,11 +435,10 @@ object QueryExecutionErrors {
       s"to false to bypass this error.")
   }
 
-  def arithmeticOverflowError(
-      message: String, hint: Option[String] = None): ArithmeticException = {
-    new ArithmeticException(s"$message. You can ${hint.map(x => s"use '$x' or ").getOrElse("")}" +
-      s"set ${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) " +
-      "to bypass this error.")
+  def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
+    val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
+    new ArithmeticException(s"$message.$alternative If necessary set " +
+      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
@@ -1005,8 +1009,9 @@ object QueryExecutionErrors {
       e)
   }
 
-  def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
-    new DateTimeException(s"Cannot cast $s to $to.")
+  def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
+    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1134,7 +1139,9 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
-    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+    new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
+      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      "to false to bypass this error.")
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
@@ -1882,4 +1889,9 @@ object QueryExecutionErrors {
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
     new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
   }
+
+  def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
+    new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+  }
 }
+

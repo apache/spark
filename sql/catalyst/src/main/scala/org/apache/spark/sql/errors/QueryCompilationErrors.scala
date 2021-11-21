@@ -530,10 +530,6 @@ object QueryCompilationErrors {
       "SHOW VIEWS, only SessionCatalog supports this command.")
   }
 
-  def unsupportedFunctionNameError(quoted: String): Throwable = {
-    new AnalysisException(s"Unsupported function name '$quoted'")
-  }
-
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
@@ -861,9 +857,9 @@ object QueryCompilationErrors {
     new TableAlreadyExistsException(ident)
   }
 
-  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
-    new NoSuchTableException(
-      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -2369,5 +2365,14 @@ object QueryCompilationErrors {
 
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
     new AnalysisException(errorMessage)
+  }
+
+  def invalidViewText(viewText: String, tableName: String): Throwable = {
+    new AnalysisException(
+      s"Invalid view text: $viewText. The view $tableName may have been tampered with")
+  }
+
+  def invalidTimeTravelSpecError(): Throwable = {
+    new AnalysisException("Cannot specify both version and timestamp when scanning the table.")
   }
 }
