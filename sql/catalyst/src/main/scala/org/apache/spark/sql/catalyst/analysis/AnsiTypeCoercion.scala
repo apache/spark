@@ -147,27 +147,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  // find the closet convertible data type, which can be implicit cast to all other
-  // convertible types.
-  private def findClosestDataType(types: Seq[DataType]): Option[DataType] = {
-    if (types.isEmpty) {
-      return None
-    }
-    var result = types.head
-    types.tail.foreach { input =>
-      val widerType = findWiderTypeForTwo(result, input)
-      if (widerType.isEmpty) {
-        return None
-      } else if (widerType.contains(DoubleType) && result == FloatType) {
-        result = input
-      } else if (widerType.contains(result)) {
-        result = input
-      }
-    }
-
-    Some(result)
-  }
-
   /**
    * In Ansi mode, the implicit cast is only allow when `expectedType` is in the type precedent
    * list of `inType`.
