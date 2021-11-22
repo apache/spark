@@ -172,19 +172,29 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            if col in ["float", "float_w_nan"]:
+            if col == "float":
                 self.assert_eq(pser ** pser, psser ** psser)
                 self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
                 self.assert_eq(pser ** True, psser ** True)
                 self.assert_eq(pser ** False, psser ** False)
-                self.assert_eq(pser ** 1, psser ** 1)
-                self.assert_eq(pser ** 0, psser ** 0)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
                     self.assert_eq(pdf["float"] ** pdf[n_col], psdf["float"] ** psdf[n_col])
                 else:
                     self.assertRaises(TypeError, lambda: psser ** psdf[n_col])
+
+    # TODO(SPARK-36031): Merge test_pow_with_nan into test_pow
+    def test_pow_with_float_nan(self):
+        for col in self.numeric_w_nan_df_cols:
+            if col == "float_w_nan":
+                pser, psser = self.numeric_w_nan_pdf[col], self.numeric_w_nan_psdf[col]
+                self.assert_eq(pser ** pser, psser ** psser)
+                self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
+                self.assert_eq(pser ** True, psser ** True)
+                self.assert_eq(pser ** False, psser ** False)
+                self.assert_eq(pser ** 1, psser ** 1)
+                self.assert_eq(pser ** 0, psser ** 0)
 
     def test_radd(self):
         pdf, psdf = self.pdf, self.psdf
@@ -334,36 +344,40 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
+        pdf, psdf = self.numeric_w_nan_pdf, self.numeric_w_nan_psdf
+        for col in self.numeric_w_nan_df_cols:
             self.assert_eq(pdf[col].isnull(), psdf[col].isnull())
 
     def test_astype(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-
-            for int_type in [int, np.int32, np.int16, np.int8]:
-                if not pser.hasnans:
-                    self.assert_eq(pser.astype(int_type), psser.astype(int_type))
-                else:
-                    self.assertRaisesRegex(
-                        ValueError,
-                        "Cannot convert %s with missing "
-                        "values to integer" % psser._dtype_op.pretty_name,
-                        lambda: psser.astype(int_type),
-                    )
-
-            # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
-            if not pser.hasnans:
-                self.assert_eq(pser.astype(bool), psser.astype(bool))
-
+            self.assert_eq(pser.astype(int), psser.astype(int))
             self.assert_eq(pser.astype(float), psser.astype(float))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+            self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+            self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+            self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
             self.assert_eq(pser.astype(str), psser.astype(str))
+            self.assert_eq(pser.astype(bool), psser.astype(bool))
             self.assert_eq(pser.astype("category"), psser.astype("category"))
             cat_type = CategoricalDtype(categories=[2, 1, 3])
             self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+        self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert fractions with missing values to integer",
+            lambda: self.float_withnan_psser.astype(int),
+        )
+        self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert fractions with missing values to integer",
+            lambda: self.float_withnan_psser.astype(np.int32),
+        )
+        self.assert_eq(self.float_withnan_psser.astype(str), self.float_withnan_psser.astype(str))
+        self.assert_eq(self.float_withnan_psser.astype(bool), self.float_withnan_psser.astype(bool))
+        self.assert_eq(
+            self.float_withnan_psser.astype("category"), self.float_withnan_psser.astype("category")
+        )
         if extension_object_dtypes_available and extension_float_dtypes_available:
             pser = pd.Series(pd.Categorical([1.0, 2.0, 3.0]), dtype=pd.Float64Dtype())
             psser = ps.from_pandas(pser)
