@@ -65,7 +65,7 @@ MultilabelClassificationEvaluatorMetricType = Union[
     Literal["microRecall"],
     Literal["microF1Measure"],
 ]
-ClusteringEvaluatorMetricType = Union[Literal["silhouette"]]
+ClusteringEvaluatorMetricType = Literal["silhouette"]
 RankingEvaluatorMetricType = Union[
     Literal["meanAveragePrecision"],
     Literal["meanAveragePrecisionAtK"],
