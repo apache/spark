@@ -56,6 +56,7 @@ sealed trait TimestampFormatter extends Serializable {
    * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
    *
    * @param s - string with timestamp to parse
+   * @param ignoreTimeZone - indicates non-strict parsing, allows to ignore time zone components
    * @return microseconds since epoch.
    * @throws ParseException can be thrown by legacy parser
    * @throws DateTimeParseException can be thrown by new parser
@@ -67,10 +68,19 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
   @throws(classOf[IllegalStateException])
-  def parseWithoutTimeZone(s: String): Long =
+  def parseWithoutTimeZone(s: String, ignoreTimeZone: Boolean): Long =
     throw new IllegalStateException(
-      s"The method `parseWithoutTimeZone(s: String)` should be implemented in the formatter " +
-        "of timestamp without time zone")
+      s"The method `parseWithoutTimeZone(s: String, ignoreTimeZone: Boolean)` should be " +
+        "implemented in the formatter of timestamp without time zone")
+
+  /**
+   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
+   * Zone-id and zone-offset components are ignored.
+   */
+  final def parseWithoutTimeZone(s: String): Long =
+    // This is implemented to adhere to the original behaviour of `parseWithoutTimeZone` where we
+    // did not fail if timestamp contained zone-id or zone-offset component and instead ignored it.
+    parseWithoutTimeZone(s, true)
 
   def format(us: Long): String
   def format(ts: Timestamp): String
@@ -119,11 +129,10 @@ class Iso8601TimestampFormatter(
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
-  override def parseWithoutTimeZone(s: String): Long = {
+  override def parseWithoutTimeZone(s: String, ignoreTimeZone: Boolean): Long = {
     try {
       val parsed = formatter.parse(s)
-      val parsedZoneId = parsed.query(TemporalQueries.zone())
-      if (parsedZoneId != null) {
+      if (!ignoreTimeZone && parsed.query(TemporalQueries.zone()) != null) {
         throw QueryExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
       }
       val localDate = toLocalDate(parsed)
@@ -191,15 +200,13 @@ class DefaultTimestampFormatter(
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
-  override def parseWithoutTimeZone(s: String): Long = {
+  override def parseWithoutTimeZone(s: String, ignoreTimeZone: Boolean): Long = {
     try {
       val utf8Value = UTF8String.fromString(s)
-      val (_, zoneIdOpt, _) = DateTimeUtils.parseTimestampString(utf8Value)
-      if (zoneIdOpt.isDefined) {
+      DateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, ignoreTimeZone).getOrElse {
         throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
           TimestampFormatter.defaultPattern(), s, TimestampNTZType)
       }
-      DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utf8Value)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 }

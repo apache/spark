@@ -1125,15 +1125,14 @@ abstract class CSVSuite
         .coalesce(1)
         .write.text(path)
 
-      val res = spark.read
-        .format("csv")
+      val res = spark.read.format("csv")
         .option("inferSchema", "true")
         .option("header", "true")
         .load(path)
 
       if (spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY.key) == "legacy") {
-        // Timestamps without timezone are parsed as strings, so the col0 type would be StringType
-        // which is similar to reading without schema inference.
+        // Timestamps without timezone are parsed as strings, so the col0 type would be
+        // StringType which is similar to reading without schema inference.
         val exp = spark.read.format("csv").option("header", "true").load(path)
         checkAnswer(res, exp)
       } else {
@@ -1161,17 +1160,23 @@ abstract class CSVSuite
         .coalesce(1)
         .write.text(path)
 
-      val res = spark.read.format("csv").schema("col0 TIMESTAMP_NTZ").load(path)
+      for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
+        val reader = spark.read.format("csv").schema("col0 TIMESTAMP_NTZ")
+        val res = timestampNTZFormat match {
+          case Some(format) => reader.option("timestampNTZFormat", format).load(path)
+          case None => reader.load(path)
+        }
 
-      checkAnswer(
-        res,
-        Seq(
-          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
-          Row(null),
-          Row(null),
-          Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+        checkAnswer(
+          res,
+          Seq(
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
+            Row(null),
+            Row(null),
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+          )
         )
-      )
+      }
     }
   }
 
