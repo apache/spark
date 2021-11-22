@@ -896,7 +896,7 @@ case class ShowTablePropertiesCommand(
           }
         case None =>
           catalogTable.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
-            .map(p => Row(p._1, p._2)).toSeq
+            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2)).toSeq
       }
     }
   }
