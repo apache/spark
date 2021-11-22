@@ -3481,13 +3481,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
+        val tableProperties = TableProperties(properties, provider, options, location, comment,
+          serdeInfo, external)
         val schema = StructType(columns ++ partCols)
         CreateV2Table(
           UnresolvedDBObjectName(
             table,
             isNamespace = false),
-          schema, partitioning, bucketSpec, properties, options, serdeInfo, location, comment,
-          provider, external, ignoreIfExists = ifNotExists)
+          schema, partitioning, bucketSpec, tableProperties, ignoreIfExists = ifNotExists)
     }
   }
 

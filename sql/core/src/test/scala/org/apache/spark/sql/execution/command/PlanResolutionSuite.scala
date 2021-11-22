@@ -34,8 +34,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.convertTableProperties
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Identifier, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -480,7 +479,6 @@ class PlanResolutionSuite extends AnalysisTest {
       "location" -> "s3://bucket/path/to/data",
       "comment" -> "table comment",
       "other" -> "20")
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util.convertTableProperties
 
     parseAndResolve(sql) match {
       case create: CreateV2Table =>
@@ -492,10 +490,13 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        val props = convertTableProperties(
-          create.properties, create.options, create.serdeInfo, create.location, create.comment,
-          create.provider, create.external)
-        assert(props == expectedProperties)
+
+        val properties = CatalogV2Util.convertTableProperties(
+          create.tableProperties.properties, create.tableProperties.options,
+          create.tableProperties.serde, create.tableProperties.location,
+          create.tableProperties.comment, create.tableProperties.provider,
+          create.tableProperties.external)
+        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -536,10 +537,12 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        val props = convertTableProperties(
-          create.properties, create.options, create.serdeInfo, create.location, create.comment,
-          create.provider, create.external)
-        assert(props == expectedProperties)
+        val properties = CatalogV2Util.convertTableProperties(
+          create.tableProperties.properties, create.tableProperties.options,
+          create.tableProperties.serde, create.tableProperties.location,
+          create.tableProperties.comment, create.tableProperties.provider,
+          create.tableProperties.external)
+        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -579,10 +582,12 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        val props = convertTableProperties(
-          create.properties, create.options, create.serdeInfo, create.location, create.comment,
-          create.provider, create.external)
-        assert(props == expectedProperties)
+        val properties = CatalogV2Util.convertTableProperties(
+          create.tableProperties.properties, create.tableProperties.options,
+          create.tableProperties.serde, create.tableProperties.location,
+          create.tableProperties.comment, create.tableProperties.provider,
+          create.tableProperties.external)
+        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>

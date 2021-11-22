@@ -211,13 +211,7 @@ case class CreateV2Table(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    options: Map[String, String],
-    serdeInfo: Option[SerdeInfo],
-    location: Option[String],
-    comment: Option[String],
-    provider: Option[String],
-    external: Boolean,
+    tableProperties: TableProperties,
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlanX {
   override def child: LogicalPlan = name
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlanX =
@@ -1112,3 +1106,12 @@ case class DropIndex(
   override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
     copy(table = newChild)
 }
+
+case class TableProperties(
+    properties: Map[String, String],
+    provider: Option[String],
+    options: Map[String, String],
+    location: Option[String],
+    comment: Option[String],
+    serde: Option[SerdeInfo],
+    external: Boolean)

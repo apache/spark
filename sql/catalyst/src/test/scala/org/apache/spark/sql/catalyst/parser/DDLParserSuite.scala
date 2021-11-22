@@ -2291,13 +2291,13 @@ class DDLParserSuite extends AnalysisTest {
             Some(create.tableSchema),
             create.partitioning,
             create.bucketSpec,
-            create.properties,
-            create.provider,
-            create.options,
-            create.location,
-            create.comment,
-            create.serdeInfo,
-            create.external)
+            create.tableProperties.properties,
+            create.tableProperties.provider,
+            create.tableProperties.options,
+            create.tableProperties.location,
+            create.tableProperties.comment,
+            create.tableProperties.serde,
+            create.tableProperties.external)
         case replace: ReplaceTableStatement =>
           TableSpec(
             replace.tableName,

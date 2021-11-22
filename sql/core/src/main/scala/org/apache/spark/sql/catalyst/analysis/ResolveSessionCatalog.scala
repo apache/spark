@@ -143,20 +143,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateV2Table(ResolvedDBObjectName(catalog, name), _, _, _, _, _, _, _, _, _, _, _) =>
+    case c @ CreateV2Table(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.provider, c.options, c.location, c.serdeInfo, ctas = false)
+        c.tableProperties.provider,
+        c.tableProperties.options,
+        c.tableProperties.location,
+        c.tableProperties.serde,
+        ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(name.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
-          c.comment, storageFormat, c.external)
+          c.partitioning, c.bucketSpec, c.tableProperties.properties, provider,
+          c.tableProperties.location, c.tableProperties.comment, storageFormat,
+          c.tableProperties.external)
         val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
         CreateV2Table(
-          ResolvedDBObjectName(catalog, name),
-          c.tableSchema, c.partitioning ++ c.bucketSpec.map(_.asTransform), None, c.properties,
-          c.options, c.serdeInfo, c.location, c.comment, c.provider, c.external, c.ignoreIfExists)
+          ResolvedDBObjectName(catalog, name), c.tableSchema,
+          c.partitioning ++ c.bucketSpec.map(_.asTransform), None, c.tableProperties,
+          c.ignoreIfExists)
       }
 
     case c @ CreateTableAsSelectStatement(

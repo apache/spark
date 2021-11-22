@@ -29,7 +29,7 @@ import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDBObjectName
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.CreateV2Table
+import org.apache.spark.sql.catalyst.plans.logical.{CreateV2Table, TableProperties}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
@@ -289,20 +289,22 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
        */
+      val tableProperties = TableProperties(
+        Map.empty[String, String],
+        Some(source),
+        Map.empty[String, String],
+        extraOptions.get("path"),
+        None,
+        None,
+        false)
       val cmd = CreateV2Table(
         UnresolvedDBObjectName(
           originalMultipartIdentifier,
-          isNamespace = true),
+          isNamespace = false),
         df.schema.asNullable,
         partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
         None,
-        Map.empty[String, String],
-        Map.empty[String, String],
-        None,
-        extraOptions.get("path"),
-        None,
-        Some(source),
-        external = false,
+        tableProperties,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)
     }
