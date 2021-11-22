@@ -49,7 +49,7 @@ from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
-from pyspark.profiler import ProfilerCollector, BasicProfiler
+from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler
 
 
 __all__ = ["SparkContext"]
@@ -105,6 +105,9 @@ class SparkContext(object):
     profiler_cls : type, optional
         A class of custom Profiler used to do profiling
         (default is :class:`pyspark.profiler.BasicProfiler`).
+    udf_profiler_cls : type, optional
+        A class of custom Profiler used to do udf profiling
+        (default is :class:`pyspark.profiler.UDFBasicProfiler`).
 
     Notes
     -----
@@ -147,6 +150,7 @@ class SparkContext(object):
         gateway=None,
         jsc=None,
         profiler_cls=BasicProfiler,
+        udf_profiler_cls=UDFBasicProfiler,
     ):
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
             # In order to prevent SparkContext from being created in executors.
@@ -172,6 +176,7 @@ class SparkContext(object):
                 conf,
                 jsc,
                 profiler_cls,
+                udf_profiler_cls,
             )
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
@@ -190,6 +195,7 @@ class SparkContext(object):
         conf,
         jsc,
         profiler_cls,
+        udf_profiler_cls,
     ):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
@@ -319,7 +325,7 @@ class SparkContext(object):
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
             dump_path = self._conf.get("spark.python.profile.dump", None)
-            self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
+            self.profiler_collector = ProfilerCollector(profiler_cls, udf_profiler_cls, dump_path)
         else:
             self.profiler_collector = None
 

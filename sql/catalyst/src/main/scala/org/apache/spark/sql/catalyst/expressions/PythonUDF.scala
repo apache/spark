@@ -62,7 +62,11 @@ case class PythonUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  private def suffix: String = s"#${resultId.id}$typeSuffix"
+
+  override def toString: String = s"$name(${children.mkString(", ")})$suffix"
+
+  override def sql: String = super.sql.dropRight(suffix.length)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 

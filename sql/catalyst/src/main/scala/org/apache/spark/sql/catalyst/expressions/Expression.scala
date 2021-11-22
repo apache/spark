@@ -292,6 +292,16 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleStringWithNodeId(): String = {
     throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
+
+  protected def typeSuffix =
+    if (resolved) {
+      dataType match {
+        case LongType => "L"
+        case _ => ""
+      }
+    } else {
+      ""
+    }
 }
 
 
@@ -383,7 +393,7 @@ trait UnevaluableAggregate extends DeclarativeAggregate {
  * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
  */
 trait NonSQLExpression extends Expression {
-  final override def sql: String = {
+  override def sql: String = {
     transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
