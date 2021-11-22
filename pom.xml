@@ -3587,7 +3587,7 @@
       </properties>
       <activation>
         <os>
-          <family>macos</family>
+          <family>mac</family>
           <arch>aarch64</arch>
         </os>
       </activation>
