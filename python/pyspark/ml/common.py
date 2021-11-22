@@ -16,7 +16,7 @@
 #
 
 from typing import Any, Callable
-from pyspark.ml._typing import C, JavaObjectType
+from pyspark.ml._typing import C, JavaObjectOrPickleDump
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
@@ -87,7 +87,7 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     return obj
 
 
-def _java2py(sc: SparkContext, r: JavaObjectType, encoding: str = "bytes") -> Any:
+def _java2py(sc: SparkContext, r: JavaObjectOrPickleDump, encoding: str = "bytes") -> Any:
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -115,7 +115,9 @@ def _java2py(sc: SparkContext, r: JavaObjectType, encoding: str = "bytes") -> An
     return r
 
 
-def callJavaFunc(sc: pyspark.context.SparkContext, func: Callable, *args: Any) -> JavaObjectType:
+def callJavaFunc(
+    sc: pyspark.context.SparkContext, func: Callable[..., JavaObjectOrPickleDump], *args: Any
+) -> JavaObjectOrPickleDump:
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*java_args))

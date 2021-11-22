@@ -23,4 +23,4 @@ from py4j.java_gateway import JavaObject
 
 VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]
 C = TypeVar("C", bound=type)
-JavaObjectType = Union[JavaObject, bytearray, bytes]
+JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]

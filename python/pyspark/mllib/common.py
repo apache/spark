@@ -16,7 +16,7 @@
 #
 
 from typing import Any, Callable
-from pyspark.mllib._typing import C, JavaObjectType
+from pyspark.mllib._typing import C, JavaObjectOrPickleDump
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
@@ -89,7 +89,7 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     return obj
 
 
-def _java2py(sc: SparkContext, r: JavaObjectType, encoding: str = "bytes") -> Any:
+def _java2py(sc: SparkContext, r: JavaObjectOrPickleDump, encoding: str = "bytes") -> Any:
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -117,13 +117,15 @@ def _java2py(sc: SparkContext, r: JavaObjectType, encoding: str = "bytes") -> An
     return r
 
 
-def callJavaFunc(sc: pyspark.context.SparkContext, func: Callable, *args: Any) -> JavaObjectType:
+def callJavaFunc(
+    sc: pyspark.context.SparkContext, func: Callable[..., JavaObjectOrPickleDump], *args: Any
+) -> JavaObjectOrPickleDump:
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*java_args))
 
 
-def callMLlibFunc(name: str, *args: Any) -> JavaObjectType:
+def callMLlibFunc(name: str, *args: Any) -> JavaObjectOrPickleDump:
     """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
     api = getattr(sc._jvm.PythonMLLibAPI(), name)  # type: ignore[attr-defined]
@@ -142,7 +144,7 @@ class JavaModelWrapper(object):
     def __del__(self) -> None:
         self._sc._gateway.detach(self._java_model)  # type: ignore[attr-defined]
 
-    def call(self, name: str, *a: Any) -> JavaObjectType:
+    def call(self, name: str, *a: Any) -> JavaObjectOrPickleDump:
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 

@@ -34,7 +34,7 @@ M = TypeVar("M", bound=pyspark.ml.base.Transformer)
 JM = TypeVar("JM", bound=pyspark.ml.wrapper.JavaTransformer)
 C = TypeVar("C", bound=type)
 
-JavaObjectType = Union[JavaObject, bytearray, bytes]
+JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]
 BinaryClassificationEvaluatorMetricType = Union[Literal["areaUnderROC"], Literal["areaUnderPR"]]
 RegressionEvaluatorMetricType = Union[
     Literal["rmse"], Literal["mse"], Literal["r2"], Literal["mae"], Literal["var"]
