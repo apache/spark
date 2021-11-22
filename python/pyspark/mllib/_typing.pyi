@@ -19,8 +19,6 @@
 from typing import List, Tuple, TypeVar, Union
 from pyspark.mllib.linalg import Vector
 from numpy import ndarray  # noqa: F401
-from py4j.java_gateway import JavaObject
 
 VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]
 C = TypeVar("C", bound=type)
-JavaObjectType = Union[JavaObject, bytearray, bytes]
