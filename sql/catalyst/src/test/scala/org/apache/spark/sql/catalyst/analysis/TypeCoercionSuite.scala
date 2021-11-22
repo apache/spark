@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
@@ -40,6 +40,8 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   protected def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  protected def dateTimeOperationsRule: TypeCoercionRule
 
   protected def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
     // Check default value
@@ -383,6 +385,36 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
     }
   }
+
+  test("Datetime operations") {
+    val rule = dateTimeOperationsRule
+    val dateLiteral = Literal(java.sql.Date.valueOf("2021-01-01"))
+    val timestampLiteral = Literal(Timestamp.valueOf("2021-01-01 00:00:00"))
+    val timestampNTZLiteral = Literal(LocalDateTime.parse("2021-01-01T00:00:00"))
+    val intLiteral = Literal(3)
+    Seq(timestampLiteral, timestampNTZLiteral).foreach { tsLiteral =>
+      ruleTest(rule,
+        DateAdd(tsLiteral, intLiteral),
+        DateAdd(Cast(tsLiteral, DateType), intLiteral))
+      ruleTest(rule,
+        DateSub(tsLiteral, intLiteral),
+        DateSub(Cast(tsLiteral, DateType), intLiteral))
+      ruleTest(rule,
+        SubtractTimestamps(tsLiteral, dateLiteral),
+        SubtractTimestamps(tsLiteral, Cast(dateLiteral, tsLiteral.dataType)))
+      ruleTest(rule,
+        SubtractTimestamps(dateLiteral, tsLiteral),
+        SubtractTimestamps(Cast(dateLiteral, tsLiteral.dataType), tsLiteral))
+    }
+
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, timestampNTZLiteral),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampNTZType), timestampNTZLiteral))
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, timestampLiteral),
+      SubtractTimestamps(timestampNTZLiteral, Cast(timestampLiteral, TimestampNTZType)))
+  }
+
 }
 
 class TypeCoercionSuite extends TypeCoercionSuiteBase {
@@ -417,6 +449,8 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   // scalastyle:on line.size.limit
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     TypeCoercion.implicitCast(e, expectedType)
+
+  override def dateTimeOperationsRule: TypeCoercionRule = TypeCoercion.DateTimeOperations
 
   private def checkWidenType(
       widenFunc: (DataType, DataType) => Option[DataType],

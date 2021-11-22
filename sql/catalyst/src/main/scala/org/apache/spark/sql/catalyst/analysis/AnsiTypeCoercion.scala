@@ -290,6 +290,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      case d @ DateAdd(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+
       case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
       case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>

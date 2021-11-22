@@ -60,6 +60,8 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     AnsiTypeCoercion.implicitCast(e, expectedType)
 
+  override def dateTimeOperationsRule: TypeCoercionRule = AnsiTypeCoercion.DateTimeOperations
+
   private def shouldCastStringLiteral(to: AbstractDataType, expected: DataType): Unit = {
     val input = Literal("123")
     val castResult = AnsiTypeCoercion.implicitCast(input, to)
