@@ -79,8 +79,6 @@ grammar SqlBase;
    * unclosed bracketed comment.
    * If the next character is -1, it means the end of the entire character stream match,
    * and we throw exception to prevent executing the query.
-   *
-   * Returns false if the next character is not -1.
    */
   public void end() {
     int nextChar = _input.LA(1);
