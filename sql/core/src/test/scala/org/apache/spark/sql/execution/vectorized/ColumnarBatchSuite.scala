@@ -196,6 +196,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 1
 
       reader.skipBooleans(8)
+      reader.skipBooleans(0)
 
       column.putBoolean(idx, reader.readBoolean) // bit index 17
       reference += false

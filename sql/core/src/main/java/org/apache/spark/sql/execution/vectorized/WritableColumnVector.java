@@ -204,7 +204,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Sets bits from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
-   * src must contain bit-packed 8 Booleans in the byte.
+   * src must contain bit-packed 8 booleans in the byte.
    */
   public void putBooleans(int rowId, int count, byte src, int srcIndex) {
     byte8[0] = (byte)(src & 1);
@@ -220,7 +220,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Sets bits from [src[0], src[7]] to [rowId, rowId + 7]
-   * src must contain bit-packed 8 Booleans in the byte.
+   * src must contain bit-packed 8 booleans in the byte.
    */
   public abstract void putBooleans(int rowId, byte src);
 
@@ -495,7 +495,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Append bits from [src[offset], src[offset + count])
-   * src must contain bit-packed 8 Booleans in the byte.
+   * src must contain bit-packed 8 booleans in the byte.
    */
   public final int appendBooleans(int count, byte src, int offset) {
     reserve(elementsAppended + count);
