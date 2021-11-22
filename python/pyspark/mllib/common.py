@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, Union
-from pyspark.mllib._typing import C
+from typing import Any, Callable
+from pyspark.mllib._typing import C, JavaObjectType
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
@@ -89,9 +89,7 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     return obj
 
 
-def _java2py(
-    sc: SparkContext, r: Union[JavaObject, bytearray, bytes], encoding: str = "bytes"
-) -> Any:
+def _java2py(sc: SparkContext, r: JavaObjectType, encoding: str = "bytes") -> Any:
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -119,15 +117,13 @@ def _java2py(
     return r
 
 
-def callJavaFunc(
-    sc: pyspark.context.SparkContext, func: Callable, *args: Any
-) -> Union[JavaObject, bytearray, bytes]:
+def callJavaFunc(sc: pyspark.context.SparkContext, func: Callable, *args: Any) -> JavaObjectType:
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*java_args))
 
 
-def callMLlibFunc(name: str, *args: Any) -> Union[JavaObject, bytearray, bytes]:
+def callMLlibFunc(name: str, *args: Any) -> JavaObjectType:
     """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
     api = getattr(sc._jvm.PythonMLLibAPI(), name)  # type: ignore[attr-defined]
@@ -146,7 +142,7 @@ class JavaModelWrapper(object):
     def __del__(self) -> None:
         self._sc._gateway.detach(self._java_model)  # type: ignore[attr-defined]
 
-    def call(self, name: str, *a: Any) -> Union[JavaObject, bytearray, bytes]:
+    def call(self, name: str, *a: Any) -> JavaObjectType:
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 
