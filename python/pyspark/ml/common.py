@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from typing import Any, TypeVar
+from typing import Any, Callable, Union
+from pyspark.ml._typing import C
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
@@ -56,24 +57,24 @@ _picklable_classes = [
 
 
 # this will call the ML version of pythonToJava()
-def _to_java_object_rdd(rdd):
+def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     """Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pickle, whenever the
     RDD is serialized in batch or not.
     """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(rdd._jrdd, True)
+    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))  # type: ignore[attr-defined]
+    return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(rdd._jrdd, True)  # type: ignore[attr-defined]
 
 
-def _py2java(sc, obj):
+def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     """Convert Python object into Java"""
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, DataFrame):
         obj = obj._jdf
     elif isinstance(obj, SparkContext):
-        obj = obj._jsc
+        obj = obj._jsc  # type: ignore[attr-defined]
     elif isinstance(obj, list):
         obj = [_py2java(sc, x) for x in obj]
     elif isinstance(obj, JavaObject):
@@ -82,11 +83,13 @@ def _py2java(sc, obj):
         pass
     else:
         data = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(data)
+        obj = sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(data)  # type: ignore[attr-defined]
     return obj
 
 
-def _java2py(sc: SparkContext, r, encoding="bytes"):
+def _java2py(
+    sc: SparkContext, r: Union[JavaObject, bytearray, bytes], encoding: str = "bytes"
+) -> Any:
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
@@ -114,13 +117,12 @@ def _java2py(sc: SparkContext, r, encoding="bytes"):
     return r
 
 
-def callJavaFunc(sc: pyspark.context.SparkContext, func, *args):
+def callJavaFunc(
+    sc: pyspark.context.SparkContext, func: Callable, *args: Any
+) -> Union[JavaObject, bytearray, bytes]:
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*java_args))
-
-
-C = TypeVar("C", bound=type)
 
 
 def inherit_doc(cls: C) -> C:

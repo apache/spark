@@ -31,6 +31,7 @@ T = TypeVar("T")
 P = TypeVar("P", bound=pyspark.ml.param.Params)
 M = TypeVar("M", bound=pyspark.ml.base.Transformer)
 JM = TypeVar("JM", bound=pyspark.ml.wrapper.JavaTransformer)
+C = TypeVar("C", bound=type)
 
 BinaryClassificationEvaluatorMetricType = Union[Literal["areaUnderROC"], Literal["areaUnderPR"]]
 RegressionEvaluatorMetricType = Union[
