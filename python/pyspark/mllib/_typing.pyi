@@ -16,8 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import List, Tuple, Union
+from typing import List, Tuple, TypeVar, Union
 from pyspark.mllib.linalg import Vector
 from numpy import ndarray  # noqa: F401
 
 VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]
+C = TypeVar("C", bound=type)
