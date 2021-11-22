@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, Union
+from typing import Any, Callable
 from pyspark.mllib._typing import C, JavaObjectType
 
 import py4j.protocol
