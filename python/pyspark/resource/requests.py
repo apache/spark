@@ -18,7 +18,7 @@ from typing import overload, Optional, Dict
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark.util import _parse_memory   # type: ignore[attr-defined]
+from pyspark.util import _parse_memory  # type: ignore[attr-defined]
 
 
 class ExecutorResourceRequest(object):
@@ -107,6 +107,7 @@ class ExecutorResourceRequests(object):
     -----
     This API is evolving.
     """
+
     _CORES = "cores"
     _MEMORY = "memory"
     _OVERHEAD_MEM = "memoryOverhead"
@@ -131,10 +132,12 @@ class ExecutorResourceRequests(object):
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
     ):
         from pyspark import SparkContext
+
         _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
-            self._java_executor_resource_requests = \
+            self._java_executor_resource_requests = (
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
+            )
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._MEMORY:
@@ -146,8 +149,9 @@ class ExecutorResourceRequests(object):
                     elif k == self._CORES:
                         self._java_executor_resource_requests.cores(v.amount)
                     else:
-                        self._java_executor_resource_requests.resource(v.resourceName, v.amount,
-                                                                       v.discoveryScript, v.vendor)
+                        self._java_executor_resource_requests.resource(
+                            v.resourceName, v.amount, v.discoveryScript, v.vendor
+                        )
         else:
             self._java_executor_resource_requests = None
             self._executor_resources: Dict[str, ExecutorResourceRequest] = {}
@@ -156,32 +160,36 @@ class ExecutorResourceRequests(object):
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memory(amount)
         else:
-            self._executor_resources[self._MEMORY] = ExecutorResourceRequest(self._MEMORY,
-                                                                             _parse_memory(amount))
+            self._executor_resources[self._MEMORY] = ExecutorResourceRequest(
+                self._MEMORY, _parse_memory(amount)
+            )
         return self
 
     def memoryOverhead(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memoryOverhead(amount)
         else:
-            self._executor_resources[self._OVERHEAD_MEM] = \
-                ExecutorResourceRequest(self._OVERHEAD_MEM, _parse_memory(amount))
+            self._executor_resources[self._OVERHEAD_MEM] = ExecutorResourceRequest(
+                self._OVERHEAD_MEM, _parse_memory(amount)
+            )
         return self
 
     def pysparkMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.pysparkMemory(amount)
         else:
-            self._executor_resources[self._PYSPARK_MEM] = \
-                ExecutorResourceRequest(self._PYSPARK_MEM, _parse_memory(amount))
+            self._executor_resources[self._PYSPARK_MEM] = ExecutorResourceRequest(
+                self._PYSPARK_MEM, _parse_memory(amount)
+            )
         return self
 
     def offheapMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.offHeapMemory(amount)
         else:
-            self._executor_resources[self._OFFHEAP_MEM] = \
-                ExecutorResourceRequest(self._OFFHEAP_MEM, _parse_memory(amount))
+            self._executor_resources[self._OFFHEAP_MEM] = ExecutorResourceRequest(
+                self._OFFHEAP_MEM, _parse_memory(amount)
+            )
         return self
 
     def cores(self, amount: int) -> "ExecutorResourceRequests":
@@ -199,11 +207,13 @@ class ExecutorResourceRequests(object):
         vendor: str = "",
     ) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
-            self._java_executor_resource_requests.resource(resourceName, amount, discoveryScript,
-                                                           vendor)
+            self._java_executor_resource_requests.resource(
+                resourceName, amount, discoveryScript, vendor
+            )
         else:
-            self._executor_resources[resourceName] = \
-                ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
+            self._executor_resources[resourceName] = ExecutorResourceRequest(
+                resourceName, amount, discoveryScript, vendor
+            )
         return self
 
     @property
@@ -212,8 +222,9 @@ class ExecutorResourceRequests(object):
             result = {}
             execRes = self._java_executor_resource_requests.requestsJMap()
             for k, v in execRes.items():
-                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                                                    v.discoveryScript(), v.vendor())
+                result[k] = ExecutorResourceRequest(
+                    v.resourceName(), v.amount(), v.discoveryScript(), v.vendor()
+                )
             return result
         else:
             return self._executor_resources
@@ -242,6 +253,7 @@ class TaskResourceRequest(object):
     -----
     This API is evolving.
     """
+
     def __init__(self, resourceName: str, amount: float):
         self._name = resourceName
         self._amount = float(amount)
@@ -289,11 +301,13 @@ class TaskResourceRequests(object):
         _requests: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
         from pyspark import SparkContext
+
         _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
-            self._java_task_resource_requests: Optional[JavaObject] = (
-                SparkContext._jvm.org  # type: ignore[attr-defined]
-                .apache.spark.resource.TaskResourceRequests()
+            self._java_task_resource_requests: Optional[
+                JavaObject
+            ] = (
+                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()  # type: ignore[attr-defined]
             )
             if _requests is not None:
                 for k, v in _requests.items():
@@ -312,14 +326,9 @@ class TaskResourceRequests(object):
             self._task_resources[self._CPUS] = TaskResourceRequest(self._CPUS, amount)
         return self
 
-    def resource(
-        self,
-        resourceName: str,
-        amount: float
-    ) -> "TaskResourceRequests":
+    def resource(self, resourceName: str, amount: float) -> "TaskResourceRequests":
         if self._java_task_resource_requests is not None:
-            self._java_task_resource_requests.resource(
-                resourceName, float(amount))
+            self._java_task_resource_requests.resource(resourceName, float(amount))
         else:
             self._task_resources[resourceName] = TaskResourceRequest(resourceName, amount)
         return self

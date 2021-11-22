@@ -2453,6 +2453,41 @@ abstract class JsonSuite
     checkAnswer(
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
+    checkAnswer(
+      // encoding auto detection should also be possible with json schema infer
+      spark.read.option("mode", "PERMISSIVE").json(Seq(badJson).toDS()),
+      Row(badJson))
+  }
+
+  test("SPARK-37176: inferring should be possible when parse mode is permissive") {
+    withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      // normal input to let spark correctly infer schema
+      val record = """{"a":1}"""
+      Seq(record, badJson + record).toDS().write.text(path)
+      val expected = s"""${badJson}{"a":1}"""
+      val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
+        .load(path)
+      checkAnswer(df, Seq(Row(null, 1), Row(expected, null)))
+    }
+  }
+
+  test("SPARK-31716: inferring should handle malformed input") {
+    val schema = new StructType().add("a", IntegerType)
+    val dfWithSchema = spark.read.format("json")
+      .option("mode", "DROPMALFORMED")
+      .option("encoding", "utf-8")
+      .schema(schema)
+      .load(testFile("test-data/malformed_utf8.json"))
+    checkAnswer(dfWithSchema, Seq(Row(1), Row(1)))
+
+    val df = spark.read.format("json")
+      .option("mode", "DROPMALFORMED")
+      .option("encoding", "utf-8")
+      .load(testFile("test-data/malformed_utf8.json"))
+
+    checkAnswer(df, Seq(Row(1), Row(1)))
   }
 
   test("SPARK-23772 ignore column of all null values or empty array during schema inference") {

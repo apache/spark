@@ -7,6 +7,7 @@
 *.pyo
 *.swp
 *~
+.java-version
 .DS_Store
 .bsp/
 .cache

@@ -22,15 +22,15 @@ from py4j.java_collections import JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql import DataFrame, SQLContext
+from pyspark.sql import DataFrame, SparkSession
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
 
 _float_str_mapping = {
-    'nan': 'NaN',
-    'inf': 'Infinity',
-    '-inf': '-Infinity',
+    "nan": "NaN",
+    "inf": "Infinity",
+    "-inf": "-Infinity",
 }
 
 
@@ -40,20 +40,21 @@ def _new_smart_decode(obj):
         return _float_str_mapping.get(s, s)
     return _old_smart_decode(obj)
 
+
 py4j.protocol.smart_decode = _new_smart_decode
 
 
 _picklable_classes = [
-    'SparseVector',
-    'DenseVector',
-    'SparseMatrix',
-    'DenseMatrix',
+    "SparseVector",
+    "DenseVector",
+    "SparseMatrix",
+    "DenseMatrix",
 ]
 
 
 # this will call the ML version of pythonToJava()
 def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
+    """Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pickle, whenever the
     RDD is serialized in batch or not.
@@ -63,7 +64,7 @@ def _to_java_object_rdd(rdd):
 
 
 def _py2java(sc, obj):
-    """ Convert Python object into Java """
+    """Convert Python object into Java"""
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, DataFrame):
@@ -86,16 +87,16 @@ def _java2py(sc, r, encoding="bytes"):
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
-        if clsName != 'JavaRDD' and clsName.endswith("RDD"):
+        if clsName != "JavaRDD" and clsName.endswith("RDD"):
             r = r.toJavaRDD()
-            clsName = 'JavaRDD'
+            clsName = "JavaRDD"
 
-        if clsName == 'JavaRDD':
+        if clsName == "JavaRDD":
             jrdd = sc._jvm.org.apache.spark.ml.python.MLSerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
-        if clsName == 'Dataset':
-            return DataFrame(r, SQLContext.getOrCreate(sc))
+        if clsName == "Dataset":
+            return DataFrame(r, SparkSession(sc)._wrapped)
 
         if clsName in _picklable_classes:
             r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)
@@ -103,7 +104,7 @@ def _java2py(sc, r, encoding="bytes"):
             try:
                 r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)
             except Py4JJavaError:
-                pass  # not pickable
+                pass  # not picklable
 
     if isinstance(r, (bytearray, bytes)):
         r = PickleSerializer().loads(bytes(r), encoding=encoding)
@@ -111,7 +112,7 @@ def _java2py(sc, r, encoding="bytes"):
 
 
 def callJavaFunc(sc, func, *args):
-    """ Call Java Function """
+    """Call Java Function"""
     args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*args))
 

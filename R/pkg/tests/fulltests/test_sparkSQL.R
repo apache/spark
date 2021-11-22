@@ -2050,6 +2050,20 @@ test_that("date functions on a DataFrame", {
   Sys.setenv(TZ = .originalTimeZone)
 })
 
+test_that("SPARK-37108: expose make_date expression in R", {
+  df <- createDataFrame(
+    list(list(2021, 10, 22), list(2021, 13, 1),
+         list(2021, 2, 29), list(2020, 2, 29)),
+    list("year", "month", "day")
+  )
+  expect <- createDataFrame(
+    list(list(as.Date("2021-10-22")), NA, NA, list(as.Date("2020-02-29"))),
+    list("make_date(year, month, day)")
+  )
+  actual <- select(df, make_date(df$year, df$month, df$day))
+  expect_equal(collect(expect), collect(actual))
+})
+
 test_that("greatest() and least() on a DataFrame", {
   l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(l)

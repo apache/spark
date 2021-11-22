@@ -156,7 +156,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self,
         func_or_funcs: Optional[Union[str, List[str], Dict[Name, Union[str, List[str]]]]] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> DataFrame:
         """Aggregate using one or more operations over the specified axis.
 

@@ -23,3 +23,9 @@ testpaths = [
   "pyspark/sql/tests/typing",
   "pyspark/ml/typing",
 ]
+
+[tool.black]
+line-length = 100
+target-version = ['py37']
+include = '\.pyi?$'
+extend-exclude = 'cloudpickle'

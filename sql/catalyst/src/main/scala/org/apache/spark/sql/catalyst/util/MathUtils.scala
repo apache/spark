@@ -42,15 +42,15 @@ object MathUtils {
 
   def toIntExact(a: Long): Int = withOverflow(Math.toIntExact(a))
 
-  def floorDiv(a: Int, b: Int): Int = withOverflow(Math.floorDiv(a, b), Some("try_divide"))
+  def floorDiv(a: Int, b: Int): Int = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
-  def floorDiv(a: Long, b: Long): Long = withOverflow(Math.floorDiv(a, b), Some("try_divide"))
+  def floorDiv(a: Long, b: Long): Long = withOverflow(Math.floorDiv(a, b), hint = "try_divide")
 
   def floorMod(a: Int, b: Int): Int = withOverflow(Math.floorMod(a, b))
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  private def withOverflow[A](f: => A, hint: Option[String] = None): A = {
+  private def withOverflow[A](f: => A, hint: String = ""): A = {
     try {
       f
     } catch {

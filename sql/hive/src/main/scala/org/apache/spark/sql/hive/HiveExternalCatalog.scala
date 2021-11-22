@@ -46,8 +46,7 @@ import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOpti
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
-
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType}
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -357,6 +356,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val qualifiedTableName = table.identifier.quotedString
     val maybeSerde = HiveSerDe.sourceToSerDe(provider)
+    val incompatibleTypes =
+      table.schema.filter(f => !isHiveCompatibleDataType(f.dataType)).map(_.dataType.simpleString)
 
     val (hiveCompatibleTable, logMessage) = maybeSerde match {
       case _ if options.skipHiveMetadata =>
@@ -365,6 +366,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             "Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
+      case _ if incompatibleTypes.nonEmpty =>
+        val message =
+          s"Hive incompatible types found: ${incompatibleTypes.mkString(", ")}. " +
+            s"Persisting data source table $qualifiedTableName into Hive metastore in " +
+            "Spark SQL specific format, which is NOT compatible with Hive."
+        (None, message)
       // our bucketing is un-compatible with hive(different hash function)
       case Some(serde) if table.bucketSpec.nonEmpty =>
         val message =
@@ -1402,4 +1409,12 @@ object HiveExternalCatalog {
     provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
   }
 
+  private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
+    case _: AnsiIntervalType => false
+    case s: StructType => s.forall(f => isHiveCompatibleDataType(f.dataType))
+    case a: ArrayType => isHiveCompatibleDataType(a.elementType)
+    case m: MapType =>
+      isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
+    case _ => true
+  }
 }

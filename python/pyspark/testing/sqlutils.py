@@ -30,6 +30,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
     require_minimum_pandas_version()
 except ImportError as e:
     # If Pandas version requirement is not satisfied, skip related tests.
@@ -38,6 +39,7 @@ except ImportError as e:
 pyarrow_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
     require_minimum_pyarrow_version()
 except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
@@ -46,6 +48,7 @@ except ImportError as e:
 test_not_compiled_message = None
 try:
     from pyspark.sql.utils import require_test_compiled
+
     require_test_compiled()
 except Exception as e:
     test_not_compiled_message = str(e)
@@ -81,11 +84,11 @@ class ExamplePointUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return 'pyspark.sql.tests'
+        return "pyspark.sql.tests"
 
     @classmethod
     def scalaUDT(cls):
-        return 'org.apache.spark.sql.test.ExamplePointUDT'
+        return "org.apache.spark.sql.test.ExamplePointUDT"
 
     def serialize(self, obj):
         return [obj.x, obj.y]
@@ -112,8 +115,7 @@ class ExamplePoint:
         return "(%s,%s)" % (self.x, self.y)
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and \
-            other.x == self.x and other.y == self.y
+        return isinstance(other, self.__class__) and other.x == self.x and other.y == self.y
 
 
 class PythonOnlyUDT(UserDefinedType):
@@ -127,7 +129,7 @@ class PythonOnlyUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return '__main__'
+        return "__main__"
 
     def serialize(self, obj):
         return [obj.x, obj.y]
@@ -148,6 +150,7 @@ class PythonOnlyPoint(ExamplePoint):
     """
     An example class to demonstrate UDT in only Python
     """
+
     __UDT__ = PythonOnlyUDT()  # type: ignore
 
 
@@ -247,8 +250,7 @@ class SQLTestUtils(object):
     @staticmethod
     def assert_close(a, b):
         c = [j[0] for j in b]
-        diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k]
-                for k, v in enumerate(a)]
+        diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
         return sum(diff) == len(a)
 
 

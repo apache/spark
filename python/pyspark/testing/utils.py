@@ -29,12 +29,14 @@ have_scipy = False
 have_numpy = False
 try:
     import scipy.sparse  # noqa: F401
+
     have_scipy = True
 except ImportError:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
     import numpy as np  # noqa: F401
+
     have_numpy = True
 except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
@@ -92,7 +94,8 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
     else:
         raise AssertionError(
             "Test failed due to timeout after %g sec, with last condition returning: %s"
-            % (timeout, lastValue))
+            % (timeout, lastValue)
+        )
 
 
 class QuietTest(object):
@@ -108,11 +111,10 @@ class QuietTest(object):
 
 
 class PySparkTestCase(unittest.TestCase):
-
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.sc = SparkContext('local[4]', class_name)
+        self.sc = SparkContext("local[4]", class_name)
 
     def tearDown(self):
         self.sc.stop()
@@ -120,7 +122,6 @@ class PySparkTestCase(unittest.TestCase):
 
 
 class ReusedPySparkTestCase(unittest.TestCase):
-
     @classmethod
     def conf(cls):
         """
@@ -130,7 +131,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sc = SparkContext('local[4]', cls.__name__, conf=cls.conf())
+        cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
 
     @classmethod
     def tearDownClass(cls):
@@ -151,18 +152,17 @@ class ByteArrayOutput(object):
 def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
     # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(
-        os.environ["SPARK_HOME"], project_relative_path)
+    project_full_path = os.path.join(os.environ["SPARK_HOME"], project_relative_path)
 
     # We should ignore the following jars
     ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
 
     # Search jar in the project dir using the jar name_prefix for both sbt build and maven
     # build because the artifact jars are in different directories.
-    sbt_build = glob.glob(os.path.join(
-        project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix))
-    maven_build = glob.glob(os.path.join(
-        project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
+    sbt_build = glob.glob(
+        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
+    )
+    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
     jar_paths = sbt_build + maven_build
     jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
 

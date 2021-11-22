@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
 
+import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
+
 import org.apache.spark.benchmark.Benchmark
 
 /**
  * Benchmark to measure read performance with Bloom filters.
- *
- * Currently, only ORC supports bloom filters, we will add Parquet BM as soon as it becomes
- * available.
  *
  * To run this benchmark:
  * {{{
@@ -43,7 +42,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   private val N = scaleFactor * 1000 * 1000
   private val df = spark.range(N).map(_ => Random.nextInt)
 
-  private def writeBenchmark(): Unit = {
+  private def writeORCBenchmark(): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -61,7 +60,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def readBenchmark(): Unit = {
+  private def readORCBenchmark(): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -81,8 +80,55 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def writeParquetBenchmark(): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      runBenchmark("Parquet Write") {
+        val benchmark = new Benchmark(s"Write ${scaleFactor}M rows", N, output = output)
+        benchmark.addCase("Without bloom filter") { _ =>
+          df.write.mode("overwrite").parquet(path + "/withoutBF")
+        }
+        benchmark.addCase("With bloom filter") { _ =>
+          df.write.mode("overwrite")
+            .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
+            .parquet(path + "/withBF")
+        }
+        benchmark.run()
+      }
+    }
+  }
+
+  private def readParquetBenchmark(): Unit = {
+    val blockSizes = Seq(2 * 1024 * 1024, 4 * 1024 * 1024, 6 * 1024 * 1024, 8 * 1024 * 1024,
+      12 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024)
+    for (blocksize <- blockSizes) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        df.write.option("parquet.block.size", blocksize).parquet(path + "/withoutBF")
+        df.write.option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
+          .option("parquet.block.size", blocksize)
+          .parquet(path + "/withBF")
+
+        runBenchmark("Parquet Read") {
+          val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+          benchmark.addCase("Without bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.parquet(path + "/withoutBF").where("value = 0").noop()
+          }
+          benchmark.addCase("With bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.option(ParquetInputFormat.BLOOM_FILTERING_ENABLED, true)
+              .parquet(path + "/withBF").where("value = 0").noop()
+          }
+          benchmark.run()
+        }
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    writeBenchmark()
-    readBenchmark()
+    writeORCBenchmark()
+    readORCBenchmark()
+    writeParquetBenchmark()
+    readParquetBenchmark()
   }
 }
