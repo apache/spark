@@ -77,6 +77,10 @@ sealed trait TimestampFormatter extends Serializable {
    * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
    * Zone-id and zone-offset components are ignored.
    */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  @throws(classOf[IllegalStateException])
   final def parseWithoutTimeZone(s: String): Long =
     // This is implemented to adhere to the original behaviour of `parseWithoutTimeZone` where we
     // did not fail if timestamp contained zone-id or zone-offset component and instead ignored it.
