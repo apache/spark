@@ -1158,9 +1158,13 @@ object TypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
       case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      // ANSI mode doesn't allow implicitly cast String to Date/Timestamp, thus we need to check it
+      // here.
+      case d @ DateAdd(StringType(), _) if implicitCast(StringType, DateType).isDefined =>
+        d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) if implicitCast(StringType, DateType).isDefined =>
+        d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
@@ -1172,7 +1176,8 @@ object TypeCoercion extends TypeCoercionBase {
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
-      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeAdd(StringType(), _, _) if implicitCast(StringType, DateType).isDefined =>
+        t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
