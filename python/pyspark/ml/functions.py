@@ -19,7 +19,7 @@ from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
 
 
-def vector_to_array(col, dtype="float64"):
+def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
@@ -64,13 +64,13 @@ def vector_to_array(col, dtype="float64"):
     [StructField(vec,ArrayType(FloatType,false),false),
     StructField(oldVec,ArrayType(FloatType,false),false)]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
     )
 
 
-def array_to_vector(col):
+def array_to_vector(col: Column) -> Column:
     """
     Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector
     instances
@@ -100,11 +100,11 @@ def array_to_vector(col):
     >>> df3.select(array_to_vector('v1').alias('vec1')).collect()
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.ml.functions
