@@ -1367,14 +1367,27 @@ case class BRound(child: Expression, scale: Expression)
 }
 
 object WidthBucket {
-
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
-    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
-        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
-        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
-      return null
+    if (isNull(value, min, max, numBucket)) {
+      null
+    } else {
+      computeBucketNumberNotNull(value, min, max, numBucket)
     }
+  }
 
+  /** This function is called by generated Java code, so it needs to be public. */
+  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+    numBucket <= 0 ||
+      numBucket == Long.MaxValue ||
+      jl.Double.isNaN(value) ||
+      min == max ||
+      jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+      jl.Double.isNaN(max) || jl.Double.isInfinite(max)
+  }
+
+  /** This function is called by generated Java code, so it needs to be public. */
+  def computeBucketNumberNotNull(
+      value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
 
@@ -1457,8 +1470,13 @@ case class WidthBucket(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
-      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
-        s".computeBucketNumber($input, $min, $max, $numBucket)")
+    nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
+      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .isNull($input, $min, $max, $numBucket);
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |}""".stripMargin
+    })
   }
 }
