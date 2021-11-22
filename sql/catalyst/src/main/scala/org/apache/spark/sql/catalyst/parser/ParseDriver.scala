@@ -91,6 +91,23 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
 
+  private def checkUnclosedBracketedComment(
+      command: String, tokenStream: CommonTokenStream): Unit = {
+    tokenStream.fill()
+    for (index <- 0 to tokenStream.size() - 1) {
+      val token = tokenStream.get(index)
+      if (token.getType() == SqlBaseParser.BRACKETED_COMMENT) {
+        val text = token.getText()
+        val prefixNum = ParserUtils.appearNumber(text, ParserUtils.bracketedCommentPrefix)
+        val suffixNum = ParserUtils.appearNumber(text, ParserUtils.bracketedCommentSuffix)
+        if (prefixNum > suffixNum) {
+          val position = Origin(Option(token.getLine), Option(token.getCharPositionInLine))
+          throw QueryParsingErrors.unclosedBracketedCommentError(command, position)
+        }
+      }
+    }
+  }
+
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
@@ -100,6 +117,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
+
+    checkUnclosedBracketedComment(command, tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)

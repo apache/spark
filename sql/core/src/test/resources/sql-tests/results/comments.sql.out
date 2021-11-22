@@ -134,16 +134,21 @@ select 1 as a
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Unclosed bracketed comment: /*abc*/
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Unclosed bracketed comment(line 3, pos 0)
+
+== SQL ==
+/*abc*/
 select 1 as a
 /*
+^^^
 
 2 as b
 /*abc*/
 , 3 as c
 
-/**/, position: 55
+/**/
 
 
 -- !query
@@ -160,14 +165,19 @@ select 4 as d
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-Unclosed bracketed comment: /*abc*/
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Unclosed bracketed comment(line 3, pos 0)
+
+== SQL ==
+/*abc*/
 select 1 as a
 /*
+^^^
 
 2 as b
 /*abc*/
 , 3 as c
 
 /**/
-select 4 as d, position: 69
+select 4 as d

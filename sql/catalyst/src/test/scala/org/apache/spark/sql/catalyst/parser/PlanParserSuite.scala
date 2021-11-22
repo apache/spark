@@ -189,8 +189,8 @@ class PlanParserSuite extends AnalysisTest {
                   |
                   |/**/
                   |""".stripMargin
-    val e = intercept[RuntimeException](parsePlan(query))
-    assert(e.getMessage.contains(s"Unclosed bracketed comment: $query, position: 58"))
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("unclosed bracketed comment two") {
@@ -206,8 +206,8 @@ class PlanParserSuite extends AnalysisTest {
                   |/**/
                   |select 4 as d
                   |""".stripMargin
-    val e = intercept[RuntimeException](parsePlan(query))
-    assert(e.getMessage.contains(s"Unclosed bracketed comment: $query, position: 72"))
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("case insensitive") {

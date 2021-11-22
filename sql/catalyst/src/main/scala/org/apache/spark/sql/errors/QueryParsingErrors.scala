@@ -425,4 +425,8 @@ object QueryParsingErrors {
     new ParseException(
       s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
   }
+
+  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
+    new ParseException(Some(command), "Unclosed bracketed comment", position, position)
+  }
 }
