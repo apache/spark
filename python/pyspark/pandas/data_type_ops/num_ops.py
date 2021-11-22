@@ -55,7 +55,7 @@ def _non_fractional_astype(
     elif isinstance(spark_type, BooleanType):
         return _as_bool_type(index_ops, dtype)
     elif isinstance(spark_type, StringType):
-        return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+        return _as_string_type(index_ops, dtype, null_str="NaN")
     else:
         return _as_other_type(index_ops, dtype, spark_type)
 
@@ -447,9 +447,28 @@ class DecimalOps(FractionalOps):
         return index_ops.copy()
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
-        # TODO(SPARK-36230): check index_ops.hasnans after fixing SPARK-36230
         dtype, spark_type = pandas_on_spark_type(dtype)
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError(
+                    "Cannot convert %s with missing values to integer" % self.pretty_name
+                )
         return _non_fractional_astype(index_ops, dtype, spark_type)
+
+    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if not isinstance(right, numbers.Number):
+            raise TypeError("Exponentiation can not be applied to given types.")
+
+        def rpow_func(left: Column, right: Any) -> Column:
+            return (
+                F.when(left.isNull(), np.nan)
+                .when(SF.lit(right == 1), right)
+                .otherwise(Column.__rpow__(left, right))
+            )
+
+        right = transform_boolean_operand_to_numeric(right)
+        return column_op(rpow_func)(left, right)
 
 
 class IntegralExtensionOps(IntegralOps):

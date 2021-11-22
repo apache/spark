@@ -35,6 +35,7 @@ class ChiSquareTest(object):
     .. versionadded:: 2.2.0
 
     """
+
     @staticmethod
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
@@ -113,6 +114,7 @@ class Correlation(object):
     which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
     to avoid recomputing the common lineage.
     """
+
     @staticmethod
     def corr(dataset, column, method="pearson"):
         """
@@ -177,6 +179,7 @@ class KolmogorovSmirnovTest(object):
     .. versionadded:: 2.4.0
 
     """
+
     @staticmethod
     def test(dataset, sampleCol, distName, *params):
         """
@@ -228,8 +231,9 @@ class KolmogorovSmirnovTest(object):
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
         dataset = _py2java(sc, dataset)
         params = [float(param) for param in params]
-        return _java2py(sc, javaTestObj.test(dataset, sampleCol, distName,
-                                             _jvm().PythonUtils.toSeq(params)))
+        return _java2py(
+            sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
+        )
 
 
 class Summarizer(object):
@@ -277,6 +281,7 @@ class Summarizer(object):
     +--------------+
     <BLANKLINE>
     """
+
     @staticmethod
     @since("2.4.0")
     def mean(col, weightCol=None):
@@ -368,8 +373,11 @@ class Summarizer(object):
     @staticmethod
     def _get_single_metric(col, weightCol, metric):
         col, weightCol = Summarizer._check_param(col, weightCol)
-        return Column(JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer." + metric,
-                                                col._jc, weightCol._jc))
+        return Column(
+            JavaWrapper._new_java_obj(
+                "org.apache.spark.ml.stat.Summarizer." + metric, col._jc, weightCol._jc
+            )
+        )
 
     @staticmethod
     def metrics(*metrics):
@@ -407,8 +415,9 @@ class Summarizer(object):
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
         sc = SparkContext._active_spark_context
-        js = JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer.metrics",
-                                       _to_seq(sc, metrics))
+        js = JavaWrapper._new_java_obj(
+            "org.apache.spark.ml.stat.Summarizer.metrics", _to_seq(sc, metrics)
+        )
         return SummaryBuilder(js)
 
 
@@ -422,6 +431,7 @@ class SummaryBuilder(JavaWrapper):
     .. versionadded:: 2.4.0
 
     """
+
     def __init__(self, jSummaryBuilder):
         super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
@@ -463,6 +473,7 @@ class MultivariateGaussian(object):
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
     """
+
     def __init__(self, mean, cov):
         self.mean = mean
         self.cov = cov
@@ -473,22 +484,20 @@ if __name__ == "__main__":
     import numpy
     import pyspark.ml.stat
     from pyspark.sql import SparkSession
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
 
     globs = pyspark.ml.stat.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder \
-        .master("local[2]") \
-        .appName("ml.stat tests") \
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.stat tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
 
     failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

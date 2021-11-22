@@ -25,8 +25,9 @@ from pyspark.serializers import read_int
 class DaemonTests(unittest.TestCase):
     def connect(self, port):
         from socket import socket, AF_INET, SOCK_STREAM
+
         sock = socket(AF_INET, SOCK_STREAM)
-        sock.connect(('127.0.0.1', port))
+        sock.connect(("127.0.0.1", port))
         # send a split index of -1 to shutdown the worker
         sock.send(b"\xFF\xFF\xFF\xFF")
         sock.close()
@@ -69,6 +70,7 @@ class DaemonTests(unittest.TestCase):
     def test_termination_sigterm(self):
         """Ensure that daemon and workers terminate on SIGTERM."""
         from signal import SIGTERM
+
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 
@@ -77,7 +79,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

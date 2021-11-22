@@ -389,7 +389,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             structed_scol = F.struct(
                 sdf[NATURAL_ORDER_COLUMN_NAME],
                 *left._internal.index_spark_columns,
-                left.spark.column
+                left.spark.column,
             )
             # The size of the list is expected to be small.
             collected_structed_scol = F.collect_list(structed_scol)
@@ -411,7 +411,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
                     .otherwise(
                         x[scol_name] == y,
                     )
-                    .alias(scol_name)
+                    .alias(scol_name),
                 ),
             ).alias(scol_name)
             # 1. `sdf_new` here looks like the below (the first field of each set is Index):

@@ -69,13 +69,15 @@ def since(version):
     A decorator that annotates a function to append the version of Spark the function was added.
     """
     import re
-    indent_p = re.compile(r'\n( +)')
+
+    indent_p = re.compile(r"\n( +)")
 
     def deco(f):
         indents = indent_p.findall(f.__doc__)
-        indent = ' ' * (min(len(m) for m in indents) if indents else 0)
+        indent = " " * (min(len(m) for m in indents) if indents else 0)
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
         return f
+
     return deco
 
 
@@ -86,8 +88,9 @@ def copy_func(f, name=None, sinceversion=None, doc=None):
     """
     # See
     # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
-    fn = types.FunctionType(f.__code__, f.__globals__, name or f.__name__, f.__defaults__,
-                            f.__closure__)
+    fn = types.FunctionType(
+        f.__code__, f.__globals__, name or f.__name__, f.__defaults__, f.__closure__
+    )
     # in case f was given attrs (note this dict is a shallow copy):
     fn.__dict__.update(f.__dict__)
     if doc is not None:
@@ -106,13 +109,16 @@ def keyword_only(func):
     -----
     Should only be used to wrap a method where first arg is `self`
     """
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if len(args) > 0:
             raise TypeError("Method %s forces keyword arguments." % func.__name__)
         self._input_kwargs = kwargs
         return func(self, **kwargs)
+
     return wrapper
+
 
 # To avoid circular dependencies
 from pyspark.context import SparkContext
@@ -121,9 +127,26 @@ from pyspark.context import SparkContext
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
 
 __all__ = [
-    "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
-    "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
-    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "InheritableThread",
-    "inheritable_thread_target", "__version__",
+    "SparkConf",
+    "SparkContext",
+    "SparkFiles",
+    "RDD",
+    "StorageLevel",
+    "Broadcast",
+    "Accumulator",
+    "AccumulatorParam",
+    "MarshalSerializer",
+    "PickleSerializer",
+    "StatusTracker",
+    "SparkJobInfo",
+    "SparkStageInfo",
+    "Profiler",
+    "BasicProfiler",
+    "TaskContext",
+    "RDDBarrier",
+    "BarrierTaskContext",
+    "BarrierTaskInfo",
+    "InheritableThread",
+    "inheritable_thread_target",
+    "__version__",
 ]

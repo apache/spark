@@ -21,7 +21,6 @@ import math
 
 
 class RDDSamplerBase(object):
-
     def __init__(self, withReplacement, seed=None):
         self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
         self._withReplacement = withReplacement
@@ -62,7 +61,6 @@ class RDDSamplerBase(object):
 
 
 class RDDSampler(RDDSamplerBase):
-
     def __init__(self, withReplacement, fraction, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
@@ -84,7 +82,6 @@ class RDDSampler(RDDSamplerBase):
 
 
 class RDDRangeSampler(RDDSamplerBase):
-
     def __init__(self, lowerBound, upperBound, seed=None):
         RDDSamplerBase.__init__(self, False, seed)
         self._lowerBound = lowerBound
@@ -98,7 +95,6 @@ class RDDRangeSampler(RDDSamplerBase):
 
 
 class RDDStratifiedSampler(RDDSamplerBase):
-
     def __init__(self, withReplacement, fractions, seed=None):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fractions = fractions

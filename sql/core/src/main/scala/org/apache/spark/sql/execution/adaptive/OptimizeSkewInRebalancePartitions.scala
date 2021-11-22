@@ -33,9 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
  *                            (without this rule) r1[m0-b1, m1-b1, m2-b1]
  *                              /                                     \
  *   r0:[m0-b0, m1-b0, m2-b0], r1-0:[m0-b1], r1-1:[m1-b1], r1-2:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
- *
- * Note that, this rule is only applied with the SparkPlan whose top-level node is
- * ShuffleQueryStageExec.
  */
 object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
 
@@ -92,10 +89,9 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
       return plan
     }
 
-    plan match {
+    plan transformUp {
       case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
-      case _ => plan
     }
   }
 }

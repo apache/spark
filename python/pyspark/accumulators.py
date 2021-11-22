@@ -23,7 +23,7 @@ import threading
 from pyspark.serializers import read_int, PickleSerializer
 
 
-__all__ = ['Accumulator', 'AccumulatorParam']
+__all__ = ["Accumulator", "AccumulatorParam"]
 
 
 pickleSer = PickleSerializer()
@@ -35,6 +35,7 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
+
     # If this certain accumulator was deserialized, don't overwrite it.
     if aid in _accumulatorRegistry:
         return _accumulatorRegistry[aid]
@@ -108,6 +109,7 @@ class Accumulator(object):
     def __init__(self, aid, value, accum_param):
         """Create a new Accumulator with a given initial value and AccumulatorParam object"""
         from pyspark.accumulators import _accumulatorRegistry
+
         self.aid = aid
         self.accum_param = accum_param
         self._value = value
@@ -225,6 +227,7 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
+
         auth_token = self.server.auth_token
 
         def poll(func):
@@ -248,13 +251,14 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
             received_token = self.rfile.read(len(auth_token))
             if isinstance(received_token, bytes):
                 received_token = received_token.decode("utf-8")
-            if (received_token == auth_token):
+            if received_token == auth_token:
                 accum_updates()
                 # we've authenticated, we can break out of the first loop now
                 return True
             else:
                 raise ValueError(
-                    "The value of the provided token to the AccumulatorServer is not correct.")
+                    "The value of the provided token to the AccumulatorServer is not correct."
+                )
 
         # first we keep polling till we've received the authentication token
         poll(authenticate_and_accum_updates)
@@ -263,7 +267,6 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
 
 class AccumulatorServer(SocketServer.TCPServer):
-
     def __init__(self, server_address, RequestHandlerClass, auth_token):
         SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass)
         self.auth_token = auth_token
@@ -288,16 +291,17 @@ def _start_update_server(auth_token):
     thread.start()
     return server
 
+
 if __name__ == "__main__":
     import doctest
 
     from pyspark.context import SparkContext
+
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    globs['sc'] = SparkContext('local', 'test')
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    globs["sc"] = SparkContext("local", "test")
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

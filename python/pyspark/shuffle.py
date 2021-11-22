@@ -26,8 +26,13 @@ import random
 import sys
 
 import heapq
-from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
-    CompressedSerializer, AutoBatchedSerializer
+from pyspark.serializers import (
+    BatchedSerializer,
+    PickleSerializer,
+    FlattenedValuesSerializer,
+    CompressedSerializer,
+    AutoBatchedSerializer,
+)
 from pyspark.util import fail_on_stopiteration  # type: ignore
 
 
@@ -37,7 +42,7 @@ try:
     process = None
 
     def get_used_memory():
-        """ Return the used memory in MiB """
+        """Return the used memory in MiB"""
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -47,20 +52,21 @@ try:
             info = process.get_memory_info()
         return info.rss >> 20
 
+
 except ImportError:
 
     def get_used_memory():
-        """ Return the used memory in MiB """
-        if platform.system() == 'Linux':
-            for line in open('/proc/self/status'):
-                if line.startswith('VmRSS:'):
+        """Return the used memory in MiB"""
+        if platform.system() == "Linux":
+            for line in open("/proc/self/status"):
+                if line.startswith("VmRSS:"):
                     return int(line.split()[1]) >> 10
 
         else:
-            warnings.warn("Please install psutil to have better "
-                          "support with spilling")
+            warnings.warn("Please install psutil to have better " "support with spilling")
             if platform.system() == "Darwin":
                 import resource
+
                 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 return rss >> 20
             # TODO: support windows
@@ -69,7 +75,7 @@ except ImportError:
 
 
 def _get_local_dirs(sub):
-    """ Get all the directories """
+    """Get all the directories"""
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
     dirs = path.split(",")
     if len(dirs) > 1:
@@ -121,15 +127,15 @@ class Merger(object):
         self.agg = aggregator
 
     def mergeValues(self, iterator):
-        """ Combine the items by creator and combiner """
+        """Combine the items by creator and combiner"""
         raise NotImplementedError
 
     def mergeCombiners(self, iterator):
-        """ Merge the combined items by mergeCombiner """
+        """Merge the combined items by mergeCombiner"""
         raise NotImplementedError
 
     def items(self):
-        """ Return the merged items ad iterator """
+        """Return the merged items ad iterator"""
         raise NotImplementedError
 
 
@@ -197,8 +203,16 @@ class ExternalMerger(Merger):
     # the max total partitions created recursively
     MAX_TOTAL_PARTITIONS = 4096
 
-    def __init__(self, aggregator, memory_limit=512, serializer=None,
-                 localdirs=None, scale=1, partitions=59, batch=1000):
+    def __init__(
+        self,
+        aggregator,
+        memory_limit=512,
+        serializer=None,
+        localdirs=None,
+        scale=1,
+        partitions=59,
+        batch=1000,
+    ):
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
         self.serializer = _compressed_serializer(serializer)
@@ -219,7 +233,7 @@ class ExternalMerger(Merger):
         self._seed = id(self) + 7
 
     def _get_spill_dir(self, n):
-        """ Choose one directory for spill by number n """
+        """Choose one directory for spill by number n"""
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
     def _next_limit(self):
@@ -231,7 +245,7 @@ class ExternalMerger(Merger):
         return max(self.memory_limit, get_used_memory() * 1.05)
 
     def mergeValues(self, iterator):
-        """ Combine the items by creator and combiner """
+        """Combine the items by creator and combiner"""
         # speedup attribute lookup
         creator, comb = self.agg.createCombiner, self.agg.mergeValue
         c, data, pdata, hfun, batch = 0, self.data, self.pdata, self._partition, self.batch
@@ -255,17 +269,17 @@ class ExternalMerger(Merger):
             self._spill()
 
     def _partition(self, key):
-        """ Return the partition for key """
+        """Return the partition for key"""
         return hash((key, self._seed)) % self.partitions
 
     def _object_size(self, obj):
-        """ How much of memory for this obj, assume that all the objects
+        """How much of memory for this obj, assume that all the objects
         consume similar bytes of memory
         """
         return 1
 
     def mergeCombiners(self, iterator, limit=None):
-        """ Merge (K,V) pair by mergeCombiner """
+        """Merge (K,V) pair by mergeCombiner"""
         if limit is None:
             limit = self.memory_limit
         # speedup attribute lookup
@@ -309,8 +323,7 @@ class ExternalMerger(Merger):
             # above limit at the first time.
 
             # open all the files for writing
-            streams = [open(os.path.join(path, str(i)), 'wb')
-                       for i in range(self.partitions)]
+            streams = [open(os.path.join(path, str(i)), "wb") for i in range(self.partitions)]
 
             for k, v in self.data.items():
                 h = self._partition(k)
@@ -339,13 +352,13 @@ class ExternalMerger(Merger):
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
     def items(self):
-        """ Return all merged items as iterator """
+        """Return all merged items as iterator"""
         if not self.pdata and not self.spills:
             return iter(self.data.items())
         return self._external_items()
 
     def _external_items(self):
-        """ Return all partitioned items as iterator """
+        """Return all partitioned items as iterator"""
         assert not self.data
         if any(self.pdata):
             self._spill()
@@ -376,9 +389,11 @@ class ExternalMerger(Merger):
                 self.mergeCombiners(self.serializer.load_stream(f), 0)
 
             # limit the total partitions
-            if (self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
-                    and j < self.spills - 1
-                    and get_used_memory() > limit):
+            if (
+                self.scale * self.partitions < self.MAX_TOTAL_PARTITIONS
+                and j < self.spills - 1
+                and get_used_memory() > limit
+            ):
                 self.data.clear()  # will read from disk again
                 gc.collect()  # release the memory as much as possible
                 return self._recursive_merged_items(index)
@@ -393,15 +408,22 @@ class ExternalMerger(Merger):
         partitioned and merged recursively.
         """
         subdirs = [os.path.join(d, "parts", str(index)) for d in self.localdirs]
-        m = ExternalMerger(self.agg, self.memory_limit, self.serializer, subdirs,
-                           self.scale * self.partitions, self.partitions, self.batch)
+        m = ExternalMerger(
+            self.agg,
+            self.memory_limit,
+            self.serializer,
+            subdirs,
+            self.scale * self.partitions,
+            self.partitions,
+            self.batch,
+        )
         m.pdata = [{} for _ in range(self.partitions)]
         limit = self._next_limit()
 
         for j in range(self.spills):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
-            with open(p, 'rb') as f:
+            with open(p, "rb") as f:
                 m.mergeCombiners(self.serializer.load_stream(f), 0)
 
             if get_used_memory() > limit:
@@ -411,7 +433,7 @@ class ExternalMerger(Merger):
         return m._external_items()
 
     def _cleanup(self):
-        """ Clean up all the files in disks """
+        """Clean up all the files in disks"""
         for d in self.localdirs:
             shutil.rmtree(d, True)
 
@@ -435,13 +457,14 @@ class ExternalSorter(object):
     >>> sorted(l) == list(sorter.sorted(l, key=lambda x: -x, reverse=True))
     True
     """
+
     def __init__(self, memory_limit, serializer=None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
         self.serializer = _compressed_serializer(serializer)
 
     def _get_path(self, n):
-        """ Choose one directory for spill by number n """
+        """Choose one directory for spill by number n"""
         d = self.local_dirs[n % len(self.local_dirs)]
         if not os.path.exists(d):
             os.makedirs(d)
@@ -476,7 +499,7 @@ class ExternalSorter(object):
                 # sort them inplace will save memory
                 current_chunk.sort(key=key, reverse=reverse)
                 path = self._get_path(len(chunks))
-                with open(path, 'wb') as f:
+                with open(path, "wb") as f:
                     self.serializer.dump_stream(current_chunk, f)
 
                 def load(f):
@@ -485,7 +508,8 @@ class ExternalSorter(object):
                     # close the file explicit once we consume all the items
                     # to avoid ResourceWarning in Python3
                     f.close()
-                chunks.append(load(open(path, 'rb')))
+
+                chunks.append(load(open(path, "rb")))
                 current_chunk = []
                 MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
                 DiskBytesSpilled += os.path.getsize(path)
@@ -528,6 +552,7 @@ class ExternalList(object):
     >>> list(l2)[100]
     10
     """
+
     LIMIT = 10240
 
     def __init__(self, values):
@@ -543,7 +568,7 @@ class ExternalList(object):
                 f.seek(0)
                 serialized = f.read()
         else:
-            serialized = b''
+            serialized = b""
         return self.values, self.count, serialized
 
     def __setstate__(self, item):
@@ -559,7 +584,7 @@ class ExternalList(object):
         if self._file is not None:
             self._file.flush()
             # read all items from disks first
-            with os.fdopen(os.dup(self._file.fileno()), 'rb') as f:
+            with os.fdopen(os.dup(self._file.fileno()), "rb") as f:
                 f.seek(0)
                 for v in self._ser.load_stream(f):
                     yield v
@@ -593,7 +618,7 @@ class ExternalList(object):
             self._file = None
 
     def _spill(self):
-        """ dump the values into disk """
+        """dump the values into disk"""
         global MemoryBytesSpilled, DiskBytesSpilled
         if self._file is None:
             self._open_file()
@@ -705,6 +730,7 @@ class ExternalGroupBy(ExternalMerger):
       items with the same key as a group, yield the values as
       an iterator.
     """
+
     SORT_KEY_LIMIT = 1000
 
     def flattened_serializer(self):
@@ -732,8 +758,7 @@ class ExternalGroupBy(ExternalMerger):
             # above limit at the first time.
 
             # open all the files for writing
-            streams = [open(os.path.join(path, str(i)), 'wb')
-                       for i in range(self.partitions)]
+            streams = [open(os.path.join(path, str(i)), "wb") for i in range(self.partitions)]
 
             # If the number of keys is small, then the overhead of sort is small
             # sort them before dumping into disks
@@ -775,8 +800,10 @@ class ExternalGroupBy(ExternalMerger):
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
     def _merged_items(self, index):
-        size = sum(os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
-                   for j in range(self.spills))
+        size = sum(
+            os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
+            for j in range(self.spills)
+        )
         # if the memory can not hold all the partition,
         # then use sort based merge. Because of compression,
         # the data on disks will be much smaller than needed memory
@@ -793,11 +820,12 @@ class ExternalGroupBy(ExternalMerger):
         return self.data.items()
 
     def _merge_sorted_items(self, index):
-        """ load a partition from disk, then sort and group by key """
+        """load a partition from disk, then sort and group by key"""
+
         def load_partition(j):
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
-            with open(p, 'rb', 65536) as f:
+            with open(p, "rb", 65536) as f:
                 for v in self.serializer.load_stream(f):
                     yield v
 
@@ -812,13 +840,13 @@ class ExternalGroupBy(ExternalMerger):
             # memory during merging sort.
             ser = self.flattened_serializer()
             sorter = ExternalSorter(self.memory_limit, ser)
-            sorted_items = sorter.sorted(itertools.chain(*disk_items),
-                                         key=operator.itemgetter(0))
+            sorted_items = sorter.sorted(itertools.chain(*disk_items), key=operator.itemgetter(0))
         return ((k, vs) for k, vs in GroupByKey(sorted_items))
 
 
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

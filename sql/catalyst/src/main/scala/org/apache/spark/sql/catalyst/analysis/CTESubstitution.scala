@@ -48,6 +48,9 @@ import org.apache.spark.sql.internal.SQLConf.{LEGACY_CTE_PRECEDENCE_POLICY, Lega
  */
 object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!plan.containsPattern(UNRESOLVED_WITH)) {
+      return plan
+    }
     val isCommand = plan.find {
       case _: Command | _: ParsedStatement | _: InsertIntoDir => true
       case _ => false
@@ -224,7 +227,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
-      case u @ UnresolvedRelation(Seq(table), _, _) =>
+      case u @ UnresolvedRelation(Seq(table), _, _, _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
           if (alwaysInline) {
             d.child
