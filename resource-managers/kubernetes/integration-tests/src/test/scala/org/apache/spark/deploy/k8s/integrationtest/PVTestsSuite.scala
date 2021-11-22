@@ -28,8 +28,6 @@ import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
   import PVTestsSuite._
 
-  var i = 0
-
   private def setupLocalStorageClass(): Unit = {
     val scBuilder = new StorageClassBuilder()
       .withKind("StorageClass")
@@ -55,13 +53,11 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
 
     setupLocalStorageClass()
 
-    i = i + 1
-
     val pvBuilder = new PersistentVolumeBuilder()
       .withKind("PersistentVolume")
       .withApiVersion("v1")
       .withNewMetadata()
-        .withName(f"{PV_NAME}-{i}")
+        .withName("test-local-pv")
       .endMetadata()
       .withNewSpec()
         .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
@@ -85,7 +81,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .withKind("PersistentVolumeClaim")
       .withApiVersion("v1")
       .withNewMetadata()
-        .withName(f"{PVC_NAME}-{i}")
+        .withName(PVC_NAME)
       .endMetadata()
       .withNewSpec()
         .withAccessModes("ReadWriteOnce")
@@ -109,13 +105,13 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
-      .withName(f"{PVC_NAME}-{i}")
+      .withName(PVC_NAME)
       .delete()
 
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumes()
-      .withName(f"{PV_NAME}-{i}")
+      .withName(PV_NAME)
       .delete()
 
     kubernetesTestComponents
