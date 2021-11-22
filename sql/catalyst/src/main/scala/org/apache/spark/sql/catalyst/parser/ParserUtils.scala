@@ -19,15 +19,16 @@ package org.apache.spark.sql.catalyst.parser
 import java.lang.{Long => JLong}
 import java.nio.CharBuffer
 import java.util
+
 import scala.collection.mutable.StringBuilder
+
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.TerminalNode
+
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.errors.QueryParsingErrors
-
-import java.util.regex.Pattern
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -205,11 +206,11 @@ object ParserUtils {
   /** the column name pattern in quoted regex with qualifier */
   val qualifiedEscapedIdentifier = ("((?s).+)" + """.""" + "`((?s).+)`").r
 
-  val bracketedCommentPrefix = Pattern.compile("/\\*")
+  val bracketedCommentPrefix = util.regex.Pattern.compile("/\\*")
 
-  val bracketedCommentSuffix = Pattern.compile("\\*/")
+  val bracketedCommentSuffix = util.regex.Pattern.compile("\\*/")
 
-  def appearNumber(str: String, pattern: Pattern): Int = {
+  def appearNumber(str: String, pattern: util.regex.Pattern): Int = {
     var count = 0
     val m = pattern.matcher(str)
     while (m.find()) {
