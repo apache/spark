@@ -219,6 +219,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Seconds") {
+    assert(Second(Literal(ts)).eval() == 15)
     assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
     Seq(TimestampType, TimestampNTZType).foreach { dt =>
@@ -364,6 +365,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Minute") {
+    assert(Minute(Literal(ts)).eval() == 10)
     assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Minute(Literal(ts), UTC_OPT).resolved)
     Seq(TimestampType, TimestampNTZType).foreach { dt =>
