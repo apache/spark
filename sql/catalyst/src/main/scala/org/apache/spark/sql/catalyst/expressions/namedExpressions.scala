@@ -446,9 +446,9 @@ object VirtualColumn {
  * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
-  def apply(name: String, dataType: DataType): AttributeReference =
-    AttributeReference(name, dataType, true,
-      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, true).build())()
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
 
   def unapply(attr: AttributeReference): Option[AttributeReference] = {
     if (attr.metadata.contains(METADATA_COL_ATTR_KEY)

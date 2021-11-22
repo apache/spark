@@ -26,8 +26,8 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, JoinedRow, MetadataAttribute, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeRowJoiner, UnsafeRowJoiner}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
@@ -121,10 +121,22 @@ class FileScanRDD(
       // FILE METADATA METHODS //
       ///////////////////////////
 
-      // use to join with an unsafe row, will only be updated when the current file is changed
-      @volatile var metadataStructUnsafeRow: UnsafeRow = _
-      // use to append to an internal row, will only be updated when the current file is changed
-      @volatile var metadataStructGenericRow: Row = _
+      // whether a metadata column exists and it is a `MetadataAttribute`
+      private lazy val hasMetadataAttribute: Boolean = {
+        metadataStruct.exists {
+          case MetadataAttribute(_) => true
+          case _ => false
+        }
+      }
+
+      // metadata struct unsafe row, will only be updated when the current file is changed
+      @volatile private var metadataStructUnsafeRow: UnsafeRow = _
+      // metadata generic row, will only be updated when the current file is changed
+      @volatile private var metadataStructGenericRow: Row = _
+      // an unsafe joiner to join an unsafe row with the metadata unsafe row
+      lazy private val unsafeRowJoiner =
+        if (hasMetadataAttribute)
+          GenerateUnsafeRowJoiner.create(requiredSchema, Seq(metadataStruct.get).toStructType)
 
       // Create a off/on heap WritableColumnVector
       private def createColumnVector(numRows: Int, dataType: DataType): WritableColumnVector = {
@@ -139,8 +151,8 @@ class FileScanRDD(
        * For each partitioned file, metadata columns for each record in the file are exactly same.
        * Only update metadata columns when `currentFile` is changed.
        */
-      private def updateMetadataStruct(): Unit =
-        if (metadataStruct.exists(_.sameRef(FILE_METADATA_COLUMNS))) {
+      private def updateMetadataStruct(): Unit = {
+        if (hasMetadataAttribute) {
           val meta = metadataStruct.get
           if (currentFile == null) {
             metadataStructUnsafeRow = new UnsafeRow(1)
@@ -162,7 +174,7 @@ class FileScanRDD(
             // convert the generic row to an unsafe row
             val unsafeRowConverter = {
               val converter = UnsafeProjection.create(
-                Array(FILE_METADATA_COLUMNS.dataType))
+                Array(METADATA_STRUCT))
               (row: Row) => {
                 converter(CatalystTypeConverters.convertToCatalyst(row)
                   .asInstanceOf[InternalRow])
@@ -172,13 +184,14 @@ class FileScanRDD(
               unsafeRowConverter(Row.fromSeq(Seq(metadataStructGenericRow)))
           }
         }
+      }
 
       /**
        * Create a writable column vector containing all required metadata fields
        */
       private def createMetadataStructColumnVector(
           c: ColumnarBatch, meta: AttributeReference): WritableColumnVector = {
-        val columnVector = createColumnVector(c.numRows(), FILE_METADATA_COLUMNS.dataType)
+        val columnVector = createColumnVector(c.numRows(), METADATA_STRUCT)
         val filePathBytes = new File(currentFile.filePath).toString.getBytes
         val fileNameBytes = currentFile.filePath.split("/").last.getBytes
         var rowId = 0
@@ -214,8 +227,8 @@ class FileScanRDD(
        * Add metadata struct at the end of nextElement if needed.
        * For different row implementations, use different methods to update and append.
        */
-      private def addMetadataStructIfNeeded(nextElement: Object): Object =
-        if (metadataStruct.exists(_.sameRef(FILE_METADATA_COLUMNS))) {
+      private def addMetadataStructIfNeeded(nextElement: Object): Object = {
+        if (hasMetadataAttribute) {
           val meta = metadataStruct.get
           nextElement match {
             case c: ColumnarBatch =>
@@ -223,15 +236,14 @@ class FileScanRDD(
                 Array(createMetadataStructColumnVector(c, meta))
               new ColumnarBatch(columnVectorArr, c.numRows())
             case u: UnsafeRow =>
-              val joiner =
-                GenerateUnsafeRowJoiner.create(requiredSchema, Seq(meta).toStructType)
-              joiner.join(u, metadataStructUnsafeRow)
+              unsafeRowJoiner.asInstanceOf[UnsafeRowJoiner].join(u, metadataStructUnsafeRow)
             case i: InternalRow =>
-              InternalRow.fromSeq(i.toSeq(requiredSchema) ++ metadataStructGenericRow.toSeq)
+              new JoinedRow(i, InternalRow.fromSeq(metadataStructGenericRow.toSeq))
           }
         } else {
           nextElement
         }
+      }
 
       def next(): Object = {
         val nextElement = currentIterator.next()

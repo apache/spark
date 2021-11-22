@@ -44,6 +44,9 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     .add(StructField("id", LongType))
     .add(StructField("university", StringType))
 
+  // make sure:
+  // `_metadata.file_size` (a flat column) and _metadata.file_size (a field in a strut)
+  // are not the same columns, users could read both correctly
   val schemaWithNameConflicts: StructType = new StructType()
     .add(StructField("name", StringType))
     .add(StructField("age", IntegerType))
@@ -208,8 +211,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("metadata columns will not " +
-    "overwrite user data schema", schemaWithNameConflicts) { (df, f0, f1) =>
+  metadataColumnsTest("metadata fields and `_metadata.file_size` " +
+    "are not the same", schemaWithNameConflicts) { (df, f0, f1) =>
     // here: the data has the schema: name, age, _metadata.file_size, _metadata.file_name
     checkAnswer(
       df.select("name", "age", "`_metadata.file_size`", "`_metadata.FILE_NAME`",
@@ -352,35 +355,31 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  Seq("true", "false").foreach { photonEnabled =>
-    Seq("true", "false").foreach { offHeapColumnVectorEnabled =>
-      withSQLConf("spark.sql.columnVector.offheap.enabled" -> offHeapColumnVectorEnabled,
-        "spark.databricks.photon.enabled" -> photonEnabled) {
-        metadataColumnsTest(s"read metadata with " +
-          s"offheap set to $offHeapColumnVectorEnabled, " +
-          s"photon set to $photonEnabled", schema) { (df, f0, f1) =>
-          // read all available metadata columns
-          checkAnswer(
-            df.select("name", "age", "id", "university",
-              METADATA_FILE_NAME, METADATA_FILE_PATH,
-              METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
-            Seq(
-              Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
-                f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
-              Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
-                f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
-            )
+  Seq("true", "false").foreach { offHeapColumnVectorEnabled =>
+    withSQLConf("spark.sql.columnVector.offheap.enabled" -> offHeapColumnVectorEnabled) {
+      metadataColumnsTest(s"read metadata with " +
+        s"offheap set to $offHeapColumnVectorEnabled", schema) { (df, f0, f1) =>
+        // read all available metadata columns
+        checkAnswer(
+          df.select("name", "age", "id", "university",
+            METADATA_FILE_NAME, METADATA_FILE_PATH,
+            METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
+          Seq(
+            Row("jack", 24, 12345L, "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
+              f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
+            Row("lily", 31, null, "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+              f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
           )
+        )
 
-          // read a part of metadata columns
-          checkAnswer(
-            df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
-            Seq(
-              Row("jack", "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_SIZE)),
-              Row("lily", "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_SIZE))
-            )
+        // read a part of metadata columns
+        checkAnswer(
+          df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
+          Seq(
+            Row("jack", "uom", f0(METADATA_FILE_NAME), f0(METADATA_FILE_SIZE)),
+            Row("lily", "ucb", f1(METADATA_FILE_NAME), f1(METADATA_FILE_SIZE))
           )
-        }
+        )
       }
     }
   }
