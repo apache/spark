@@ -818,8 +818,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        arrow_enabled_status = [True, False]
-        for value in arrow_enabled_status:
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
                 dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
                 dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
@@ -845,8 +845,8 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        arrow_enabled_status = [True, False]
-        for value in arrow_enabled_status:
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
                 pdf = self.spark.sql(sql).toPandas()
                 types = pdf.dtypes
@@ -884,8 +884,8 @@ class DataFrameTests(ReusedSQLTestCase):
         FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
                     (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
-        arrow_enabled_status = [True, False]
-        for value in arrow_enabled_status:
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
                 pdf_with_some_nulls = self.spark.sql(sql).toPandas()
                 pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()

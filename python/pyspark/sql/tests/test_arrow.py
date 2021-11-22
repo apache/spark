@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     NullType,
+    DayTimeIntervalType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -208,7 +209,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_empty_df_arrow_enabled(self):
         # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
         # when arrow is enabled
-        from datetime import datetime, date
+        from datetime import date
         from decimal import Decimal
 
         schema = StructType(
@@ -222,6 +223,8 @@ class ArrowTests(ReusedSQLTestCase):
                 StructField("g", DateType(), True),
                 StructField("h", BinaryType(), True),
                 StructField("i", DecimalType(38, 18), True),
+                StructField("k", TimestampNTZType(), True),
+                StructField("L", DayTimeIntervalType(0, 3), True),
             ]
         )
         df = self.spark.createDataFrame(self.spark.sparkContext.emptyRDD(), schema=schema)
@@ -230,13 +233,15 @@ class ArrowTests(ReusedSQLTestCase):
                 (
                     "a",
                     1,
-                    datetime(1969, 1, 1, 1, 1, 1),
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
                     None,
                     10,
                     0.2,
                     date(1969, 1, 1),
                     bytearray(b"a"),
                     Decimal("2.0"),
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    datetime.timedelta(microseconds=123),
                 )
             ],
             schema=schema,
