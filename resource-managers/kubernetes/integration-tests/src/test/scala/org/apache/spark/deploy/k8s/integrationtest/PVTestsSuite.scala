@@ -120,6 +120,28 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .storageClasses()
       .withName(STORAGE_NAME)
       .delete()
+
+    // Wait for them to be deleted
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(kubernetesTestComponents
+        .kubernetesClient
+        .persistentVolumeClaims()
+        .withName(PVC_NAME)
+        .get() === null)
+
+      assert(kubernetesTestComponents
+        .kubernetesClient
+        .persistentVolumes()
+        .withName(PV_NAME)
+        .get() === null)
+
+      assert(kubernetesTestComponents
+        .kubernetesClient
+        .storage()
+        .storageClasses()
+        .withName(STORAGE_NAME)
+        .get() === null)
+    }
   }
 
   private def checkPVs(pod: Pod, file: String) = {
