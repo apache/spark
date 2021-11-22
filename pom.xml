@@ -3583,7 +3583,7 @@
     <profile>
       <id>mac-on-apple-silicon</id>
       <properties>
-        <test.exclude.tags>org.apache.spark.tags.ExtendedLevelDBTest,org.apache.spark.tags.ExtendedRocksDBTest</test.exclude.tags>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest,org.apache.spark.tags.ExtendedRocksDBTest</test.default.exclude.tags>
       </properties>
       <activation>
         <os>
