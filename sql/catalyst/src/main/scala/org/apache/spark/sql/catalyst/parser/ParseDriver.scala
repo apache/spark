@@ -90,6 +90,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
     val lexer = tokenStream.getTokenSource.asInstanceOf[SqlBaseLexer]
     if (lexer.has_unclosed_bracketed_comment) {
+      // The last token is 'EOF' and the penultimate is unclosed bracketed comment
       val failedToken = tokenStream.get(tokenStream.size() - 2)
       assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
       val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
