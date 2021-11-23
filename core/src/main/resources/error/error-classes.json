@@ -54,6 +54,9 @@
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
   },
+  "ILLEGAL_SUBSTRING" : {
+    "message" : [ "%s cannot contain %s." ]
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"

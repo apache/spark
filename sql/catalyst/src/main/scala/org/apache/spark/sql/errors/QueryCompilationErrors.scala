@@ -66,6 +66,12 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
+  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
+    new AnalysisException(
+      errorClass = "ILLEGAL_SUBSTRING",
+      messageParameters = Array(subject, illegalContent))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
