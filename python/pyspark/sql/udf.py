@@ -20,7 +20,7 @@ User-defined function related classes and functions
 import functools
 import inspect
 import sys
-from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union, Tuple
+from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -230,6 +230,7 @@ class UserDefinedFunction(object):
     def __call__(self, *cols: "ColumnOrName") -> Column:
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
 
+        profiler: Optional[Profiler] = None
         if sc.profiler_collector:
             f = self.func
             profiler = sc.profiler_collector.new_udf_profiler(sc)
@@ -246,7 +247,7 @@ class UserDefinedFunction(object):
             judf = self._judf
 
         jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-        if sc.profiler_collector:
+        if profiler is not None:
             id = jPythonUDF.expr().resultId().id()
             sc.profiler_collector.add_profiler(id, profiler)
         return Column(jPythonUDF)
