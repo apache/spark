@@ -531,9 +531,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
 @Unstable
 object Decimal {
-  val ROUND_UP = BigDecimal.RoundingMode.UP
-  val ROUND_DOWN = BigDecimal.RoundingMode.DOWN
-  val ROUND_HALF_DOWN = BigDecimal.RoundingMode.HALF_DOWN
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
