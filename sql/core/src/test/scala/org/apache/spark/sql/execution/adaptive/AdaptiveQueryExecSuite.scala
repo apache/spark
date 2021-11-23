@@ -2260,13 +2260,15 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584") {
       // Spark estimates a string column as 20 bytes so with 60k rows, these relations should be
-      // estimated at ~120m bytes which is greater than the broadcast join threshold
-      Seq.fill(60000)("a").toDF("key")
+      // estimated at ~120m bytes which is greater than the broadcast join threshold.
+      val joinKeyOne = "00112233445566778899"
+      val joinKeyTwo = "11223344556677889900"
+      Seq.fill(60000)(joinKeyOne).toDF("key")
         .createOrReplaceTempView("temp")
-      Seq.fill(60000)("b").toDF("key")
+      Seq.fill(60000)(joinKeyTwo).toDF("key")
         .createOrReplaceTempView("temp2")
 
-      Seq("a").toDF("key").createOrReplaceTempView("smallTemp")
+      Seq(joinKeyOne).toDF("key").createOrReplaceTempView("smallTemp")
       spark.sql("SELECT key as newKey FROM temp").persist()
 
       // This query is trying to set up a situation where there are three joins.
