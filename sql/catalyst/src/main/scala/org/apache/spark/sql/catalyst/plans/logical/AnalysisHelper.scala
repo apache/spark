@@ -134,12 +134,20 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRuleOnChildren = mapChildren(_.resolveOperatorsUpWithPruning(cond, ruleId)(rule))
         val afterRule = if (self fastEquals afterRuleOnChildren) {
-          CurrentOrigin.withOrigin(origin) {
-            rule.applyOrElse(self, identity[LogicalPlan])
+          if (rule.isDefinedAt(self)) {
+            CurrentOrigin.withOrigin(origin) {
+              rule.apply(self)
+            }
+          } else {
+            self
           }
         } else {
-          CurrentOrigin.withOrigin(origin) {
-            rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+          if (rule.isDefinedAt(afterRuleOnChildren)) {
+            CurrentOrigin.withOrigin(origin) {
+              rule.apply(afterRuleOnChildren)
+            }
+          } else {
+            afterRuleOnChildren
           }
         }
         if (self eq afterRule) {
