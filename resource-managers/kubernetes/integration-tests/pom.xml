@@ -192,7 +192,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3.3</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
