@@ -156,6 +156,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
+    // SPARK-37448: performance optimization: set withOrigin = false in MapExpressions because
+    // transformDownWithPruning call `CurrentOrigin.withOrigin`:
     mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule), withOrigin = false)
   }
 
@@ -185,6 +187,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
+    // SPARK-37448: performance optimization: set withOrigin = false in MapExpressions because
+    // transformUpWithPruning call `CurrentOrigin.withOrigin`:
     mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule), withOrigin = false)
   }
 
