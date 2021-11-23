@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     NullType,
+    DayTimeIntervalType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -204,6 +205,53 @@ class ArrowTests(ReusedSQLTestCase):
             with self.warnings_lock:
                 with self.assertRaisesRegex(Exception, "Unsupported type"):
                     df.toPandas()
+
+    def test_toPandas_empty_df_arrow_enabled(self):
+        # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
+        # when arrow is enabled
+        from datetime import date
+        from decimal import Decimal
+
+        schema = StructType(
+            [
+                StructField("a", StringType(), True),
+                StructField("a", IntegerType(), True),
+                StructField("c", TimestampType(), True),
+                StructField("d", NullType(), True),
+                StructField("e", LongType(), True),
+                StructField("f", FloatType(), True),
+                StructField("g", DateType(), True),
+                StructField("h", BinaryType(), True),
+                StructField("i", DecimalType(38, 18), True),
+                StructField("k", TimestampNTZType(), True),
+                StructField("L", DayTimeIntervalType(0, 3), True),
+            ]
+        )
+        df = self.spark.createDataFrame(self.spark.sparkContext.emptyRDD(), schema=schema)
+        non_empty_df = self.spark.createDataFrame(
+            [
+                (
+                    "a",
+                    1,
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    None,
+                    10,
+                    0.2,
+                    date(1969, 1, 1),
+                    bytearray(b"a"),
+                    Decimal("2.0"),
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    datetime.timedelta(microseconds=123),
+                )
+            ],
+            schema=schema,
+        )
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        pdf_non_empty, pdf_arrow_non_empty = self._toPandas_arrow_toggle(non_empty_df)
+        assert_frame_equal(pdf, pdf_arrow)
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_arrow_non_empty.dtypes))
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_non_empty.dtypes))
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame(
