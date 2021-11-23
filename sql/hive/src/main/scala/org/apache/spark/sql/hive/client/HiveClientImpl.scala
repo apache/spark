@@ -992,6 +992,7 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
+    // Store timestamp_ntz in a hive-compatible way, by storing both ntz and ltz as hive timestamp
     val field = c.dataType match {
       case TimestampNTZType => c.copy(dataType = TimestampType)
       case _ => c
