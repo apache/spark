@@ -162,8 +162,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
   }
 
-  def notifyDriverAboutPushCompletion(shuffleId: Int, mapIndex: Int): Unit = {
-    val msg = ShufflePushCompletion(shuffleId, mapIndex)
+  def notifyDriverAboutPushCompletion(shuffleId: Int, shuffleMergeId: Int, mapIndex: Int): Unit = {
+    val msg = ShufflePushCompletion(shuffleId, shuffleMergeId, mapIndex)
     driver.foreach(_.send(msg))
   }
 

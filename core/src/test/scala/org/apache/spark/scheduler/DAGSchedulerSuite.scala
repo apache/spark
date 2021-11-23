@@ -507,8 +507,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   /** Sends ShufflePushCompleted to the DAG scheduler. */
-  private def pushComplete(shuffleId: Int, mapIndex: Int): Unit = {
-    runEvent(ShufflePushCompleted(shuffleId, mapIndex))
+  private def pushComplete(
+      shuffleId: Int, shuffleMergeId: Int, mapIndex: Int): Unit = {
+    runEvent(ShufflePushCompleted(shuffleId, shuffleMergeId, mapIndex))
   }
 
   test("[SPARK-3353] parent stage should have lower stage id") {
@@ -3948,8 +3949,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       .asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask2.delay == 10 && finalizeTask2.registerMergeResults)
 
-    pushComplete(shuffleStage2.shuffleDep.shuffleId, 0)
-    pushComplete(shuffleStage2.shuffleDep.shuffleId, 1)
+    pushComplete(shuffleStage2.shuffleDep.shuffleId, 0, 0)
+    pushComplete(shuffleStage2.shuffleDep.shuffleId, 0, 1)
 
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)

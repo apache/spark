@@ -98,7 +98,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   private def verifyBlockPushCompleted(
       blockPusher: ShuffleBlockPusher): Unit = {
     verify(executorBackend, times(1))
-      .notifyDriverAboutPushCompletion(dependency.shuffleId, 0)
+      .notifyDriverAboutPushCompletion(dependency.shuffleId, 0, 0)
     assert(blockPusher.isPushCompletionNotified)
   }
 

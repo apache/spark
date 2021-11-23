@@ -168,8 +168,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
-      case ShufflePushCompletion(shuffleId, mapIndex) =>
-        scheduler.dagScheduler.shufflePushCompleted(shuffleId, mapIndex)
+      case ShufflePushCompletion(shuffleId, shuffleMergeId, mapIndex) =>
+        scheduler.dagScheduler.shufflePushCompleted(shuffleId, shuffleMergeId, mapIndex)
 
       case ReviveOffers =>
         makeOffers()
