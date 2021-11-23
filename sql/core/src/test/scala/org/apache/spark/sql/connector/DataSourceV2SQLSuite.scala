@@ -1301,6 +1301,18 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-37444: ALTER NAMESPACE .. SET LOCATION using v2 catalog with empty location") {
+    val ns = "testcat.ns1.ns2"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_1'")
+      val e = intercept[IllegalArgumentException] {
+        sql(s"ALTER DATABASE $ns SET LOCATION ''")
+      }
+      assert(e.getMessage.contains("Can not create a Path from an empty string"))
+    }
+  }
+
   private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {
