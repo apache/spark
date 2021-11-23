@@ -53,9 +53,10 @@ object JDBCRDD extends Logging {
    */
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
+    val withClause = options.withClause
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
-    getQueryOutputSchema(dialect.getSchemaQuery(table), options, dialect)
+    getQueryOutputSchema(withClause + dialect.getSchemaQuery(table), options, dialect)
   }
 
   def getQueryOutputSchema(
@@ -367,7 +368,8 @@ private[jdbc] class JDBCRDD(
 
     val myLimitClause: String = dialect.getLimitClause(limit)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
+    val sqlText = options.withClause +
+      s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
       s" $myWhereClause $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)

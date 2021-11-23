@@ -21,6 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
@@ -355,5 +356,43 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         -16, -65, 0, 0, 0, 0, 0, 0, -16, -65, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 2, 0, 0,
         0, 3, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
         0, 0, 0, 1, 0, 0, 0, 3))
+  }
+
+  test("withClause and query  JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val withClause = "WITH t AS (SELECT x, y FROM tbl)"
+    val query = "SELECT * FROM t WHERE x > 10"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("withClause", withClause)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    df.explain(true)
+  }
+
+  test("withClause and dbtable JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val withClause = "WITH t AS (SELECT x, y FROM tbl WHERE x > 10)"
+    val dbtable = "t"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("withClause", withClause)
+      .option("dbtable", dbtable)
+      .load()
+    assert(df.collect.toSet === expectedResult)
   }
 }

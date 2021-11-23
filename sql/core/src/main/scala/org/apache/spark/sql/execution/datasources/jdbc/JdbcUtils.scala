@@ -256,7 +256,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
+      val statement =
+        conn.prepareStatement(options.withClause + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))

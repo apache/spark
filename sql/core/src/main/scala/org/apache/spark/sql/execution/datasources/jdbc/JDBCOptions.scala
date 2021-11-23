@@ -222,6 +222,8 @@ class JDBCOptions(
 
   // User specified JDBC connection provider name
   val connectionProviderName = parameters.get(JDBC_CONNECTION_PROVIDER)
+
+  val withClause = parameters.get(JDBC_WITH_CLAUSE).map(_ + " ").getOrElse("")
 }
 
 class JdbcOptionsInWrite(
@@ -282,4 +284,5 @@ object JDBCOptions {
   val JDBC_TABLE_COMMENT = newOption("tableComment")
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
+  val JDBC_WITH_CLAUSE = newOption("withClause")
 }
