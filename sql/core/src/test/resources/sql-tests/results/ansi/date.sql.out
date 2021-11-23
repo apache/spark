@@ -219,10 +219,9 @@ struct<next_day(2015-07-23 12:12:12, Mon):date>
 -- !query
 select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon")
 -- !query schema
-struct<>
+struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'next_day(TIMESTAMP '2015-07-23 12:12:12', 'Mon')' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP '2015-07-23 12:12:12'' is of timestamp type.; line 1 pos 7
+2015-07-27
 
 
 -- !query
@@ -354,19 +353,17 @@ NULL
 -- !query
 select date_add(timestamp_ltz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<>
+struct<date_add(TIMESTAMP '2011-11-11 12:12:12', 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(TIMESTAMP '2011-11-11 12:12:12', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP '2011-11-11 12:12:12'' is of timestamp type.; line 1 pos 7
+2011-11-12
 
 
 -- !query
 select date_add(timestamp_ntz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<>
+struct<date_add(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 12:12:12'' is of timestamp_ntz type.; line 1 pos 7
+2011-11-12
 
 
 -- !query
@@ -464,19 +461,17 @@ NULL
 -- !query
 select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<>
+struct<date_sub(TIMESTAMP '2011-11-11 12:12:12', 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(TIMESTAMP '2011-11-11 12:12:12', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP '2011-11-11 12:12:12'' is of timestamp type.; line 1 pos 7
+2011-11-10
 
 
 -- !query
 select date_sub(timestamp_ntz'2011-11-11 12:12:12', 1)
 -- !query schema
-struct<>
+struct<date_sub(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 12:12:12'' is of timestamp_ntz type.; line 1 pos 7
+2011-11-10
 
 
 -- !query

@@ -71,10 +71,9 @@ ab	abcd	ab	NULL
 -- !query
 select left(null, -2)
 -- !query schema
-struct<>
+struct<left(NULL, -2):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'substring(NULL, 1, -2)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of void type.; line 1 pos 7
+NULL
 
 
 -- !query
@@ -89,19 +88,17 @@ invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'
 -- !query
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
 -- !query schema
-struct<>
+struct<right(abcd, 2):string,right(abcd, 5):string,right(abcd, 2):string,right(abcd, NULL):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'substring('abcd', (- CAST('2' AS DOUBLE)), 2147483647)' due to data type mismatch: argument 2 requires int type, however, '(- CAST('2' AS DOUBLE))' is of double type.; line 1 pos 43
+cd	abcd	cd	NULL
 
 
 -- !query
 select right(null, -2)
 -- !query schema
-struct<>
+struct<right(NULL, -2):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'substring(NULL, (- -2), 2147483647)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of void type.; line 1 pos 7
+NULL
 
 
 -- !query
@@ -109,8 +106,8 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'substring('abcd', (- CAST('a' AS DOUBLE)), 2147483647)' due to data type mismatch: argument 2 requires int type, however, '(- CAST('a' AS DOUBLE))' is of double type.; line 1 pos 44
+java.lang.NumberFormatException
+invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -308,28 +305,25 @@ trim
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query schema
-struct<>
+struct<btrim(encode( xyz , utf-8)):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'trim(encode(' xyz ', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode(' xyz ', 'utf-8')' is of binary type.; line 1 pos 7
+xyz
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query schema
-struct<>
+struct<btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH encode('xyz', 'utf-8') FROM encode('yxTomxx', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode('yxTomxx', 'utf-8')' is of binary type. argument 2 requires string type, however, 'encode('xyz', 'utf-8')' is of binary type.; line 1 pos 7
+Tom
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query schema
-struct<>
+struct<btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH encode('x', 'utf-8') FROM encode('xxxbarxxx', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode('xxxbarxxx', 'utf-8')' is of binary type. argument 2 requires string type, however, 'encode('x', 'utf-8')' is of binary type.; line 1 pos 7
+bar
 
 
 -- !query
@@ -545,37 +539,33 @@ AABB
 -- !query
 SELECT lpad('abc', 5, x'57')
 -- !query schema
-struct<>
+struct<lpad(abc, 5, X'57'):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'lpad('abc', 5, X'57')' due to data type mismatch: argument 3 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
+WWabc
 
 
 -- !query
 SELECT lpad(x'57', 5, 'abc')
 -- !query schema
-struct<>
+struct<lpad(X'57', 5, abc):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'lpad(X'57', 5, 'abc')' due to data type mismatch: argument 1 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
+abcaW
 
 
 -- !query
 SELECT rpad('abc', 5, x'57')
 -- !query schema
-struct<>
+struct<rpad(abc, 5, X'57'):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'rpad('abc', 5, X'57')' due to data type mismatch: argument 3 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
+abcWW
 
 
 -- !query
 SELECT rpad(x'57', 5, 'abc')
 -- !query schema
-struct<>
+struct<rpad(X'57', 5, abc):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'rpad(X'57', 5, 'abc')' due to data type mismatch: argument 1 requires string type, however, 'X'57'' is of binary type.; line 1 pos 7
+Wabca
 
 
 -- !query

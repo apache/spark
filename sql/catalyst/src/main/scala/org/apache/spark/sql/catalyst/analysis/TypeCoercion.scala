@@ -1157,9 +1157,9 @@ object TypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
