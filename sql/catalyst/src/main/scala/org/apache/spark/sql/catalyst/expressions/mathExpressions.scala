@@ -1525,8 +1525,18 @@ abstract class RoundBase(child: Expression, scale: Expression, modeExpr: Express
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
-      > SELECT _FUNC_(2.6, 0, 'down');
+      > SELECT _FUNC_(2.5, 0, 'half_up');
+       3
+      > SELECT _FUNC_(2.5, 0, 'half_even');
        2
+      > SELECT _FUNC_(2.6, 0, 'half_down');
+       3
+      > SELECT _FUNC_(2.1, 0, 'up');
+       3
+      > SELECT _FUNC_(2.9, 0, 'down');
+       2
+      > SELECT _FUNC_(-2.9, 0, 'down');
+       -2
   """,
   since = "1.5.0",
   group = "math_funcs")

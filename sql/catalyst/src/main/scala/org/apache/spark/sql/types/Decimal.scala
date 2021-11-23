@@ -413,17 +413,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
             if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
               longVal += (if (droppedDigits < 0) -1L else 1L)
             }
-          case ROUND_UP =>
-            if (droppedDigits > 0) {
-              longVal += 1L
-            } else if (droppedDigits < 0) {
-              longVal -= 1L
-            }
-          case ROUND_DOWN =>
-          case ROUND_HALF_DOWN =>
-            if (math.abs(droppedDigits) * 2 > pow10diff) {
-              longVal += (if (droppedDigits < 0) -1L else 1L)
-            }
           case _ =>
             throw QueryExecutionErrors.unsupportedRoundingMode(roundMode)
         }
