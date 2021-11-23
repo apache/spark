@@ -176,7 +176,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 3
 
       implicit def intToByte(i: Int): Byte = i.toByte
-      val buf = ByteBuffer.wrap(Array(0x33, 0x5A, 0xA5, 0xCC, 0x0F, 0xF0, 0xEE))
+      val buf = ByteBuffer.wrap(Array(0x33, 0x5A, 0xA5, 0xCC, 0x0F, 0xF0, 0xEE, 0x77, 0x88))
       val reader = new VectorizedPlainValuesReader()
       reader.initFromPage(0, ByteBufferInputStream.wrap(buf))
       column.putBoolean(idx, reader.readBoolean) // bit index 0
@@ -211,6 +211,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reader.readBooleans(11, column, idx) // bit index [38, 48]
       reference ++= Array(false, false, false, false, false, false, true, true, true, true, false)
       idx += 11
+
+      reader.skipBooleans(7)
+
+      reader.readBooleans(9, column, idx) // bit index [56, 64]
+      reference ++= Array(true, true, true, false, true, true, true, false, false)
+      idx += 9
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1 == column.getBoolean(v._2), "VectorType=" + column.getClass.getSimpleName)
