@@ -206,19 +206,6 @@ object ParserUtils {
   /** the column name pattern in quoted regex with qualifier */
   val qualifiedEscapedIdentifier = ("((?s).+)" + """.""" + "`((?s).+)`").r
 
-  val bracketedCommentPrefix = util.regex.Pattern.compile("/\\*")
-
-  val bracketedCommentSuffix = util.regex.Pattern.compile("\\*/")
-
-  def appearNumber(str: String, pattern: util.regex.Pattern): Int = {
-    var count = 0
-    val m = pattern.matcher(str)
-    while (m.find()) {
-      count += 1
-    }
-    count
-  }
-
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
     /**
