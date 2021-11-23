@@ -477,8 +477,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[BaseType])
+    val afterRule = if (rule.isDefinedAt(this)) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.apply(this)
+      }
+    } else {
+      this
     }
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
@@ -531,12 +535,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
     val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
     val newNode = if (this fastEquals afterRuleOnChildren) {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(this, identity[BaseType])
+      if (rule.isDefinedAt(this)) {
+        CurrentOrigin.withOrigin(origin) {
+          rule.apply(this)
+        }
+      } else {
+        this
       }
     } else {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      if (rule.isDefinedAt(afterRuleOnChildren)) {
+        CurrentOrigin.withOrigin(origin) {
+          rule.apply(afterRuleOnChildren)
+        }
+      } else {
+        afterRuleOnChildren
       }
     }
     if (this eq newNode) {
@@ -574,8 +586,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
     val afterRuleOnChildren =
       mapChildren(_.transformUpWithBeforeAndAfterRuleOnChildren(cond, ruleId)(rule))
-    val newNode = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse((this, afterRuleOnChildren), { t: (BaseType, BaseType) => t._2 })
+    val beforeAndAfter = (this, afterRuleOnChildren)
+    val newNode = if (rule.isDefinedAt(beforeAndAfter)) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.apply(beforeAndAfter)
+      }
+    } else {
+      afterRuleOnChildren
     }
     if (this eq newNode) {
       this.markRuleAsIneffective(ruleId)
