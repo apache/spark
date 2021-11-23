@@ -121,7 +121,6 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
-
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
