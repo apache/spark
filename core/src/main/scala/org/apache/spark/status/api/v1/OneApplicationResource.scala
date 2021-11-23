@@ -53,6 +53,25 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
 
   @GET
+  @Path("executorPeakMemoryMetricsDistribution")
+  def executorSummary(
+    @QueryParam("activeOnly") @DefaultValue("true") activeOnly: Boolean,
+    @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String)
+  : ExecutorPeakMetricsDistributions = withUI { ui =>
+    val quantiles = quantileString.split(",").map { s =>
+      try {
+        s.toDouble
+      } catch {
+        case nfe: NumberFormatException =>
+          throw new BadParameterException("quantiles", "double", s)
+      }
+    }
+
+    ui.store.executorMetricSummary(activeOnly, quantiles).getOrElse(
+      throw new NotFoundException(s"No executor reported metrics yet."))
+  }
+
+  @GET
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
     if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {

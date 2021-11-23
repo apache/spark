@@ -546,6 +546,15 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/executorPeakMemoryMetricsDistribution</code></td>
+    <td>
+      Distributions of peak memory metrics for executors.
+      <br><code>?activeOnly=[true (default) | false]</code> lists only active executors
+      <br><code>?quantiles</code> summarize the metrics with the given quantiles.
+      <br>Example: <code>?activeOnly=false&quantiles=0.01,0.5,0.99</code>
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
     <td>A list of stored RDDs for the given application.</td>
   </tr>

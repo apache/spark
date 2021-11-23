@@ -403,6 +403,18 @@ private[spark] class AppStatusStore(
   }
 
   /**
+   * Calculates a summary of the executor metrics for executors, returning the
+   * requested quantiles for the recorded metrics.
+   */
+  def executorMetricSummary(
+    activeOnly: Boolean,
+    unsortedQuantiles: Array[Double]): Option[v1.ExecutorPeakMetricsDistributions] = {
+    val quantiles = unsortedQuantiles.sorted
+    val executors = executorList(activeOnly).flatMap(_.peakMemoryMetrics).toIndexedSeq
+    Some(new v1.ExecutorPeakMetricsDistributions(quantiles, executors))
+  }
+
+  /**
    * Whether to cache information about a specific metric quantile. We cache quantiles at every 0.05
    * step, which covers the default values used both in the API and in the stages page.
    */

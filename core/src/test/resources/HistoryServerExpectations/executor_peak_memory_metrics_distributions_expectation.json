@@ -1,0 +1,22 @@
+{
+  "JVMHeapMemory" : [ 2.09883992E8, 4.6213568E8, 7.5947948E8, 9.8473656E8, 9.8473656E8 ],
+  "JVMOffHeapMemory" : [ 6.0829472E7, 6.1343616E7, 6.271752E7, 9.1926448E7, 9.1926448E7 ],
+  "OnHeapExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "OffHeapExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "OnHeapStorageMemory" : [ 7023.0, 12537.0, 19560.0, 19560.0, 19560.0 ],
+  "OffHeapStorageMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "OnHeapUnifiedMemory" : [ 7023.0, 12537.0, 19560.0, 19560.0, 19560.0 ],
+  "OffHeapUnifiedMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "DirectPoolMemory" : [ 10742.0, 10865.0, 12781.0, 157182.0, 157182.0 ],
+  "MappedPoolMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "ProcessTreeJVMVMemory" : [ 8.296026112E9, 9.678606336E9, 9.684373504E9, 9.691553792E9, 9.691553792E9 ],
+  "ProcessTreeJVMRSSMemory" : [ 5.26491648E8, 7.03639552E8, 9.64222976E8, 1.210867712E9, 1.210867712E9 ],
+  "ProcessTreePythonVMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "ProcessTreePythonRSSMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "ProcessTreeOtherVMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "ProcessTreeOtherRSSMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "MinorGCCount" : [ 7.0, 15.0, 24.0, 27.0, 27.0 ],
+  "MinorGCTime" : [ 55.0, 106.0, 140.0, 145.0, 145.0 ],
+  "MajorGCCount" : [ 2.0, 2.0, 2.0, 3.0, 3.0 ],
+  "MajorGCTime" : [ 60.0, 63.0, 75.0, 144.0, 144.0 ]
+}
