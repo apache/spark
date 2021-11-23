@@ -463,7 +463,7 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        python3.9 -m pip install flake8 pydata_sphinx_theme 'mypy==0.910' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
+        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.910' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
         # TODO Update to PyPI
         python3.9 -m pip install git+https://github.com/typeddjango/pytest-mypy-plugins.git@b0020061f48e85743ee3335bd62a3a608d17c6bd
     - name: Install R linter dependencies and SparkR
