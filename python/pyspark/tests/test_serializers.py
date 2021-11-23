@@ -29,7 +29,7 @@ from pyspark.serializers import (
     PairDeserializer,
     FlattenedValuesSerializer,
     CartesianDeserializer,
-    PickleSerializer,
+    CPickleSerializer,
     UTF8Deserializer,
     MarshalSerializer,
 )
@@ -46,14 +46,12 @@ from pyspark.testing.utils import (
 class SerializationTestCase(unittest.TestCase):
     def test_namedtuple(self):
         from collections import namedtuple
-        from pickle import dumps, loads
+        from pyspark.cloudpickle import dumps, loads
 
         P = namedtuple("P", "x y")
         p1 = P(1, 3)
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
-
-        from pyspark.cloudpickle import dumps
 
         P2 = loads(dumps(P))
         p3 = P2(1, 3)
@@ -132,7 +130,7 @@ class SerializationTestCase(unittest.TestCase):
         ser.dumps(foo)
 
     def test_compressed_serializer(self):
-        ser = CompressedSerializer(PickleSerializer())
+        ser = CompressedSerializer(CPickleSerializer())
         from io import BytesIO as StringIO
 
         io = StringIO()
@@ -147,15 +145,15 @@ class SerializationTestCase(unittest.TestCase):
     def test_hash_serializer(self):
         hash(NoOpSerializer())
         hash(UTF8Deserializer())
-        hash(PickleSerializer())
+        hash(CPickleSerializer())
         hash(MarshalSerializer())
         hash(AutoSerializer())
-        hash(BatchedSerializer(PickleSerializer()))
+        hash(BatchedSerializer(CPickleSerializer()))
         hash(AutoBatchedSerializer(MarshalSerializer()))
         hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
-        hash(CompressedSerializer(PickleSerializer()))
-        hash(FlattenedValuesSerializer(PickleSerializer()))
+        hash(CompressedSerializer(CPickleSerializer()))
+        hash(FlattenedValuesSerializer(CPickleSerializer()))
 
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
