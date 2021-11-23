@@ -37,6 +37,11 @@ grammar SqlBase;
 
 @lexer::members {
   /**
+   * When true, parser should throw ParseExcetion for unclosed bracketed comment.
+   */
+  public boolean has_unclosed_bracketed_comment = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -71,6 +76,19 @@ grammar SqlBase;
       return true;
     } else {
       return false;
+    }
+  }
+
+  /**
+   * This method will be called when the character stream ends and try to find out the
+   * unclosed bracketed comment.
+   * If the next character is -1, it means the end of the entire character stream match,
+   * and we throw exception to prevent executing the query.
+   */
+  public void end() {
+    int nextChar = _input.LA(1);
+    if (nextChar == -1) {
+      has_unclosed_bracketed_comment = true;
     }
   }
 }
@@ -1926,7 +1944,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {end();} EOF) -> channel(HIDDEN)
     ;
 
 WS

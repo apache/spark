@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.SingleStatementContext
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -78,9 +79,29 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitQuery(parser.query())
   }
 
+  /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
+  private def singleStatementWithCheck(
+      parser: SqlBaseParser, sqlText: String): SingleStatementContext = {
+    val singleStatementContext = parser.singleStatement()
+    assert(parser.getTokenStream.isInstanceOf[CommonTokenStream])
+
+    val tokenStream = parser.getTokenStream.asInstanceOf[CommonTokenStream]
+    assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
+
+    val lexer = tokenStream.getTokenSource.asInstanceOf[SqlBaseLexer]
+    if (lexer.has_unclosed_bracketed_comment) {
+      val failedToken = tokenStream.get(tokenStream.size() - 2)
+      assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
+      val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
+      throw QueryParsingErrors.unclosedBracketedCommentError(sqlText, position)
+    }
+
+    singleStatementContext
+  }
+
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitSingleStatement(parser.singleStatement()) match {
+    astBuilder.visitSingleStatement(singleStatementWithCheck(parser, sqlText)) match {
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
@@ -90,23 +111,6 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
-
-  private def checkUnclosedBracketedComment(
-      command: String, tokenStream: CommonTokenStream): Unit = {
-    tokenStream.fill()
-    for (index <- 0 to tokenStream.size() - 1) {
-      val token = tokenStream.get(index)
-      if (token.getType() == SqlBaseParser.BRACKETED_COMMENT) {
-        val text = token.getText()
-        val prefixNum = ParserUtils.appearNumber(text, ParserUtils.bracketedCommentPrefix)
-        val suffixNum = ParserUtils.appearNumber(text, ParserUtils.bracketedCommentSuffix)
-        if (prefixNum > suffixNum) {
-          val position = Origin(Option(token.getLine), Option(token.getCharPositionInLine))
-          throw QueryParsingErrors.unclosedBracketedCommentError(command, position)
-        }
-      }
-    }
-  }
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
@@ -118,7 +122,6 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
 
-    checkUnclosedBracketedComment(command, tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
