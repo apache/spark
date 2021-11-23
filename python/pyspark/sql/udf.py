@@ -205,28 +205,14 @@ class UserDefinedFunction(object):
         return self._returnType_placeholder
 
     @property
-    def _judf(self) -> Tuple[JavaObject, Optional[Profiler]]:
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-
-        if sc.profiler_collector:
-            f = self.func
-            profiler = sc.profiler_collector.new_udf_profiler(sc)
-
-            @functools.wraps(f)
-            def func(*args: Any, **kwargs: Any) -> Any:
-                assert profiler is not None
-                return profiler.profile(f, *args, **kwargs)
-
-            func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-            return self._create_judf(func), profiler
-        else:
-            # It is possible that concurrent access, to newly created UDF,
-            # will initialize multiple UserDefinedPythonFunctions.
-            # This is unlikely, doesn't affect correctness,
-            # and should have a minimal performance impact.
-            if self._judf_placeholder is None:
-                self._judf_placeholder = self._create_judf(self.func)
-            return self._judf_placeholder, None
+    def _judf(self) -> JavaObject:
+        # It is possible that concurrent access, to newly created UDF,
+        # will initialize multiple UserDefinedPythonFunctions.
+        # This is unlikely, doesn't affect correctness,
+        # and should have a minimal performance impact.
+        if self._judf_placeholder is None:
+            self._judf_placeholder = self._create_judf(self.func)
+        return self._judf_placeholder
 
     def _create_judf(self, func: Callable[..., Any]) -> JavaObject:
         from pyspark.sql import SparkSession
@@ -242,10 +228,25 @@ class UserDefinedFunction(object):
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        judf, profiler = self._judf
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+
+        if sc.profiler_collector:
+            f = self.func
+            profiler = sc.profiler_collector.new_udf_profiler(sc)
+
+            @functools.wraps(f)
+            def func(*args: Any, **kwargs: Any) -> Any:
+                assert profiler is not None
+                return profiler.profile(f, *args, **kwargs)
+
+            func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+
+            judf = self._create_judf(func)
+        else:
+            judf = self._judf
+
         jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
-        if profiler:
+        if sc.profiler_collector:
             id = jPythonUDF.expr().resultId().id()
             sc.profiler_collector.add_profiler(id, profiler)
         return Column(jPythonUDF)
