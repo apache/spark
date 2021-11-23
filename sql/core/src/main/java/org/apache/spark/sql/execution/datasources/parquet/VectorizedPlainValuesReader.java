@@ -82,7 +82,10 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void skipBooleans(int total) {
-    // using >>3 instead of /8 below since Java division rounds towards zero i.e. (-1)/8=0
+    // Using >>3 instead of /8 below. The difference is important when (total-(8-bitOffset))<0.
+    // E.g. (-1)>>3=(-1) vs. (-1)/8=0. The latter incorrectly enters the if(numBytesToSkip>=0){.
+    // (total-(8-bitOffset))<0 means there will be still unread bits left in the currentByte.
+    // In that case, updateCurrentByte() should not be called.
     int numBytesToSkip = (total - (8 - bitOffset)) >> 3;
     bitOffset = (bitOffset + total) & 7;
     if (numBytesToSkip >= 0) {
