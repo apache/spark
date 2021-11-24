@@ -438,7 +438,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     properties.put(CREATED_SPARK_VERSION, table.createVersion)
     // This is for backward compatibility to Spark 2 to read tables with char/varchar created by
     // Spark 3.1. At read side, we will restore a table schema from its properties. So, we meed to
-    // clear the `varchar(n)` and char(n)` and replace them with `string` as Spark 2 does not have
+    // clear the `varchar(n)` and `char(n)` and replace them with `string` as Spark 2 does not have
     // a type mapping for them in `DataType.nameToType`.
     // See `restoreHiveSerdeTable` for example.
     val newSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
