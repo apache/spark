@@ -87,6 +87,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
+        CountAggregateOptimization,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -2159,6 +2160,74 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
         // instead replace this by single, easy to hash/sort, literal expression.
         a.copy(groupingExpressions = Seq(Literal(0, IntegerType)))
       }
+  }
+}
+
+/**
+ * Prunes unnecessary fields from a [[Generate]] if it is under a count aggregation
+ * query.
+ */
+object CountAggregateOptimization extends Rule[LogicalPlan] {
+  private def isLiteralCountAggFun(func: AggregateFunction): Boolean = func match {
+    case c: Count if c.children.size == 1 && c.children(0).isInstanceOf[Literal] => true
+    case _ => false
+  }
+
+  private def isCandidate(agg: Aggregate): Boolean = {
+    if (agg.aggregateExpressions.size == 1) {
+      agg.aggregateExpressions(0) match {
+        case Alias(ae: AggregateExpression, _) if isLiteralCountAggFun(ae.aggregateFunction) =>
+          true
+        case _ =>
+          false
+      }
+    } else {
+      false
+    }
+  }
+
+  private def pruningFields(agg: Aggregate): LogicalPlan = {
+    agg.transformDownWithPruning(_.containsPattern(GENERATE), ruleId) {
+      case p @ Project(_, g: Generate) if p.references.intersect(g.outputSet).isEmpty
+          && g.generator.isInstanceOf[ExplodeBase] =>
+        g.generator.children.head.dataType match {
+          case ArrayType(StructType(fields), _) =>
+            val atomicFields = fields.collect {
+              case f: StructField if f.dataType.isInstanceOf[AtomicType] => f
+            }
+            val extractor = if (atomicFields.size > 0) {
+              // Pick an arbitrary atomic field, if any
+              ExtractValue(g.generator.children.head,
+                Literal(atomicFields(0).name), SQLConf.get.resolver)
+            } else {
+              ExtractValue(g.generator.children.head,
+                Literal(fields(0).name), SQLConf.get.resolver)
+            }
+            val rewrittenG = g.transformExpressions {
+              case e: ExplodeBase =>
+                e.withNewChildren(Seq(extractor))
+            }
+            // As we change the child of the generator, its output data type must be updated.
+            val updatedGeneratorOutput = rewrittenG.generatorOutput
+              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .map { case (oldAttr, newAttr) =>
+                newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
+              }
+            assert(updatedGeneratorOutput.length == rewrittenG.generatorOutput.length,
+              "Updated generator output must have the same length " +
+                "with original generator output.")
+            val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
+            p.withNewChildren(Seq(updatedGenerate))
+          case _ => p
+        }
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+    _.containsPattern(AGGREGATE), ruleId) {
+
+    case a @ Aggregate(_, _, _) if isCandidate(a) =>
+      pruningFields(a)
   }
 }
 
