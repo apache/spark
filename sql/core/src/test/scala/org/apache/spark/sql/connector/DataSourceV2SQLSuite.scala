@@ -1294,10 +1294,22 @@ class DataSourceV2SQLSuite
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test_2"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", ""))
       )
+    }
+  }
+
+  test("SPARK-37444: ALTER NAMESPACE .. SET LOCATION using v2 catalog with empty location") {
+    val ns = "testcat.ns1.ns2"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_1'")
+      val e = intercept[IllegalArgumentException] {
+        sql(s"ALTER DATABASE $ns SET LOCATION ''")
+      }
+      assert(e.getMessage.contains("Can not create a Path from an empty string"))
     }
   }
 
