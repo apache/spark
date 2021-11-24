@@ -598,7 +598,6 @@ def main():
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
@@ -609,7 +608,6 @@ def main():
         build_tool = "sbt"
         scala_version = os.environ.get("SCALA_PROFILE")
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         if "GITHUB_ACTIONS" in os.environ:
             test_env = "github_actions"
         else:
