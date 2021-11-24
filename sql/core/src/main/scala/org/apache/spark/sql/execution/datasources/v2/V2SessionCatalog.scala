@@ -71,6 +71,28 @@ class V2SessionCatalog(catalog: SessionCatalog)
     V1Table(catalogTable)
   }
 
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  private def failTimeTravel(ident: Identifier, t: Table): Table = {
+    t match {
+      case V1Table(catalogTable) =>
+        if (catalogTable.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.viewNotSupportTimeTravelError(
+            ident.namespace() :+ ident.name())
+        } else {
+          throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+        }
+
+      case _ => throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+    }
+  }
+
   override def invalidateTable(ident: Identifier): Unit = {
     catalog.refreshTable(ident.asTableIdentifier)
   }

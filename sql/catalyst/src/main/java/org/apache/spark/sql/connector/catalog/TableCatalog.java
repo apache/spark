@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Map;
@@ -106,7 +107,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
-    throw new UnsupportedOperationException("Load table with version is not supported.");
+    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
   }
 
   /**
@@ -121,7 +122,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
-    throw new UnsupportedOperationException("Load table with timestamp is not supported.");
+    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
   }
 
   /**
