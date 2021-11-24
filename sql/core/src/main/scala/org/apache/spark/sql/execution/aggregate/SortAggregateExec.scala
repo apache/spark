@@ -21,9 +21,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Sort-based aggregate operator.
@@ -36,11 +38,12 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec
+  extends AggregateCodegenSupport
   with AliasAwareOutputOrdering {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"))
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
@@ -83,6 +86,20 @@ case class SortAggregateExec(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    // TODO(SPARK-32750): Support sort aggregate code-gen with grouping keys
+    super.supportCodegen && conf.getConf(SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN) &&
+      groupingExpressions.isEmpty
+  }
+
+  protected def doProduceWithKeys(ctx: CodegenContext): String = {
+    throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
+  }
+
+  protected def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
   }
 
   override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
