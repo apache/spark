@@ -225,7 +225,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
         case (np, cp) if supportedMerge(np) && np.getClass == cp.getClass &&
             np.children.size == cp.children.size &&
             np.expressions.size == cp.expressions.size &&
-            // Non-children and non-expression containing fields of the nodes should match
+            // Fields that don't contain any children or expressions should match
             np.productIterator.filterNot(np.children.contains)
               .filter(QueryPlan.extractExpressions(_).isEmpty).toSeq ==
               cp.productIterator.filterNot(cp.children.contains)
@@ -236,11 +236,11 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           if (merged.forall(_.isDefined)) {
             val (mergedChildren, outputMaps) = merged.map(_.get).unzip
             val outputMap = AttributeMap(outputMaps.map(_.iterator).reduce(_ ++ _).toSeq)
-            val mergedPlan = cp.withNewChildren(mergedChildren)
-            // We know that non-children and non-expression containing fields do match and
+            // We know that fields that don't contain any children or expressions do match and
             // children can be merged so we need to test expressions only
             if (np.expressions.map(mapAttributes(_, outputMap).canonicalized) ==
-              mergedPlan.expressions.map(_.canonicalized)) {
+              cp.expressions.map(_.canonicalized)) {
+              val mergedPlan = cp.withNewChildren(mergedChildren)
               Some(mergedPlan -> outputMap)
             } else {
               None
