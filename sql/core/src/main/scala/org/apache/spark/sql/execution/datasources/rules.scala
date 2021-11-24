@@ -82,7 +82,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
     // we fail the query if the partitioning information is specified.
-    case c @ DataSourceCreateTable(tableDesc, _, None) if tableDesc.schema.isEmpty =>
+    case c @ CreateTableV1(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
         failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
           "when creating and will be inferred at runtime")
@@ -97,7 +97,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     // When we append data to an existing table, check if the given provider, partition columns,
     // bucket spec, etc. match the existing table, and adjust the columns order of the given query
     // if necessary.
-    case c @ DataSourceCreateTable(tableDesc, SaveMode.Append, Some(query))
+    case c @ CreateTableV1(tableDesc, SaveMode.Append, Some(query))
         if query.resolved && catalog.tableExists(tableDesc.identifier) =>
       // This is guaranteed by the parser and `DataFrameWriter`
       assert(tableDesc.provider.isDefined)
@@ -190,7 +190,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
     //   * reorder table schema or output of query plan, to put partition columns at the end.
-    case c @ DataSourceCreateTable(tableDesc, _, query) if query.forall(_.resolved) =>
+    case c @ CreateTableV1(tableDesc, _, query) if query.forall(_.resolved) =>
       if (query.isDefined) {
         assert(tableDesc.schema.isEmpty,
           "Schema may not be specified in a Create Table As Select (CTAS) statement")
@@ -434,7 +434,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case DataSourceCreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+      case CreateTableV1(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
         throw QueryCompilationErrors.ddlWithoutHiveSupportEnabledError(
           "CREATE Hive TABLE (AS SELECT)")
       case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>
