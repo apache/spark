@@ -205,6 +205,29 @@ function createRESTEndPointForExecutorsPage(appId) {
   return uiRoot + "/api/v1/applications/" + appId + "/allexecutors";
 }
 
+function createRESTEndPointForExecutorsPeakMetricsSummariesPage(appId) {
+  var words = getBaseURI().split('/');
+  var ind = words.indexOf("proxy");
+  var newBaseURI;
+  if (ind > 0) {
+    appId = words[ind + 1];
+    newBaseURI = words.slice(0, ind + 2).join('/');
+    return newBaseURI + "/api/v1/applications/" + appId + "/executorPeakMemoryMetricsDistribution";
+  }
+  ind = words.indexOf("history");
+  if (ind > 0) {
+    appId = words[ind + 1];
+    var attemptId = words[ind + 2];
+    newBaseURI = words.slice(0, ind).join('/');
+    if (isNaN(attemptId)) {
+      return newBaseURI + "/api/v1/applications/" + appId + "/executorPeakMemoryMetricsDistribution";
+    } else {
+      return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/executorPeakMemoryMetricsDistribution";
+    }
+  }
+  return uiRoot + "/api/v1/applications/" + appId + "/executorPeakMemoryMetricsDistribution";
+}
+
 function createRESTEndPointForMiscellaneousProcess(appId) {
   var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");

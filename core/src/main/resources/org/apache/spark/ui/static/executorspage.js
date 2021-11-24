@@ -88,9 +88,19 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
+var shouldBlockUI = true;
+
+$(document).ajaxStop(function () {
+  if (shouldBlockUI) {
+    $.unblockUI();
+    shouldBlockUI = false;
+  }
+});
+
 $(document).ajaxStart(function () {
-  $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
+  if (shouldBlockUI) {
+    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
+  }
 });
 
 function logsExist(execs) {
@@ -158,6 +168,149 @@ function reselectCheckboxesBasedOnTaskTableState() {
   if (allChecked) {
     $("#select-all-box").prop("checked", true);
   }
+}
+
+var executorSummaryMetricsTableArray = [];
+var executorSummaryMetricsTableCurrentStateArray = [];
+var executorSummaryMetricsDataTable;
+
+function getColumnNameForExecutorMetricSummary(columnKey) {
+  switch(columnKey) {
+    case "JVMHeapMemory":
+      return "JVM Heap Memory";
+
+    case "JVMOffHeapMemory":
+      return "JVM Off Heap Memory";
+
+    case "OnHeapExecutionMemory":
+      return "On Heap Execution Memory";
+
+    case "OffHeapExecutionMemory":
+      return "Off Heap Execution Memory";
+
+    case "OnHeapStorageMemory":
+      return "On Heap Storage Memory";
+
+    case "OffHeapStorageMemory":
+      return "Off Heap Storage Memory";
+
+    case "OnHeapUnifiedMemory":
+      return "On Heap Unified Memory";
+
+    case "OffHeapUnifiedMemory":
+      return "Off Heap Unified Memory";
+
+    case "DirectPoolMemory":
+      return "Direct Pool Memory";
+
+    case "MappedPoolMemory":
+      return "Mapped Pool Memory";
+
+    case "ProcessTreeJVMVMemory":
+      return "Process Tree JVM Memory";
+
+    case "ProcessTreeJVMRSSMemory":
+      return "Process Tree JVM RSS Memory";
+
+    case "ProcessTreePythonVMemory":
+      return "Process Tree Python VMemory";
+
+    case "ProcessTreePythonRSSMemory":
+      return "Process Tree Python RSS Memory";
+
+    case "ProcessTreeOtherVMemory":
+      return "Process Tree Other VMemory";
+
+    case "ProcessTreeOtherRSSMemory":
+      return "Process Tree Other RSS Memory";
+
+    case "MinorGCCount":
+      return "Minor GC Count";
+
+    case "MinorGCTime":
+      return "Minor GC Time";
+
+    case "MajorGCCount":
+      return "Major GC Count";
+
+    case "MajorGCTime":
+      return "Major GC Time";
+
+    default:
+      return "NA";
+  }
+}
+
+function createRowMetadataForColumn(colKey, data, checkboxId) {
+  var row = {
+    "metric": getColumnNameForExecutorMetricSummary(colKey),
+    "data": data,
+    "columnKey": colKey
+  };
+  return row;
+}
+
+function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTable) {
+  var executorMetricsTable = "#summary-executor-metrics-table";
+  if ($.fn.dataTable.isDataTable(executorMetricsTable)) {
+    executorSummaryMetricsDataTable.clear().draw();
+    executorSummaryMetricsDataTable.rows.add(executorSummaryMetricsTable).draw();
+  } else {
+    var executorSummaryConf = {
+      "data": executorSummaryMetricsTable,
+      "columns": [
+        {data : 'metric'},
+        // Min
+        {
+          data: function (row, type) {
+            return displayRowsForSummaryMetricsTable(row, type, 0);
+          }
+        },
+        // 25th percentile
+        {
+          data: function (row, type) {
+            return displayRowsForSummaryMetricsTable(row, type, 1);
+          }
+        },
+        // Median
+        {
+          data: function (row, type) {
+            return displayRowsForSummaryMetricsTable(row, type, 2);
+          }
+        },
+        // 75th percentile
+        {
+          data: function (row, type) {
+            return displayRowsForSummaryMetricsTable(row, type, 3);
+          }
+        },
+        // Max
+        {
+          data: function (row, type) {
+            return displayRowsForSummaryMetricsTable(row, type, 4);
+          }
+        }
+      ],
+      "columnDefs": [
+        { "type": "duration", "targets": 1 },
+        { "type": "duration", "targets": 2 },
+        { "type": "duration", "targets": 3 },
+        { "type": "duration", "targets": 4 },
+        { "type": "duration", "targets": 5 }
+      ],
+      "paging": false,
+      "info": false,
+      "searching": false,
+      "order": [[0, "asc"]],
+      "bSort": false,
+      "bAutoWidth": false,
+      "oLanguage": {
+        "sEmptyTable": "No tasks have reported metrics yet"
+      }
+    };
+    executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
+  }
+  executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
 
 $(document).ready(function () {
@@ -386,6 +539,10 @@ $(document).ready(function () {
         "allTotalShuffleWrite": deadTotalShuffleWrite,
         "allTotalExcluded": deadTotalExcluded
       };
+
+      // title number and toggle list
+      $('#executorSummaryMetricsTitle').html("Summary Metrics for " + "<a href='#executorsTitle'>" + allExecCnt + " Executors" + "</a>");
+      $('#executorsTitle').html("Executors (" + allExecCnt + ")");
 
       var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
@@ -770,5 +927,153 @@ $(document).ready(function () {
         }
       });
     });
+
+    var quantiles = "0,0.25,0.5,0.75,1.0";
+    $.getJSON(createRESTEndPointForExecutorsPeakMetricsSummariesPage(appId) + "?activeOnly=true&quantiles=" + quantiles,
+      function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
+        var taskMetricKeys = Object.keys(executorMetricsResponse);
+        var output;
+        for (property in executorMetricsResponse) {
+            output += property + ': ' + executorMetricsResponse[property]+'; \n';
+        }
+        console.log(output);
+        taskMetricKeys.forEach(function (columnKey) {
+          var row;
+          switch(columnKey) {
+
+            case "JVMHeapMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 1);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "JVMOffHeapMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 12);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "OnHeapExecutionMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 15);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "OnHeapStorageMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 16);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "OffHeapStorageMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 17);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "OnHeapUnifiedMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 1);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "OffHeapUnifiedMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 2);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "DirectPoolMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 4);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "MappedPoolMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreeJVMVMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 6);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreeJVMRSSMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreePythonVMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreePythonRSSMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreeOtherVMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "ProcessTreeOtherRSSMemory":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "MinorGCCount":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "MinorGCTime":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "MajorGCCount":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            case "MajorGCTime":
+              row = createRowMetadataForColumn(
+                columnKey, executorMetricsResponse[columnKey], 5);
+              executorSummaryMetricsTableArray.push(row);
+              break;
+
+            default:
+              if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 0);
+                executorSummaryMetricsTableArray.push(row);
+              }
+              break;
+          }
+        });
+       var output2;
+       for (property in executorSummaryMetricsTableArray) {
+         output2 += property + '; \n';
+       }
+       console.log(output);
+        var executorSummaryMetricsTableFilteredArray =
+          executorSummaryMetricsTableArray
+//          .filter(row => row.checkboxId < 11);
+        executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
+        createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableCurrentStateArray);
+      });
   });
 });
