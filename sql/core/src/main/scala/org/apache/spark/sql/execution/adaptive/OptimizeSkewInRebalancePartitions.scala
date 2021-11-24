@@ -41,7 +41,7 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
 
   /**
    * Splits the skewed partition based on the map size and the target partition size
-   * after split. Create a list of `PartialMapperPartitionSpec` for skewed partition and
+   * after split. Create a list of `PartialReducerPartitionSpec` for skewed partition and
    * create `CoalescedPartition` for normal partition.
    */
   private def optimizeSkewedPartitions(
