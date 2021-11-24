@@ -82,14 +82,11 @@ grammar SqlBase;
   /**
    * This method will be called when the character stream ends and try to find out the
    * unclosed bracketed comment.
-   * If the next character is -1, it means the end of the entire character stream match,
-   * and we throw exception to prevent executing the query.
+   * If the method be called, it means the end of the entire character stream match,
+   * and we set the flag and fail later.
    */
-  public void end() {
-    int nextChar = _input.LA(1);
-    if (nextChar == -1) {
-      has_unclosed_bracketed_comment = true;
-    }
+  public void checkUnclosedComment() {
+    has_unclosed_bracketed_comment = true;
   }
 }
 
@@ -1944,7 +1941,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {end();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {checkUnclosedComment();} EOF) -> channel(HIDDEN)
     ;
 
 WS

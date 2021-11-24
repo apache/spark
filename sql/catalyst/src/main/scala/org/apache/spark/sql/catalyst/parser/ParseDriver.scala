@@ -26,7 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.SingleStatementContext
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -79,30 +78,9 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitQuery(parser.query())
   }
 
-  /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
-  private def singleStatementWithCheck(
-      parser: SqlBaseParser, sqlText: String): SingleStatementContext = {
-    val singleStatementContext = parser.singleStatement()
-    assert(parser.getTokenStream.isInstanceOf[CommonTokenStream])
-
-    val tokenStream = parser.getTokenStream.asInstanceOf[CommonTokenStream]
-    assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
-
-    val lexer = tokenStream.getTokenSource.asInstanceOf[SqlBaseLexer]
-    if (lexer.has_unclosed_bracketed_comment) {
-      // The last token is 'EOF' and the penultimate is unclosed bracketed comment
-      val failedToken = tokenStream.get(tokenStream.size() - 2)
-      assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
-      val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
-      throw QueryParsingErrors.unclosedBracketedCommentError(sqlText, position)
-    }
-
-    singleStatementContext
-  }
-
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitSingleStatement(singleStatementWithCheck(parser, sqlText)) match {
+    astBuilder.visitSingleStatement(parser.singleStatement()) match {
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
@@ -123,6 +101,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
+    parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
@@ -334,4 +313,59 @@ case object PostProcessor extends SqlBaseBaseListener {
       token.getStopIndex - stripMargins)
     parent.addChild(new TerminalNodeImpl(f(newToken)))
   }
+}
+
+/**
+ * The post-processor checks the unclosed bracketed comment.
+ */
+case class UnclosedCommentProcessor(
+    command: String, tokenStream: CommonTokenStream) extends SqlBaseBaseListener {
+
+  override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleExpression(ctx: SqlBaseParser.SingleExpressionContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleTableIdentifier(ctx: SqlBaseParser.SingleTableIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleFunctionIdentifier(
+      ctx: SqlBaseParser.SingleFunctionIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleMultipartIdentifier(
+      ctx: SqlBaseParser.SingleMultipartIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleTableSchema(ctx: SqlBaseParser.SingleTableSchemaContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitQuery(ctx: SqlBaseParser.QueryContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleStatement(ctx: SqlBaseParser.SingleStatementContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
+  private def checkUnclosedComment(tokenStream: CommonTokenStream, command: String) = {
+    assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
+    val lexer = tokenStream.getTokenSource.asInstanceOf[SqlBaseLexer]
+    if (lexer.has_unclosed_bracketed_comment) {
+      // The last token is 'EOF' and the penultimate is unclosed bracketed comment
+      val failedToken = tokenStream.get(tokenStream.size() - 2)
+      assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
+      val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
+      throw QueryParsingErrors.unclosedBracketedCommentError(command, position)
+    }
+  }
+
 }
