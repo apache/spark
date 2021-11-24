@@ -204,7 +204,7 @@ class UnivocityParser(
 
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        timestampNTZFormatter.parseWithoutTimeZone(datum, true)
       }
 
     case _: DateType => (d: String) =>
