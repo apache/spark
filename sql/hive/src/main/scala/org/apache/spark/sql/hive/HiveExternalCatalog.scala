@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+
 import java.util
 import java.util.Locale
 
@@ -31,8 +32,8 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
-
 import org.apache.spark.{SparkConf, SparkException}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -40,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -436,8 +437,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val properties = new mutable.HashMap[String, String]
 
     properties.put(CREATED_SPARK_VERSION, table.createVersion)
+    // This is for backward compatibility to Spark 2 to read tables with char/varchar created by
+    // Spark 3.1. At read side, we will restore a table schema from its properties. So, we meed to
+    // clear the `varchar(n)` and char(n)` and replace them with `string` as Spark 2 does not have
+    // a type mapping for them in `DataType.nameToType`.
+    // See `restoreHiveSerdeTable` for example.
+    val newSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     CatalogTable.splitLargeTableProp(
-      DATASOURCE_SCHEMA, schema.json, properties.put, conf.get(SCHEMA_STRING_LENGTH_THRESHOLD))
+      DATASOURCE_SCHEMA,
+      newSchema.json,
+      properties.put,
+      conf.get(SCHEMA_STRING_LENGTH_THRESHOLD))
 
     if (partitionColumns.nonEmpty) {
       properties.put(DATASOURCE_SCHEMA_NUMPARTCOLS, partitionColumns.length.toString)
