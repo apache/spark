@@ -144,7 +144,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CatalystCreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
+    case c @ CatalystCreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         c.tableSpec.options,
@@ -153,13 +153,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(name.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.tableSpec.properties, provider,
+          c.partitioning, c.tableSpec.bucketSpec, c.tableSpec.properties, provider,
           c.tableSpec.location, c.tableSpec.comment, storageFormat,
           c.tableSpec.external)
         val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
-        c
+        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
+        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
+          tableSpec = newTableSpec)
       }
 
     case c @ CreateTableAsSelectStatement(

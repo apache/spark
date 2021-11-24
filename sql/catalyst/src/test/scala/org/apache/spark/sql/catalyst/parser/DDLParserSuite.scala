@@ -2290,7 +2290,7 @@ class DDLParserSuite extends AnalysisTest {
             create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(create.tableSchema),
             create.partitioning,
-            create.bucketSpec,
+            create.tableSpec.bucketSpec,
             create.tableSpec.properties,
             create.tableSpec.provider,
             create.tableSpec.options,

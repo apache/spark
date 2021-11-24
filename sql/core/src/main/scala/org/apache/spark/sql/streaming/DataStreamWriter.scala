@@ -290,6 +290,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * TODO (SPARK-33638): Full support of v2 table creation
        */
       val tableProperties = TableSpec(
+        None,
         Map.empty[String, String],
         Some(source),
         Map.empty[String, String],
@@ -303,7 +304,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           isNamespace = false),
         df.schema.asNullable,
         partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
-        None,
         tableProperties,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)

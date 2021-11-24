@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
@@ -191,18 +191,6 @@ trait V2CreateTablePlan extends LogicalPlan {
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }
 
-trait V2CreateTablePlanX extends LogicalPlan {
-  def name: LogicalPlan
-  def partitioning: Seq[Transform]
-  def tableSchema: StructType
-
-  /**
-   * Creates a copy of this node with the new partitioning transforms. This method is used to
-   * rewrite the partition transforms normalized according to the table schema.
-   */
-  def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX
-}
-
 /**
  * Create a new table with a v2 catalog.
  */
@@ -210,13 +198,21 @@ case class CreateTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
     tableSpec: TableSpec,
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlanX {
+    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
   override def child: LogicalPlan = name
-  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlanX =
+
+  override def tableName: Identifier = {
+    assert(child.resolved)
+    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
-  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlanX = {
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
 }
@@ -1108,6 +1104,7 @@ case class DropIndex(
 }
 
 case class TableSpec(
+    bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
     provider: Option[String],
     options: Map[String, String],

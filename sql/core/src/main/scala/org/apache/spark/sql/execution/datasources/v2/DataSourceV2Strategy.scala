@@ -165,16 +165,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
-    case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning, bucketSpec,
+    case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      val props = CatalogV2Util.convertTableProperties(
-        tableSpec.properties, tableSpec.options, tableSpec.serde,
-        tableSpec.location, tableSpec.comment, tableSpec.provider,
-        tableSpec.external)
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
-      val parts = partitioning ++ bucketSpec.map(_.asTransform)
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
-        parts, propsWithOwner, ifNotExists) :: Nil
+        partitioning, tableSpec, ifNotExists) :: Nil
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
