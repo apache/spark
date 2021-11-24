@@ -89,31 +89,29 @@ Other information of first level.
 SELECT 'selected content' AS tenth;
 --QUERY-DELIMITER-END
 
- -- the first case of unclosed bracketed comment
- --QUERY-DELIMITER-START
- /*abc*/
- select 1 as a
- /*
+-- the first case of unclosed bracketed comment
+--QUERY-DELIMITER-START
+/*abc*/
+select 1 as a
+/*
+2 as b
+/*abc*/
+, 3 as c
 
- 2 as b
- /*abc*/
- , 3 as c
+/**/
+;
+--QUERY-DELIMITER-END
 
- /**/
- ;
- --QUERY-DELIMITER-END
+-- the second case of unclosed bracketed comment
+--QUERY-DELIMITER-START
+/*abc*/
+select 1 as a
+/*
+2 as b
+/*abc*/
+, 3 as c
 
- -- the second case of unclosed bracketed comment
- --QUERY-DELIMITER-START
- /*abc*/
- select 1 as a
- /*
-
- 2 as b
- /*abc*/
- , 3 as c
-
- /**/
- select 4 as d
- ;
- --QUERY-DELIMITER-END
+/**/
+select 4 as d
+;
+--QUERY-DELIMITER-END
