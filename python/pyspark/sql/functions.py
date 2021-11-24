@@ -1703,9 +1703,7 @@ def struct(
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
-    jc = sc._jvm.functions.struct(
-        _to_seq(sc, cols, _to_java_column)  # type: ignore[arg-type]
-    )
+    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3614,9 +3612,7 @@ def create_map(
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
-    jc = sc._jvm.functions.map(
-        _to_seq(sc, cols, _to_java_column)  # type: ignore[arg-type]
-    )
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3681,9 +3677,7 @@ def array(
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
-    jc = sc._jvm.functions.array(
-        _to_seq(sc, cols, _to_java_column)  # type: ignore[arg-type]
-    )
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -4796,9 +4790,7 @@ def map_concat(
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
-    jc = sc._jvm.functions.map_concat(
-        _to_seq(sc, cols, _to_java_column)  # type: ignore[arg-type]
-    )
+    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
