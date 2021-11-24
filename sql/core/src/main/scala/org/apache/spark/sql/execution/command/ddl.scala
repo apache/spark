@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.net.URI
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
@@ -148,13 +147,13 @@ case class AlterDatabasePropertiesCommand(
  *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
  * }}}
  */
-case class AlterDatabaseSetLocationCommand(databaseName: String, location: URI)
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val oldDb = catalog.getDatabaseMetadata(databaseName)
-    catalog.alterDatabase(oldDb.copy(locationUri = location))
+    catalog.alterDatabase(oldDb.copy(locationUri = CatalogUtils.stringToURI(location)))
 
     Seq.empty[Row]
   }

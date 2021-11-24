@@ -21,9 +21,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.{expressions, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
-import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, EmptyRow, Expression, Literal, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -45,7 +45,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 
-class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
+class DataSourceV2Strategy(session: SparkSession) extends Strategy
+    with PredicateHelper with SQLConfHelper {
 
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -312,10 +313,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
+      val nsPath = CatalogUtils.makeQualifiedNamespacePath(
+        CatalogUtils.stringToURI(location), conf.warehousePath, session.sharedState.hadoopConf)
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> CatalogUtils.URIToString(location))) :: Nil
+        Map(SupportsNamespaces.PROP_LOCATION -> CatalogUtils.URIToString(nsPath))) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(

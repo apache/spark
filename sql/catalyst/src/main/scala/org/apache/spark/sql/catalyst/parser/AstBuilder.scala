@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -3132,7 +3132,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     withOrigin(ctx) {
       SetNamespaceLocation(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
-        CatalogUtils.stringToURI(visitLocationSpec(ctx.locationSpec)))
+        visitLocationSpec(ctx.locationSpec))
     }
   }
 

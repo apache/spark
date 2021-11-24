@@ -23,7 +23,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -1833,21 +1833,20 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("set namespace location") {
-    val loc = CatalogUtils.stringToURI("/home/user/db")
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
       SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), loc))
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
       SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), loc))
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
 
     comparePlans(
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
       SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), loc))
+        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
   test("analyze table statistics") {

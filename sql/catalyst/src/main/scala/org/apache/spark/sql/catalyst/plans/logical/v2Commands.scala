@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import java.net.URI
-
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
@@ -351,7 +349,7 @@ case class SetNamespaceProperties(
  */
 case class SetNamespaceLocation(
     namespace: LogicalPlan,
-    location: URI) extends UnaryCommand {
+    location: String) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): SetNamespaceLocation =
     copy(namespace = newChild)
