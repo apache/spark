@@ -36,7 +36,7 @@ INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 JAVA_VERSION="8"
 BUILD_DEPENDENCIES_MVN_FLAG="-am"
-HADOOP_PROFILE="hadoop-3.3"
+HADOOP_PROFILE="hadoop-3"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
