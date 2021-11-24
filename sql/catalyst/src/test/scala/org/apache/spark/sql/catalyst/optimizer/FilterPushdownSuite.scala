@@ -1387,7 +1387,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-37226: Filter push down through window") {
+  test("SPARK-37226: Filter push down through window if partitionSpec isEmpty") {
     val data = (0 until 100).map(i => InternalRow(i, i, i))
     val testRelation2 = LocalRelation(LocalRelation('a.int, 'b.int, 'c.int).output, data)
 
@@ -1433,6 +1433,22 @@ class FilterPushdownSuite extends PlanTest {
         .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
         .where('rn > 2 && 'rn < 5)
         .select('a, 'b, 'c, 'rn).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation2
+        .select('a, 'b, 'c, winExpr.as('rn)).where('rn < 3 && 'rn < 5).analyze),
+      testRelation2.select('a, 'b, 'c).orderBy('b.asc).limit(Literal(2))
+        .window(winExprAnalyzed.as('rn) :: Nil, Nil, 'b.asc :: Nil)
+        .where('rn < 3 && 'rn < 5)
+        .select('a, 'b, 'c, 'rn).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation2
+        .select('a, 'b, 'c, winExpr.as('r1), winExpr.as('r2)).where('r1 < 8 && 'r2 < 6).analyze),
+      testRelation2.select('a, 'b, 'c).orderBy('b.asc).limit(Literal(5))
+        .window(winExprAnalyzed.as('r1) :: winExprAnalyzed.as('r2) :: Nil, Nil, 'b.asc :: Nil)
+        .where('r1 < 8 && 'r2 < 6)
+        .select('a, 'b, 'c, 'r1, 'r2).analyze)
 
     comparePlans(
       Optimize.execute(testRelation2

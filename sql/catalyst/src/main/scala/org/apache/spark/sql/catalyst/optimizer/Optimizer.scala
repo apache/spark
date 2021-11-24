@@ -1548,27 +1548,29 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
-    case filter @ Filter(condition, w: Window) if w.partitionSpec.isEmpty =>
-      w.windowExpressions match {
-        case Seq(alias @ Alias(WindowExpression(_: RowNumber, WindowSpecDefinition(Nil, orderSpec,
-            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)) =>
+    case filter @ Filter(condition, w: Window) if w.partitionSpec.isEmpty && w.orderSpec.nonEmpty =>
+      val candidates = splitConjunctivePredicates(condition)
+      val limitOrderSpecs = w.windowExpressions.flatMap {
+        case alias @ Alias(WindowExpression(_: RowNumber, WindowSpecDefinition(Nil, orderSpec,
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) =>
           val aliasAttr = alias.toAttribute
-          val limitValue = splitConjunctivePredicates(condition).collectFirst {
-            case LessThanOrEqual(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
-            case Equality(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v
-            case LessThan(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) => v - 1
+          candidates.collect {
+            case LessThanOrEqual(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) =>
+              (v, orderSpec)
+            case Equality(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) =>
+              (v, orderSpec)
+            case LessThan(e, IntegerLiteral(v)) if e.semanticEquals(aliasAttr) =>
+              (v - 1, orderSpec)
           }
+        case _ => Nil
+      }
 
-          limitValue match {
-            case Some(lv) if lv <= 0 =>
-              LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
-            case Some(lv)
-                if lv < conf.topKSortFallbackThreshold && w.child.maxRows.forall(_ > lv) =>
-              filter.copy(child =
-                w.copy(child = Limit(Literal(lv), Sort(orderSpec, true, w.child))))
-            case _ =>
-              filter
-          }
+      limitOrderSpecs.sortBy(_._1).headOption match {
+        case Some((lv, _)) if lv <= 0 =>
+          LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
+        case Some((lv, orderSpec))
+            if lv < conf.topKSortFallbackThreshold && w.child.maxRows.forall(_ > lv) =>
+          filter.copy(child = w.copy(child = Limit(Literal(lv), Sort(orderSpec, true, w.child))))
         case _ =>
           filter
       }
