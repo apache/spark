@@ -85,7 +85,7 @@ grammar SqlBase;
    * If the method be called, it means the end of the entire character stream match,
    * and we set the flag and fail later.
    */
-  public void checkUnclosedComment() {
+  public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
 }
@@ -1941,7 +1941,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {checkUnclosedComment();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
     ;
 
 WS
