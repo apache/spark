@@ -752,7 +752,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
         CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA).foreach { schemaJson =>
-          table = table.copy(schema = DataType.fromJson(schemaJson).asInstanceOf[StructType])
+          val rawSchema = CharVarcharUtils.getRawSchema(
+            DataType.fromJson(schemaJson).asInstanceOf[StructType])
+          table = table.copy(schema = rawSchema)
         }
 
       // No provider in table properties, which means this is a Hive serde table.
@@ -805,8 +807,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schemaJson = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
     if (schemaJson.isDefined) {
       val schemaFromTableProps = DataType.fromJson(schemaJson.get).asInstanceOf[StructType]
+      val rawSchema = CharVarcharUtils.getRawSchema(schemaFromTableProps)
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
-      val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
+      val reorderedSchema = reorderSchema(schema = rawSchema, partColumnNames)
 
       if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
           options.respectSparkSchema) {
@@ -845,7 +848,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
     val schemaFromTableProps = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
-      .map(json => DataType.fromJson(json).asInstanceOf[StructType]).getOrElse(new StructType())
+      .map { json =>
+        CharVarcharUtils.getRawSchema(DataType.fromJson(json).asInstanceOf[StructType])
+      }.getOrElse(new StructType())
     val partColumnNames = getPartitionColumnsFromTableProperties(table)
     val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
