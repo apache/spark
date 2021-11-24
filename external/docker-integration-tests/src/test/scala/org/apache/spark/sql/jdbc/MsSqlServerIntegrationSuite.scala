@@ -358,7 +358,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         0, 0, 0, 1, 0, 0, 0, 3))
   }
 
-  test("withClause and query  JDBC options") {
+  test("withClause and query JDBC options") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")
@@ -392,6 +392,24 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("url", jdbcUrl)
       .option("withClause", withClause)
       .option("dbtable", dbtable)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+  }
+
+  test("temp table withClause and query JDBC options") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val withClause = "(SELECT * INTO #TempTable FROM (SELECT * FROM tbl) t)"
+    val query = "SELECT * FROM #TempTable"
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("withClause", withClause)
+      .option("query", query)
       .load()
     assert(df.collect.toSet === expectedResult)
   }
