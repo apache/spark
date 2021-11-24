@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable => CatalystCreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Identifier, Table, TableCapability, TableCatalog, V1Table}
@@ -481,7 +481,7 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20")
 
     parseAndResolve(sql) match {
-      case create: CreateV2Table =>
+      case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
         assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
           "mydb.table_name")
@@ -492,15 +492,15 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(create.partitioning.isEmpty)
 
         val properties = CatalogV2Util.convertTableProperties(
-          create.tableProperties.properties, create.tableProperties.options,
-          create.tableProperties.serde, create.tableProperties.location,
-          create.tableProperties.comment, create.tableProperties.provider,
-          create.tableProperties.external)
+          create.tableSpec.properties, create.tableSpec.options,
+          create.tableSpec.serde, create.tableSpec.location,
+          create.tableSpec.comment, create.tableSpec.provider,
+          create.tableSpec.external)
         assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+        fail(s"Expected to parse ${classOf[CatalystCreateTable].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -528,7 +528,7 @@ class PlanResolutionSuite extends AnalysisTest {
       "other" -> "20")
 
     parseAndResolve(sql, withDefault = true) match {
-      case create: CreateV2Table =>
+      case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
         assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
           "mydb.table_name")
@@ -538,15 +538,15 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
         val properties = CatalogV2Util.convertTableProperties(
-          create.tableProperties.properties, create.tableProperties.options,
-          create.tableProperties.serde, create.tableProperties.location,
-          create.tableProperties.comment, create.tableProperties.provider,
-          create.tableProperties.external)
+          create.tableSpec.properties, create.tableSpec.options,
+          create.tableSpec.serde, create.tableSpec.location,
+          create.tableSpec.comment, create.tableSpec.provider,
+          create.tableSpec.external)
         assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+        fail(s"Expected to parse ${classOf[CatalystCreateTable].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }
@@ -572,7 +572,7 @@ class PlanResolutionSuite extends AnalysisTest {
       "comment" -> "This is the staging page view table")
 
     parseAndResolve(sql) match {
-      case create: CreateV2Table =>
+      case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
           CatalogManager.SESSION_CATALOG_NAME)
         assert(create.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
@@ -583,15 +583,15 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
         val properties = CatalogV2Util.convertTableProperties(
-          create.tableProperties.properties, create.tableProperties.options,
-          create.tableProperties.serde, create.tableProperties.location,
-          create.tableProperties.comment, create.tableProperties.provider,
-          create.tableProperties.external)
+          create.tableSpec.properties, create.tableSpec.options,
+          create.tableSpec.serde, create.tableSpec.location,
+          create.tableSpec.comment, create.tableSpec.provider,
+          create.tableSpec.external)
         assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
-        fail(s"Expected to parse ${classOf[CreateV2Table].getName} from query," +
+        fail(s"Expected to parse ${classOf[CatalystCreateTable].getName} from query," +
             s"got ${other.getClass.getName}: $sql")
     }
   }

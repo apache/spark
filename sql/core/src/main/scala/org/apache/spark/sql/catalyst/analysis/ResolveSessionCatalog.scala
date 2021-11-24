@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable => CatalystCreateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
@@ -143,25 +144,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateV2Table(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
+    case c @ CatalystCreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableProperties.provider,
-        c.tableProperties.options,
-        c.tableProperties.location,
-        c.tableProperties.serde,
+        c.tableSpec.provider,
+        c.tableSpec.options,
+        c.tableSpec.location,
+        c.tableSpec.serde,
         ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(name.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.tableProperties.properties, provider,
-          c.tableProperties.location, c.tableProperties.comment, storageFormat,
-          c.tableProperties.external)
+          c.partitioning, c.bucketSpec, c.tableSpec.properties, provider,
+          c.tableSpec.location, c.tableSpec.comment, storageFormat,
+          c.tableSpec.external)
         val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
-        CreateV2Table(
-          ResolvedDBObjectName(catalog, name), c.tableSchema,
-          c.partitioning ++ c.bucketSpec.map(_.asTransform), None, c.tableProperties,
-          c.ignoreIfExists)
+        c
       }
 
     case c @ CreateTableAsSelectStatement(

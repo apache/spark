@@ -206,12 +206,12 @@ trait V2CreateTablePlanX extends LogicalPlan {
 /**
  * Create a new table with a v2 catalog.
  */
-case class CreateV2Table(
+case class CreateTable(
     name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
     bucketSpec: Option[BucketSpec],
-    tableProperties: TableProperties,
+    tableSpec: TableSpec,
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlanX {
   override def child: LogicalPlan = name
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlanX =
@@ -1107,7 +1107,7 @@ case class DropIndex(
     copy(table = newChild)
 }
 
-case class TableProperties(
+case class TableSpec(
     properties: Map[String, String],
     provider: Option[String],
     options: Map[String, String],

@@ -29,7 +29,7 @@ import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDBObjectName
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateV2Table, TableProperties}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, TableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
@@ -289,7 +289,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
        */
-      val tableProperties = TableProperties(
+      val tableProperties = TableSpec(
         Map.empty[String, String],
         Some(source),
         Map.empty[String, String],
@@ -297,7 +297,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         None,
         None,
         false)
-      val cmd = CreateV2Table(
+      val cmd = CreateTable(
         UnresolvedDBObjectName(
           originalMultipartIdentifier,
           isNamespace = false),
