@@ -122,6 +122,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RewriteCorrelatedScalarSubquery,
         RewriteLateralSubquery,
         EliminateSerialization,
+        DeduplicateLeftSemiLeftAntiRightSide,
         RemoveRedundantAliases,
         RemoveRedundantAggregates,
         UnwrapCastInBinaryComparison,
@@ -2145,6 +2146,17 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
         projectMinPlan
       )
       Project(left.output, genRowPlan)
+  }
+}
+
+/**
+ * Deduplicate the right side of left-semi join and left-anti join.
+ */
+object DeduplicateLeftSemiLeftAntiRightSide extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
+    case join @ Join(_, right, LeftSemiOrAnti(joinType), _, _) if !right.isInstanceOf[Aggregate] =>
+      join.copy(right = Aggregate(right.output, right.output, right))
   }
 }
 

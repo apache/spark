@@ -108,6 +108,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
+      "org.apache.spark.sql.catalyst.optimizer.DeduplicateLeftSemiLeftAntiRightSide" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateAggregateFilter" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateLimits" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateMapObjects" ::
