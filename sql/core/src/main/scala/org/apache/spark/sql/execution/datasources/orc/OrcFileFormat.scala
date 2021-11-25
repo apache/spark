@@ -193,8 +193,7 @@ class OrcFileFormat
 
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
-          val orcRecordReader: mapreduce.OrcMapreduceRecordReader[OrcStruct] =
-            createRecordReader[OrcStruct](fileSplit, taskAttemptContext)
+          val orcRecordReader = createRecordReader[OrcStruct](fileSplit, taskAttemptContext)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
@@ -214,6 +213,8 @@ class OrcFileFormat
     }
   }
 
+  // This method references createRecordReader of OrcInputFormat.
+  // Just for call useUTCTimestamp of OrcFile.ReaderOptions.
   private def createRecordReader[V <: WritableComparable[_]](
       inputSplit: InputSplit,
       taskAttemptContext: TaskAttemptContext): mapreduce.OrcMapreduceRecordReader[V] = {
