@@ -74,7 +74,7 @@ object OrcUtils extends Logging {
   def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
       : Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
-    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs).useUTCTimestamp(true)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
       val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
         reader.getSchema
