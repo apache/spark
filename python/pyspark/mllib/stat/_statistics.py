@@ -19,6 +19,7 @@ import sys
 from typing import cast, overload, List, Optional, TYPE_CHECKING, Union
 
 from numpy import ndarray
+from py4j.java_gateway import JavaObject
 
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
@@ -39,28 +40,28 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
     """
 
     def mean(self) -> ndarray:
-        return self.call("mean").toArray()
+        return cast(JavaObject, self.call("mean")).toArray()
 
     def variance(self) -> ndarray:
-        return self.call("variance").toArray()
+        return cast(JavaObject, self.call("variance")).toArray()
 
     def count(self) -> int:
         return int(self.call("count"))
 
     def numNonzeros(self) -> ndarray:
-        return self.call("numNonzeros").toArray()
+        return cast(JavaObject, self.call("numNonzeros")).toArray()
 
     def max(self) -> ndarray:
-        return self.call("max").toArray()
+        return cast(JavaObject, self.call("max")).toArray()
 
     def min(self) -> ndarray:
-        return self.call("min").toArray()
+        return cast(JavaObject, self.call("min")).toArray()
 
     def normL1(self) -> ndarray:
-        return self.call("normL1").toArray()
+        return cast(JavaObject, self.call("normL1")).toArray()
 
     def normL2(self) -> ndarray:
-        return self.call("normL2").toArray()
+        return cast(JavaObject, self.call("normL2")).toArray()
 
 
 class Statistics(object):
@@ -189,9 +190,14 @@ class Statistics(object):
             raise TypeError("Use 'method=' to specify method name.")
 
         if not y:
-            return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
+            return cast(
+                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)
+            ).toArray()
         else:
-            return callMLlibFunc("corr", cast("RDD[float]", x).map(float), y.map(float), method)
+            return cast(
+                Union[float, Matrix],
+                callMLlibFunc("corr", cast("RDD[float]", x).map(float), y.map(float), method),
+            )
 
     @overload
     @staticmethod
