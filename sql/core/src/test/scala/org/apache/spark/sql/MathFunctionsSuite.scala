@@ -279,15 +279,18 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
     checkAnswer(
-      df.select(round('a, 0, "up"), round('a, -1, "up"), round('a, -2, "up")),
+      df.select(round('a, lit(0), lit("up")), round('a, lit(-1), lit("up")),
+        round('a, lit(-2), lit("up"))),
       Seq(Row(5, 10, 100), Row(55, 60, 100), Row(555, 560, 600))
     )
     checkAnswer(
-      df.select(round('a, 0, "down"), round('a, -1, "down"), round('a, -2, "down")),
+      df.select(round('a, lit(0), lit("down")), round('a, lit(-1), lit("down")),
+        round('a, lit(-2), lit("down"))),
       Seq(Row(5, 0, 0), Row(55, 50, 0), Row(555, 550, 500))
     )
     checkAnswer(
-      df.select(round('a), round('a, -1, "half_down"), round('a, -2, "half_down")),
+      df.select(round('a), round('a, lit(-1), lit("half_down")),
+        round('a, lit(-2), lit("half_down"))),
       Seq(Row(5, 0, 0), Row(55, 50, 100), Row(555, 550, 600))
     )
 
@@ -371,15 +374,15 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
-      df.withColumn("value_rounded", round('value, 0, "up")),
+      df.withColumn("value_rounded", round('value, lit(0), lit("up"))),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
-      df.withColumn("value_rounded", round('value, 0, "down")),
+      df.withColumn("value_rounded", round('value, lit(0), lit("down"))),
       Seq(Row(BigDecimal("5.9"), BigDecimal("5")))
     )
     checkAnswer(
-      df.withColumn("value_rounded", round('value, 0, "half_down")),
+      df.withColumn("value_rounded", round('value, lit(0), lit("half_down"))),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
   }

@@ -2202,7 +2202,7 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def round(e: Column, scale: Int): Column = round(e, scale, "half_up")
+  def round(e: Column, scale: Int): Column = round(e, lit(scale), lit("half_up"))
 
   /**
    * Round the value of `e` to `scale` decimal places with given round mode, default: HALF_UP
@@ -2211,8 +2211,8 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def round(e: Column, scale: Int, mode: String): Column = withExpr {
-    Round(e.expr, Literal(scale), Literal(mode))
+  def round(e: Column, scale: Column, mode: Column): Column = withExpr {
+    Round(e.expr, scale.expr, mode.expr)
   }
 
   /**
@@ -2230,7 +2230,7 @@ object functions {
    * @group math_funcs
    * @since 2.0.0
    */
-  def bround(e: Column, scale: Int): Column = round(e, scale, "half_even")
+  def bround(e: Column, scale: Int): Column = round(e, lit(scale), lit("half_even"))
 
   /**
    * @param e angle in radians
