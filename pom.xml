@@ -3349,7 +3349,7 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
       <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 
