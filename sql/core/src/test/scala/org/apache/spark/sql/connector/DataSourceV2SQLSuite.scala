@@ -1854,109 +1854,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33898: SHOW CREATE TABLE AS SERDE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"SHOW CREATE TABLE $t AS SERDE")
-      }
-      assert(e.message.contains(s"SHOW CREATE TABLE AS SERDE is not supported for v2 tables."))
-    }
-  }
-
-  test("SPARK-33898: SHOW CREATE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (
-           |  a bigint NOT NULL,
-           |  b bigint,
-           |  c bigint,
-           |  `extra col` ARRAY<INT>,
-           |  `<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>
-           |)
-           |USING foo
-           |OPTIONS (
-           |  from = 0,
-           |  to = 1,
-           |  via = 2)
-           |COMMENT 'This is a comment'
-           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
-           |PARTITIONED BY (a)
-           |LOCATION 'file:/tmp'
-        """.stripMargin)
-      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
-      assert(showDDL === Array(
-        "CREATE TABLE testcat.ns1.ns2.tbl (",
-        "`a` BIGINT NOT NULL,",
-        "`b` BIGINT,",
-        "`c` BIGINT,",
-        "`extra col` ARRAY<INT>,",
-        "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>)",
-        "USING foo",
-        "OPTIONS(",
-        "'from' = '0',",
-        "'to' = '1',",
-        "'via' = '2')",
-        "PARTITIONED BY (a)",
-        "COMMENT 'This is a comment'",
-        "LOCATION 'file:/tmp'",
-        "TBLPROPERTIES (",
-        "'prop1' = '1',",
-        "'prop2' = '2',",
-        "'prop3' = '3',",
-        "'prop4' = '4')"
-      ))
-    }
-  }
-
-  test("SPARK-33898: SHOW CREATE TABLE WITH AS SELECT") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t
-           |USING foo
-           |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin)
-      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
-      assert(showDDL === Array(
-        "CREATE TABLE testcat.ns1.ns2.tbl (",
-        "`a` INT,",
-        "`b` STRING)",
-        "USING foo"
-      ))
-    }
-  }
-
-  test("SPARK-33898: SHOW CREATE TABLE PARTITIONED BY Transforms") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) USING foo
-           |PARTITIONED BY (
-           |    a,
-           |    bucket(16, b),
-           |    years(ts),
-           |    months(ts),
-           |    days(ts),
-           |    hours(ts))
-         """.stripMargin)
-      val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
-      assert(showDDL === Array(
-        "CREATE TABLE testcat.ns1.ns2.tbl (",
-        "`a` INT,",
-        "`b` STRING,",
-        "`ts` TIMESTAMP)",
-        "USING foo",
-        "PARTITIONED BY (a, bucket(16, b), years(ts), months(ts), days(ts), hours(ts))"
-      ))
-    }
-  }
-
   test("CACHE/UNCACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2867,10 +2764,6 @@ class DataSourceV2SQLSuite
     }
     assert(ex.getErrorClass == expectedErrorClass)
     assert(ex.messageParameters.sameElements(expectedErrorMessageParameters))
-  }
-
-  private def getShowCreateDDL(showCreateTableSql: String): Array[String] = {
-    sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim)
   }
 }
 
