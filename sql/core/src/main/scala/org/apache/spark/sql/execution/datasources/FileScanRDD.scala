@@ -24,8 +24,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeRowJoiner, UnsafeRowJoiner}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -121,8 +121,8 @@ class FileScanRDD(
 
       // metadata struct unsafe row, will only be updated when the current file is changed
       @volatile private var metadataStructColUnsafeRow: UnsafeRow = _
-      // metadata generic row, will only be updated when the current file is changed
-      @volatile private var metadataStructColGenericRow: Row = _
+      // metadata internal row, will only be updated when the current file is changed
+      @volatile private var metadataStructColInternalRow: InternalRow = _
       // an unsafe joiner to join an unsafe row with the metadata unsafe row
       lazy private val unsafeRowJoiner =
         if (metadataStructCol.isDefined) {
@@ -138,11 +138,11 @@ class FileScanRDD(
           val meta = metadataStructCol.get
           if (currentFile == null) {
             metadataStructColUnsafeRow = null
-            metadataStructColGenericRow = null
+            metadataStructColInternalRow = null
           } else {
             // make an generic row
             assert(meta.dataType.isInstanceOf[StructType])
-            metadataStructColGenericRow = Row.fromSeq(
+            metadataStructColInternalRow = InternalRow.fromSeq(
               meta.dataType.asInstanceOf[StructType].names.map {
                 case FILE_PATH => UTF8String.fromString(new File(currentFile.filePath).toString)
                 case FILE_NAME => UTF8String.fromString(
@@ -156,13 +156,10 @@ class FileScanRDD(
             // convert the generic row to an unsafe row
             val unsafeRowConverter = {
               val converter = UnsafeProjection.create(Array(meta.dataType))
-              (row: Row) => {
-                converter(CatalystTypeConverters.convertToCatalyst(row)
-                  .asInstanceOf[InternalRow])
-              }
+              (row: InternalRow) => converter(row)
             }
             metadataStructColUnsafeRow =
-              unsafeRowConverter(Row.fromSeq(Seq(metadataStructColGenericRow)))
+              unsafeRowConverter(InternalRow.fromSeq(Seq(metadataStructColInternalRow)))
           }
         }
       }
@@ -218,8 +215,7 @@ class FileScanRDD(
               new ColumnarBatch(columnVectorArr, c.numRows())
             case u: UnsafeRow =>
               unsafeRowJoiner.asInstanceOf[UnsafeRowJoiner].join(u, metadataStructColUnsafeRow)
-            case i: InternalRow =>
-              new JoinedRow(i, InternalRow.fromSeq(metadataStructColGenericRow.toSeq))
+            case i: InternalRow => new JoinedRow(i, metadataStructColInternalRow)
           }
         } else {
           nextElement
