@@ -836,7 +836,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     sql("set spark.sql.session.timeZone = America/Los_Angeles")
 
     val df =
-      sql("select timestamp_ntz '2021-06-01 00:00:00' ts_ntz, timestamp '2021-06-01 00:00:00' ts")
+      sql("select timestamp_ntz '2021-06-01 00:00:00' ts_ntz, timestamp_ltz '2021-06-01 00:00:00' ts_ltz")
 
     df.write.mode("overwrite").orc("ts_ntz_orc")
     df.write.mode("overwrite").parquet("ts_ntz_parquet")
