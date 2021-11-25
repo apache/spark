@@ -227,7 +227,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan =
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
-      case u @ UnresolvedRelation(Seq(table), _, _, _) =>
+      case u @ UnresolvedRelation(Seq(table), _, _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
           if (alwaysInline) {
             d.child
