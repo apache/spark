@@ -804,8 +804,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // schema from table properties.
     val maybeSchemaFromTableProps = getSchemaFromTableProperties(table.properties)
     if (maybeSchemaFromTableProps.isDefined) {
+      val schemaFromTableProps = maybeSchemaFromTableProps.get
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
-      val reorderedSchema = reorderSchema(schema = maybeSchemaFromTableProps.get, partColumnNames)
+      val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
       if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
           options.respectSparkSchema) {
