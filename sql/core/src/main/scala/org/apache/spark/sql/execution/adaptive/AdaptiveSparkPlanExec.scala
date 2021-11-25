@@ -118,7 +118,7 @@ case class AdaptiveSparkPlanExec(
       ensureRequirements,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements, costEvaluator)
+      OptimizeSkewedJoin(ensureRequirements)
     ) ++ context.session.sessionState.queryStagePrepRules
   }
 

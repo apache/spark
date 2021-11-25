@@ -401,15 +401,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
 
-    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
-      val newOutput =
-        if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA) && propertyKey.isDefined) {
-          assert(output.length == 2)
-          output.tail
-        } else {
-          output
-        }
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, newOutput)
+    // If target is view, force use v1 command
+    case s @ ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
+
+    case s @ ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey, output)
+        if conf.useV1Command =>
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)

@@ -550,4 +550,20 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       spark.sessionState.conf.clear()
     }
   }
+
+  test("SPARK-37266: View text can only be SELECT queries") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1")
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+      val dropView = "DROP VIEW v"
+      // Simulate the behavior of hackers
+      val tamperedTable = table.copy(viewText = Some(dropView))
+      spark.sessionState.catalog.alterTable(tamperedTable)
+      val message = intercept[AnalysisException] {
+        sql("SELECT * FROM v")
+      }.getMessage
+      assert(message.contains(s"Invalid view text: $dropView." +
+        s" The view ${table.qualifiedName} may have been tampered with"))
+    }
+  }
 }

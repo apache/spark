@@ -18,10 +18,10 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -901,8 +901,8 @@ private[spark] class Client(
       sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     }
 
-    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
-      env(ENV_DIST_CLASSPATH) = dcp
+    Seq(ENV_DIST_CLASSPATH, SPARK_TESTING).foreach { envVar =>
+      sys.env.get(envVar).foreach(value => env(envVar) = value)
     }
 
     env
@@ -1312,7 +1312,7 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private[spark] object Client extends Logging {
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1352,6 +1352,8 @@ private object Client extends Logging {
 
   // Subdirectory where Spark libraries will be placed.
   val LOCALIZED_LIB_DIR = "__spark_libs__"
+
+  val SPARK_TESTING = "SPARK_TESTING"
 
   /**
    * Return the path to the given application's staging directory.
@@ -1472,6 +1474,34 @@ private object Client extends Logging {
     val mainUri = getMainJarUri(conf.get(APP_JAR))
     val secondaryUris = getSecondaryJarUris(conf.get(SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
+  }
+
+  /**
+   * Returns a list of local, absolute file URLs representing the user classpath. Note that this
+   * must be executed on the same host which will access the URLs, as it will resolve relative
+   * paths based on the current working directory, as well as environment variables.
+   * See SPARK-35672 for discussion of why it is necessary to do environment variable substitution.
+   *
+   * @param conf Spark configuration.
+   * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
+   *                       `local` scheme. This should be used when running on the cluster, but
+   *                       not when running on the gateway (i.e. for the driver in `client` mode).
+   * @return Array of local URLs ready to be passed to a [[java.net.URLClassLoader]].
+   */
+  def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
+    Client.getUserClasspath(conf).map { uri =>
+      val inputPath = uri.getPath
+      val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
+        Client.getClusterPath(conf, inputPath)
+      } else {
+        // Any other URI schemes should have been resolved by this point
+        assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
+          "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
+        inputPath
+      }
+      val envVarResolvedFilePath = YarnSparkHadoopUtil.replaceEnvVars(replacedFilePath, sys.env)
+      Paths.get(envVarResolvedFilePath).toAbsolutePath.toUri.toURL
+    }
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {

@@ -95,6 +95,36 @@ public interface TableCatalog extends CatalogPlugin {
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
   /**
+   * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param version version of the table
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
+    throw new UnsupportedOperationException("Load table with version is not supported.");
+  }
+
+  /**
+   * Load table metadata at a specific time by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
+    throw new UnsupportedOperationException("Load table with timestamp is not supported.");
+  }
+
+  /**
    * Invalidate cached table metadata for an {@link Identifier identifier}.
    * <p>
    * If the table is already loaded or cached, drop cached data. If the table does not exist or is

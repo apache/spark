@@ -4820,9 +4820,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 "If `index_col` is not specified for `to_spark`, "
                 "the existing index is lost when converting to Spark DataFrame."
             )
-        return self.spark.frame(index_col)
+        return self._to_spark(index_col)
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
+
+    def _to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+        """
+        Same as `to_spark()`, without issueing the advice log when `index_col` is not specified
+        for internal usage.
+        """
+        return self.spark.frame(index_col)
 
     def to_pandas(self) -> pd.DataFrame:
         """
@@ -4846,6 +4853,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas DataFrame is expected to be small."
         )
+        return self._to_pandas()
+
+    def _to_pandas(self) -> pd.DataFrame:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
         return self._internal.to_pandas_frame.copy()
 
     def assign(self, **kwargs: Any) -> "DataFrame":
@@ -10871,7 +10884,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
                 self.count = (  # type: ignore[assignment]
-                    lambda: count_func().to_pandas()  # type: ignore[assignment, misc, union-attr]
+                    lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
                     self,

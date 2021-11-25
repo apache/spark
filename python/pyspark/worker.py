@@ -53,7 +53,11 @@ from pyspark.serializers import (
     PickleSerializer,
     BatchedSerializer,
 )
-from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.serializers import (
+    ArrowStreamPandasUDFSerializer,
+    CogroupUDFSerializer,
+    ArrowStreamUDFSerializer,
+)
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback  # type: ignore
@@ -123,7 +127,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     )
 
 
-def wrap_pandas_iter_udf(f, return_type):
+def wrap_batch_iter_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_type(result):
@@ -291,9 +295,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return arg_offsets, wrap_scalar_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_pandas_iter_udf(func, return_type)
+        return arg_offsets, wrap_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return arg_offsets, wrap_pandas_iter_udf(func, return_type)
+        return arg_offsets, wrap_batch_iter_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
+        return arg_offsets, wrap_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
@@ -318,6 +324,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
@@ -346,6 +353,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
+        elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
+            ser = ArrowStreamUDFSerializer()
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -363,13 +372,16 @@ def read_udfs(pickleSer, infile, eval_type):
     num_udfs = read_int(infile)
 
     is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-    is_map_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+    is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+    is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
-    if is_scalar_iter or is_map_iter:
+    if is_scalar_iter or is_map_pandas_iter or is_map_arrow_iter:
         if is_scalar_iter:
             assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
-        if is_map_iter:
-            assert num_udfs == 1, "One MAP_ITER UDF expected here."
+        if is_map_pandas_iter:
+            assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
+        if is_map_arrow_iter:
+            assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
@@ -398,7 +410,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # it's very unlikely the output length is higher than
                 # input length.
                 assert (
-                    is_map_iter or num_output_rows <= num_input_rows
+                    is_map_pandas_iter or is_map_arrow_iter or num_output_rows <= num_input_rows
                 ), "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 

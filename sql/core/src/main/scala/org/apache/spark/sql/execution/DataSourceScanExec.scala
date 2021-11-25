@@ -463,7 +463,7 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       driverMetrics("numPartitions") = partitions.length
     }
   }
@@ -482,7 +482,7 @@ case class FileSourceScanExec(
       None
     }
   } ++ {
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       Map(
         "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
         "pruningTime" ->

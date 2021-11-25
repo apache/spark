@@ -289,6 +289,29 @@ class SparkSessionBuilderTests(unittest.TestCase):
             if session2 is not None:
                 session2.stop()
 
+    def test_create_spark_context_first_and_copy_options_to_sharedState(self):
+        sc = None
+        session = None
+        try:
+            conf = SparkConf().set("key1", "value1")
+            sc = SparkContext("local[4]", "SessionBuilderTests", conf=conf)
+            session = (
+                SparkSession.builder.config("key2", "value2").enableHiveSupport().getOrCreate()
+            )
+
+            self.assertEqual(session._jsparkSession.sharedState().conf().get("key1"), "value1")
+            self.assertEqual(session._jsparkSession.sharedState().conf().get("key2"), "value2")
+            self.assertEqual(
+                session._jsparkSession.sharedState().conf().get("spark.sql.catalogImplementation"),
+                "hive",
+            )
+            self.assertEqual(session.sparkContext, sc)
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
 
 class SparkExtensionsTest(unittest.TestCase):
     # These tests are separate because it uses 'spark.sql.extensions' which is

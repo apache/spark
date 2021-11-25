@@ -116,7 +116,10 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       testJoin(originalCond, expectedCond = expectedCond)
       testDelete(originalCond, expectedCond = expectedCond)
       testUpdate(originalCond, expectedCond = expectedCond)
-      testProjection(originalCond, expectedExpr = originalCond)
+      testProjection(originalCond,
+        expectedExpr = CaseWhen(
+          Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
+          elseExp.filterNot(_.semanticEquals(Literal(null, BooleanType)))))
     }
   }
 
@@ -222,7 +225,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
   }
 
   private def testProjection(originalExpr: Expression, expectedExpr: Expression): Unit = {
-    test((rel, exp) => rel.select(exp), originalExpr, expectedExpr)
+    test((rel, exp) => rel.select(exp), originalExpr.as("out"), expectedExpr.as("out"))
   }
 
   private def testDelete(originalCond: Expression, expectedCond: Expression): Unit = {

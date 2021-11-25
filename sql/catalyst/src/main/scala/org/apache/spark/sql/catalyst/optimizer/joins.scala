@@ -179,12 +179,10 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
         if a.groupOnly && a.references.subsetOf(right.outputSet) =>
       a.copy(child = right)
     case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-        if a.groupOnly && p.outputSet.subsetOf(a.references) &&
-          AttributeSet(p.projectList.flatMap(_.references)).subsetOf(left.outputSet) =>
+        if a.groupOnly && p.references.subsetOf(left.outputSet) =>
       a.copy(child = p.copy(child = left))
     case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
-        if a.groupOnly && p.outputSet.subsetOf(a.references) &&
-          AttributeSet(p.projectList.flatMap(_.references)).subsetOf(right.outputSet) =>
+        if a.groupOnly && p.references.subsetOf(right.outputSet) =>
       a.copy(child = p.copy(child = right))
   }
 }

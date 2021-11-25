@@ -130,6 +130,10 @@ class Frame(object, metaclass=ABCMeta):
     def to_pandas(self) -> Union[pd.DataFrame, pd.Series]:
         pass
 
+    @abstractmethod
+    def _to_pandas(self) -> Union[pd.DataFrame, pd.Series]:
+        pass
+
     @property
     @abstractmethod
     def index(self) -> "Index":
@@ -578,7 +582,7 @@ class Frame(object, metaclass=ABCMeta):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        return self.to_pandas().values
+        return self._to_pandas().values
 
     @property
     def values(self) -> np.ndarray:
@@ -796,7 +800,7 @@ class Frame(object, metaclass=ABCMeta):
                 self, ps.Series
             ):
                 # 0.23 seems not having 'columns' parameter in Series' to_csv.
-                return psdf_or_ser.to_pandas().to_csv(
+                return psdf_or_ser._to_pandas().to_csv(
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -805,7 +809,7 @@ class Frame(object, metaclass=ABCMeta):
                     index=False,
                 )
             else:
-                return psdf_or_ser.to_pandas().to_csv(
+                return psdf_or_ser._to_pandas().to_csv(
                     None,
                     sep=sep,
                     na_rep=na_rep,
@@ -1001,7 +1005,7 @@ class Frame(object, metaclass=ABCMeta):
         if path is None:
             # If path is none, just collect and use pandas's to_json.
             psdf_or_ser = self
-            pdf = psdf_or_ser.to_pandas()
+            pdf = psdf_or_ser._to_pandas()
             if isinstance(self, ps.Series):
                 pdf = pdf.to_frame()
             # To make the format consistent and readable by `read_json`, convert it to pandas' and

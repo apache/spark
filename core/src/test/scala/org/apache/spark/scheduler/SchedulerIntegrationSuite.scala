@@ -55,7 +55,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   var backend: T = _
   // Even though the tests aren't doing much, occasionally we see flakiness from pauses over
   // a second (probably from GC?) so we leave a long timeout in here
-  val duration = Duration(10, SECONDS)
+  val duration = Duration(20, SECONDS)
 
   override def beforeEach(): Unit = {
     if (taskScheduler != null) {
