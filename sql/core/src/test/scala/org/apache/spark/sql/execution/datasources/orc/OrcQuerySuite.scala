@@ -831,7 +831,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36346: read/write Timestamp ntz or ltz to Orc uses UTC timestamp") {
+  test("SPARK-37463: read/write Timestamp ntz or ltz to Orc uses UTC timestamp") {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     sql("set spark.sql.session.timeZone = America/Los_Angeles")
 
