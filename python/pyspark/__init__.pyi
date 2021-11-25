@@ -38,7 +38,7 @@ from pyspark.profiler import (  # noqa: F401
 from pyspark.rdd import RDD as RDD, RDDBarrier as RDDBarrier  # noqa: F401
 from pyspark.serializers import (  # noqa: F401
     MarshalSerializer as MarshalSerializer,
-    PickleSerializer as PickleSerializer,
+    CPickleSerializer as CPickleSerializer,
 )
 from pyspark.status import (  # noqa: F401
     SparkJobInfo as SparkJobInfo,
