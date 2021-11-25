@@ -676,9 +676,26 @@ jobs:
     - name: Generate TPC-DS (SF=1) table data
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       run: build/sbt "sql/test:runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
-    - name: Run TPC-DS queries
+    - name: Run TPC-DS queries (Sort merge join)
       run: |
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+      env:
+        SPARK_TPCDS_JOIN_CONF: |
+          spark.sql.autoBroadcastJoinThreshold=-1
+          spark.sql.join.preferSortMergeJoin=true
+    - name: Run TPC-DS queries (Broadcast hash join)
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+      env:
+        SPARK_TPCDS_JOIN_CONF: |
+          spark.sql.autoBroadcastJoinThreshold=10485760
+    - name: Run TPC-DS queries (Shuffled hash join)
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+      env:
+        SPARK_TPCDS_JOIN_CONF: |
+          spark.sql.autoBroadcastJoinThreshold=-1
+          spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -695,7 +712,7 @@ jobs:
   docker-integration-tests:
     needs: configure-jobs
     if: needs.configure-jobs.outputs.type == 'regular'
-    name: Run docker integration tests
+    name: Run Docker integration tests
     runs-on: ubuntu-20.04
     env:
       HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
