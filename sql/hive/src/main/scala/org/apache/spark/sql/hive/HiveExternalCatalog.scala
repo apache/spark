@@ -437,7 +437,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     properties.put(CREATED_SPARK_VERSION, table.createVersion)
     // This is for backward compatibility to Spark 2 to read tables with char/varchar created by
-    // Spark 3.1. At read side, we will restore a table schema from its properties. So, we meed to
+    // Spark 3.1. At read side, we will restore a table schema from its properties. So, we need to
     // clear the `varchar(n)` and `char(n)` and replace them with `string` as Spark 2 does not have
     // a type mapping for them in `DataType.nameToType`.
     // See `restoreHiveSerdeTable` for example.
@@ -751,10 +751,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case None if table.tableType == VIEW =>
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
-        CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA).foreach { schemaJson =>
-          val rawSchema = CharVarcharUtils.getRawSchema(
-            DataType.fromJson(schemaJson).asInstanceOf[StructType])
-          table = table.copy(schema = rawSchema)
+        getSchemaFromTableProperties(table.properties).foreach { schemaFromTableProps =>
+          table = table.copy(schema = schemaFromTableProps)
         }
 
       // No provider in table properties, which means this is a Hive serde table.
@@ -804,12 +802,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // If this is a Hive serde table created by Spark 2.1 or higher versions, we should restore its
     // schema from table properties.
-    val schemaJson = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
-    if (schemaJson.isDefined) {
-      val schemaFromTableProps = DataType.fromJson(schemaJson.get).asInstanceOf[StructType]
-      val rawSchema = CharVarcharUtils.getRawSchema(schemaFromTableProps)
+    val maybeSchemaFromTableProps = getSchemaFromTableProperties(table.properties)
+    if (maybeSchemaFromTableProps.isDefined) {
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
-      val reorderedSchema = reorderSchema(schema = rawSchema, partColumnNames)
+      val reorderedSchema = reorderSchema(schema = maybeSchemaFromTableProps.get, partColumnNames)
 
       if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
           options.respectSparkSchema) {
@@ -833,6 +829,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  private def getSchemaFromTableProperties(
+      tableProperties: Map[String, String]): Option[StructType] = {
+    CatalogTable.readLargeTableProp(tableProperties, DATASOURCE_SCHEMA).map { schemaJson =>
+      val parsed = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+      CharVarcharUtils.getRawSchema(parsed)
+    }
+  }
+
   private def restoreDataSourceTable(table: CatalogTable, provider: String): CatalogTable = {
     // Internally we store the table location in storage properties with key "path" for data
     // source tables. Here we set the table location to `locationUri` field and filter out the
@@ -847,10 +851,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
-    val schemaFromTableProps = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
-      .map { json =>
-        CharVarcharUtils.getRawSchema(DataType.fromJson(json).asInstanceOf[StructType])
-      }.getOrElse(new StructType())
+    val schemaFromTableProps =
+      getSchemaFromTableProperties(table.properties).getOrElse(new StructType())
     val partColumnNames = getPartitionColumnsFromTableProperties(table)
     val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
