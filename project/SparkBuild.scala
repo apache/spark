@@ -1106,13 +1106,12 @@ object TestSettings {
   import BuildCommons._
   private val isMacOnAppleSilicon = System.getProperty("os.name").startsWith("Mac OS X") &&
     System.getProperty("os.arch").equals("aarch64")
-  private val defaultExcludedTags = if (isMacOnAppleSilicon) {
-    Seq("org.apache.spark.tags.ChromeUITest",
-      "org.apache.spark.tags.ExtendedLevelDBTest",
-      "org.apache.spark.tags.ExtendedRocksDBTest")
-  } else {
-    Seq("org.apache.spark.tags.ChromeUITest")
-  }
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest") ++
+    if (isMacOnAppleSilicon) {
+      Seq("org.apache.spark.tags.ExtendedLevelDBTest", "org.apache.spark.tags.ExtendedRocksDBTest")
+    } else {
+      Seq.empty
+    }
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
