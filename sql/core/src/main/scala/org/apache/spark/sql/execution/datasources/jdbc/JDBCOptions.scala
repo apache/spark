@@ -258,6 +258,7 @@ object JDBCOptions {
   val JDBC_URL = newOption("url")
   val JDBC_TABLE_NAME = newOption("dbtable")
   val JDBC_QUERY_STRING = newOption("query")
+  val JDBC_USE_RAW_QUERY = newOption("useRawQuery")
   val JDBC_DRIVER_CLASS = newOption("driver")
   val JDBC_PARTITION_COLUMN = newOption("partitionColumn")
   val JDBC_LOWER_BOUND = newOption("lowerBound")
