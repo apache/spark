@@ -1285,6 +1285,34 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
+    withNamespace("testcat.ns1.ns2") {
+      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_1'")
+      sql("ALTER NAMESPACE testcat.ns1.ns2 SET LOCATION '/tmp/ns_test_2'")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test_2"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", ""))
+      )
+    }
+  }
+
+  test("SPARK-37444: ALTER NAMESPACE .. SET LOCATION using v2 catalog with empty location") {
+    val ns = "testcat.ns1.ns2"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
+        "'test namespace' LOCATION '/tmp/ns_test_1'")
+      val e = intercept[IllegalArgumentException] {
+        sql(s"ALTER DATABASE $ns SET LOCATION ''")
+      }
+      assert(e.getMessage.contains("Can not create a Path from an empty string"))
+    }
+  }
+
   private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {

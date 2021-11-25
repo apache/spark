@@ -371,7 +371,7 @@ object ShufflePartitionsUtil extends Logging {
 
   /**
    * Splits the skewed partition based on the map size and the target partition size
-   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
+   * after split, and create a list of `PartialReducerPartitionSpec`. Returns None if can't split.
    */
   def createSkewPartitionSpecs(
       shuffleId: Int,

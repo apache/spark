@@ -221,7 +221,6 @@ This is a graphical depiction of the precedence list as a directed tree:
 The least common type from a set of types is the narrowest type reachable from the precedence list by all elements of the set of types.
 
 The least common type resolution is used to:
-- Decide whether a function expecting a parameter of a type can be invoked using an argument of a narrower type.
 - Derive the argument type for functions which expect a shared argument type for multiple parameters, such as coalesce, least, or greatest.
 - Derive the operand types for operators such as arithmetic operations or comparisons.
 - Derive the result type for expressions such as the case expression.
@@ -246,19 +245,40 @@ DOUBLE
 > SELECT (typeof(coalesce(1BD, 1F)));
 DOUBLE
 
--- The substring function expects arguments of type INT for the start and length parameters.
-> SELECT substring('hello', 1Y, 2);
-he
-> SELECT substring('hello', '1', 2);
-he
-> SELECT substring('hello', 1L, 2);
-Error: Argument 2 requires an INT type.
-> SELECT substring('hello', str, 2) FROM VALUES(CAST('1' AS STRING)) AS T(str);
-Error: Argument 2 requires an INT type.
 ```
 
 ### SQL Functions
+#### Function invocation
+Under ANSI mode(spark.sql.ansi.enabled=true), the function invocation of Spark SQL:
+- In general, it follows the `Store assignment` rules as storing the input values as the declared parameter type of the SQL functions
+- Special rules apply for string literals and untyped NULL. A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
 
+```sql
+> SET spark.sql.ansi.enabled=true;
+-- implicitly cast Int to String type
+> SELECT concat('total number: ', 1);
+total number: 1
+-- implicitly cast Timestamp to Date type
+> select datediff(now(), current_date);
+0
+
+-- specialrule: implicitly cast String literal to Double type
+> SELECT ceil('0.1');
+1
+-- specialrule: implicitly cast NULL to Date type
+> SELECT year(null);
+NULL
+
+> CREATE TABLE t(s string);
+-- Can't store String column as Numeric types.
+> SELECT ceil(s) from t;
+Error in query: cannot resolve 'CEIL(spark_catalog.default.t.s)' due to data type mismatch
+-- Can't store String column as Date type.
+> select year(s) from t;
+Error in query: cannot resolve 'year(spark_catalog.default.t.s)' due to data type mismatch
+```
+
+#### Functions with different behaviors
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `size`: This function returns null for null input.
   - `element_at`:
