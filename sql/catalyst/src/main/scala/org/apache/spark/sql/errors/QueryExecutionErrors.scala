@@ -1894,3 +1894,4 @@ object QueryExecutionErrors {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
 }
+
