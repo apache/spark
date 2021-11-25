@@ -94,6 +94,7 @@ SELECT 'selected content' AS tenth;
 /*abc*/
 select 1 as a
 /*
+
 2 as b
 /*abc*/
 , 3 as c
@@ -107,6 +108,7 @@ select 1 as a
 /*abc*/
 select 1 as a
 /*
+
 2 as b
 /*abc*/
 , 3 as c
