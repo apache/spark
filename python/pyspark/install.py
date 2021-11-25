@@ -24,9 +24,9 @@ from shutil import rmtree
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
 
-DEFAULT_HADOOP = "hadoop3.3"
+DEFAULT_HADOOP = "hadoop3.2"
 DEFAULT_HIVE = "hive2.3"
-SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.3", "without-hadoop"]
+SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
