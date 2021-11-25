@@ -141,7 +141,7 @@ class OrcFileFormat
       val filePath = new Path(new URI(file.filePath))
 
       val fs = filePath.getFileSystem(conf)
-      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs).useUTCTimestamp(true)
       val resultedColPruneInfo =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
           OrcUtils.requestedColumnIds(

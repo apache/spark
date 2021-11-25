@@ -124,7 +124,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       fileSplit.getPath(),
       OrcFile.readerOptions(conf)
         .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
-        .filesystem(fileSplit.getPath().getFileSystem(conf)));
+        .filesystem(fileSplit.getPath().getFileSystem(conf))
+        .useUTCTimestamp(true));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
     recordReader = reader.rows(options);

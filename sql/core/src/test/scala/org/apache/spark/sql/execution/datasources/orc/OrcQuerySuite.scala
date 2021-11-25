@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneOffset}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
@@ -31,7 +30,6 @@ import org.apache.orc.{OrcConf, OrcFile}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -42,6 +40,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+import java.util.TimeZone
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -828,6 +828,27 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       withAllOrcReaders {
         checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
+    }
+  }
+
+  test("SPARK-36346: read/write Timestamp ntz or ltz to Orc uses UTC timestamp") {
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    sql("set spark.sql.session.timeZone = America/Los_Angeles")
+
+    val df =
+      sql("select timestamp_ntz '2021-06-01 00:00:00' ts_ntz, timestamp '2021-06-01 00:00:00' ts")
+
+    df.write.mode("overwrite").orc("ts_ntz_orc")
+    df.write.mode("overwrite").parquet("ts_ntz_parquet")
+
+    val queryOrc = "select * from `orc`.`ts_ntz_orc`"
+    val queryParquet = "select * from `parquet`.`ts_ntz_parquet`"
+
+    val tzs = Seq("America/Los_Angeles", "UTC", "Europe/Amsterdam")
+    for (tz <- tzs) {
+      TimeZone.setDefault(TimeZone.getTimeZone(tz))
+      sql(s"set spark.sql.session.timeZone = $tz")
+      sql(queryOrc).collect().equals(sql(queryParquet).collect())
     }
   }
 }
