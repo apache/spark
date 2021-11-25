@@ -212,9 +212,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
-      // outputAttributes should also include referenced metadata columns at the every end
+      // outputAttributes should also include the referenced metadata struct column at the end
       val outputAttributes = readDataColumns ++ partitionColumns ++
-        plan.references.collect { case MetadataAttribute(attr) => attr }
+        requiredAttributes.collect { case MetadataAttribute(attr) => attr }
 
       val scan =
         FileSourceScanExec(

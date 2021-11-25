@@ -26,7 +26,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
-class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
+class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   val data0: String =
     """
@@ -90,7 +90,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       testName: String, fileSchema: StructType)
     (f: (DataFrame, Map[String, Any], Map[String, Any]) => Unit): Unit = {
     Seq("csv", "parquet").foreach { testFileFormat =>
-      test(s"metadata columns ($testFileFormat): " + testName) {
+      test(s"metadata struct ($testFileFormat): " + testName) {
         withTempDir { dir =>
           // read data0 as CSV and write f0 as testFileFormat
           val df0 = spark.read.schema(fileSchema).csv(
@@ -136,8 +136,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  metadataColumnsTest("read partial/all metadata columns", schema) { (df, f0, f1) =>
-    // read all available metadata columns
+  metadataColumnsTest("read partial/all metadata struct fields", schema) { (df, f0, f1) =>
+    // read all available metadata struct fields
     checkAnswer(
       df.select("name", "age", "id", "university",
         METADATA_FILE_NAME, METADATA_FILE_PATH,
@@ -150,7 +150,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       )
     )
 
-    // read a part of metadata columns
+    // read a part of metadata struct fields
     checkAnswer(
       df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
       Seq(
@@ -160,8 +160,8 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("read metadata columns with random ordering", schema) { (df, f0, f1) =>
-    // read a part of metadata columns with random ordering
+  metadataColumnsTest("read metadata struct fields with random ordering", schema) { (df, f0, f1) =>
+    // read a part of metadata struct fields with random ordering
     checkAnswer(
       df.select(METADATA_FILE_NAME, "name", METADATA_FILE_SIZE, "university"),
       Seq(
@@ -171,7 +171,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("read metadata columns with expressions", schema) { (df, f0, f1) =>
+  metadataColumnsTest("read metadata struct fields with expressions", schema) { (df, f0, f1) =>
     checkAnswer(
       df.select(
         // substring of file name
@@ -201,7 +201,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("select all will not select metadata columns", schema) { (df, _, _) =>
+  metadataColumnsTest("select all will not select metadata struct fields", schema) { (df, _, _) =>
     checkAnswer(
       df.select("*"),
       Seq(
@@ -221,19 +221,19 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
       Seq(
         Row("jack", 24, 12345L, "uom",
           // uom and 12345L will not be overwritten,
-          // and we still can read metadata columns correctly
+          // and we still can read metadata struct fields correctly
           f0(METADATA_FILE_NAME), f0(METADATA_FILE_PATH),
           f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME)),
         Row("lily", 31, null, "ucb",
           // ucb and `null` will not be overwritten,
-          // and we still can read metadata columns correctly
+          // and we still can read metadata struct fields correctly
           f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
           f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME))
       )
     )
   }
 
-  metadataColumnsTest("select only metadata columns", schema) { (df, f0, f1) =>
+  metadataColumnsTest("select only metadata struct fields", schema) { (df, f0, f1) =>
     checkAnswer(
       df.select(METADATA_FILE_NAME, METADATA_FILE_PATH,
         METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME),
@@ -308,7 +308,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
         // file schema: name, age, _file_size, _FILE_NAME
         if (caseSensitive) {
           // for case sensitive mode:
-          // _METADATA.FILE_SIZE is not a part of user schema or metadata columns
+          // _METADATA.FILE_SIZE is not a part of user schema or metadata struct fields
           val ex = intercept[Exception] {
             df.select("name", "age", "_METADATA.FILE_SIZE").show()
           }
@@ -316,7 +316,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
 
           // for case sensitive mode:
           // `_metadata.file_size` and `_metadata.FILE_NAME` are in the user schema
-          // _metadata.file_name and _metadata.file_modification_time are metadata columns
+          // _metadata.file_name and _metadata.file_modification_time are metadata struct fields
           checkAnswer(
             df.select("name", "age", "`_metadata.file_size`", "`_metadata.FILE_NAME`",
               "_metadata.file_name", "_metadata.file_modification_time"),
@@ -332,13 +332,13 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
           // `_metadata.file_size`, `_metadata.FILE_SIZE`,
           // `_metadata.file_name`, `_metadata.FILE_NAME` are all from the user schema.
           // different casings of _metadata.file_path and
-          // _metadata.file_modification_time are metadata columns
+          // _metadata.file_modification_time are metadata struct fields
           checkAnswer(
             df.select("name", "age",
               // user columns
               "`_metadata.file_size`", "`_metadata.FILE_SIZE`",
               "`_metadata.file_name`", "`_metadata.FILE_NAME`",
-              // metadata columns
+              // metadata struct fields
               "_metadata.file_path", "_metadata.FILE_PATH",
               "_metadata.file_modification_time", "_metadata.FILE_modification_TiMe"),
             Seq(
@@ -359,7 +359,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.columnVector.offheap.enabled" -> offHeapColumnVectorEnabled) {
       metadataColumnsTest(s"read metadata with " +
         s"offheap set to $offHeapColumnVectorEnabled", schema) { (df, f0, f1) =>
-        // read all available metadata columns
+        // read all available metadata struct fields
         checkAnswer(
           df.select("name", "age", "id", "university",
             METADATA_FILE_NAME, METADATA_FILE_PATH,
@@ -372,7 +372,7 @@ class FileMetadataColumnsSuite extends QueryTest with SharedSparkSession {
           )
         )
 
-        // read a part of metadata columns
+        // read a part of metadata struct fields
         checkAnswer(
           df.select("name", "university", METADATA_FILE_NAME, METADATA_FILE_SIZE),
           Seq(

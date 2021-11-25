@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -195,20 +195,15 @@ case class FileSourceScanExec(
     disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
-  lazy val outputMetadataStruct: Option[AttributeReference] =
+  lazy val metadataStructCol: Option[AttributeReference] =
     output.collectFirst { case MetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    // schema without the file metadata column
-    val fileSchema = if (outputMetadataStruct.isEmpty) schema else {
-      StructType.fromAttributes(
-        output.filter {
-          case MetadataAttribute(_) => false
-          case _ => true
-        }
-      )
+    // schema without the file metadata struct column
+    val fileSchema = if (metadataStructCol.isEmpty) schema else {
+      output.filter(_.exprId != metadataStructCol.get.exprId).toStructType
     }
     relation.fileFormat.supportBatch(relation.sparkSession, fileSchema)
   }
@@ -226,14 +221,10 @@ case class FileSourceScanExec(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
-        val metadataVectorClz =
-          if (relation.sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
-            classOf[OffHeapColumnVector].getName
-          } else {
-            classOf[OnHeapColumnVector].getName
-          }
-        // for column-based file format, append metadata columns' vector type classes if any
-        vectorTypes ++ (if (outputMetadataStruct.isDefined) Seq(metadataVectorClz) else Seq.empty)
+        // for column-based file format, append metadata struct column's vector type classes if any
+        vectorTypes ++ (if (metadataStructCol.isDefined) {
+          Seq(classOf[OnHeapColumnVector].getName)
+        } else Seq.empty)
       }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
@@ -627,7 +618,7 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, outputMetadataStruct)
+      requiredSchema, metadataStructCol)
   }
 
   /**
@@ -684,7 +675,7 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, outputMetadataStruct)
+      requiredSchema, metadataStructCol)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
