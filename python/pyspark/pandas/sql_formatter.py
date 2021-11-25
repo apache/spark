@@ -152,7 +152,7 @@ def sql(
     1  2
     2  3
     """
-    if "PYSPARK_PANDAS_SQL_LEGACY" in os.environ:
+    if os.environ.get("PYSPARK_PANDAS_SQL_LEGACY") == "1":
         from pyspark.pandas import sql_processor
 
         warnings.warn(

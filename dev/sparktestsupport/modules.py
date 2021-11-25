@@ -604,6 +604,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.mlflow",
         "pyspark.pandas.namespace",
         "pyspark.pandas.numpy_compat",
+        "pyspark.pandas.sql_processor",
         "pyspark.pandas.sql_formatter",
         "pyspark.pandas.strings",
         "pyspark.pandas.utils",
