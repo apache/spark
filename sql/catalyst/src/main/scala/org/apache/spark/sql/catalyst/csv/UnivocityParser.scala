@@ -94,7 +94,7 @@ class UnivocityParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
   private lazy val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInRead,
+    options.timestampNTZFormat,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,

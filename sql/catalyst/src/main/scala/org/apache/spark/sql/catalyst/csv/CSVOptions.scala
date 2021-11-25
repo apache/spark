@@ -164,9 +164,7 @@ class CSVOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
-  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
-  val timestampNTZFormatInWrite: String =
-    parameters.getOrElse("timestampNTZFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+  val timestampNTZFormat: Option[String] = parameters.get("timestampNTZFormat")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

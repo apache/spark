@@ -49,7 +49,7 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
   private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampNTZFormatInWrite,
+    options.timestampNTZFormat,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false,
