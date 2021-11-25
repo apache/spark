@@ -22,6 +22,7 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.WritableComparable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
@@ -29,7 +30,6 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcUtils => _, _}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
@@ -155,7 +155,7 @@ class OrcFileFormat
         if (orcFilterPushDown && filters.nonEmpty) {
           OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
             OrcFilters.createFilter(fileSchema, filters).foreach { f =>
-              OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
+              mapreduce.OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
             }
           }
         }
@@ -193,8 +193,8 @@ class OrcFileFormat
 
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
-          val orcRecordReader = new OrcInputFormat[OrcStruct]
-            .createRecordReader(fileSplit, taskAttemptContext)
+          val orcRecordReader: mapreduce.OrcMapreduceRecordReader[OrcStruct] =
+            createRecordReader[OrcStruct](fileSplit, taskAttemptContext)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
@@ -212,6 +212,19 @@ class OrcFileFormat
         }
       }
     }
+  }
+
+  private def createRecordReader[V <: WritableComparable[_]](
+      inputSplit: InputSplit,
+      taskAttemptContext: TaskAttemptContext): mapreduce.OrcMapreduceRecordReader[V] = {
+    val split = inputSplit.asInstanceOf[FileSplit]
+    val conf = taskAttemptContext.getConfiguration()
+    val readOptions = OrcFile.readerOptions(conf)
+      .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf)).useUTCTimestamp(true)
+    val file = OrcFile.createReader(split.getPath(), readOptions)
+    val options = org.apache.orc.mapred.OrcInputFormat.buildOptions(
+      conf, file, split.getStart(), split.getLength()).useSelected(true)
+    new mapreduce.OrcMapreduceRecordReader(file, options)
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
