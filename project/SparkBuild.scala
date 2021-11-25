@@ -1104,14 +1104,16 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-  private val isMacOnAppleSilicon = System.getProperty("os.name").startsWith("Mac OS X") &&
-    System.getProperty("os.arch").equals("aarch64")
-  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest") ++
+  private val extraDefaultExcludedTags = {
+    val isMacOnAppleSilicon = System.getProperty("os.name").startsWith("Mac OS X") &&
+      System.getProperty("os.arch").equals("aarch64")
     if (isMacOnAppleSilicon) {
       Seq("org.apache.spark.tags.ExtendedLevelDBTest", "org.apache.spark.tags.ExtendedRocksDBTest")
     } else {
       Seq.empty
     }
+  }
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest") ++ extraDefaultExcludedTags
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
