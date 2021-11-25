@@ -31,13 +31,4 @@ class AlterNamespaceSetLocationSuite extends command.AlterNamespaceSetLocationSu
   test("basic test") {
     runBasicTest()
   }
-
-  test("Empty location string is allowed") {
-    val ns = s"$catalog.$namespace"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $ns")
-      sql(s"ALTER NAMESPACE $ns SET LOCATION ''")
-      assert(getLocation(ns) === "")
-    }
-  }
 }

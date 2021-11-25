@@ -41,6 +41,17 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
 
   protected def notFoundMsgPrefix: String
 
+  test("Empty location string") {
+    val ns = s"$catalog.$namespace"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $ns")
+      val message = intercept[IllegalArgumentException] {
+        sql(s"ALTER NAMESPACE $ns SET LOCATION ''")
+      }.getMessage
+      assert(message.contains("Can not create a Path from an empty string"))
+    }
+  }
+
   test("Namespace does not exist") {
     val ns = "not_exist"
     val message = intercept[AnalysisException] {
@@ -57,9 +68,7 @@ trait AlterNamespaceSetLocationSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
         "'test namespace' LOCATION '/tmp/loc_test_1'")
       sql(s"ALTER NAMESPACE $ns SET LOCATION '/tmp/loc_test_2'")
-      // v1 command stores the location as URI ("file:/tmp/loc_test_2") whereas
-      // v2 command stores the location as string ("/tmp/loc_test_2").
-      assert(getLocation(ns).contains("/tmp/loc_test_2"))
+      assert(getLocation(ns).contains("file:/tmp/loc_test_2"))
     }
   }
 
