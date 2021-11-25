@@ -1093,6 +1093,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-37456: Location in CreateNamespace should be qualified") {
+    withNamespace("testcat.ns1.ns2") {
+      val e = intercept[IllegalArgumentException] {
+        sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION ''")
+      }
+      assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
+      sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION '/tmp/ns_test'")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", ""))
+      )
+    }
+  }
+
   test("create/replace/alter table - reserved properties") {
     import TableCatalog._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
@@ -1246,7 +1264,7 @@ class DataSourceV2SQLSuite
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", "((a,b), (b,a), (c,c))"))
       )

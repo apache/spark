@@ -375,6 +375,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val path = new Path(tmpDir.getCanonicalPath).toUri
       databaseNames.foreach { dbName =>
         try {
+          val e = intercept[IllegalArgumentException] {
+            sql(s"CREATE DATABASE $dbName Location ''")
+          }
+          assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)

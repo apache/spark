@@ -94,6 +94,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
+  private def makeQualifiedNamespacePath(location: String): String = {
+    val warehousePath = session.sharedState.conf.get(WAREHOUSE_PATH)
+    val nsPath = CatalogUtils.makeQualifiedNamespacePath(
+      CatalogUtils.stringToURI(location), warehousePath, session.sharedState.hadoopConf)
+    CatalogUtils.URIToString(nsPath)
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
       _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
@@ -313,13 +320,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
-      val warehousePath = session.sharedState.conf.get(WAREHOUSE_PATH)
-      val nsPath = CatalogUtils.makeQualifiedNamespacePath(
-        CatalogUtils.stringToURI(location), warehousePath, session.sharedState.hadoopConf)
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> CatalogUtils.URIToString(nsPath))) :: Nil
+        Map(SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(location))) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
@@ -328,7 +332,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
     case CreateNamespace(ResolvedDBObjectName(catalog, name), ifNotExists, properties) =>
-      CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, properties) :: Nil
+      val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
+        properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(loc))
+      }.getOrElse(properties)
+      CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, finalProperties) :: Nil
 
     case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
