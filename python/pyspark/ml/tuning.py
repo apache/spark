@@ -404,7 +404,7 @@ class _ValidatorSharedReadWrite:
         estimatorParamMaps = instance.getEstimatorParamMaps()
         paramErr = (
             "Validator save requires all Params in estimatorParamMaps to apply to "
-            f"its Estimator, An extraneous Param was found: "
+            "its Estimator, An extraneous Param was found: "
         )
         for paramMap in estimatorParamMaps:
             for param in paramMap:

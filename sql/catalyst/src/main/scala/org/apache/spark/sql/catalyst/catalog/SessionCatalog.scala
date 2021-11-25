@@ -210,9 +210,7 @@ class SessionCatalog(
    * FileSystem is changed.
    */
   private def makeQualifiedPath(path: URI): URI = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath).toUri
+    CatalogUtils.makeQualifiedPath(path, hadoopConf)
   }
 
   private def requireDbExists(db: String): Unit = {
@@ -254,12 +252,7 @@ class SessionCatalog(
   }
 
   private def makeQualifiedDBPath(locationUri: URI): URI = {
-    if (locationUri.isAbsolute) {
-      locationUri
-    } else {
-      val fullPath = new Path(conf.warehousePath, CatalogUtils.URIToString(locationUri))
-      makeQualifiedPath(fullPath.toUri)
-    }
+    CatalogUtils.makeQualifiedNamespacePath(locationUri, conf.warehousePath, hadoopConf)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
