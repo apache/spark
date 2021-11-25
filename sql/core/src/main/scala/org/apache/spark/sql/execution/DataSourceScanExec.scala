@@ -368,6 +368,7 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    // TODO: should be able to push filters containing metadata struct down to skip files
     dataFilters
       .filterNot(
         _.references.exists {
