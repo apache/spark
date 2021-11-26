@@ -55,27 +55,27 @@ For PySpark with/without a specific Hadoop version, you can install it by using 
 
 .. code-block:: bash
 
-    PYSPARK_HADOOP_VERSION=2.7 pip install pyspark
+    PYSPARK_HADOOP_VERSION=2 pip install pyspark
 
-The default distribution uses Hadoop 3.2 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
+The default distribution uses Hadoop 3 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
 downloads a different version and use it in PySpark. Downloading it can take a while depending on
 the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manually choose the mirror for faster downloading.
 
 .. code-block:: bash
 
-    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org PYSPARK_HADOOP_VERSION=2.7 pip install
+    PYSPARK_RELEASE_MIRROR=http://mirror.apache-kr.org PYSPARK_HADOOP_VERSION=2 pip install
 
 It is recommended to use ``-v`` option in ``pip`` to track the installation and download status.
 
 .. code-block:: bash
 
-    PYSPARK_HADOOP_VERSION=2.7 pip install pyspark -v
+    PYSPARK_HADOOP_VERSION=2 pip install pyspark -v
 
 Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 
 - ``without``: Spark pre-built with user-provided Apache Hadoop
-- ``2.7``: Spark pre-built for Apache Hadoop 2.7
-- ``3.2``: Spark pre-built for Apache Hadoop 3.2 and later (default)
+- ``2``: Spark pre-built for Apache Hadoop 2.7
+- ``3``: Spark pre-built for Apache Hadoop 3.3 and later (default)
 
 Note that this installation way of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
