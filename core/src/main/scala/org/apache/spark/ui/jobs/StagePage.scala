@@ -533,7 +533,8 @@ private[ui] class TaskPagedTable(
         {if (hasInput(stage)) Seq((HEADER_INPUT_SIZE, "")) else Nil} ++
         {if (hasOutput(stage)) Seq((HEADER_OUTPUT_SIZE, "")) else Nil} ++
         {if (hasShuffleRead(stage)) {
-          Seq((HEADER_SHUFFLE_READ_FETCH_WAIT_TIME, TaskDetailsClassNames.SHUFFLE_READ_FETCH_WAIT_TIME),
+          Seq((HEADER_SHUFFLE_READ_FETCH_WAIT_TIME,
+            TaskDetailsClassNames.SHUFFLE_READ_FETCH_WAIT_TIME),
             (HEADER_SHUFFLE_TOTAL_READS, ""),
             (HEADER_SHUFFLE_REMOTE_READS, TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
         } else {
@@ -656,7 +657,7 @@ private[ui] class TaskPagedTable(
         }</td>
       }}
       {if (hasShuffleRead(stage)) {
-        <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+        <td class={TaskDetailsClassNames.SHUFFLE_READ_FETCH_WAIT_TIME}>
           {formatDuration(task.taskMetrics.map(_.shuffleReadMetrics.fetchWaitTime))}
         </td>
         <td>{
