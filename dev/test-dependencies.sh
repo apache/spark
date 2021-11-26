@@ -84,7 +84,7 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 
 # Generate manifests for each Hadoop profile:
 for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
-  if [[ $HADOOP_HIVE_PROFILE == **hadoop-3.3-hive-2.3** ]]; then
+  if [[ $HADOOP_HIVE_PROFILE == **hadoop-3-hive-2.3** ]]; then
     HADOOP_PROFILE=hadoop-3
     HIVE_PROFILE=hive-2.3
   else
