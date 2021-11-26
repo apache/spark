@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.command.v1
  */
 class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
+  // Hive Catalog is not case preserving and always lower-case the namespace name when storing it.
   override def isCasePreserving: Boolean = false
 
   test("hive client calls") {
