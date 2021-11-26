@@ -195,7 +195,7 @@ class Statistics(object):
             ).toArray()
         else:
             return cast(
-                Union[float, Matrix],
+                float,
                 callMLlibFunc("corr", cast("RDD[float]", x).map(float), y.map(float), method),
             )
 
