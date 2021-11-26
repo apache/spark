@@ -144,6 +144,50 @@ object OrcUtils extends Logging {
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
   }
 
+  /**
+   * Judge the Orc file be read is write by Spark 3.1 or prior.
+   */
+  def isOldOrcFile(schema: TypeDescription): Boolean = {
+    import TypeDescription.Category
+
+    def find(orcType: TypeDescription): Boolean = {
+      orcType.getCategory match {
+        case Category.STRUCT => findInStruct(orcType)
+        case Category.LIST => findInArray(orcType)
+        case Category.MAP => findInMap(orcType)
+        case Category.TIMESTAMP =>
+          if (orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME) == null) {
+            true
+          } else {
+            false
+          }
+        case _ => false
+      }
+    }
+
+    def findInStruct(orcType: TypeDescription): Boolean = {
+      val fieldTypes = orcType.getChildren.asScala
+      for (fieldType <- fieldTypes) {
+        if (find(fieldType)) {
+          return true
+        }
+      }
+      false
+    }
+
+    def findInArray(orcType: TypeDescription): Boolean = {
+      val elementType = orcType.getChildren.get(0)
+      find(elementType)
+    }
+
+    def findInMap(orcType: TypeDescription): Boolean = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      find(keyType) || find(valueType)
+    }
+
+    find(schema)
+  }
+
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
@@ -553,11 +597,12 @@ object OrcUtils extends Logging {
    */
   def createRecordReader[V <: WritableComparable[_]](
       inputSplit: InputSplit,
-      taskAttemptContext: TaskAttemptContext): mapreduce.OrcMapreduceRecordReader[V] = {
+      taskAttemptContext: TaskAttemptContext,
+      useUTCTimestamp: Boolean): mapreduce.OrcMapreduceRecordReader[V] = {
     val split = inputSplit.asInstanceOf[FileSplit]
     val conf = taskAttemptContext.getConfiguration()
     val readOptions = OrcFile.readerOptions(conf)
-      .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf)).useUTCTimestamp(true)
+      .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf)).useUTCTimestamp(useUTCTimestamp)
     val file = OrcFile.createReader(split.getPath(), readOptions)
     val options = org.apache.orc.mapred.OrcInputFormat.buildOptions(
       conf, file, split.getStart(), split.getLength()).useSelected(true)
