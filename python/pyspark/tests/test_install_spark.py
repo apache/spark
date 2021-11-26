@@ -51,6 +51,26 @@ class SparkInstallationTestCase(unittest.TestCase):
             "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3")
         )
 
+        spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "2", "2.3")
+        self.assertEqual(
+            "spark-3.2.0-bin-hadoop-2.7", checked_package_name(spark_version, hadoop_version, hive_version)
+        )
+
+        spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "2", "2.3")
+        self.assertEqual(
+            "spark-3.3.0-bin-hadoop-2", checked_package_name(spark_version, hadoop_version, hive_version)
+        )
+
+        spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "3", "2.3")
+        self.assertEqual(
+            "spark-3.2.0-bin-hadoop-3.2", checked_package_name(spark_version, hadoop_version, hive_version)
+        )
+
+        spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "3", "2.3")
+        self.assertEqual(
+            "spark-3.3.0-bin-hadoop-3", checked_package_name(spark_version, hadoop_version, hive_version)
+        )
+
     def test_checked_versions(self):
         test_version = "3.0.1"  # Just pick one version to test.
 
@@ -113,7 +133,6 @@ class SparkInstallationTestCase(unittest.TestCase):
             checked_versions(
                 spark_version=test_version, hadoop_version="hadoop3", hive_version="hive1.2"
             )
-
 
 if __name__ == "__main__":
     from pyspark.tests.test_install_spark import *  # noqa: F401
