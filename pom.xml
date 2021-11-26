@@ -251,7 +251,7 @@
     <!--
       These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
       only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
-      profile is hadoop-2.7.
+      profile is hadoop-2.
 
       To make the above work, in the hadoop-2.7 profile section we bind hadoop-client-api to
       hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
@@ -3334,7 +3334,7 @@
     -->
 
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
       <properties>
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>

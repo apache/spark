@@ -34,8 +34,8 @@ HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
     -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
-    hadoop-2.7-hive-2.3
-    hadoop-3.3-hive-2.3
+    hadoop-2-hive-2.3
+    hadoop-3-hive-2.3
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
@@ -88,7 +88,7 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     HADOOP_PROFILE=hadoop-3
     HIVE_PROFILE=hive-2.3
   else
-    HADOOP_PROFILE=hadoop-2.7
+    HADOOP_PROFILE=hadoop-2
     HIVE_PROFILE=hive-2.3
   fi
   echo "Performing Maven install for $HADOOP_HIVE_PROFILE"

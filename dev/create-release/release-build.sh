@@ -322,17 +322,17 @@ if [[ "$1" == "package" ]]; then
   #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
   #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
-  BINARY_PKGS_ARGS["hadoop3.3"]="-Phadoop-3 $HIVE_PROFILES"
+  BINARY_PKGS_ARGS["hadoop3"]="-Phadoop-3 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
+    BINARY_PKGS_ARGS["hadoop2"]="-Phadoop-2 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop3.3"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    key="hadoop3.3-scala2.13"
+    key="hadoop3-scala2.13"
     args="-Phadoop-3 $HIVE_PROFILES"
     extra=""
     if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
