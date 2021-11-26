@@ -48,7 +48,7 @@ class SparkInstallationTestCase(unittest.TestCase):
 
     def test_package_name(self):
         self.assertEqual(
-            "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3")
+            "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3", "hive2.3")
         )
 
     def test_checked_versions(self):
@@ -56,12 +56,12 @@ class SparkInstallationTestCase(unittest.TestCase):
 
         # Positive test cases
         self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"),
-            checked_versions("spark-3.0.0", "hadoop2.7", "hive2.3"),
+            ("spark-3.0.0", "hadoop2", "hive2.3"),
+            checked_versions("spark-3.0.0", "hadoop2", "hive2.3"),
         )
 
         self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"), checked_versions("3.0.0", "2.7", "2.3")
+            ("spark-3.0.0", "hadoop2", "hive2.3"), checked_versions("3.0.0", "2", "2.3")
         )
 
         self.assertEqual(
@@ -100,7 +100,7 @@ class SparkInstallationTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Spark distribution of hive1.2 is not supported"):
             checked_versions(
-                spark_version=test_version, hadoop_version="hadoop3.2", hive_version="hive1.2"
+                spark_version=test_version, hadoop_version="hadoop3", hive_version="hive1.2"
             )
 
 
