@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, File, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -141,12 +143,12 @@ class FileScanRDD(
             metadataStructColInternalRow = null
           } else {
             // make an generic row
+            val path = new Path(currentFile.filePath)
             assert(meta.dataType.isInstanceOf[StructType])
             metadataStructColInternalRow = InternalRow.fromSeq(
               meta.dataType.asInstanceOf[StructType].names.map {
-                case FILE_PATH => UTF8String.fromString(new File(currentFile.filePath).toString)
-                case FILE_NAME => UTF8String.fromString(
-                  currentFile.filePath.split(java.io.File.separator).last)
+                case FILE_PATH => UTF8String.fromString(path.toString)
+                case FILE_NAME => UTF8String.fromString(path.getName)
                 case FILE_SIZE => currentFile.fileSize
                 case FILE_MODIFICATION_TIME => currentFile.modificationTime
                 case _ => None // be exhaustive, won't happen
@@ -170,8 +172,9 @@ class FileScanRDD(
       private def createMetadataStructColumnVector(
           c: ColumnarBatch, meta: AttributeReference): WritableColumnVector = {
         val columnVector = new OnHeapColumnVector(c.numRows(), meta.dataType)
-        val filePathBytes = new File(currentFile.filePath).toString.getBytes
-        val fileNameBytes = currentFile.filePath.split("/").last.getBytes
+        val path = new Path(currentFile.filePath)
+        val filePathBytes = path.toString.getBytes
+        val fileNameBytes = path.getName.getBytes
         var rowId = 0
 
         assert(meta.dataType.isInstanceOf[StructType])
