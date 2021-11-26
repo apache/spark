@@ -41,7 +41,6 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
-  // Hive Catalog is not case preserving and always lower-case the namespace name when storing it.
   protected def isCasePreserving: Boolean = true
 
   test("default namespace") {
