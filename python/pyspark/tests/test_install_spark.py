@@ -53,22 +53,26 @@ class SparkInstallationTestCase(unittest.TestCase):
 
         spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "2", "2.3")
         self.assertEqual(
-            "spark-3.2.0-bin-hadoop-2.7", checked_package_name(spark_version, hadoop_version, hive_version)
+            "spark-3.2.0-bin-hadoop-2.7",
+            checked_package_name(spark_version, hadoop_version, hive_version),
         )
 
         spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "2", "2.3")
         self.assertEqual(
-            "spark-3.3.0-bin-hadoop-2", checked_package_name(spark_version, hadoop_version, hive_version)
+            "spark-3.3.0-bin-hadoop-2",
+            checked_package_name(spark_version, hadoop_version, hive_version),
         )
 
         spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "3", "2.3")
         self.assertEqual(
-            "spark-3.2.0-bin-hadoop-3.2", checked_package_name(spark_version, hadoop_version, hive_version)
+            "spark-3.2.0-bin-hadoop-3.2",
+            checked_package_name(spark_version, hadoop_version, hive_version),
         )
 
         spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "3", "2.3")
         self.assertEqual(
-            "spark-3.3.0-bin-hadoop-3", checked_package_name(spark_version, hadoop_version, hive_version)
+            "spark-3.3.0-bin-hadoop-3",
+            checked_package_name(spark_version, hadoop_version, hive_version),
         )
 
     def test_checked_versions(self):
