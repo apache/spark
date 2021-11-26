@@ -65,7 +65,7 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
    */
   private def replaceHashAgg(plan: SparkPlan): SparkPlan = {
     plan.transformDown {
-      case hashAgg: HashAggregateExec =>
+      case hashAgg: HashAggregateExec if hashAgg.groupingExpressions.nonEmpty =>
         val sortAgg = hashAgg.toSortAggregate
         hashAgg.child match {
           case partialAgg: HashAggregateExec if isPartialAgg(partialAgg, hashAgg) =>

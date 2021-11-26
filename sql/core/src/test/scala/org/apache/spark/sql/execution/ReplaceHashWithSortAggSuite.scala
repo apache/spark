@@ -110,6 +110,18 @@ abstract class ReplaceHashWithSortAggSuiteBase
       checkAggs(query, 2, 0, 2, 0)
     }
   }
+
+  test("do not replace hash aggregate if there is no group-by column") {
+    withTempView("t1") {
+      spark.range(100).selectExpr("id as key").createOrReplaceTempView("t1")
+      val query =
+        """
+          |SELECT COUNT(key)
+          |FROM t1
+        """.stripMargin
+      checkAggs(query, 2, 0, 2, 0)
+    }
+  }
 }
 
 class ReplaceHashWithSortAggSuite extends ReplaceHashWithSortAggSuiteBase
