@@ -2232,7 +2232,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser.index = pmidx
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(pser.mad(), psser.mad())
+        # Mark almost as True to avoid precision issue like:
+        # "21.555555555555554 != 21.555555555555557"
+        self.assert_eq(pser.mad(), psser.mad(), almost=True)
 
     def test_to_frame(self):
         pser = pd.Series(["a", "b", "c"])
