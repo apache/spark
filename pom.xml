@@ -253,7 +253,7 @@
       only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
       profile is hadoop-2.
 
-      To make the above work, in the hadoop-2.7 profile section we bind hadoop-client-api to
+      To make the above work, in the hadoop-2 profile section we bind hadoop-client-api to
       hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
       former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
       should be fine since both dependencies are required. We cannot use hadoop-client for both

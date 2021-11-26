@@ -190,8 +190,8 @@
 
   <profiles>
     <!--
-     hadoop-3 profile is activated by default so hadoop-2.7 profile
-     also needs to be declared here for building with -Phadoop-2.7.
+     hadoop-3 profile is activated by default so hadoop-2 profile
+     also needs to be declared here for building with -Phadoop-2.
     -->
     <profile>
       <id>hadoop-2</id>
