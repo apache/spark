@@ -104,7 +104,6 @@ class SparkInstallationTestCase(unittest.TestCase):
             checked_versions("spark-3.3.0", "hadoop2", "hive2.3"),
         )
 
-
         # Negative test cases
         for (hadoop_version, hive_version) in UNSUPPORTED_COMBINATIONS:
             with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):
@@ -133,6 +132,7 @@ class SparkInstallationTestCase(unittest.TestCase):
             checked_versions(
                 spark_version=test_version, hadoop_version="hadoop3", hive_version="hive1.2"
             )
+
 
 if __name__ == "__main__":
     from pyspark.tests.test_install_spark import *  # noqa: F401
