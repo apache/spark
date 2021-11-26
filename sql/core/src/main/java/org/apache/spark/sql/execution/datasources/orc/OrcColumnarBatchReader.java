@@ -48,6 +48,9 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The capacity of vectorized batch.
   private int capacity;
 
+  // If the orc file will be read is not write by Spark 3.1 or prior, use UTC timestamp.
+  private boolean useUTCTimestamp;
+
   // Vectorized ORC Row Batch wrap.
   private VectorizedRowBatchWrap wrap;
 
@@ -74,8 +77,9 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
-  public OrcColumnarBatchReader(int capacity) {
+  public OrcColumnarBatchReader(int capacity, boolean useUTCTimestamp) {
     this.capacity = capacity;
+    this.useUTCTimestamp = useUTCTimestamp;
   }
 
 
@@ -125,7 +129,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       OrcFile.readerOptions(conf)
         .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
         .filesystem(fileSplit.getPath().getFileSystem(conf))
-        .useUTCTimestamp(true));
+        .useUTCTimestamp(useUTCTimestamp));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
     recordReader = reader.rows(options);

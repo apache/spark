@@ -88,10 +88,11 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val resultedColPruneInfo =
+    val (resultedColPruneInfo, isOldOrcFile) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+        (OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf),
+          OrcUtils.isOldOrcFile(reader.getSchema))
       }
 
     if (resultedColPruneInfo.isEmpty) {
@@ -109,7 +110,7 @@ case class OrcPartitionReaderFactory(
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
       val orcRecordReader =
-        OrcUtils.createRecordReader[OrcStruct](fileSplit, taskAttemptContext)
+        OrcUtils.createRecordReader[OrcStruct](fileSplit, taskAttemptContext, !isOldOrcFile)
       val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
@@ -131,10 +132,11 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val resultedColPruneInfo =
+    val (resultedColPruneInfo, isOldOrcFile) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+        (OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf),
+          OrcUtils.isOldOrcFile(reader.getSchema))
       }
 
     if (resultedColPruneInfo.isEmpty) {
@@ -152,7 +154,7 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val batchReader = new OrcColumnarBatchReader(capacity)
+      val batchReader = new OrcColumnarBatchReader(capacity, !isOldOrcFile)
       batchReader.initialize(fileSplit, taskAttemptContext)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
