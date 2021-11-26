@@ -129,7 +129,7 @@ private[spark] object TaskIndexNames {
   final val SER_TIME = "rst"
   final val SHUFFLE_LOCAL_BLOCKS = "slbl"
   final val SHUFFLE_READ_RECORDS = "srr"
-  final val SHUFFLE_READ_TIME = "srt"
+  final val SHUFFLE_READ_FETCH_WAIT_TIME = "srfwt"
   final val SHUFFLE_REMOTE_BLOCKS = "srbl"
   final val SHUFFLE_REMOTE_READS = "srby"
   final val SHUFFLE_REMOTE_READS_TO_DISK = "srbd"

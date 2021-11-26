@@ -136,8 +136,8 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     case "executorDeserializeTime":
       return "Task Deserialization Time";
 
-    case "shuffleReadBlockedTime":
-      return "Shuffle Read Blocked Time";
+    case "shuffleReadFetchWaitTime":
+      return "Shuffle Read Fetch Wait Time";
 
     case "shuffleRemoteReads":
       return "Shuffle Remote Reads";
@@ -334,7 +334,7 @@ $(document).ready(function () {
     "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
     "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11' data-metrics-type='task'> Scheduler Delay</div>" +
     "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12' data-metrics-type='task'> Task Deserialization Time</div>" +
-    "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' data-metrics-type='task'> Shuffle Read Blocked Time</div>" +
+    "<div id='shuffle_read_fetch_wait_time' class='shuffle-read-fetch-wait-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' data-metrics-type='task'> Shuffle Read Fetch Wait Time</div>" +
     "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14' data-metrics-type='task'> Shuffle Remote Reads</div>" +
     "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21' data-metrics-type='task'> Shuffle Write Time</div>" +
     "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' data-metrics-type='task'> Result Serialization Time</div>" +
@@ -670,7 +670,7 @@ $(document).ready(function () {
                   row1 = createRowMetadataForColumn(
                     columnKey, taskMetricsResponse[columnKey], 3);
                   row2 = createRowMetadataForColumn(
-                    "shuffleReadBlockedTime", taskMetricsResponse[columnKey], 13);
+                    "shuffleReadFetchWaitTime", taskMetricsResponse[columnKey], 13);
                   row3 = createRowMetadataForColumn(
                     "shuffleRemoteReads", taskMetricsResponse[columnKey], 14);
                   if (dataToShow.showShuffleReadData) {
@@ -886,7 +886,7 @@ $(document).ready(function () {
                   return "";
                 }
               },
-              name: "Shuffle Read Blocked Time"
+              name: "Shuffle Read Fetch Wait Time"
             },
             {
               data : function (row, type) {
