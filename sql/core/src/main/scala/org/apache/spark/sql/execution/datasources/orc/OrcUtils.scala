@@ -28,7 +28,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
-import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.hadoop.mapreduce.{InputSplit, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.orc.{mapreduce, BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
@@ -541,5 +543,24 @@ object OrcUtils extends Logging {
     val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
     result.setNanos(nanos.toInt)
     result
+  }
+
+  /**
+   * This method references createRecordReader of OrcInputFormat.
+   * Just for call useUTCTimestamp of OrcFile.ReaderOptions.
+   *
+   * @return OrcMapreduceRecordReader
+   */
+  def createRecordReader[V <: WritableComparable[_]](
+      inputSplit: InputSplit,
+      taskAttemptContext: TaskAttemptContext): mapreduce.OrcMapreduceRecordReader[V] = {
+    val split = inputSplit.asInstanceOf[FileSplit]
+    val conf = taskAttemptContext.getConfiguration()
+    val readOptions = OrcFile.readerOptions(conf)
+      .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf)).useUTCTimestamp(true)
+    val file = OrcFile.createReader(split.getPath(), readOptions)
+    val options = org.apache.orc.mapred.OrcInputFormat.buildOptions(
+      conf, file, split.getStart(), split.getLength()).useSelected(true)
+    new mapreduce.OrcMapreduceRecordReader(file, options)
   }
 }
