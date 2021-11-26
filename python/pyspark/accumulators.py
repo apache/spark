@@ -20,13 +20,13 @@ import select
 import struct
 import socketserver as SocketServer
 import threading
-from pyspark.serializers import read_int, PickleSerializer
+from pyspark.serializers import read_int, CPickleSerializer
 
 
 __all__ = ["Accumulator", "AccumulatorParam"]
 
 
-pickleSer = PickleSerializer()
+pickleSer = CPickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
 # the local accumulator updates back to the driver program at the end of a task.

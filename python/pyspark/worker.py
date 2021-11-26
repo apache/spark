@@ -50,7 +50,7 @@ from pyspark.serializers import (
     read_int,
     SpecialLengths,
     UTF8Deserializer,
-    PickleSerializer,
+    CPickleSerializer,
     BatchedSerializer,
 )
 from pyspark.sql.pandas.serializers import (
@@ -63,7 +63,7 @@ from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback  # type: ignore
 from pyspark import shuffle
 
-pickleSer = PickleSerializer()
+pickleSer = CPickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
 
@@ -367,7 +367,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 timezone, safecheck, assign_cols_by_name, df_for_struct
             )
     else:
-        ser = BatchedSerializer(PickleSerializer(), 100)
+        ser = BatchedSerializer(CPickleSerializer(), 100)
 
     num_udfs = read_int(infile)
 

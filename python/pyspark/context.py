@@ -35,7 +35,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import (
-    PickleSerializer,
+    CPickleSerializer,
     BatchedSerializer,
     UTF8Deserializer,
     PairDeserializer,
@@ -142,7 +142,7 @@ class SparkContext(object):
         pyFiles=None,
         environment=None,
         batchSize=0,
-        serializer=PickleSerializer(),
+        serializer=CPickleSerializer(),
         conf=None,
         gateway=None,
         jsc=None,
@@ -814,7 +814,7 @@ class SparkContext(object):
                and value Writable classes
             2. Serialization is attempted via Pickle pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
-            4. :class:`PickleSerializer` is used to deserialize pickled objects on the Python side
+            4. :class:`CPickleSerializer` is used to deserialize pickled objects on the Python side
 
         Parameters
         ----------

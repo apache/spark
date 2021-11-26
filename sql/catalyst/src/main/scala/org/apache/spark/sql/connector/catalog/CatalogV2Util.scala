@@ -22,10 +22,9 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
-import org.apache.spark.sql.connector.expressions.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap

@@ -616,7 +616,7 @@ fromClause
 
 temporalClause
     : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | STRING)
-    | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=STRING
+    | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=valueExpression
     ;
 
 aggregationClause
@@ -731,7 +731,8 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier temporalClause? sample? tableAlias  #tableName
+    : multipartIdentifier temporalClause?
+      sample? tableAlias                      #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2

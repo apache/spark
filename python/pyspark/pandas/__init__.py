@@ -144,4 +144,4 @@ _auto_patch_pandas()
 # Import after the usage logger is attached.
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # F405
-from pyspark.pandas.sql_processor import sql
+from pyspark.pandas.sql_formatter import sql

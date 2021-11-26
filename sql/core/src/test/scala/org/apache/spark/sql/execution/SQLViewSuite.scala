@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -217,12 +216,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
       assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
-    }
-  }
-
-  private def assertNoSuchTable(query: String): Unit = {
-    intercept[NoSuchTableException] {
-      sql(query)
     }
   }
 

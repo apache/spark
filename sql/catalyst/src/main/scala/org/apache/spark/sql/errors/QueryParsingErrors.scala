@@ -429,4 +429,8 @@ object QueryParsingErrors {
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
     new ParseException(Some(command), "Unclosed bracketed comment", position, position)
   }
+
+  def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid time travel spec: $reason.", ctx)
+  }
 }
