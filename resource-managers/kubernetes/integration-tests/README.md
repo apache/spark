@@ -17,7 +17,7 @@ To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify t
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
 
-To run tests with Hadoop 2.7 instead of Hadoop 3.2, use `--hadoop-profile`.
+To run tests with Hadoop 2 instead of Hadoop 3, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
 
