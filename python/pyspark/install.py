@@ -32,6 +32,9 @@ UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
 def checked_package_name(spark_version, hadoop_version, hive_version):
+    """
+    Check the generated package name, here we need to use the final hadoop version.
+    """
     return "%s-bin-%s" % (spark_version, hadoop_version)
 
 
@@ -83,15 +86,16 @@ def checked_versions(spark_version, hadoop_version, hive_version):
             "one of [%s]" % (hive_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
         )
 
-    return spark_version, hadoop_version, hive_version
+    return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version
 
 def convert_old_hadoop_version(spark_version, hadoop_version):
     # check if Spark version < 3.2, if so, convert hadoop3 to hadoop3.2 and hadoop2 to hadoop2.7
-    version_dict = {'hadoop3': 'hadoop3.2', 'hadoop2': 'hadoop2.7'}
+    version_dict = {'hadoop3': 'hadoop3.2', 'hadoop2': 'hadoop2.7',
+                    'without':'without', 'without-hadoop':'without-hadoop'}
     spark_version_parts = re.search("^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+$", spark_version)
     spark_major_version = int(spark_version_parts.group(1))
     spark_minor_version = int(spark_version_parts.group(2))
-    if spark_major_version < 3 or (spark_major_version >= 3 and spark_minor_version < 2):
+    if spark_major_version < 3 or (spark_major_version >= 3 and spark_minor_version <= 2):
         hadoop_version = version_dict[hadoop_version]
     return hadoop_version
 
@@ -113,7 +117,6 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
         Hive version. It should be hiveX.X such as 'hive2.3'.
     """
 
-    hadoop_version = convert_old_hadoop_version(spark_version, hadoop_version)
     package_name = checked_package_name(spark_version, hadoop_version, hive_version)
     package_local_path = os.path.join(dest, "%s.tgz" % package_name)
     if "PYSPARK_RELEASE_MIRROR" in os.environ:
