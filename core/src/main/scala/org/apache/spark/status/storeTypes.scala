@@ -217,7 +217,7 @@ private[spark] class TaskDataWrapper(
     val shuffleRemoteBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleLocalBlocksFetched: Long,
-    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_TIME, parent = TaskIndexNames.STAGE)
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_FETCH_WAIT_TIME, parent = TaskIndexNames.STAGE)
     val shuffleFetchWaitTime: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_REMOTE_READS, parent = TaskIndexNames.STAGE)
     val shuffleRemoteBytesRead: Long,
