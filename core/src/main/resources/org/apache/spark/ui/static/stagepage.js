@@ -168,7 +168,7 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
         row.data.readRecords[columnIndex];
       return str;
  
-    case 'shuffleReadBlockedTime':
+    case 'shuffleReadFetchWaitTime':
       str = formatDuration(row.data.fetchWaitTime[columnIndex]);
       return str;
  
@@ -353,7 +353,7 @@ $(document).ready(function () {
   $('#task_deserialization_time').attr("data-toggle", "tooltip")
     .attr("data-placement", "top")
     .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
-  $('#shuffle_read_blocked_time').attr("data-toggle", "tooltip")
+  $('#shuffle_read_fetch_wait_time').attr("data-toggle", "tooltip")
     .attr("data-placement", "top")
     .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
   $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
@@ -413,7 +413,7 @@ $(document).ready(function () {
   
         var columnIndicesToRemove = [];
         if (!dataToShow.showShuffleReadData) {
-          $('#shuffle_read_blocked_time').remove();
+          $('#shuffle_read_fetch_wait_time').remove();
           $('#shuffle_remote_reads').remove();
           columnIndicesToRemove.push(2);
           columnIndicesToRemove.push(3);
