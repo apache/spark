@@ -108,8 +108,8 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val orcRecordReader = new OrcInputFormat[OrcStruct]
-        .createRecordReader(fileSplit, taskAttemptContext)
+      val orcRecordReader =
+        OrcUtils.createRecordReader[OrcStruct](fileSplit, taskAttemptContext)
       val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
