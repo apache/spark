@@ -88,6 +88,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
 
     return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version
 
+
 def convert_old_hadoop_version(spark_version, hadoop_version):
     # check if Spark version < 3.2, if so, convert hadoop3 to hadoop3.2 and hadoop2 to hadoop2.7
     version_dict = {'hadoop3': 'hadoop3.2', 'hadoop2': 'hadoop2.7',
