@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable => CatalystCreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Identifier, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -471,15 +471,6 @@ class PlanResolutionSuite extends AnalysisTest {
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "option.other" -> "20",
-      "provider" -> "parquet",
-      "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment",
-      "other" -> "20")
-
     parseAndResolve(sql) match {
       case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
@@ -490,13 +481,6 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-
-        val properties = CatalogV2Util.convertTableProperties(
-          create.tableSpec.properties, create.tableSpec.options,
-          create.tableSpec.serde, create.tableSpec.location,
-          create.tableSpec.comment, create.tableSpec.provider,
-          create.tableSpec.external)
-        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -518,15 +502,6 @@ class PlanResolutionSuite extends AnalysisTest {
          |OPTIONS (path 's3://bucket/path/to/data', other 20)
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "option.other" -> "20",
-      "provider" -> "parquet",
-      "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment",
-      "other" -> "20")
-
     parseAndResolve(sql, withDefault = true) match {
       case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
@@ -537,12 +512,6 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        val properties = CatalogV2Util.convertTableProperties(
-          create.tableSpec.properties, create.tableSpec.options,
-          create.tableSpec.serde, create.tableSpec.location,
-          create.tableSpec.comment, create.tableSpec.provider,
-          create.tableSpec.external)
-        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>
@@ -564,13 +533,6 @@ class PlanResolutionSuite extends AnalysisTest {
          |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "provider" -> v2Format,
-      "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
-
     parseAndResolve(sql) match {
       case create: CatalystCreateTable =>
         assert(create.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
@@ -582,12 +544,6 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("description", StringType)
             .add("point", new StructType().add("x", DoubleType).add("y", DoubleType)))
         assert(create.partitioning.isEmpty)
-        val properties = CatalogV2Util.convertTableProperties(
-          create.tableSpec.properties, create.tableSpec.options,
-          create.tableSpec.serde, create.tableSpec.location,
-          create.tableSpec.comment, create.tableSpec.provider,
-          create.tableSpec.external)
-        assert(properties == expectedProperties)
         assert(create.ignoreIfExists)
 
       case other =>

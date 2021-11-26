@@ -37,11 +37,13 @@ case class CreateTableExec(
     ignoreIfExists: Boolean) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  val props = CatalogV2Util.convertTableProperties(
-    tableSpec.properties, tableSpec.options, tableSpec.serde,
-    tableSpec.location, tableSpec.comment, tableSpec.provider,
-    tableSpec.external)
-  val tableProperties = CatalogV2Util.withDefaultOwnership(props)
+  val tableProperties = {
+    val props = CatalogV2Util.convertTableProperties(
+      tableSpec.properties, tableSpec.options, tableSpec.serde,
+      tableSpec.location, tableSpec.comment, tableSpec.provider,
+      tableSpec.external)
+    CatalogV2Util.withDefaultOwnership(props)
+  }
 
   override protected def run(): Seq[InternalRow] = {
     if (!catalog.tableExists(identifier)) {

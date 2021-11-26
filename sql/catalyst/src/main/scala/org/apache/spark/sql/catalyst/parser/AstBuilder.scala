@@ -3414,7 +3414,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] or [[CreateV2Table]] logical plan.
+   * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelectStatement]] logical plan.
    *
    * Expected format:
    * {{{
@@ -3485,9 +3485,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           serdeInfo, external)
         val schema = StructType(columns ++ partCols)
         CreateTable(
-          UnresolvedDBObjectName(
-            table,
-            isNamespace = false),
+          UnresolvedDBObjectName(table, isNamespace = false),
           schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
