@@ -243,40 +243,26 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
-       0
+       0.0
       > SELECT _FUNC_(5);
        5
+      > SELECT _FUNC_(3.1411, 3);
+       3.142
+      > SELECT _FUNC_(3.1411, -3);
+       1000.0
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
-  override def dataType: DataType = child.dataType match {
-    case dt @ DecimalType.Fixed(_, 0) => dt
-    case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision - scale + 1, 0)
-    case _ => LongType
-  }
+case class Ceil(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Ceil =
+    copy(child = newLeft, scale = newRight)
+}
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType, LongType))
-
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.dataType match {
-      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(_, _) =>
-        defineCodeGen(ctx, ev, c => s"$c.ceil()")
-      case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
-    }
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
+object Ceil {
+  def apply(child: Expression): Ceil = new Ceil(child)
 }
 
 @ExpressionDescription(
@@ -453,40 +439,26 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
-       -1
+       -1.0
       > SELECT _FUNC_(5);
        5
+      > SELECT _FUNC_(3.1411, 3);
+       3.141
+      > SELECT _FUNC_(3.1411, -3);
+       1000.0
   """,
-  since = "1.4.0",
+  since = "3.3.0",
   group = "math_funcs")
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
-  override def dataType: DataType = child.dataType match {
-    case dt @ DecimalType.Fixed(_, 0) => dt
-    case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision - scale + 1, 0)
-    case _ => LongType
-  }
+case class Floor(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Floor =
+    copy(child = newLeft, scale = newRight)
+}
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType, LongType))
-
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.dataType match {
-      case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(_, _) =>
-        defineCodeGen(ctx, ev, c => s"$c.floor()")
-      case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
-    }
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Floor = copy(child = newChild)
+object Floor {
+  def apply(child: Expression): Floor = new Floor(child)
 }
 
 object Factorial {

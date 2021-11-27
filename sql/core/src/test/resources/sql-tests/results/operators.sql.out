@@ -357,7 +357,7 @@ struct<COT(-1):double>
 -- !query
 select ceiling(0)
 -- !query schema
-struct<ceiling(0):bigint>
+struct<ceiling(0, 0):int>
 -- !query output
 0
 
@@ -365,7 +365,7 @@ struct<ceiling(0):bigint>
 -- !query
 select ceiling(1)
 -- !query schema
-struct<ceiling(1):bigint>
+struct<ceiling(1, 0):int>
 -- !query output
 1
 
@@ -373,7 +373,7 @@ struct<ceiling(1):bigint>
 -- !query
 select ceil(1234567890123456)
 -- !query schema
-struct<CEIL(1234567890123456):bigint>
+struct<ceil(1234567890123456, 0):bigint>
 -- !query output
 1234567890123456
 
@@ -381,7 +381,7 @@ struct<CEIL(1234567890123456):bigint>
 -- !query
 select ceiling(1234567890123456)
 -- !query schema
-struct<ceiling(1234567890123456):bigint>
+struct<ceiling(1234567890123456, 0):bigint>
 -- !query output
 1234567890123456
 
@@ -389,7 +389,7 @@ struct<ceiling(1234567890123456):bigint>
 -- !query
 select ceil(0.01)
 -- !query schema
-struct<CEIL(0.01):decimal(1,0)>
+struct<ceil(0.01, 0):decimal(2,0)>
 -- !query output
 1
 
@@ -397,7 +397,7 @@ struct<CEIL(0.01):decimal(1,0)>
 -- !query
 select ceiling(-0.10)
 -- !query schema
-struct<ceiling(-0.10):decimal(1,0)>
+struct<ceiling(-0.10, 0):decimal(2,0)>
 -- !query output
 0
 
@@ -405,7 +405,7 @@ struct<ceiling(-0.10):decimal(1,0)>
 -- !query
 select floor(0)
 -- !query schema
-struct<FLOOR(0):bigint>
+struct<floor(0, 0):int>
 -- !query output
 0
 
@@ -413,7 +413,7 @@ struct<FLOOR(0):bigint>
 -- !query
 select floor(1)
 -- !query schema
-struct<FLOOR(1):bigint>
+struct<floor(1, 0):int>
 -- !query output
 1
 
@@ -421,7 +421,7 @@ struct<FLOOR(1):bigint>
 -- !query
 select floor(1234567890123456)
 -- !query schema
-struct<FLOOR(1234567890123456):bigint>
+struct<floor(1234567890123456, 0):bigint>
 -- !query output
 1234567890123456
 
@@ -429,7 +429,7 @@ struct<FLOOR(1234567890123456):bigint>
 -- !query
 select floor(0.01)
 -- !query schema
-struct<FLOOR(0.01):decimal(1,0)>
+struct<floor(0.01, 0):decimal(2,0)>
 -- !query output
 0
 
@@ -437,7 +437,7 @@ struct<FLOOR(0.01):decimal(1,0)>
 -- !query
 select floor(-0.10)
 -- !query schema
-struct<FLOOR(-0.10):decimal(1,0)>
+struct<floor(-0.10, 0):decimal(2,0)>
 -- !query output
 -1
 

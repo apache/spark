@@ -68,8 +68,8 @@
 | org.apache.spark.sql.catalyst.expressions.Cast | timestamp | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | tinyint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<CBRT(27.0):double> |
-| org.apache.spark.sql.catalyst.expressions.Ceil | ceil | SELECT ceil(-0.1) | struct<CEIL(-0.1):decimal(1,0)> |
-| org.apache.spark.sql.catalyst.expressions.Ceil | ceiling | SELECT ceiling(-0.1) | struct<ceiling(-0.1):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.Ceil | ceil | SELECT ceil(-0.1) | struct<CEIL(-0.1, 0):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.Ceil | ceiling | SELECT ceiling(-0.1) | struct<ceiling(-0.1, 0):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.Chr | char | SELECT char(65) | struct<char(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Chr | chr | SELECT chr(65) | struct<chr(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Coalesce | coalesce | SELECT coalesce(NULL, 1, NULL) | struct<coalesce(NULL, 1, NULL):int> |
@@ -124,7 +124,7 @@
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
 | org.apache.spark.sql.catalyst.expressions.FindInSet | find_in_set | SELECT find_in_set('ab','abc,b,ab,c,def') | struct<find_in_set(ab, abc,b,ab,c,def):int> |
 | org.apache.spark.sql.catalyst.expressions.Flatten | flatten | SELECT flatten(array(array(1, 2), array(3, 4))) | struct<flatten(array(array(1, 2), array(3, 4))):array<int>> |
-| org.apache.spark.sql.catalyst.expressions.Floor | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1):decimal(1,0)> |
+| org.apache.spark.sql.catalyst.expressions.Floor | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1, 0):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.FormatNumber | format_number | SELECT format_number(12332.123456, 4) | struct<format_number(12332.123456, 4):string> |
 | org.apache.spark.sql.catalyst.expressions.FormatString | format_string | SELECT format_string("Hello World %d %s", 100, "days") | struct<format_string(Hello World %d %s, 100, days):string> |
 | org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf("Hello World %d %s", 100, "days") | struct<printf(Hello World %d %s, 100, days):string> |

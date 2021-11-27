@@ -319,37 +319,37 @@ struct<five:string,f1:double,round_f1:double>
 -- !query
 select ceil(f1) as ceil_f1 from float8_tbl f
 -- !query schema
-struct<ceil_f1:bigint>
+struct<ceil_f1:double>
 -- !query output
--34
-0
-1
-1005
-9223372036854775807
+-34.0
+0.0
+1.0
+1.2345678901234E200
+1005.0
 
 
 -- !query
 select ceiling(f1) as ceiling_f1 from float8_tbl f
 -- !query schema
-struct<ceiling_f1:bigint>
+struct<ceiling_f1:double>
 -- !query output
--34
-0
-1
-1005
-9223372036854775807
+-34.0
+0.0
+1.0
+1.2345678901234E200
+1005.0
 
 
 -- !query
 select floor(f1) as floor_f1 from float8_tbl f
 -- !query schema
-struct<floor_f1:bigint>
+struct<floor_f1:double>
 -- !query output
--35
-0
-0
-1004
-9223372036854775807
+-35.0
+0.0
+0.0
+1.2345678901234E200
+1004.0
 
 
 -- !query
