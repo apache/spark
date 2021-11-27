@@ -3354,11 +3354,6 @@
     </profile>
 
     <profile>
-      <id>hive-2.3</id>
-      <!-- Default hive profile. Uses global properties. -->
-    </profile>
-
-    <profile>
       <id>yarn</id>
       <modules>
         <module>resource-managers/yarn</module>
