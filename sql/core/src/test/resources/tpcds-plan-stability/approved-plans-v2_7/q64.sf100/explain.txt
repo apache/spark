@@ -68,7 +68,7 @@
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :           +- * Filter (31)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :              +- * HashAggregate (30)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                 +- Exchange (29)
-         :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                    +- * HashAggregate (28)
+         :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                    +- SortAggregate (28)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                       +- * Project (27)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                          +- * SortMergeJoin Inner (26)
          :                    :     :     :     :           :           :     :     :     :           :           :     :     :           :     :                             :- * Sort (19)
@@ -329,7 +329,7 @@ Join condition: None
 Output [5]: [cs_item_sk#19, cs_ext_list_price#21, cr_refunded_cash#26, cr_reversed_charge#27, cr_store_credit#28]
 Input [8]: [cs_item_sk#19, cs_order_number#20, cs_ext_list_price#21, cr_item_sk#24, cr_order_number#25, cr_refunded_cash#26, cr_reversed_charge#27, cr_store_credit#28]
 
-(28) HashAggregate [codegen id : 9]
+(28) SortAggregate
 Input [5]: [cs_item_sk#19, cs_ext_list_price#21, cr_refunded_cash#26, cr_reversed_charge#27, cr_store_credit#28]
 Keys [1]: [cs_item_sk#19]
 Functions [2]: [partial_sum(UnscaledValue(cs_ext_list_price#21)), partial_sum(CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(cr_refunded_cash#26 as decimal(8,2))) + promote_precision(cast(cr_reversed_charge#27 as decimal(8,2)))), DecimalType(8,2), true) as decimal(9,2))) + promote_precision(cast(cr_store_credit#28 as decimal(9,2)))), DecimalType(9,2), true))]

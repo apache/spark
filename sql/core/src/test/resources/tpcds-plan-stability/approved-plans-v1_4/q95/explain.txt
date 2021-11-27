@@ -3,7 +3,7 @@
 +- Exchange (57)
    +- * HashAggregate (56)
       +- * HashAggregate (55)
-         +- * HashAggregate (54)
+         +- SortAggregate (54)
             +- * Project (53)
                +- * BroadcastHashJoin Inner BuildRight (52)
                   :- * Project (46)
@@ -288,21 +288,21 @@ Join condition: None
 Output [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [5]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, web_site_sk#24]
 
-(54) HashAggregate [codegen id : 20]
+(54) SortAggregate
 Input [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#5)), partial_sum(UnscaledValue(ws_net_profit#6))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#27, sum(UnscaledValue(ws_net_profit#6))#28]
 Results [3]: [ws_order_number#4, sum#29, sum#30]
 
-(55) HashAggregate [codegen id : 20]
+(55) HashAggregate [codegen id : 21]
 Input [3]: [ws_order_number#4, sum#29, sum#30]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#27, sum(UnscaledValue(ws_net_profit#6))#28]
 Results [3]: [ws_order_number#4, sum#29, sum#30]
 
-(56) HashAggregate [codegen id : 20]
+(56) HashAggregate [codegen id : 21]
 Input [3]: [ws_order_number#4, sum#29, sum#30]
 Keys: []
 Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6)), partial_count(distinct ws_order_number#4)]
@@ -313,7 +313,7 @@ Results [3]: [sum#29, sum#30, count#32]
 Input [3]: [sum#29, sum#30, count#32]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#33]
 
-(58) HashAggregate [codegen id : 21]
+(58) HashAggregate [codegen id : 22]
 Input [3]: [sum#29, sum#30, count#32]
 Keys: []
 Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#5)), sum(UnscaledValue(ws_net_profit#6)), count(distinct ws_order_number#4)]

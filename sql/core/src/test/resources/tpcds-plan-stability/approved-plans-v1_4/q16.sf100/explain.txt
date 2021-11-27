@@ -3,7 +3,7 @@
 +- Exchange (44)
    +- * HashAggregate (43)
       +- * HashAggregate (42)
-         +- * HashAggregate (41)
+         +- SortAggregate (41)
             +- * Project (40)
                +- * BroadcastHashJoin Inner BuildRight (39)
                   :- * Project (33)
@@ -221,21 +221,21 @@ Join condition: None
 Output [3]: [cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
 Input [5]: [cs_ship_date_sk#1, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, d_date_sk#23]
 
-(41) HashAggregate [codegen id : 11]
+(41) SortAggregate
 Input [3]: [cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
 Keys [1]: [cs_order_number#5]
 Functions [2]: [partial_sum(UnscaledValue(cs_ext_ship_cost#6)), partial_sum(UnscaledValue(cs_net_profit#7))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#26, sum(UnscaledValue(cs_net_profit#7))#27]
 Results [3]: [cs_order_number#5, sum#28, sum#29]
 
-(42) HashAggregate [codegen id : 11]
+(42) HashAggregate [codegen id : 12]
 Input [3]: [cs_order_number#5, sum#28, sum#29]
 Keys [1]: [cs_order_number#5]
 Functions [2]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7))]
 Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_ship_cost#6))#26, sum(UnscaledValue(cs_net_profit#7))#27]
 Results [3]: [cs_order_number#5, sum#28, sum#29]
 
-(43) HashAggregate [codegen id : 11]
+(43) HashAggregate [codegen id : 12]
 Input [3]: [cs_order_number#5, sum#28, sum#29]
 Keys: []
 Functions [3]: [merge_sum(UnscaledValue(cs_ext_ship_cost#6)), merge_sum(UnscaledValue(cs_net_profit#7)), partial_count(distinct cs_order_number#5)]
@@ -246,7 +246,7 @@ Results [3]: [sum#28, sum#29, count#31]
 Input [3]: [sum#28, sum#29, count#31]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#32]
 
-(45) HashAggregate [codegen id : 12]
+(45) HashAggregate [codegen id : 13]
 Input [3]: [sum#28, sum#29, count#31]
 Keys: []
 Functions [3]: [sum(UnscaledValue(cs_ext_ship_cost#6)), sum(UnscaledValue(cs_net_profit#7)), count(distinct cs_order_number#5)]
