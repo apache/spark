@@ -948,7 +948,7 @@ object QueryExecutionErrors {
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
       leftScale: Int, rightScale: Int): Throwable = {
     new SparkException("Failed to merge decimal types with incompatible " +
-      s"scala $leftScale and $rightScale")
+      s"scale $leftScale and $rightScale")
   }
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
@@ -1889,4 +1889,9 @@ object QueryExecutionErrors {
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
     new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
   }
+
+  def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
+    new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+  }
 }
+

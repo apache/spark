@@ -1698,7 +1698,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  require(checkArgumentIndexNotZero(children(0)), "Illegal format argument index = 0")
+  checkArgumentIndexNotZero(children(0))
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -1782,9 +1782,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
    * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
    * behavior of Java 8, Java 11 and Java 17.
    */
-  private def checkArgumentIndexNotZero(expression: Expression): Boolean = expression match {
-    case StringLiteral(pattern) => !pattern.contains("%0$")
-    case _ => true
+  private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
+    case StringLiteral(pattern) if pattern.contains("%0$") =>
+      throw QueryCompilationErrors.illegalSubstringError(
+        "The argument_index of string format", "position 0$")
+    case _ => // do nothing
   }
 }
 

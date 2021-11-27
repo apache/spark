@@ -2953,7 +2953,7 @@ object SparkContext extends Logging {
         val memoryPerWorkerInt = memoryPerWorker.toInt
         if (sc.executorMemory > memoryPerWorkerInt) {
           throw new SparkException(
-            "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
+            "Asked to launch cluster with %d MiB/worker but requested %d MiB/executor".format(
               memoryPerWorkerInt, sc.executorMemory))
         }
 

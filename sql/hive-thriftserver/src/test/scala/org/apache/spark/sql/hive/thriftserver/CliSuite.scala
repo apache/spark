@@ -76,7 +76,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       `hive.metastore.warehouse.dir`.
    * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
    *                            not, disabled by default
-   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   * @param metastore which path the embedded derby database for metastore locates. Use the
    *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */

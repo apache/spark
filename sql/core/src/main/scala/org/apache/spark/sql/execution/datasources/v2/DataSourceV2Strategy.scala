@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, EmptyRow, Expression, Literal, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -38,6 +39,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumn, PushableColumnBase}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.{BooleanType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -90,6 +92,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   private def invalidateCache(catalog: TableCatalog, table: Table, ident: Identifier): Unit = {
     val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+  }
+
+  private def makeQualifiedNamespacePath(location: String): String = {
+    val warehousePath = session.sharedState.conf.get(WAREHOUSE_PATH)
+    val nsPath = CatalogUtils.makeQualifiedNamespacePath(
+      CatalogUtils.stringToURI(location), warehousePath, session.sharedState.hadoopConf)
+    CatalogUtils.URIToString(nsPath)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -314,7 +323,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
+        Map(SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(location))) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
@@ -323,7 +332,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
     case CreateNamespace(ResolvedDBObjectName(catalog, name), ifNotExists, properties) =>
-      CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, properties) :: Nil
+      val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
+        properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(loc))
+      }.getOrElse(properties)
+      CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, finalProperties) :: Nil
 
     case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
@@ -418,7 +430,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
 
     case r: CacheTableAsSelect =>
-      CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
+      CacheTableAsSelectExec(
+        r.tempViewName, r.plan, r.originalText, r.isLazy, r.options, r.referredTempFunctions) :: Nil
 
     case r: UncacheTable =>
       def isTempView(table: LogicalPlan): Boolean = table match {

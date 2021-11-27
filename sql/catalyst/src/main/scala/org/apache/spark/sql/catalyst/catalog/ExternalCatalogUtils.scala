@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
@@ -256,6 +257,24 @@ object CatalogUtils {
    */
   def stringToURI(str: String): URI = {
     new Path(str).toUri
+  }
+
+  def makeQualifiedNamespacePath(
+      locationUri: URI,
+      warehousePath: String,
+      hadoopConf: Configuration): URI = {
+    if (locationUri.isAbsolute) {
+      locationUri
+    } else {
+      val fullPath = new Path(warehousePath, CatalogUtils.URIToString(locationUri))
+      makeQualifiedPath(fullPath.toUri, hadoopConf)
+    }
+  }
+
+  def makeQualifiedPath(path: URI, hadoopConf: Configuration): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath).toUri
   }
 
   private def normalizeColumnName(

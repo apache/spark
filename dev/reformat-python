@@ -28,5 +28,4 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# This script is only applied for pandas API on Spark for now.
-$BLACK_BUILD python/pyspark/pandas --line-length 100
+$BLACK_BUILD --config dev/pyproject.toml python/pyspark

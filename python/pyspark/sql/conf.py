@@ -59,8 +59,9 @@ class RuntimeConfig(object):
     def _checkType(self, obj: Any, identifier: str) -> None:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
-            raise TypeError("expected %s '%s' to be a string (was '%s')" %
-                            (identifier, obj, type(obj).__name__))
+            raise TypeError(
+                "expected %s '%s' to be a string (was '%s')" % (identifier, obj, type(obj).__name__)
+            )
 
     @since(2.4)
     def isModifiable(self, key: str) -> bool:
@@ -79,16 +80,14 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.conf.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.conf tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
-    globs['spark'] = spark
+    spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

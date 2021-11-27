@@ -1829,23 +1829,6 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
   }
 
-  test("set namespace location") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-  }
-
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
@@ -2190,19 +2173,6 @@ class DDLParserSuite extends AnalysisTest {
       "SELECT 1",
       parsePlan("SELECT 1"))
     comparePlans(parsed, expected)
-  }
-
-  test("SHOW TBLPROPERTIES table") {
-    comparePlans(
-      parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true),
-        None))
-
-    comparePlans(
-      parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {

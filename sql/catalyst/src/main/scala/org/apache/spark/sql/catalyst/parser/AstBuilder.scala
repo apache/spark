@@ -1257,8 +1257,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val table = mayApplyAliasPlan(ctx.tableAlias, UnresolvedRelation(tableId))
+    val relation = UnresolvedRelation(tableId)
+    val table = mayApplyAliasPlan(
+      ctx.tableAlias, relation.optionalMap(ctx.temporalClause)(withTimeTravel))
     table.optionalMap(ctx.sample)(withSample)
+  }
+
+  private def withTimeTravel(
+      ctx: TemporalClauseContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val v = ctx.version
+    val version = if (ctx.INTEGER_VALUE != null) {
+      Some(v.getText)
+    } else {
+      Option(v).map(string)
+    }
+    val timestamp = Option(ctx.timestamp).map(expression)
+    if (timestamp.exists(_.references.nonEmpty)) {
+      throw QueryParsingErrors.invalidTimeTravelSpec(
+        "timestamp expression cannot refer to any columns", ctx.timestamp)
+    }
+    if (timestamp.exists(e => SubqueryExpression.hasSubquery(e))) {
+      throw QueryParsingErrors.invalidTimeTravelSpec(
+        "timestamp expression cannot contain subqueries", ctx.timestamp)
+    }
+    RelationTimeTravel(plan, timestamp, version)
   }
 
   /**

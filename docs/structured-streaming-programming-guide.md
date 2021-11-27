@@ -1956,7 +1956,21 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows</td>
+    <td>Whether we track the total number of rows in state store. Please refer the details in <a href="#performance-aspect-considerations">Performance-aspect considerations</a>.</td>
+    <td>True</td>
+  </tr>
 </table>
+
+##### Performance-aspect considerations
+
+1. You may want to disable the track of total number of rows to aim the better performance on RocksDB state store.
+
+Tracking the number of rows brings additional lookup on write operations - you're encouraged to try turning off the config on tuning RocksDB state store, especially the values of metrics for state operator are big - `numRowsUpdated`, `numRowsRemoved`.
+
+You can change the config during restarting the query, which enables you to change the trade-off decision on "observability vs performance".
+If the config is disabled, the number of rows in state (`numTotalStateRows`) will be reported as 0.
 
 #### State Store and task locality
 
@@ -2878,6 +2892,12 @@ df.writeStream \
   .trigger(once=True) \
   .start()
 
+# Available-now trigger
+df.writeStream \
+  .format("console") \
+  .trigger(availableNow=True) \
+  .start()
+
 # Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
@@ -3642,3 +3662,6 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 - Spark Summit 2016
   - A Deep Dive into Structured Streaming - [slides/video](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
 
+# Migration Guide
+
+The migration guide is now archived [on this page](ss-migration-guide.html).

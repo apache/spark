@@ -2192,6 +2192,68 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-37063: OptimizeSkewInRebalancePartitions support optimize non-root node") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 2) 2 else i, i.toString)), 2)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkRebalance(query: String, numShufflePartitions: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(adaptive.collect {
+            case sort: SortExec => sort
+          }.size == 1)
+          val read = collect(adaptive) {
+            case read: AQEShuffleReadExec => read
+          }
+          assert(read.size == 1)
+          assert(read.head.partitionSpecs.forall(_.isInstanceOf[PartialReducerPartitionSpec]))
+          assert(read.head.partitionSpecs.size == numShufflePartitions)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "50") {
+          checkRebalance("SELECT /*+ REBALANCE(c1) */ * FROM v SORT BY c1", 2)
+          checkRebalance("SELECT /*+ REBALANCE */ * FROM v SORT BY c1", 2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37357: Add small partition factor for rebalance partitions") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        spark.sparkContext.parallelize(
+          (1 to 8).map(i => TestData(if (i > 2) 2 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkAQEShuffleReadExists(query: String, exists: Boolean): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(
+            collect(adaptive) {
+              case read: AQEShuffleReadExec => read
+            }.nonEmpty == exists)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
+          withSQLConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR.key -> "0.5") {
+            // block size: [88, 97, 97]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM v", false)
+          }
+          withSQLConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR.key -> "0.2") {
+            // block size: [88, 97, 97]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM v", true)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

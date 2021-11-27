@@ -162,12 +162,13 @@ object RuleIdCollection {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
       "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
