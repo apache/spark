@@ -317,12 +317,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     }.asInstanceOf[T]
   }
 
-  private def mapAttributes(plan: LogicalPlan, outputMap: AttributeMap[Attribute]) = {
-    plan.transformExpressions {
-      case a: Attribute => outputMap.getOrElse(a, a)
-    }
-  }
-
   // Applies `outputMap` attribute mapping on elements of `newExpressions` and merges them into
   // `cachedExpressions`. Returns the merged expressions and the attribute mapping from the new to
   // the merged version that can be propagated up during merging nodes.
