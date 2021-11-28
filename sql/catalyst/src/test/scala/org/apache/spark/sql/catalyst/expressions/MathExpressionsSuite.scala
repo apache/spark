@@ -347,7 +347,6 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ceil(-floatPi), -3f, EmptyRow)
     checkEvaluation(Ceil(-longLit), -longLit, EmptyRow)
 
-    
 //    checkEvaluation(Ceil(nullLit), null, EmptyRow)
     checkEvaluation(Ceil(floatNullLit), null, EmptyRow)
     checkEvaluation(Ceil(0), 0, EmptyRow)
