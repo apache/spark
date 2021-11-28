@@ -270,6 +270,7 @@ reference:
   - clearCache
   - clearJobGroup
   - getLocalProperty
+  - install.spark
   - setCheckpointDir
   - setCurrentDatabase
   - setJobDescription

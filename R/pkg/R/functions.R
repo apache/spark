@@ -3818,6 +3818,7 @@ setMethod("row_number",
 #'        Column, for example \code{unresolved_named_lambda_var("a", "b", "c")}
 #'        yields unresolved \code{a.b.c}
 #' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
+#' @keywords internal
 unresolved_named_lambda_var <- function(...) {
   jc <- newJObject(
     "org.apache.spark.sql.Column",
@@ -3841,6 +3842,7 @@ unresolved_named_lambda_var <- function(...) {
 #' @param fun R \code{function} (unary, binary or ternary)
 #'        that transforms \code{Columns} into a \code{Column}
 #' @return JVM \code{LambdaFunction} object
+#' @keywords internal
 create_lambda <- function(fun) {
   as_jexpr <- function(x) callJMethod(x@jc, "expr")
 
@@ -3889,6 +3891,7 @@ create_lambda <- function(fun) {
 #' @param cols list of character or Column objects
 #' @param funs list of named list(fun = ..., expected_narg = ...)
 #' @return a \code{Column} representing name applied to cols with funs
+#' @keywords internal
 invoke_higher_order_function <- function(name, cols, funs) {
   as_jexpr <- function(x) {
     if (class(x) == "character") {
