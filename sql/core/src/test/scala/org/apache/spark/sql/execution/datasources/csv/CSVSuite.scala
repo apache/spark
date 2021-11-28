@@ -1130,19 +1130,21 @@ abstract class CSVSuite
         .option("header", "true")
         .load(path)
 
-      if (spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY.key) == "legacy") {
-        // Timestamps without timezone are parsed as strings, so the col0 type would be
-        // StringType which is similar to reading without schema inference.
-        val exp = spark.read.format("csv").option("header", "true").load(path)
-        checkAnswer(res, exp)
-      } else {
-        val exp = spark.sql("""
-          select timestamp_ltz'2020-12-12T12:12:12.000' as col0 union all
-          select timestamp_ltz'2020-12-12T17:12:12.000Z' as col0 union all
-          select timestamp_ltz'2020-12-12T17:12:12.000+05:00' as col0 union all
-          select timestamp_ltz'2020-12-12T12:12:12.000' as col0
-          """)
-        checkAnswer(res, exp)
+      for (policy <- Seq("exception", "corrected", "legacy")) {
+        if (spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY.key) == "legacy") {
+          // Timestamps without timezone are parsed as strings, so the col0 type would be
+          // StringType which is similar to reading without schema inference.
+          val exp = spark.read.format("csv").option("header", "true").load(path)
+          checkAnswer(res, exp)
+        } else {
+          val exp = spark.sql("""
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000Z' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000+05:00' as col0 union all
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0
+            """)
+          checkAnswer(res, exp)
+        }
       }
     }
   }
