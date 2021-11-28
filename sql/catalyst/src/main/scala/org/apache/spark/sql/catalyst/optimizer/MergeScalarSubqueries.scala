@@ -137,23 +137,28 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   private def cacheSubquery(plan: LogicalPlan, cache: ListBuffer[Header]): (Int, Int) = {
     val output = plan.output.head
     cache.zipWithIndex.collectFirst(Function.unlift { case (header, subqueryIndex) =>
-      checkIdenticalPlans(plan, header.plan)
-        .map((subqueryIndex, header, header.plan, _, header.merged))
-        .orElse(tryMergePlans(plan, header.plan).map {
-          case (mergedPlan, outputMap) => (subqueryIndex, header, mergedPlan, outputMap, true)
-        })
-    }).map { case (subqueryIndex, header, mergedPlan, outputMap, merged) =>
-      val mappedFirstOutput = mapAttributes(output, outputMap)
-      var headerIndex = header.elements.indexWhere {
-        case (_, attribute) => attribute.exprId == mappedFirstOutput.exprId
-      }
-      if (headerIndex == -1) {
-        val newHeaderElements = header.elements :+ (output.name -> mappedFirstOutput)
-        cache(subqueryIndex) = Header(newHeaderElements, mergedPlan, merged)
-        headerIndex = header.elements.size
-      }
-      subqueryIndex -> headerIndex
-    }.getOrElse {
+      checkIdenticalPlans(plan, header.plan).map { outputMap =>
+        val mappedOutput = mapAttributes(output, outputMap)
+        val headerIndex = header.elements.indexWhere {
+          case (_, attribute) => attribute.exprId == mappedOutput.exprId
+        }
+        subqueryIndex -> headerIndex
+      }.orElse(tryMergePlans(plan, header.plan).map {
+        case (mergedPlan, outputMap) =>
+          val mappedOutput = mapAttributes(output, outputMap)
+          var headerIndex = header.elements.indexWhere {
+            case (_, attribute) => attribute.exprId == mappedOutput.exprId
+          }
+          val newHeaderElements = if (headerIndex == -1) {
+            headerIndex = header.elements.size
+            header.elements :+ (output.name -> mappedOutput)
+          } else {
+            header.elements
+          }
+          cache(subqueryIndex) = Header(newHeaderElements, mergedPlan, true)
+          subqueryIndex -> headerIndex
+      })
+    }).getOrElse {
       cache += Header(Seq(output.name -> output), plan, false)
       cache.length - 1 -> 0
     }

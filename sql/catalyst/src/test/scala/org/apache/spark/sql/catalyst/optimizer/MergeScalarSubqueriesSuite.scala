@@ -131,6 +131,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery4)
 
     val mergedSubquery = ScalarSubquery(testRelation
+      .select('a, 'b, 'c)
       .where('a > 1)
       .select('a, 'b, 'c)
       .select('a, 'b)
