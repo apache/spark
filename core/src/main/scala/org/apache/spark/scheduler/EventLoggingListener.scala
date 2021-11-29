@@ -249,21 +249,18 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
+      logEvent(event)
+    }
     if (shouldLogStageExecutorMetrics) {
-      if (event.execId == SparkContext.DRIVER_IDENTIFIER) {
-        logEvent(event)
-      }
-      event.executorUpdates.foreach { case (stageKey1, newPeaks) =>
-        liveStageExecutorMetrics.foreach { case (stageKey2, metricsPerExecutor) =>
-          // If the update came from the driver, stageKey1 will be the dummy key (-1, -1),
-          // so record those peaks for all active stages.
-          // Otherwise, record the peaks for the matching stage.
-          if (stageKey1 == DRIVER_STAGE_KEY || stageKey1 == stageKey2) {
-            val metrics = metricsPerExecutor.getOrElseUpdate(
-              event.execId, new ExecutorMetrics())
-            metrics.compareAndUpdatePeakValues(newPeaks)
-          }
-        }
+      event.executorUpdates.foreach { case (stageKey, newPeaks) =>
+        // faster find the right key
+        // no need to update driver metric in different stages
+        liveStageExecutorMetrics.get((stageKey._1, stageKey._2)).foreach(metricExe => {
+          val metrics = metricExe.getOrElseUpdate(
+            event.execId, new ExecutorMetrics())
+          metrics.compareAndUpdatePeakValues(newPeaks)
+        })
       }
     }
   }
