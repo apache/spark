@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownV2Filters}
@@ -153,6 +153,17 @@ object PushDownUtils extends PredicateHelper {
     scanBuilder match {
       case s: SupportsPushDownLimit =>
         s.pushLimit(limit)
+      case _ => false
+    }
+  }
+
+  /**
+   * Pushes down top N to the data source Scan
+   */
+  def pushTopN(scanBuilder: ScanBuilder, order: Array[SortValue], limit: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownLimit =>
+        s.pushTopN(order, limit)
       case _ => false
     }
   }

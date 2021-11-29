@@ -401,6 +401,8 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def supportsLimit(): Boolean = true
 
+  def supportsTopN(): Boolean = true
+
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =

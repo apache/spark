@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.SortValue;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
@@ -33,4 +34,9 @@ public interface SupportsPushDownLimit extends ScanBuilder {
    * Pushes down LIMIT to the data source.
    */
   boolean pushLimit(int limit);
+
+  /**
+   * Pushes down top N to the data source.
+   */
+  boolean pushTopN(SortValue[] orders, int limit);
 }
