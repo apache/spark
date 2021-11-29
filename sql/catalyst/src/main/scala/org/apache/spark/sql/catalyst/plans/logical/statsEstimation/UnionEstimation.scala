@@ -53,12 +53,8 @@ object UnionEstimation {
     case TimestampNTZType => (a: Any, b: Any) =>
       TimestampNTZType.ordering.lt(a.asInstanceOf[TimestampNTZType.InternalType],
         b.asInstanceOf[TimestampNTZType.InternalType])
-    case y: YearMonthIntervalType => (a: Any, b: Any) =>
-      y.ordering.lt(a.asInstanceOf[y.InternalType],
-        b.asInstanceOf[y.InternalType])
-    case d: DayTimeIntervalType => (a: Any, b: Any) =>
-      d.ordering.lt(a.asInstanceOf[d.InternalType],
-        b.asInstanceOf[d.InternalType])
+    case i: AnsiIntervalType => (a: Any, b: Any) =>
+      i.ordering.lt(a.asInstanceOf[i.InternalType], b.asInstanceOf[i.InternalType])
     case _ =>
       throw new IllegalStateException(s"Unsupported data type: ${dt.catalogString}")
   }
