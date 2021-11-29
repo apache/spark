@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneOffset}
+import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -828,6 +829,28 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       withAllOrcReaders {
         checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
+    }
+  }
+
+  test("SPARK-37463: read/write Timestamp ntz to Orc uses UTC timestamp") {
+    val localTimeZone = TimeZone.getDefault
+    try {
+      TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+
+      val df = sql("select timestamp_ntz '2021-06-01 00:00:00' ts_ntz")
+
+      df.write.mode("overwrite").orc("ts_ntz_orc")
+
+      val query = "select * from `orc`.`ts_ntz_orc`"
+
+      Seq("America/Los_Angeles", "UTC", "Europe/Amsterdam").foreach { tz =>
+        TimeZone.setDefault(TimeZone.getTimeZone(tz))
+        withAllOrcReaders {
+          checkAnswer(sql(query), df)
+        }
+      }
+    } finally {
+      TimeZone.setDefault(localTimeZone)
     }
   }
 }

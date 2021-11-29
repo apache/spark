@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.Timestamp
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -531,13 +531,16 @@ object OrcUtils extends Logging {
   }
 
   def fromOrcNTZ(ts: Timestamp): Long = {
-    DateTimeUtils.millisToMicros(ts.getTime) +
+    val utcMicros = DateTimeUtils.millisToMicros(ts.getTime) +
       (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
+    val micros = DateTimeUtils.fromUTCTime(utcMicros, TimeZone.getDefault.getID)
+    micros
   }
 
   def toOrcNTZ(micros: Long): OrcTimestamp = {
-    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
-    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val utcMicros = DateTimeUtils.toUTCTime(micros, TimeZone.getDefault.getID)
+    val seconds = Math.floorDiv(utcMicros, MICROS_PER_SECOND)
+    val nanos = (utcMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
     val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
     result.setNanos(nanos.toInt)
     result
