@@ -97,6 +97,7 @@ object TreePattern extends Enumeration  {
   val DISTINCT_LIKE: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
+  val EXPAND: Value = Value
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value

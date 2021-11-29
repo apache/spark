@@ -1121,6 +1121,8 @@ case class Expand(
 
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
 
+  final override val nodePatterns : Seq[TreePattern] = Seq(EXPAND)
+
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected lazy val validConstraints: ExpressionSet = ExpressionSet()

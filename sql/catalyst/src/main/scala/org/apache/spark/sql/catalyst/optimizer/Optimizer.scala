@@ -128,7 +128,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats) ++
+        CombineConcats,
+        ReplaceSingleProjectionExpand) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -2211,5 +2212,22 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     // Replace Local Limit 0 nodes with empty Local Relation
     case ll @ LocalLimit(IntegerLiteral(0), _) =>
       empty(ll)
+  }
+}
+
+/**
+ * Replaces an [[Expand]] with only one projections with a [[Project]]
+ */
+object ReplaceSingleProjectionExpand extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(EXPAND), ruleId) {
+    case Expand(projections, output, child) if projections.size == 1 =>
+      Project(
+        projections.head.zip(output).map {
+          case (e, a) if e.semanticEquals(a) => a
+          case (e, a) => Alias(e, a.name)(a.exprId, a.qualifier)
+        },
+        child
+      )
   }
 }

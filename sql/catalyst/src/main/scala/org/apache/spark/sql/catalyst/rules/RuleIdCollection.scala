@@ -144,6 +144,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceDistinctWithAggregate" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceSingleProjectionExpand" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
