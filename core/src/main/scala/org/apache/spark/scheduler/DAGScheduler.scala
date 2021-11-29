@@ -718,13 +718,12 @@ private[spark] class DAGScheduler(
                 // read from merged output as the MergeStatuses are not available.
                 if (!mapStage.isAvailable || !mapStage.shuffleDep.shuffleMergeFinalized) {
                   missing += mapStage
-                } else if (mapStage.latestInfo.completionTime.isEmpty) {
-                  // Mark the mapStage completed if skipped. Otherwise, once it gets retried,
+                } else if (mapStage.nextAttemptId == 0) {
+                  // Forward the nextAttemptId if skipped and get visited for the first time.
+                  // Otherwise, once it gets retried,
                   // 1) the stuffs in stage info become distorting, e.g. task num, input byte, e.t.c
                   // 2) the first attempt starts from 0-idx, it will not be marked as a retry
-                  mapStage.latestInfo.completionTime = Some(clock.getTimeMillis())
-                  mapStage.increaseStageAttempt()
-                  listenerBus.post(SparkListenerStageCompleted(mapStage.latestInfo))
+                  mapStage.nextAttemptId += 1
                 }
               case narrowDep: NarrowDependency[_] =>
                 waitingForVisit.prepend(narrowDep.rdd)
