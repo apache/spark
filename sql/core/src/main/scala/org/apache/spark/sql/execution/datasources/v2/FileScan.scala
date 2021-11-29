@@ -138,7 +138,8 @@ trait FileScan extends Scan
     val readPartitionAttributes = readPartitionSchema.map { readField =>
       attributeMap.getOrElse(normalizeName(readField.name),
         throw QueryCompilationErrors.cannotFindPartitionColumnInPartitionSchemaError(
-          readField, fileIndex.partitionSchema))
+          readField, fileIndex.partitionSchema)
+      )
     }
     lazy val partitionValueProject =
       GenerateUnsafeProjection.generate(readPartitionAttributes, partitionAttributes)
