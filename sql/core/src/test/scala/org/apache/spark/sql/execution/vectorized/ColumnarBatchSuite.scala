@@ -179,30 +179,31 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val buf = ByteBuffer.wrap(Array(0x33, 0x5A, 0xA5, 0xCC, 0x0F, 0xF0, 0xEE, 0x77, 0x88))
       val reader = new VectorizedPlainValuesReader()
       reader.initFromPage(0, ByteBufferInputStream.wrap(buf))
-      column.putBoolean(idx, reader.readBoolean) // bit index 0
+
+      reader.skipBooleans(1) // bit index 0
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 1
       reference += true
       idx += 1
-
-      reader.skipBooleans(1)
 
       column.putBoolean(idx, reader.readBoolean) // bit index 2
       reference += false
       idx += 1
 
-      reader.skipBooleans(5)
+      reader.skipBooleans(5) // bit index [3, 7]
 
       column.putBoolean(idx, reader.readBoolean) // bit index 8
       reference += false
       idx += 1
 
-      reader.skipBooleans(8)
-      reader.skipBooleans(0)
+      reader.skipBooleans(8) // bit index [9, 16]
+      reader.skipBooleans(0) // no-op
 
       column.putBoolean(idx, reader.readBoolean) // bit index 17
       reference += false
       idx += 1
 
-      reader.skipBooleans(16)
+      reader.skipBooleans(16) // bit index [18, 33]
 
       reader.readBooleans(4, column, idx) // bit index [34, 37]
       reference ++= Array(true, true, false, false)
@@ -212,7 +213,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference ++= Array(false, false, false, false, false, false, true, true, true, true, false)
       idx += 11
 
-      reader.skipBooleans(7)
+      reader.skipBooleans(7) // bit index [49, 55]
 
       reader.readBooleans(9, column, idx) // bit index [56, 64]
       reference ++= Array(true, true, true, false, true, true, true, false, false)

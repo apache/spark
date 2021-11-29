@@ -82,21 +82,23 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void skipBooleans(int total) {
-    // Using >>3 instead of /8 below. The difference is important when (total-(8-bitOffset))<0.
-    // E.g. (-1)>>3=(-1) vs. (-1)/8=0. The latter incorrectly enters the if(numBytesToSkip>=0){.
-    // (total-(8-bitOffset))<0 means there will be still unread bits left in the currentByte.
-    // In that case, updateCurrentByte() should not be called.
-    int numBytesToSkip = (total - (8 - bitOffset)) >> 3;
-    bitOffset = (bitOffset + total) & 7;
-    if (numBytesToSkip >= 0) {
+    int i = 0;
+    if (bitOffset > 0) {
+      i = Math.min(8 - bitOffset, total);
+      bitOffset = (bitOffset + i) & 7;
+    }
+    if (i + 7 < total) {
+      int numBytesToSkip = (total - i) / 8;
       try {
         in.skipFully(numBytesToSkip);
       } catch (IOException e) {
         throw new ParquetDecodingException("Failed to skip bytes", e);
       }
-      if (bitOffset > 0) {
-        updateCurrentByte();
-      }
+      i += numBytesToSkip * 8;
+    }
+    if (i < total) {
+      updateCurrentByte();
+      bitOffset = total - i;
     }
   }
 
