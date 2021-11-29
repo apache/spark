@@ -107,6 +107,11 @@ private[scheduler] abstract class Stage(
     nextAttemptId += 1
   }
 
+  /** Increase stage attempt ID when it gets skipped, then if it has a next attempt that one will
+   *  be marked as a retried state on UI */
+  def increaseStageAttempt(): Unit = {
+    nextAttemptId += 1
+  }
   /** Returns the StageInfo for the most recent attempt for this stage. */
   def latestInfo: StageInfo = _latestInfo
 
