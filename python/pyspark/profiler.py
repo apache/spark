@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from typing import Any, Callable, List, Optional, Tuple, Type, TYPE_CHECKING, cast
+
 import cProfile
 import pstats
 import os
@@ -22,6 +24,9 @@ import atexit
 import sys
 
 from pyspark.accumulators import AccumulatorParam
+
+if TYPE_CHECKING:
+    from pyspark.context import SparkContext
 
 
 class ProfilerCollector(object):
@@ -31,16 +36,16 @@ class ProfilerCollector(object):
     the different stages.
     """
 
-    def __init__(self, profiler_cls, dump_path=None):
-        self.profiler_cls = profiler_cls
-        self.profile_dump_path = dump_path
-        self.profilers = []
+    def __init__(self, profiler_cls: Type["Profiler"], dump_path: Optional[str] = None):
+        self.profiler_cls: Type[Profiler] = profiler_cls
+        self.profile_dump_path: Optional[str] = dump_path
+        self.profilers: List[Tuple[int, Profiler, bool]] = []
 
-    def new_profiler(self, ctx):
+    def new_profiler(self, ctx: "SparkContext") -> "Profiler":
         """Create a new profiler using class `profiler_cls`"""
         return self.profiler_cls(ctx)
 
-    def add_profiler(self, id, profiler):
+    def add_profiler(self, id: int, profiler: "Profiler") -> None:
         """Add a profiler for RDD `id`"""
         if not self.profilers:
             if self.profile_dump_path:
@@ -48,21 +53,21 @@ class ProfilerCollector(object):
             else:
                 atexit.register(self.show_profiles)
 
-        self.profilers.append([id, profiler, False])
+        self.profilers.append([id, profiler, False])  # type: ignore[arg-type]
 
-    def dump_profiles(self, path):
+    def dump_profiles(self, path: str) -> None:
         """Dump the profile stats into directory `path`"""
         for id, profiler, _ in self.profilers:
             profiler.dump(id, path)
         self.profilers = []
 
-    def show_profiles(self):
+    def show_profiles(self) -> None:
         """Print the profile stats to stdout"""
         for i, (id, profiler, showed) in enumerate(self.profilers):
             if not showed and profiler:
                 profiler.show(id)
                 # mark it as showed
-                self.profilers[i][2] = True
+                self.profilers[i][2] = True  # type: ignore[index]
 
 
 class Profiler(object):
@@ -70,15 +75,12 @@ class Profiler(object):
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
-
     A custom profiler has to define or inherit the following methods:
         profile - will produce a system profile of some sort.
         stats - return the collected stats.
         dump - dumps the profiles to a path
         add - adds a profile to the existing accumulated profile
-
     The profiler class is chosen when creating a SparkContext
-
     Examples
     --------
     >>> from pyspark import SparkConf, SparkContext
@@ -97,24 +99,23 @@ class Profiler(object):
     My custom profiles for RDD:1
     My custom profiles for RDD:3
     >>> sc.stop()
-
     Notes
     -----
     This API is a developer API.
     """
 
-    def __init__(self, ctx):
+    def __init__(self, ctx: "SparkContext") -> None:
         pass
 
-    def profile(self, func):
+    def profile(self, func: Callable[[], Any]) -> None:
         """Do profiling on the function `func`"""
         raise NotImplementedError
 
-    def stats(self):
+    def stats(self) -> pstats.Stats:
         """Return the collected profiling stats (pstats.Stats)"""
         raise NotImplementedError
 
-    def show(self, id):
+    def show(self, id: int) -> None:
         """Print the profile stats to stdout, id is the RDD id"""
         stats = self.stats()
         if stats:
@@ -123,7 +124,7 @@ class Profiler(object):
             print("=" * 60)
             stats.sort_stats("time", "cumulative").print_stats()
 
-    def dump(self, id, path):
+    def dump(self, id: int, path: str) -> None:
         """Dump the profile into path, id is the RDD id"""
         if not os.path.exists(path):
             os.makedirs(path)
@@ -137,11 +138,13 @@ class PStatsParam(AccumulatorParam):
     """PStatsParam is used to merge pstats.Stats"""
 
     @staticmethod
-    def zero(value):
+    def zero(value: pstats.Stats) -> None:
         return None
 
     @staticmethod
-    def addInPlace(value1, value2):
+    def addInPlace(
+        value1: Optional[pstats.Stats], value2: Optional[pstats.Stats]
+    ) -> Optional[pstats.Stats]:
         if value1 is None:
             return value2
         value1.add(value2)
@@ -154,25 +157,25 @@ class BasicProfiler(Profiler):
     cProfile and Accumulator
     """
 
-    def __init__(self, ctx):
+    def __init__(self, ctx: "SparkContext") -> None:
         Profiler.__init__(self, ctx)
         # Creates a new accumulator for combining the profiles of different
         # partitions of a stage
-        self._accumulator = ctx.accumulator(None, PStatsParam)
+        self._accumulator = ctx.accumulator(None, PStatsParam)  # type: ignore[arg-type]
 
-    def profile(self, func):
+    def profile(self, func: Callable[[], Any]) -> None:
         """Runs and profiles the method to_profile passed in. A profile object is returned."""
         pr = cProfile.Profile()
         pr.runcall(func)
         st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
+        st.stream = None  # type: ignore[attr-defined]  # make it picklable
         st.strip_dirs()
 
         # Adds a new profile to the existing accumulated value
-        self._accumulator.add(st)
+        self._accumulator.add(st)  # type: ignore[arg-type]
 
-    def stats(self):
-        return self._accumulator.value
+    def stats(self) -> pstats.Stats:
+        return cast(pstats.Stats, self._accumulator.value)
 
 
 if __name__ == "__main__":
