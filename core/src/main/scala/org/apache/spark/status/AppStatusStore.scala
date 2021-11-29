@@ -18,11 +18,9 @@
 package org.apache.spark.status
 
 import java.util.{List => JList}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
-
-import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -89,7 +87,44 @@ private[spark] class AppStatusStore(
     } else {
       base
     }
-    filtered.asScala.map(_.info).filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId).toSeq
+    filtered.asScala.map(_.info)
+      .filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId)
+      .map(replaceExec).toSeq
+  }
+
+  def replaceExec(origin: v1.ExecutorSummary): v1.ExecutorSummary = {
+    if (origin.id == SparkContext.DRIVER_IDENTIFIER) {
+      replaceDriverGcTime(origin, extractGcTime(origin), extractAppTime)
+    } else {
+      origin
+    }
+  }
+
+  def replaceDriverGcTime(source: v1.ExecutorSummary,
+    totalGcTime: Option[Long], totalAppTime: Long): v1.ExecutorSummary = {
+    new v1.ExecutorSummary(source.id, source.hostPort, source.isActive, source.rddBlocks,
+      source.memoryUsed, source.diskUsed, source.totalCores, source.maxTasks, source.activeTasks,
+      source.failedTasks, source.completedTasks, source.totalTasks, totalAppTime,
+      totalGcTime.getOrElse(source.totalGCTime), source.totalInputBytes, source.totalShuffleRead,
+      source.totalShuffleWrite, source.isBlacklisted, source.maxMemory, source.addTime,
+      source.removeTime, source.removeReason, source.executorLogs, source.memoryMetrics,
+      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes, source.resources,
+      source.resourceProfileId, source.isExcluded, source.excludedInStages)
+  }
+
+  def extractGcTime(source: v1.ExecutorSummary): Option[Long] = {
+    source.peakMemoryMetrics.map(_.getMetricValue("TotalGCTime"))
+  }
+
+  def extractAppTime: Long = {
+    val appInfo = applicationInfo()
+    val startTime = appInfo.attempts.head.startTime.getTime()
+    val endTime = appInfo.attempts.head.endTime.getTime()
+    if (endTime < 0 && SparkContext.getActive.isDefined) {
+      System.currentTimeMillis() - startTime
+    } else if (endTime > 0) {
+      endTime - startTime
+    }
   }
 
   def miscellaneousProcessList(activeOnly: Boolean): Seq[v1.ProcessSummary] = {
