@@ -296,11 +296,16 @@ class SparkSessionBuilderTests(unittest.TestCase):
             conf = SparkConf().set("key1", "value1")
             sc = SparkContext("local[4]", "SessionBuilderTests", conf=conf)
             session = (
-                SparkSession.builder.config("spark.sql.codegen.comments", "true").enableHiveSupport().getOrCreate()
+                SparkSession.builder.config("spark.sql.codegen.comments", "true")
+                .enableHiveSupport()
+                .getOrCreate()
             )
 
             self.assertEqual(session._jsparkSession.sharedState().conf().get("key1"), "value1")
-            self.assertEqual(session._jsparkSession.sharedState().conf().get("spark.sql.codegen.comments"), "true")
+            self.assertEqual(
+                session._jsparkSession.sharedState().conf().get("spark.sql.codegen.comments"),
+                "true",
+            )
             self.assertEqual(
                 session._jsparkSession.sharedState().conf().get("spark.sql.catalogImplementation"),
                 "hive",
