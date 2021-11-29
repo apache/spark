@@ -369,7 +369,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(fromCsvDF, Row(localDT))
   }
 
-  test("SPARK-36490: Handle incorrectly formatted timestamp_ntz values in from_csv") {
+  test("SPARK-37326: Handle incorrectly formatted timestamp_ntz values in from_csv") {
     val fromCsvDF = Seq("2021-08-12T15:16:23.000+11:00").toDF("csv")
       .select(
         from_csv(
