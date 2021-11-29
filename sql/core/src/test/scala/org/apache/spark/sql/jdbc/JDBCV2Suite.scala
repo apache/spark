@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{lit, sum, udf}
@@ -43,6 +44,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
+    .set("spark.sql.catalog.h2.pushDownTopN", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -138,23 +140,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedLimit(df4, false, 0)
     checkAnswer(df4, Seq(Row(1, 19000.00)))
 
-    val df5 = spark.read
-      .table("h2.test.employee")
-      .sort("SALARY")
-      .limit(1)
-    checkPushedLimit(df5, false, 0)
-    checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
-
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df6 = spark.read
+    val df5 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedLimit(df6, false, 0)
-    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
+    checkPushedLimit(df5, false, 0)
+    checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
   private def checkPushedLimit(df: DataFrame, pushed: Boolean, limit: Int): Unit = {
@@ -165,6 +160,85 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             assert(v1.pushedDownOperators.limit === Some(limit))
           } else {
             assert(v1.pushedDownOperators.limit.isEmpty)
+          }
+      }
+    }
+  }
+
+  test("simple scan with top N") {
+    val df1 = spark.read.table("h2.test.employee")
+      .where($"dept" === 1).orderBy($"salary").limit(1)
+    val expectedSorts1 =
+      Seq(SortValue(FieldReference("salary"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    checkPushedTopN(df1, true, 1, expectedSorts1)
+    checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .filter($"dept" > 1)
+      .orderBy($"salary".desc)
+      .limit(1)
+    val expectedSorts2 =
+      Seq(SortValue(FieldReference("salary"), SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
+    checkPushedTopN(df2, true, 1, expectedSorts2)
+    checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
+
+    val df3 =
+      sql("SELECT name FROM h2.test.employee WHERE dept > 1 ORDER BY salary NULLS LAST LIMIT 1")
+    val scan = df3.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq("NAME", "SALARY")))
+    val expectedSorts3 =
+      Seq(SortValue(FieldReference("salary"), SortDirection.ASCENDING, NullOrdering.NULLS_LAST))
+    checkPushedTopN(df3, true, 1, expectedSorts3)
+    checkAnswer(df3, Seq(Row("david")))
+
+    val df4 = spark.read
+      .table("h2.test.employee")
+      .groupBy("DEPT").sum("SALARY")
+      .orderBy("DEPT")
+      .limit(1)
+    checkPushedTopN(df4, false, 0)
+    checkAnswer(df4, Seq(Row(1, 19000.00)))
+
+    val df5 = spark.read
+      .table("h2.test.employee")
+      .sort("SALARY")
+      .limit(1)
+    val expectedSorts5 =
+      Seq(SortValue(FieldReference("SALARY"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    checkPushedTopN(df5, true, 1, expectedSorts5)
+    checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+
+    val name = udf { (x: String) => x.matches("cat|dav|amy") }
+    val sub = udf { (x: String) => x.substring(0, 3) }
+    val df6 = spark.read
+      .table("h2.test.employee")
+      .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
+      .filter(name($"shortName"))
+      .sort($"SALARY".desc)
+      .limit(1)
+    // LIMIT is pushed down only if all the filters are pushed down
+    checkPushedTopN(df6, false, 0)
+    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
+  }
+
+  private def checkPushedTopN(df: DataFrame, pushed: Boolean, limit: Int = 0,
+      sortValues: Seq[SortValue] = Seq.empty): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          if (pushed) {
+            assert(v1.pushedDownOperators.limit === Some(limit))
+            assert(v1.pushedDownOperators.sortValues === sortValues)
+          } else {
+            assert(v1.pushedDownOperators.limit.isEmpty)
+            assert(v1.pushedDownOperators.sortValues.isEmpty)
           }
       }
     }

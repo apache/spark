@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.SortValue
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -255,7 +256,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             sHolder.pushedLimit = Some(limitValue)
           }
           globalLimit
-        case _ => globalLimit
+        case _ =>
+          child transform {
+            case sort @ Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+              if filter.length == 0 =>
+              val orders = DataSourceStrategy.translateSortOrders(order)
+              val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
+              if (topNPushed) {
+                sHolder.pushedLimit = Some(limitValue)
+                sHolder.sortValues = orders
+              }
+              sort
+            case other => other
+          }
+          globalLimit
       }
   }
 
@@ -270,8 +284,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        val pushedDownOperators =
-          PushedDownOperators(aggregation, sHolder.pushedSample, sHolder.pushedLimit)
+        val pushedDownOperators = PushedDownOperators(aggregation,
+          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortValues)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -283,6 +297,8 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
+
+  var sortValues: Seq[SortValue] = Seq.empty[SortValue]
 
   var pushedSample: Option[TableSampleInfo] = None
 }

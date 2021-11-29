@@ -20,6 +20,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.SortValue
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -50,6 +51,8 @@ case class JDBCScanBuilder(
   private var tableSample: Option[TableSampleInfo] = None
 
   private var pushedLimit = 0
+
+  private var sortValues: Array[SortValue] = Array.empty[SortValue]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -126,6 +129,15 @@ case class JDBCScanBuilder(
     false
   }
 
+  override def pushTopN(orders: Array[SortValue], limit: Int): Boolean = {
+    if (jdbcOptions.pushDownTopN && JdbcDialects.get(jdbcOptions.url).supportsTopN) {
+      pushedLimit = limit
+      sortValues = orders
+      return true
+    }
+    false
+  }
+
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
     // TODO (SPARK-32593): JDBC support nested column and nested column pruning.
@@ -151,6 +163,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit)
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortValues)
   }
 }
