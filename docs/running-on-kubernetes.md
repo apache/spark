@@ -591,7 +591,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.container.image.pullPolicy</code></td>
   <td><code>IfNotPresent</code></td>
   <td>
-    Container image pull policy used when pulling images within Kubernetes.
+    Container image pull policy used when pulling images within Kubernetes. Valid values are Always, Never, and IfNotPresent.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -780,6 +780,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.authenticate.executor.serviceAccountName</code></td>
+  <td><code>(value of spark.kubernetes.authenticate.driver.serviceAccountName)</code></td>
+  <td>
+    Service account that is used when running the executor pod.
+    If this parameter is not setup, the fallback logic will use the driver's service account.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.authenticate.caCertFile</code></td>
   <td>(none)</td>
   <td>
@@ -923,6 +932,14 @@ See the [configuration page](configuration.html) for information on Spark config
     Interval between reports of the current Spark job status in cluster mode.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.apiPollingInterval</code></td>
+  <td><code>30s</code></td>
+  <td>
+    Interval between polls against the Kubernetes API server to inspect the state of executors.
+  </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.request.cores</code></td>
@@ -1279,6 +1296,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.dynamicAllocation.deleteGracePeriod</code></td>
+  <td>5s</td>
+  <td>
+    How long to wait for executors to shut down gracefully before a forceful kill.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.file.upload.path</code></td>
   <td>(none)</td>
   <td>
@@ -1322,6 +1347,144 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.configMap.maxSize</code></td>
+  <td>1572864</td>
+  <td>
+    Max size limit for a config map. This is configurable as per https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.executor.timeout</code></td>
+  <td>600s</td>
+  <td>
+    Time to wait before a newly created executor POD request, which does not reached
+    the POD pending state yet, considered timedout and will be deleted.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.missingPodDetectDelta</code></td>
+  <td>30s</td>
+  <td>
+    When a registered executor's POD is missing from the Kubernetes API server's polled
+    list of PODs then this delta time is taken as the accepted time difference between the
+    registration time and the time of the polling. After this time the POD is considered
+    missing from the cluster and the executor will be removed.
+  </td>
+  <td>3.1.1</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.driver.readinessTimeout</code></td>
+  <td>1s</td>
+  <td>
+    Time to wait for driver pod to get ready before creating executor pods. This wait
+    only happens on application start. If timeout happens, executor pods will still be
+    created.
+  </td>
+  <td>3.1.3</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.decommission.script</code></td>
+  <td>/opt/decom.sh</td>
+  <td>
+    The location of the script to use for graceful decommissioning.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.deleteOnTermination</code></td>
+  <td>true</td>
+  <td>
+    If true, driver service will be deleted on Spark application termination. If false, it will be cleaned up when the driver pod is deletion.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
+  <td>false</td>
+  <td>
+    If true, driver pod becomes the owner of on-demand persistent volume claims instead of the executor pods
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.reusePersistentVolumeClaim</code></td>
+  <td>false</td>
+  <td>
+    If true, driver pod tries to reuse driver-owned on-demand persistent volume claims
+    of the deleted executor pods if exists. This can be useful to reduce executor pod
+    creation delay by skipping persistent volume creations. Note that a pod in
+    `Terminating` pod status is not a deleted pod by definition and its resources
+    including persistent volume claims are not reusable yet. Spark will create new
+    persistent volume claims when there exists no reusable one. In other words, the total
+    number of persistent volume claims can be larger than the number of running executors
+    sometimes. This config requires <code>spark.kubernetes.driver.ownPersistentVolumeClaim=true.</code>
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.disableConfigMap</code></td>
+  <td>false</td>
+  <td>
+    If true, disable ConfigMap creation for executors.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.pod.featureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of an extra driver pod feature step implementing
+    KubernetesFeatureConfigStep. This is a developer API. Comma separated.
+    Runs after all of Spark internal feature steps."
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class name of an extra executor pod feature step implementing
+    KubernetesFeatureConfigStep. This is a developer API. Comma separated.
+    Runs after all of Spark internal feature steps.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maxPendingPods</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    Maximum number of pending PODs allowed during executor allocation for this
+    application. Those newly requested executors which are unknown by Kubernetes yet are
+    also counted into this limit as they will change into pending PODs by time.
+    This limit is independent from the resource profiles as it limits the sum of all
+    allocation for all the used resource profiles.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
+  <td>direct</td>
+  <td>
+    Allocator to use for pods. Possible values are direct (the default) and statefulset,
+    or a full class name of a class implementing AbstractPodsAllocator.
+    Future version may add Job or replicaset. This is a developer API and may change
+    or be removed at anytime.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.enablePollingWithResourceVersion</code></td>
+  <td>false</td>
+  <td>
+    If true, `resourceVersion` is set with `0` during invoking pod listing APIs
+    in order to allow API Server-side caching. This should be used carefully.
+  </td>
+  <td>3.3.0</td>
+</tr>
+
 </table>
 
 #### Pod template properties
