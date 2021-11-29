@@ -103,9 +103,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   def resourceProfileFromId(rpId: Int): ResourceProfile = {
     readLock.lock()
     try {
-      resourceProfileIdToResourceProfile.get(rpId).getOrElse(
-        throw new SparkException(s"ResourceProfileId $rpId not found!")
-      )
+      resourceProfileIdToResourceProfile.getOrElse(rpId,
+        throw new SparkException(s"ResourceProfileId $rpId not found!"))
     } finally {
       readLock.unlock()
     }
