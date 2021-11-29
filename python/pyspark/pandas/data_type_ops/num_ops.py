@@ -24,6 +24,7 @@ from pandas.api.types import is_bool_dtype, is_integer_dtype, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
+from pyspark.pandas.config import get_option
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     is_valid_operand_for_numeric_arithmetic,
@@ -388,7 +389,7 @@ class FractionalOps(NumericOps):
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
+            if get_option("compute.eager_check") and index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
@@ -449,7 +450,7 @@ class DecimalOps(FractionalOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
         if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
+            if get_option("compute.eager_check") and index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
@@ -490,15 +491,17 @@ class IntegralExtensionOps(IntegralOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError(
-                    "Cannot convert %s with missing values to integer" % self.pretty_name
-                )
-        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+        if get_option("compute.eager_check"):
+            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to integer" % self.pretty_name
+                    )
+            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to bool" % self.pretty_name
+                    )
         return _non_fractional_astype(index_ops, dtype, spark_type)
 
 
@@ -517,15 +520,17 @@ class FractionalExtensionOps(FractionalOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError(
-                    "Cannot convert %s with missing values to integer" % self.pretty_name
-                )
-        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+        if get_option("compute.eager_check"):
+            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to integer" % self.pretty_name
+                    )
+            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to bool" % self.pretty_name
+                    )
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
