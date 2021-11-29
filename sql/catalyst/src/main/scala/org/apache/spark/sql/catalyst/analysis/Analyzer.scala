@@ -130,7 +130,8 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
-    outerPlan: Option[LogicalPlan] = None)
+    outerPlan: Option[LogicalPlan] = None,
+    allowAnsiTypeCoercion: Boolean = true)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -167,6 +168,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withDefaultTypeCoercionAnalysisContext[A](f: => A): A = {
+    val originContext = value.get()
+    set(originContext.copy(allowAnsiTypeCoercion = false))
+    try f finally { set(originContext) }
+  }
+
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
     val context = originContext.copy(outerPlan = Some(outerPlan))
@@ -198,7 +205,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
-    if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
       try {
@@ -206,9 +212,28 @@ class Analyzer(override val catalogManager: CatalogManager)
         analyzed
       } catch {
         case e: AnalysisException =>
-          val ae = e.copy(plan = Option(analyzed))
+          val ae = e.copy(plan = Option(analyzed),
+            message = e.message + extraHintForAnsiTypeCoercion(plan))
           ae.setStackTrace(e.getStackTrace)
           throw ae
+      }
+    }
+  }
+
+  private def extraHintForAnsiTypeCoercion(plan: LogicalPlan): String = {
+    if (!conf.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = AnalysisContext.withDefaultTypeCoercionAnalysisContext {
+        executeSameContext(plan)
+      }
+      try {
+        checkAnalysis(nonAnsiPlan)
+        "\nTo fix the error, you might need to add explicit type casts.\n" +
+          "To bypass the error with lenient type coercion rules, " +
+          s"set ${SQLConf.ANSI_ENABLED.key} as false.\n"
+      } catch {
+        case _: AnalysisException => ""
       }
     }
   }
@@ -245,11 +270,12 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  private def typeCoercionRules(): List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
-    AnsiTypeCoercion.typeCoercionRules
-  } else {
-    TypeCoercion.typeCoercionRules
-  }
+  protected def typeCoercionRules(): List[Rule[LogicalPlan]] =
+    if (conf.ansiEnabled && AnalysisContext.get.allowAnsiTypeCoercion) {
+      AnsiTypeCoercion.typeCoercionRules
+    } else {
+      TypeCoercion.typeCoercionRules
+    }
 
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
