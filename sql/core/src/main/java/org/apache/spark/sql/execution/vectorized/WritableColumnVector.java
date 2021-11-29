@@ -207,6 +207,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * src must contain bit-packed 8 booleans in the byte.
    */
   public void putBooleans(int rowId, int count, byte src, int srcIndex) {
+    assert ((srcIndex + count) < 8);
     byte8[0] = (byte)(src & 1);
     byte8[1] = (byte)(src >>> 1 & 1);
     byte8[2] = (byte)(src >>> 2 & 1);
