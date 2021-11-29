@@ -2956,6 +2956,8 @@ class DataSourceV2SQLSuite
         === Array(Row(7), Row(8)))
       assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
         === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
+        === Array(Row(7), Row(8)))
 
       val e1 = intercept[AnalysisException](
         sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
@@ -2968,9 +2970,19 @@ class DataSourceV2SQLSuite
       assert(e2.message.contains("is not a valid timestamp expression for time travel"))
 
       val e3 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF current_user()").collect()
+      )
+      assert(e3.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e4 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF CAST(rand() AS STRING)").collect()
+      )
+      assert(e4.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e5 = intercept[AnalysisException](
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
       )
-      assert(e3.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
     }
   }
 
