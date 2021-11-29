@@ -188,6 +188,7 @@ object JDBCRDD extends Logging {
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
+  // scalastyle:off argcount
   def scanTable(
       sc: SparkContext,
       schema: StructType,
@@ -222,6 +223,7 @@ object JDBCRDD extends Logging {
       limit,
       sortValues)
   }
+  // scalastyle:on argcount
 }
 
 /**
