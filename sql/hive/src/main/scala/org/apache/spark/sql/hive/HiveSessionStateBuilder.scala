@@ -139,8 +139,8 @@ class HiveSessionResourceLoader(
   override def addJar(path: String): Unit = {
     val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
-      client.addJar(p)
       super.addJar(p)
+      client.addJar(p)
     }
   }
 }
