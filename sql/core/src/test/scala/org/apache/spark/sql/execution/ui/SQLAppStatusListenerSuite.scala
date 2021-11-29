@@ -948,7 +948,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
       .set(ASYNC_TRACKING_ENABLED, false)
     withSpark(new SparkContext(conf)) { sc =>
       quietly {
-        val spark = new SparkSession(sc, Map.empty)
+        val spark = new SparkSession(sc)
         import spark.implicits._
         // Run 100 successful executions and 100 failed executions.
         // Each execution only has one job and one stage.
