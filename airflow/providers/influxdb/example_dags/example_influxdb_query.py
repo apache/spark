@@ -15,28 +15,25 @@
 # specific language governing permissions and limitations
 # under the License.
 
----
-package-name: apache-airflow-providers-influxdb
-name: Influxdb
-description: |
-    `InfluxDB <https://www.influxdata.com/>`__
-versions:
-  - 1.0.0
-integrations:
-  - integration-name: Influxdb
-    external-doc-url: https://www.influxdata.com/
-    tags: [software]
+from datetime import datetime
 
-hooks:
-  - integration-name: Influxdb
-    python-modules:
-      - airflow.providers.influxdb.hooks.influxdb
+from airflow.models.dag import DAG
+from airflow.providers.influxdb.operators.influxdb import InfluxDBOperator
 
-operators:
-  - integration-name: Influxdb
-    python-modules:
-      - airflow.providers.influxdb.operators.influxdb
+dag = DAG(
+    'example_influxdb_operator',
+    start_date=datetime(2021, 1, 1),
+    tags=['example'],
+    catchup=False,
+)
 
-connection-types:
-  - hook-class-name: airflow.providers.influxdb.hooks.influxdb.InfluxDBHook
-    connection-type: influxdb
+# [START howto_operator_influxdb]
+
+query_influxdb_task = InfluxDBOperator(
+    influxdb_conn_id='influxdb_conn_id',
+    task_id='query_influxdb',
+    sql='from(bucket:"test-influx") |> range(start: -10m, stop: {{ds}})',
+    dag=dag,
+)
+
+# [END howto_operator_influxdb]

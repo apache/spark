@@ -15,28 +15,18 @@
 # specific language governing permissions and limitations
 # under the License.
 
----
-package-name: apache-airflow-providers-influxdb
-name: Influxdb
-description: |
-    `InfluxDB <https://www.influxdata.com/>`__
-versions:
-  - 1.0.0
-integrations:
-  - integration-name: Influxdb
-    external-doc-url: https://www.influxdata.com/
-    tags: [software]
+import unittest
+from unittest import mock
 
-hooks:
-  - integration-name: Influxdb
-    python-modules:
-      - airflow.providers.influxdb.hooks.influxdb
+from airflow.providers.influxdb.operators.influxdb import InfluxDBOperator
 
-operators:
-  - integration-name: Influxdb
-    python-modules:
-      - airflow.providers.influxdb.operators.influxdb
 
-connection-types:
-  - hook-class-name: airflow.providers.influxdb.hooks.influxdb.InfluxDBHook
-    connection-type: influxdb
+class TestInfluxDBOperator(unittest.TestCase):
+    @mock.patch('airflow.providers.influxdb.operators.influxdb.InfluxDBHook')
+    def test_influxdb_operator_test(self, mock_hook):
+
+        sql = """from(bucket:"test") |> range(start: -10m)"""
+        op = InfluxDBOperator(task_id='basic_influxdb', sql=sql, influxdb_conn_id='influxdb_default')
+        op.execute(mock.MagicMock())
+        mock_hook.assert_called_once_with(conn_id='influxdb_default')
+        mock_hook.return_value.query.assert_called_once_with(sql)
