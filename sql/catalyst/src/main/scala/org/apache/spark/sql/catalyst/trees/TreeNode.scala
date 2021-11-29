@@ -821,8 +821,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case map: Map[_, _] =>
       redactMapString(map, maxFields)
     case t: TableSpec =>
-      redactMapString(t.options, maxFields)
-      redactMapString(t.properties, maxFields)
+      t.copy(properties = Utils.redact(t.properties).toMap,
+        options = Utils.redact(t.options).toMap) :: Nil
     case table: CatalogTable =>
       table.storage.serde match {
         case Some(serde) => table.identifier :: serde :: Nil
