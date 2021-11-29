@@ -2115,6 +2115,23 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.asof("2014-01-02"), pser.asof("2014-01-02"))
         self.assert_eq(repr(psser.asof("1999-01-02")), repr(pser.asof("1999-01-02")))
 
+        # SPARK-37482: Skip check monotonic increasing for Series.asof with 'compute.eager_check'
+        pser = pd.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
+        psser = ps.from_pandas(pser)
+
+        with ps.option_context("compute.eager_check", False):
+            self.assert_eq(psser.asof(20), 1.0)
+        with ps.option_context("compute.eager_check", True):
+            self.assertRaises(ValueError, lambda: psser.asof(20))
+
+        pser = pd.Series([1, 2, np.nan, 4], index=[40, 30, 20, 10])
+        psser = ps.from_pandas(pser)
+
+        with ps.option_context("compute.eager_check", False):
+            self.assert_eq(psser.asof(20), 4.0)
+        with ps.option_context("compute.eager_check", True):
+            self.assertRaises(ValueError, lambda: psser.asof(20))
+
     def test_squeeze(self):
         # Single value
         pser = pd.Series([90])
