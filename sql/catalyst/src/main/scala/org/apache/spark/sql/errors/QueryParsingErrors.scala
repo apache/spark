@@ -248,10 +248,6 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
-    new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
-  }
-
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved table property, $msg.", ctx)
