@@ -78,6 +78,10 @@ private[spark] object PythonUtils {
     jm.asScala.toMap
   }
 
+  def toScalaMapString(jm: java.util.Map[String, String]): Map[String, String] = {
+    jm.asScala.toMap
+  }
+
   def isEncryptionEnabled(sc: JavaSparkContext): Boolean = {
     sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
   }

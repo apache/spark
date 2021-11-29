@@ -175,7 +175,7 @@ private[hive] class TestHiveSparkSession(
     @transient private val existingSharedState: Option[TestHiveSharedState],
     @transient private val parentSessionState: Option[SessionState],
     private val loadTestTables: Boolean)
-  extends SparkSession(sc) with Logging { self =>
+  extends SparkSession(sc, Map.empty) with Logging { self =>
 
   def this(sc: SparkContext, loadTestTables: Boolean) = {
     this(

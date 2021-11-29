@@ -283,7 +283,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     try {
       sparkContext.conf.set("spark.to.be.or.not.to.be", "my love")
       sparkContext.conf.set("spark.sql.with.or.without.you", "my love")
-      val spark = new SparkSession(sparkContext)
+      val spark = new SparkSession(sparkContext, Map.empty)
       assert(spark.conf.get("spark.to.be.or.not.to.be") == "my love")
       assert(spark.conf.get("spark.sql.with.or.without.you") == "my love")
     } finally {
@@ -303,7 +303,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val previousValue = sparkContext.conf.get(GLOBAL_TEMP_DATABASE)
     try {
       sparkContext.conf.set(GLOBAL_TEMP_DATABASE, "a")
-      val newSession = new SparkSession(sparkContext)
+      val newSession = new SparkSession(sparkContext, Map.empty)
       assert(newSession.conf.get(GLOBAL_TEMP_DATABASE) == "a")
       checkAnswer(
         newSession.sql(s"SET ${GLOBAL_TEMP_DATABASE.key}"),
