@@ -25,7 +25,6 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
@@ -170,23 +169,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE LAZY TABLE tableName") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      sql("CACHE LAZY TABLE src")
-      assertCached(table("src"))
+    sql("CACHE LAZY TABLE src")
+    assertCached(table("src"))
 
-      val rddId = rddIdOf("src")
-      assert(
-        !isMaterialized(rddId),
-        "Lazily cached in-memory table shouldn't be materialized eagerly")
+    val rddId = rddIdOf("src")
+    assert(
+      !isMaterialized(rddId),
+      "Lazily cached in-memory table shouldn't be materialized eagerly")
 
-      sql("SELECT COUNT(*) FROM src").collect()
-      assert(
-        isMaterialized(rddId),
-        "Lazily cached in-memory table should have been materialized")
+    sql("SELECT COUNT(*) FROM src").collect()
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
 
-      uncacheTable("src")
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
-    }
+    uncacheTable("src")
+    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
   }
 
   test("CACHE TABLE with Hive UDF") {
