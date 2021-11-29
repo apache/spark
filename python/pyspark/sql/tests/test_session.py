@@ -61,7 +61,7 @@ class SparkSessionTests2(PySparkTestCase):
 
     def test_jvm_default_session_already_set(self):
         # Here, we assume there is the default session already set in JVM.
-        jsession = self.sc._jvm.SparkSession(self.sc._jsc.sc(), self.sc._jvm.PythonUtils.toScalaMap({}))
+        jsession = self.sc._jvm.SparkSession(self.sc._jsc.sc())
         self.sc._jvm.SparkSession.setDefaultSession(jsession)
 
         spark = SparkSession.builder.getOrCreate()

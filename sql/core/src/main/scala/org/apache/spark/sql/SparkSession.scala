@@ -91,8 +91,6 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  private[sql] def this(sc: SparkContext) = this(sc, Map.empty)
-
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
    * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
@@ -105,6 +103,8 @@ class SparkSession private(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
         new SparkSessionExtensions), initialSessionOptions)
   }
+
+  private[sql] def this(sc: SparkContext) = this(sc, Map.empty)
 
   private[sql] val sessionUUID: String = UUID.randomUUID.toString
 
