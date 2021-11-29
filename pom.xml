@@ -261,7 +261,7 @@
 
       We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
       and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
-      declare the dependency when we're using hadoop-3.2 profile, in
+      declare the dependency when we're using hadoop-3 profile, in
       resource-managers/yarn/pom.xml.
 
       Please check SPARK-36835 for more details.
