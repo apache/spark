@@ -24,6 +24,8 @@
 # $SPARK_HOME/R/pkg/html
 # The vignettes can be found in
 # $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
+# pkgdown website can be found in
+# $SPARK_HOME/R/pkg/docs
 
 set -o pipefail
 set -e
@@ -49,7 +51,8 @@ pushd "$FWDIR" > /dev/null
 mkdir -p pkg/html
 pushd pkg/html
 
-"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); knitr::knit_rd("SparkR", links = tools::findHTMLlinks(file.path(libDir, "SparkR"))); pkgdown::build_site("..")'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); knitr::knit_rd("SparkR", links = tools::findHTMLlinks(file.path(libDir, "SparkR")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); pkgdown::build_site("..")'
 
 popd
 
