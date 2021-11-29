@@ -2198,10 +2198,10 @@ object CountAggregateOptimization extends Rule[LogicalPlan] {
             val extractor = if (atomicFields.size > 0) {
               // Pick an arbitrary atomic field, if any
               ExtractValue(g.generator.children.head,
-                Literal(atomicFields(0).name), SQLConf.get.resolver)
+                Literal(atomicFields(0).name), conf.resolver)
             } else {
               ExtractValue(g.generator.children.head,
-                Literal(fields(0).name), SQLConf.get.resolver)
+                Literal(fields(0).name), conf.resolver)
             }
             val rewrittenG = g.transformExpressions {
               case e: ExplodeBase =>
