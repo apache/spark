@@ -811,10 +811,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
       Row(ts)
     }
-    val answer = (1 to 10).map { i =>
-      val ts = new java.sql.Timestamp(i)
-      Row(ts)
-    }
+
     val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
     val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
 
