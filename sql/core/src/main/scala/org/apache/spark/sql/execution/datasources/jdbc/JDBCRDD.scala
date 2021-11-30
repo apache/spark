@@ -25,7 +25,8 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.SortValue
+import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -171,7 +172,7 @@ object JDBCRDD extends Logging {
       groupByColumns: Option[Array[String]] = None,
       sample: Option[TableSampleInfo] = None,
       limit: Int = 0,
-      sortValues: Array[SortValue] = Array.empty[SortValue]): RDD[InternalRow] = {
+      sortValues: Array[SortOrder] = Array.empty[SortOrder]): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -214,7 +215,7 @@ private[jdbc] class JDBCRDD(
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
     limit: Int,
-    sortValues: Array[SortValue])
+    sortValues: Array[SortOrder])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -264,7 +265,11 @@ private[jdbc] class JDBCRDD(
 
   private def getOrderByClause: String = {
     if (sortValues.nonEmpty) {
-      s" ORDER BY ${sortValues.map(_.describe()).mkString(", ")}"
+      val values = sortValues.map {
+        case SortOrder(PushableColumnWithoutNestedColumn(name), direction, nullOrdering, _) =>
+          s"$name ${direction.sql} ${nullOrdering.sql}"
+      }
+      s" ORDER BY ${values.mkString(", ")}"
     } else {
       ""
     }

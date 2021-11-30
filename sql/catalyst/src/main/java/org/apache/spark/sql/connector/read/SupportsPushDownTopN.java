@@ -18,20 +18,20 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.SortValue;
+import org.apache.spark.sql.catalyst.expressions.SortOrder;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
- * push down LIMIT. Please note that the combination of LIMIT with other operations
- * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
+ * push down top N. Please note that the combination of LIMIT with other operations
+ * such as AGGREGATE, GROUP BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
  * @since 3.3.0
  */
 @Evolving
-public interface SupportsPushDownLimit extends ScanBuilder {
+public interface SupportsPushDownTopN extends ScanBuilder {
 
-  /**
-   * Pushes down LIMIT to the data source.
-   */
-  boolean pushLimit(int limit);
+    /**
+     * Pushes down top N to the data source.
+     */
+    boolean pushTopN(SortOrder[] orders, int limit);
 }

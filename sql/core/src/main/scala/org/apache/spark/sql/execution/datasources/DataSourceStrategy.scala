@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -723,23 +723,6 @@ object DataSourceStrategy
       }
     } else {
       None
-    }
-  }
-
-  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortValue] = {
-    sortOrders.map {
-      case SortOrder(PushableColumnWithoutNestedColumn(name), directionV1, nullOrderingV1, _) =>
-        val (directionV2, nullOrderingV2) = (directionV1, nullOrderingV1) match {
-          case (Ascending, NullsFirst) =>
-            (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
-          case (Ascending, NullsLast) =>
-            (SortDirection.ASCENDING, NullOrdering.NULLS_LAST)
-          case (Descending, NullsFirst) =>
-            (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
-          case (Descending, NullsLast) =>
-            (SortDirection.DESCENDING, NullOrdering.NULLS_LAST)
-        }
-        SortValue(FieldReference(name), directionV2, nullOrderingV2)
     }
   }
 
