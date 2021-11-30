@@ -37,17 +37,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
       ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
 
-    case c @ CreateTableStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      CreateV2Table(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        c.tableSchema,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c),
-        ignoreIfExists = c.ifNotExists)
-
     case c @ CreateTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
       CreateTableAsSelect(

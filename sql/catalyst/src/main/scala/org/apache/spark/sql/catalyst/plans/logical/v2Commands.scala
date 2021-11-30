@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
@@ -193,13 +194,24 @@ trait V2CreateTablePlan extends LogicalPlan {
 /**
  * Create a new table with a v2 catalog.
  */
-case class CreateV2Table(
-    catalog: TableCatalog,
-    tableName: Identifier,
+case class CreateTable(
+    name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    properties: Map[String, String],
-    ignoreIfExists: Boolean) extends LeafCommand with V2CreateTablePlan {
+    tableSpec: TableSpec,
+    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+  override def child: LogicalPlan = name
+
+  override def tableName: Identifier = {
+    assert(child.resolved)
+    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
+    copy(name = newChild)
+
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
@@ -1090,3 +1102,13 @@ case class DropIndex(
   override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
     copy(table = newChild)
 }
+
+case class TableSpec(
+    bucketSpec: Option[BucketSpec],
+    properties: Map[String, String],
+    provider: Option[String],
+    options: Map[String, String],
+    location: Option[String],
+    comment: Option[String],
+    serde: Option[SerdeInfo],
+    external: Boolean)

@@ -77,6 +77,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    DecimalType,
 )
 from pyspark.sql.window import Window
 
@@ -8257,6 +8258,194 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, requires_same_anchor=False)
+
+    # TODO: ddof should be implemented.
+    def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
+        """
+        Compute pairwise covariance of columns, excluding NA/null values.
+
+        Compute the pairwise covariance among the series of a DataFrame.
+        The returned data frame is the `covariance matrix
+        <https://en.wikipedia.org/wiki/Covariance_matrix>`__ of the columns
+        of the DataFrame.
+
+        Both NA and null values are automatically excluded from the
+        calculation. (See the note below about bias from missing values.)
+        A threshold can be set for the minimum number of
+        observations for each value created. Comparisons with observations
+        below this threshold will be returned as ``NaN``.
+
+        This method is generally used for the analysis of time series data to
+        understand the relationship between different measures
+        across time.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        min_periods : int, optional
+            Minimum number of observations required per pair of columns
+            to have a valid result.
+
+        Returns
+        -------
+        DataFrame
+            The covariance matrix of the series of the DataFrame.
+
+        See Also
+        --------
+        Series.cov : Compute covariance with another Series.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([(1, 2), (0, 3), (2, 0), (1, 1)],
+        ...                   columns=['dogs', 'cats'])
+        >>> df.cov()
+                  dogs      cats
+        dogs  0.666667 -1.000000
+        cats -1.000000  1.666667
+
+        >>> np.random.seed(42)
+        >>> df = ps.DataFrame(np.random.randn(1000, 5),
+        ...                   columns=['a', 'b', 'c', 'd', 'e'])
+        >>> df.cov()
+                  a         b         c         d         e
+        a  0.998438 -0.020161  0.059277 -0.008943  0.014144
+        b -0.020161  1.059352 -0.008543 -0.024738  0.009826
+        c  0.059277 -0.008543  1.010670 -0.001486 -0.000271
+        d -0.008943 -0.024738 -0.001486  0.921297 -0.013692
+        e  0.014144  0.009826 -0.000271 -0.013692  0.977795
+
+        **Minimum number of periods**
+
+        This method also supports an optional ``min_periods`` keyword
+        that specifies the required minimum number of non-NA observations for
+        each column pair in order to have a valid result:
+
+        >>> np.random.seed(42)
+        >>> df = pd.DataFrame(np.random.randn(20, 3),
+        ...                   columns=['a', 'b', 'c'])
+        >>> df.loc[df.index[:5], 'a'] = np.nan
+        >>> df.loc[df.index[5:10], 'b'] = np.nan
+        >>> sdf = ps.from_pandas(df)
+        >>> sdf.cov(min_periods=12)
+                  a         b         c
+        a  0.316741       NaN -0.150812
+        b       NaN  1.248003  0.191417
+        c -0.150812  0.191417  0.895202
+        """
+        min_periods = 1 if min_periods is None else min_periods
+
+        # Only compute covariance for Boolean and Numeric except Decimal
+        psdf = self[
+            [
+                col
+                for col in self.columns
+                if isinstance(self[col].spark.data_type, BooleanType)
+                or (
+                    isinstance(self[col].spark.data_type, NumericType)
+                    and not isinstance(self[col].spark.data_type, DecimalType)
+                )
+            ]
+        ]
+
+        num_cols = len(psdf.columns)
+        cov = np.zeros([num_cols, num_cols])
+
+        if num_cols == 0:
+            return DataFrame()
+
+        if len(psdf) < min_periods:
+            cov.fill(np.nan)
+            return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
+
+        data_cols = psdf._internal.data_spark_column_names
+        cov_scols = []
+        count_not_null_scols = []
+
+        # Count number of null row between two columns
+        # Example:
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a           b             c
+        # a  count(a, a) count(a, b) count(a, c)
+        # b              count(b, b) count(b, c)
+        # c                          count(c, c)
+        #
+        # count_not_null_scols =
+        # [F.count(a, a), F.count(a, b), F.count(a, c), F.count(b, b), F.count(b, c), F.count(c, c)]
+        for r in range(0, num_cols):
+            for c in range(r, num_cols):
+                count_not_null_scols.append(
+                    F.count(
+                        F.when(F.col(data_cols[r]).isNotNull() & F.col(data_cols[c]).isNotNull(), 1)
+                    )
+                )
+
+        count_not_null = (
+            psdf._internal.spark_frame.replace(float("nan"), None)
+            .select(*count_not_null_scols)
+            .head(1)[0]
+        )
+
+        # Calculate covariance between two columns
+        # Example:
+        # with min_periods = 3
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
+        #
+        # cov_scols = [F.cov(a, a), None, F.cov(a, c), F.cov(b, b), F.cov(b, c), F.cov(c, c)]
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                cov_scols.append(
+                    F.covar_samp(
+                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
+                    )
+                    if count_not_null[r * num_cols + c - step] >= min_periods
+                    else F.lit(None)
+                )
+
+        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
+
+        # Convert from row to 2D array
+        # Example:
+        # pair_cov = [cov(a, a), None, cov(a, c), cov(b, b), cov(b, c), cov(c, c)]
+        #
+        # cov =
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                cov[r][c] = pair_cov[r * num_cols + c - step]
+
+        # Copy values
+        # Example:
+        # cov =
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b  None      cov(b, b) cov(b, c)
+        # c  cov(a, c) cov(b, c) cov(c, c)
+        cov = cov + cov.T - np.diag(np.diag(cov))
+        return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
 
     def sample(
         self,
