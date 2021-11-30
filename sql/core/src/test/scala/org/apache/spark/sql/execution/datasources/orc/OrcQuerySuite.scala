@@ -804,14 +804,17 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36346: can't read TimestampNTZ as TimestampLTZ") {
+  test("SPARK-36346: read TimestampNTZ as TimestampLTZ") {
     val data = (1 to 10).map { i =>
       // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
       // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
       val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
       Row(ts)
     }
-
+    val answer = (1 to 10).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      Row(ts)
+    }
     val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
     val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
 
@@ -819,10 +822,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
-        val msg = intercept[SparkException] {
-          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
-        }.getMessage
-        assert(msg.contains("Unable to convert timestamp of Orc to data type 'timestamp_ltz'"))
+        checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
     }
   }

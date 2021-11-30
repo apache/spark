@@ -1893,9 +1893,5 @@ object QueryExecutionErrors {
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
-
-  def cannotConvertOrcTimestampToTimestampLTZError(): Throwable = {
-    new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ltz'")
-  }
 }
 
