@@ -3487,7 +3487,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Replace a table, returning a [[ReplaceTableStatement]] or [[ReplaceTableAsSelect]]
+   * Replace a table, returning a [[ReplaceTable]] or [[ReplaceTableAsSelect]]
    * logical plan.
    *
    * Expected format:
@@ -3563,9 +3563,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
+        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+          serdeInfo, external)
         val schema = StructType(columns ++ partCols)
-        ReplaceTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
-          options, location, comment, serdeInfo, orCreate = orCreate)
+        ReplaceTable(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          schema, partitioning, tableSpec, orCreate = orCreate)
     }
   }
 

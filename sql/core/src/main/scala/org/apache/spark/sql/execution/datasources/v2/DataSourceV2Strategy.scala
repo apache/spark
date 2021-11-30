@@ -184,20 +184,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
-    case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
-      val newProps = props.get(TableCatalog.PROP_LOCATION).map { loc =>
-        props + (TableCatalog.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
-      }.getOrElse(props)
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(newProps)
+    case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
+      val newProps = tableSpec.properties.get(TableCatalog.PROP_LOCATION).map { loc =>
+        tableSpec.properties + (TableCatalog.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
+      }.getOrElse(tableSpec.properties)
+
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(
-            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate,
-            invalidateCache) :: Nil
+            staging, ident.asIdentifier, schema, parts, tableSpec.copy(properties = newProps),
+            orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(
-            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate,
-            invalidateCache) :: Nil
+            catalog.asTableCatalog, ident.asIdentifier, schema, parts,
+            tableSpec.copy(properties = newProps), orCreate = orCreate, invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
