@@ -1243,16 +1243,22 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true"
     )
 
-    val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
-    taskScheduler.submitTasks(taskSet)
-    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
-
     val offers = IndexedSeq(
       // each offer has more than enough free cores for the entire task set, so when combined
       // with the locality preferences, we schedule all tasks on one executor
       new WorkerOffer("executor0", "host0", 4),
       new WorkerOffer("executor1", "host1", 4)
     )
+    // SPARK-37488 modified the test. We need to get the WorkerOffer before submitting the task
+    // to ensure that the taskScheduler already has the relevant executor alive, otherwise
+    // we will not pending the task to forHost if the HostTaskLocation level task does not find
+    // a live executor for the host, which defeats the purpose of this test
+    taskScheduler.resourceOffers(offers).flatten
+
+    val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     assert(firstTaskAttempts.size == 2)
     firstTaskAttempts.foreach { taskAttempt => assert("executor0" === taskAttempt.executorId) }
