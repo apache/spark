@@ -149,7 +149,7 @@ case class RowDataSourceScanExec(
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
-      Map("PushedSortValues" -> seqToString(pushedDownOperators.sortValues)) ++
+      Map("PushedSortOrders" -> seqToString(pushedDownOperators.sortValues)) ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
