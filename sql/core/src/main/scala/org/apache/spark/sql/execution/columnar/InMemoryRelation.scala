@@ -207,7 +207,7 @@ case class CachedRDDBuilder(
     tableName: Option[String]) {
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
-  @transient private var _cachedColumnBuffersAreLoaded: Boolean = false
+  @transient @volatile private var _cachedColumnBuffersAreLoaded: Boolean = false
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
