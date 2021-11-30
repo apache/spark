@@ -29,7 +29,8 @@ import org.apache.spark.util.Utils
 /**
  * :: DeveloperApi ::
  *
- * A class used for K8s executor pod monitoring in ExternalClusterManagers.
+ * A class used for watching K8s executor pods by ExternalClusterManagers.
+ *
  * @since 2.4.0
  */
 @Stable

@@ -32,7 +32,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * :: DeveloperApi ::
  *
- * A class used for monitoring executor pods in ExternalClusterManagers.
+ * A class used for polling K8s executor pods by ExternalClusterManagers.
  * @since 2.4.0
  */
 @Stable
