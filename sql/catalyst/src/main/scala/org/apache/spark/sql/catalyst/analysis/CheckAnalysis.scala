@@ -188,7 +188,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
                   s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
-                    extraHintForAnsiTypeCoercion(operator))
+                    extraHintForAnsiTypeCoercionExpression(operator))
             }
 
           case c: Cast if !c.resolved =>
@@ -428,15 +428,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (dataTypesAreCompatibleFn(dt1, dt2)) {
-                  operator.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
-                  failAnalysis(
-                    s"""
-                       |${operator.nodeName} can only be performed on tables with the compatible
-                       |column types. The ${ordinalNumber(ci)} column of the
-                       |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
-                       |compatible with ${dt2.catalogString} at same column of first table
-                    """.stripMargin.replace("\n", " ").trim() +
-                      extraHintForAnsiTypeCoercion(operator))
+                  val errorMessage = s"""
+                    |${operator.nodeName} can only be performed on tables with the compatible
+                    |column types. The ${ordinalNumber(ci)} column of the
+                    |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
+                    |compatible with ${dt2.catalogString} at same column of first table
+                  """.stripMargin.replace("\n", " ").trim()
+                  failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }
               }
             }
@@ -605,48 +603,62 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
-  private def extraHintForAnsiTypeCoercion(plan: LogicalPlan): String = {
+  private def getDefaultTypeCoercionPlan(plan: LogicalPlan): LogicalPlan =
+    TypeCoercion.typeCoercionRules.foldLeft(plan) { case (p, rule) => rule(p) }
+
+  private def extraHintMessage(issueFixed: Boolean): String = {
+    if (issueFixed) {
+      "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
+        s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    } else {
+      ""
+    }
+  }
+
+  private def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
     if (!SQLConf.get.ansiEnabled) {
       ""
     } else {
-      val nonAnsiPlan = TypeCoercion.typeCoercionRules.foldLeft(plan) { case (p, rule) => rule(p) }
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
       var issueFixed = true
       getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
-          e.checkInputDataTypes().isFailure =>
-            e.checkInputDataTypes() match {
-              case TypeCheckResult.TypeCheckFailure(_) =>
-                issueFixed = false
-            }
+            e.checkInputDataTypes().isFailure =>
+          e.checkInputDataTypes() match {
+            case TypeCheckResult.TypeCheckFailure(_) =>
+              issueFixed = false
+          }
 
         case _ =>
       })
+      extraHintMessage(issueFixed)
+    }
+  }
 
-      if (nonAnsiPlan.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true)) {
-        nonAnsiPlan match {
-          case _: Union | _: SetOperation if nonAnsiPlan.children.length > 1 =>
-            def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+  private def extraHintForAnsiTypeCoercionPlan(plan: LogicalPlan): String = {
+    if (!SQLConf.get.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
+      var issueFixed = true
+      nonAnsiPlan match {
+        case _: Union | _: SetOperation if nonAnsiPlan.children.length > 1 =>
+          def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
 
-            val ref = dataTypes(nonAnsiPlan.children.head)
-            nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
-              val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
-              // Check if the data types match.
-              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                if (dataTypesAreCompatibleFn(dt1, dt2)) {
-                  issueFixed = false
-                }
+          val ref = dataTypes(nonAnsiPlan.children.head)
+          nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
+            val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
+            // Check if the data types match.
+            dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                issueFixed = false
               }
             }
+          }
 
-          case _ =>
-        }
+        case _ =>
       }
-      if (issueFixed) {
-        "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
-          s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-      } else {
-        ""
-      }
+      extraHintMessage(issueFixed)
     }
   }
 
