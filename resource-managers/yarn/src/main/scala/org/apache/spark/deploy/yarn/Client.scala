@@ -38,6 +38,7 @@ import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
+import org.apache.hadoop.util.VersionInfo
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -350,9 +351,14 @@ private[spark] class Client(
   private def setTokenConf(amContainer: ContainerLaunchContext): Unit = {
     // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
     // for fetching delegation tokens. See YARN-5910 for more details.
-    // The feature is only supported in Hadoop 3.x and up, hence the check below.
     val regex = sparkConf.get(config.AM_TOKEN_CONF_REGEX)
-    if (regex.nonEmpty && VersionUtils.isHadoop3) {
+    // The feature is only supported in Hadoop 2.9+ and 3.x, hence the check below.
+    val isSupported = VersionUtils.majorMinorVersion(VersionInfo.getVersion) match {
+      case (2, n) if n >= 9 => true
+      case (3, _) => true
+      case _ => false
+    }
+    if (regex.nonEmpty && isSupported) {
       logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
       val dob = new DataOutputBuffer();
       val copy = new Configuration(false);
