@@ -155,7 +155,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some(effectiveRateLimitPerPartition.map {
         case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong,
-          ppc.minRatePerPartition(tp))
+          (secsPerBatch * ppc.minRatePerPartition(tp)).toLong)
       })
     } else {
       None
