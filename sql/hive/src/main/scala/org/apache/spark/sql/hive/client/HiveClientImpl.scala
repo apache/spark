@@ -645,7 +645,7 @@ private[hive] class HiveClientImpl(
         }
         parts.map(_.getValues)
       }.distinct
-    var droppedParts = ArrayBuffer.empty[java.util.List[String]]
+    val droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
         shim.dropPartition(client, db, table, partition, !retainData, purge)

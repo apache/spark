@@ -59,7 +59,7 @@ object MiniReadWriteTest {
       System.exit(1)
     }
 
-    var i = 0
+    val i = 0
 
     val localFilePath = new File(args(i))
     if (!localFilePath.exists) {

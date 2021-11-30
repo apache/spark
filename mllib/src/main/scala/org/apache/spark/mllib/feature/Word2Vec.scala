@@ -180,7 +180,7 @@ class Word2Vec extends Serializable with Logging {
   private var trainWordsCount = 0L
   private var vocabSize = 0
   @transient private var vocab: Array[VocabWord] = null
-  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private val vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab[S <: Iterable[String]](dataset: RDD[S]): Unit = {
     val words = dataset.flatMap(x => x)

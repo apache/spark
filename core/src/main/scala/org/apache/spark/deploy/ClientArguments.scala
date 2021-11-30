@@ -42,7 +42,7 @@ private[deploy] class ClientArguments(args: Array[String]) {
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
-  private var _driverOptions = ListBuffer[String]()
+  private val _driverOptions = ListBuffer[String]()
   def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
