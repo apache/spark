@@ -291,7 +291,8 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.get.index === 0)
   }
 
-  test("skip unsatisfiable locality levels (the case TaskLocation is HostTaskLocation)") {
+  test("SPARK-37488 skip unsatisfiable locality levels " +
+    "(the case TaskLocation is HostTaskLocation)") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("execA", "host1"))
     val taskSet = FakeTask.createTaskSet(2, Seq(TaskLocation("host1")), Seq(TaskLocation("host2")))
