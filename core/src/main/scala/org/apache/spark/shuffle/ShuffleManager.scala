@@ -91,6 +91,15 @@ private[spark] trait ShuffleManager {
    */
   def shuffleBlockResolver: ShuffleBlockResolver
 
+  /**
+   * The flag to indicate if the shuffle manager needs to work with a local shuffle service,
+   * by default it returns true; if the shuffle manager works with a remote shuffle service,
+   * this function needs to be overridden and return false instead.
+   * @return true if this shuffle manager needs to work with a local external shuffle service,
+   *         otherwise false.
+   */
+  def supportExternalShuffleService: Boolean = true
+
   /** Shut down this ShuffleManager. */
   def stop(): Unit
 }

@@ -529,7 +529,8 @@ private[spark] class BlockManager(
     }
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
-    if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
+    if (externalShuffleServiceEnabled && !blockManagerId.isDriver
+      && shuffleManager.supportExternalShuffleService) {
       registerWithExternalShuffleServer()
     }
 
