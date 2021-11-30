@@ -18,7 +18,7 @@
 import inspect
 import unittest
 from distutils.version import LooseVersion
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -457,6 +457,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "b": [4, 5, 6],
                 "c": pd.date_range("2011-01-01", freq="D", periods=3),
                 "d": pd.Categorical(["a", "b", "c"]),
+                "e": timedelta(1),
             }
         )
 
@@ -533,7 +534,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(psdf.set_index("c").index, name)()
+                getattr(psdf.set_index("e").index, name)()
 
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
@@ -542,7 +543,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
             ):
-                getattr(psdf.set_index("c").index, name)()
+                getattr(psdf.set_index("e").index, name)()
 
         # Index properties
         missing_properties = inspect.getmembers(

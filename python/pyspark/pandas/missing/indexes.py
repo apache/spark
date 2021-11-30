@@ -112,11 +112,9 @@ class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
 
     # Functions
     to_pytimedelta = _unsupported_function("to_pytimedelta", cls="TimedeltaIndex")
-    to_series = _unsupported_function("to_series", cls="TimedeltaIndex")
     round = _unsupported_function("round", cls="TimedeltaIndex")
     floor = _unsupported_function("floor", cls="TimedeltaIndex")
     ceil = _unsupported_function("ceil", cls="TimedeltaIndex")
-    to_frame = _unsupported_function("to_frame", cls="TimedeltaIndex")
     mean = _unsupported_function("mean", cls="TimedeltaIndex")
 
 
