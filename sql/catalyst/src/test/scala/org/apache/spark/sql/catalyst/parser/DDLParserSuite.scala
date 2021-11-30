@@ -719,8 +719,8 @@ class DDLParserSuite extends AnalysisTest {
     parsedPlan match {
       case create: CreateTable if newTableToken == "CREATE" =>
         assert(create.ignoreIfExists == expectedIfNotExists)
-      case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
-        assert(ctas.ifNotExists == expectedIfNotExists)
+      case ctas: CreateTableAsSelect if newTableToken == "CREATE" =>
+        assert(ctas.ignoreIfExists == expectedIfNotExists)
       case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
       case replace: ReplaceTableAsSelect if newTableToken == "REPLACE" =>
       case other =>
@@ -2310,19 +2310,19 @@ class DDLParserSuite extends AnalysisTest {
             replace.location,
             replace.comment,
             replace.serde)
-        case ctas: CreateTableAsSelectStatement =>
+        case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.tableName,
-            Some(ctas.asSelect).filter(_.resolved).map(_.schema),
+            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
-            ctas.bucketSpec,
-            ctas.properties,
-            ctas.provider,
-            ctas.options,
-            ctas.location,
-            ctas.comment,
-            ctas.serde,
-            ctas.external)
+            ctas.tableSpec.bucketSpec,
+            ctas.tableSpec.properties,
+            ctas.tableSpec.provider,
+            ctas.tableSpec.options,
+            ctas.tableSpec.location,
+            ctas.tableSpec.comment,
+            ctas.tableSpec.serde,
+            ctas.tableSpec.external)
         case rtas: ReplaceTableAsSelect =>
           TableSpec(
             rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,

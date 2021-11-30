@@ -3410,7 +3410,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelectStatement]] logical plan.
+   * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.
    *
    * Expected format:
    * {{{
@@ -3470,9 +3470,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelectStatement(
-          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          writeOptions = Map.empty, serdeInfo, external = external, ifNotExists = ifNotExists)
+        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+          serdeInfo, external)
+        CreateTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning, query, tableSpec, Map.empty, ifNotExists)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
