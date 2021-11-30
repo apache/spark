@@ -85,12 +85,15 @@ class Profiler(object):
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
+
     A custom profiler has to define or inherit the following methods:
         profile - will produce a system profile of some sort.
         stats - return the collected stats.
         dump - dumps the profiles to a path
         add - adds a profile to the existing accumulated profile
+
     The profiler class is chosen when creating a SparkContext
+
     Examples
     --------
     >>> from pyspark import SparkConf, SparkContext
@@ -109,6 +112,7 @@ class Profiler(object):
     My custom profiles for RDD:1
     My custom profiles for RDD:3
     >>> sc.stop()
+
     Notes
     -----
     This API is a developer API.
