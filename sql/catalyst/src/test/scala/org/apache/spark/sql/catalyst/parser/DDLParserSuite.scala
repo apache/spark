@@ -722,7 +722,7 @@ class DDLParserSuite extends AnalysisTest {
       case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
         assert(ctas.ifNotExists == expectedIfNotExists)
       case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
-      case replace: ReplaceTableAsSelectStatement if newTableToken == "REPLACE" =>
+      case replace: ReplaceTableAsSelect if newTableToken == "REPLACE" =>
       case other =>
         fail("First token in statement does not match the expected parsed plan; CREATE TABLE" +
           " should create a CreateTableStatement, and REPLACE TABLE should create a" +
@@ -2323,18 +2323,18 @@ class DDLParserSuite extends AnalysisTest {
             ctas.comment,
             ctas.serde,
             ctas.external)
-        case rtas: ReplaceTableAsSelectStatement =>
+        case rtas: ReplaceTableAsSelect =>
           TableSpec(
-            rtas.tableName,
-            Some(rtas.asSelect).filter(_.resolved).map(_.schema),
+            rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
-            rtas.bucketSpec,
-            rtas.properties,
-            rtas.provider,
-            rtas.options,
-            rtas.location,
-            rtas.comment,
-            rtas.serde)
+            rtas.tableSpec.bucketSpec,
+            rtas.tableSpec.properties,
+            rtas.tableSpec.provider,
+            rtas.tableSpec.options,
+            rtas.tableSpec.location,
+            rtas.tableSpec.comment,
+            rtas.tableSpec.serde)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")

@@ -3487,7 +3487,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Replace a table, returning a [[ReplaceTableStatement]] logical plan.
+   * Replace a table, returning a [[ReplaceTableStatement]] or [[ReplaceTableAsSelect]]
+   * logical plan.
    *
    * Expected format:
    * {{{
@@ -3553,9 +3554,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, writeOptions = Map.empty, serdeInfo,
-          orCreate = orCreate)
+        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+          serdeInfo, false)
+        ReplaceTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns

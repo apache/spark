@@ -22,14 +22,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable => CatalystCreateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
@@ -144,7 +143,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CatalystCreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _) =>
+    case c @ CreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         c.tableSpec.options,
@@ -157,7 +156,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           c.tableSpec.location, c.tableSpec.comment, storageFormat,
           c.tableSpec.external)
         val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTable(tableDesc, mode, None)
+        CreateTableV1(tableDesc, mode, None)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
         c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
@@ -173,7 +172,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           c.partitioning, c.bucketSpec, c.properties, provider, c.location,
           c.comment, storageFormat, c.external)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTable(tableDesc, mode, Some(c.asSelect))
+        CreateTableV1(tableDesc, mode, Some(c.asSelect))
       } else {
         CreateTableAsSelect(
           catalog.asTableCatalog,
@@ -210,21 +209,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           orCreate = c.orCreate)
       }
 
-    case c @ ReplaceTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
+    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _)
+        if isSessionCatalog(catalog) =>
+      val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError
       } else {
-        ReplaceTableAsSelect(
-          catalog.asTableCatalog,
-          tbl.asIdentifier,
-          // convert the bucket spec and add it as a transform
-          c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          c.asSelect,
-          convertTableProperties(c),
-          writeOptions = c.writeOptions,
-          orCreate = c.orCreate)
+        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
+        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
+          tableSpec = newTableSpec)
       }
 
     case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>

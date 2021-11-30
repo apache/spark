@@ -166,29 +166,6 @@ case class ReplaceTableStatement(
     orCreate: Boolean) extends LeafParsedStatement
 
 /**
- * A REPLACE TABLE AS SELECT command, as parsed from SQL.
- */
-case class ReplaceTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(
-    newChild: LogicalPlan): ReplaceTableAsSelectStatement = copy(asSelect = newChild)
-}
-
-
-/**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
