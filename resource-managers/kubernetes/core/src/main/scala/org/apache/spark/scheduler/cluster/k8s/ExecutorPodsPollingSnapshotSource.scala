@@ -29,7 +29,15 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsPollingSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for monitoring executor pods in ExternalClusterManagers.
+ * @since 2.4.0
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -39,6 +47,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
 
   private var pollingFuture: Future[_] = _
 
+  @Since("2.4.0")
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
@@ -46,6 +55,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
       new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
+  @Since("2.4.0")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)

@@ -26,12 +26,21 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorPodsWatchSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for K8s executor pod monitoring in ExternalClusterManagers.
+ * @since 2.4.0
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient) extends Logging {
 
   private var watchConnection: Closeable = _
 
+  @Since("2.4.0")
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
     logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
@@ -42,6 +51,7 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
       .watch(new ExecutorPodsWatcher())
   }
 
+  @Since("2.4.0")
   def stop(): Unit = {
     if (watchConnection != null) {
       Utils.tryLogNonFatalError {
