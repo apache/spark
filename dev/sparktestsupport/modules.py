@@ -464,6 +464,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_streaming",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_utils",
     ]
 )
