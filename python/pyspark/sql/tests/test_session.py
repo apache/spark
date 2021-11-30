@@ -273,7 +273,9 @@ class SparkSessionBuilderTests(unittest.TestCase):
         session2 = None
         try:
             session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
-            session2 = SparkSession.builder.config("spark.sql.codegen.comments", "true").getOrCreate()
+            session2 = SparkSession.builder.config(
+                "spark.sql.codegen.comments", "true"
+            ).getOrCreate()
 
             self.assertEqual(session1.conf.get("key1"), "value1")
             self.assertEqual(session2.conf.get("key1"), "value1")

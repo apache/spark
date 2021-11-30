@@ -278,7 +278,9 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 for key, value in self._options.items():
-                    if not session._jvm.org.apache.spark.sql.internal.SQLConf.isStaticConfigKey(key):
+                    if not session._jvm.org.apache.spark.sql.internal.SQLConf.isStaticConfigKey(
+                        key
+                    ):
                         session._jsparkSession.sessionState().conf().setConfString(key, value)
                 return session
 
