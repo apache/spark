@@ -291,7 +291,7 @@ class SparkSession(SparkConversionMixin):
         self,
         sparkContext: SparkContext,
         jsparkSession: Optional[JavaObject] = None,
-        options: Optional[Dict[str, Any]] = None,
+        options: Optional[Dict[str, Any]] = {},
     ):
         from pyspark.sql.context import SQLContext
 
@@ -305,10 +305,7 @@ class SparkSession(SparkConversionMixin):
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
-                if options is not None:
-                    for key, value in options.items():
-                        jsparkSession.sharedState().conf().set(key, value)
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
