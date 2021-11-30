@@ -80,14 +80,14 @@ package object config extends Logging {
 
   private[spark] val AM_TOKEN_CONF_REGEX =
     ConfigBuilder("spark.yarn.am.tokenConfRegex")
-      .doc("This config is only supported for Hadoop 3.x profile. The value of this config is a " +
-        "regex expression used to grep a list of config entries from the job's configuration " +
-        "file (e.g., hdfs-site.xml) and send to RM, which uses them when renewing delegation " +
-        "tokens. A typical use case of this feature is to support delegation tokens in an " +
-        "environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, " +
-        "where the YARN RM may not have configs (e.g., dfs.nameservices, dfs.ha.namenodes.*, " +
-        "dfs.namenode.rpc-address.*) to connect to these clusters. In this scenario, Spark " +
-        "users can specify the config value to be " +
+      .doc("This config is only supported when Hadoop version is 2.9+ or 3.x (e.g., when using " +
+        "the Hadoop 3.x profile). The value of this config is a regex expression used to grep a " +
+        "list of config entries from the job's configuration file (e.g., hdfs-site.xml) and send " +
+        "to RM, which uses them when renewing delegation tokens. A typical use case of this " +
+        "feature is to support delegation tokens in an environment where a YARN cluster needs to " +
+        "talk to multiple downstream HDFS clusters, where the YARN RM may not have configs " +
+        "(e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to " +
+        "these clusters. In this scenario, Spark users can specify the config value to be " +
         "'^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$' to parse " +
         "these HDFS configs from the job's local configuration files. This config is very " +
         "similar to 'mapreduce.job.send-token-conf'. Please check YARN-5910 for more details.")
