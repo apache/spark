@@ -591,7 +591,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.container.image.pullPolicy</code></td>
   <td><code>IfNotPresent</code></td>
   <td>
-    Container image pull policy used when pulling images within Kubernetes. Valid values are Always, Never, and IfNotPresent.
+    Container image pull policy used when pulling images within Kubernetes.
+    Valid values are <code>Always</code>, <code>Never</code>, and <code>IfNotPresent</code>.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1249,7 +1250,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
-  <td>false</td>
+  <td><code>false</code></td>
   <td>
   Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
   </td>
@@ -1257,7 +1258,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.submission.connectionTimeout</code></td>
-  <td>10000</td>
+  <td><code>10000</code></td>
   <td>
     Connection timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
@@ -1265,7 +1266,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.submission.requestTimeout</code></td>
-  <td>10000</td>
+  <td><code>10000</code></td>
   <td>
     Request timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
@@ -1273,7 +1274,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
-  <td>10000</td>
+  <td><code>10000</code></td>
   <td>
     Connection timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
   </td>
@@ -1281,7 +1282,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.requestTimeout</code></td>
-  <td>10000</td>
+  <td><code>10000</code></td>
   <td>
     Request timeout in milliseconds for the kubernetes client in driver to use when requesting executors.
   </td>
@@ -1297,7 +1298,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.dynamicAllocation.deleteGracePeriod</code></td>
-  <td>5s</td>
+  <td><code>5s</code></td>
   <td>
     How long to wait for executors to shut down gracefully before a forceful kill.
   </td>
@@ -1349,24 +1350,16 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
-  <td>1572864</td>
+  <td><code>1572864</code></td>
   <td>
-    Max size limit for a config map. This is configurable as per https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.
-  </td>
-  <td>3.1.0</td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.allocation.executor.timeout</code></td>
-  <td>600s</td>
-  <td>
-    Time to wait before a newly created executor POD request, which does not reached
-    the POD pending state yet, considered timedout and will be deleted.
+    Max size limit for a config map.
+    This is configurable as per <a href="https://etcd.io/docs/latest/dev-guide/limit/">limit</a> on k8s server end.
   </td>
   <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.missingPodDetectDelta</code></td>
-  <td>30s</td>
+  <td><code>30s</code></td>
   <td>
     When a registered executor's POD is missing from the Kubernetes API server's polled
     list of PODs then this delta time is taken as the accepted time difference between the
@@ -1376,18 +1369,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.1.1</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.allocation.driver.readinessTimeout</code></td>
-  <td>1s</td>
-  <td>
-    Time to wait for driver pod to get ready before creating executor pods. This wait
-    only happens on application start. If timeout happens, executor pods will still be
-    created.
-  </td>
-  <td>3.1.3</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.decommission.script</code></td>
-  <td>/opt/decom.sh</td>
+  <td><code>/opt/decom.sh</code></td>
   <td>
     The location of the script to use for graceful decommissioning.
   </td>
@@ -1395,7 +1378,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.service.deleteOnTermination</code></td>
-  <td>true</td>
+  <td><code>true</code></td>
   <td>
     If true, driver service will be deleted on Spark application termination. If false, it will be cleaned up when the driver pod is deletion.
   </td>
@@ -1403,7 +1386,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
-  <td>false</td>
+  <td><code>false</code></td>
   <td>
     If true, driver pod becomes the owner of on-demand persistent volume claims instead of the executor pods
   </td>
@@ -1411,7 +1394,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.reusePersistentVolumeClaim</code></td>
-  <td>false</td>
+  <td><code>false</code></td>
   <td>
     If true, driver pod tries to reuse driver-owned on-demand persistent volume claims
     of the deleted executor pods if exists. This can be useful to reduce executor pod
@@ -1426,7 +1409,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.disableConfigMap</code></td>
-  <td>false</td>
+  <td><code>false</code></td>
   <td>
     If true, disable ConfigMap creation for executors.
   </td>
@@ -1437,8 +1420,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Class names of an extra driver pod feature step implementing
-    KubernetesFeatureConfigStep. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps."
+    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
+    Runs after all of Spark internal feature steps.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1446,8 +1429,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
   <td>(none)</td>
   <td>
-    Class name of an extra executor pod feature step implementing
-    KubernetesFeatureConfigStep. This is a developer API. Comma separated.
+    Class names of an extra executor pod feature step implementing
+    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
     Runs after all of Spark internal feature steps.
   </td>
   <td>3.2.0</td>
@@ -1466,18 +1449,37 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
-  <td>direct</td>
+  <td><code>direct</code></td>
   <td>
-    Allocator to use for pods. Possible values are direct (the default) and statefulset,
-    or a full class name of a class implementing AbstractPodsAllocator.
+    Allocator to use for pods. Possible values are <code>direct</code> (the default)
+    and <code>statefulset</code>, or a full class name of a class implementing `AbstractPodsAllocator`.
     Future version may add Job or replicaset. This is a developer API and may change
     or be removed at anytime.
   </td>
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.allocation.executor.timeout</code></td>
+  <td><code>600s</code></td>
+  <td>
+    Time to wait before a newly created executor POD request, which does not reached
+    the POD pending state yet, considered timedout and will be deleted.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.driver.readinessTimeout</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Time to wait for driver pod to get ready before creating executor pods. This wait
+    only happens on application start. If timeout happens, executor pods will still be
+    created.
+  </td>
+  <td>3.1.3</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.enablePollingWithResourceVersion</code></td>
-  <td>false</td>
+  <td><code>false</code></td>
   <td>
     If true, `resourceVersion` is set with `0` during invoking pod listing APIs
     in order to allow API Server-side caching. This should be used carefully.
