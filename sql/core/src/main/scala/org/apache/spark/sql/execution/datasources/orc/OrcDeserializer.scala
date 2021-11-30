@@ -32,7 +32,8 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class OrcDeserializer(
     requiredSchema: StructType,
-    requestedColIds: Array[Int]) {
+    requestedColIds: Array[Int],
+    writerTimezone: Option[String] = None) {
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
@@ -130,7 +131,8 @@ class OrcDeserializer(
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
 
       case TimestampNTZType => (ordinal, value) =>
-        updater.setLong(ordinal, OrcUtils.fromOrcNTZ(value.asInstanceOf[OrcTimestamp]))
+        updater.setLong(ordinal,
+          OrcUtils.fromOrcNTZ(value.asInstanceOf[OrcTimestamp], writerTimezone.orNull))
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)

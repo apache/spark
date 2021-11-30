@@ -33,33 +33,37 @@ class OrcColumnVectorUtils {
    * @param vector Hive's column vector
    * @return Spark's column vector
    */
-  static OrcColumnVector toOrcColumnVector(DataType type, ColumnVector vector) {
+  static OrcColumnVector toOrcColumnVector(
+      DataType type, ColumnVector vector, String writerTimezone) {
     if (vector instanceof LongColumnVector ||
       vector instanceof DoubleColumnVector ||
       vector instanceof BytesColumnVector ||
       vector instanceof DecimalColumnVector ||
       vector instanceof TimestampColumnVector) {
-      return new OrcAtomicColumnVector(type, vector);
+      return new OrcAtomicColumnVector(type, vector, writerTimezone);
     } else if (vector instanceof StructColumnVector) {
       StructColumnVector structVector = (StructColumnVector) vector;
       OrcColumnVector[] fields = new OrcColumnVector[structVector.fields.length];
       int ordinal = 0;
       for (StructField f : ((StructType) type).fields()) {
-        fields[ordinal] = toOrcColumnVector(f.dataType(), structVector.fields[ordinal]);
+        fields[ordinal] =
+          toOrcColumnVector(f.dataType(), structVector.fields[ordinal], writerTimezone);
         ordinal++;
       }
       return new OrcStructColumnVector(type, vector, fields);
     } else if (vector instanceof ListColumnVector) {
       ListColumnVector listVector = (ListColumnVector) vector;
       OrcColumnVector dataVector = toOrcColumnVector(
-        ((ArrayType) type).elementType(), listVector.child);
+        ((ArrayType) type).elementType(), listVector.child, writerTimezone);
       return new OrcArrayColumnVector(
         type, vector, dataVector, listVector.offsets, listVector.lengths);
     } else if (vector instanceof MapColumnVector) {
       MapColumnVector mapVector = (MapColumnVector) vector;
       MapType mapType = (MapType) type;
-      OrcColumnVector keysVector = toOrcColumnVector(mapType.keyType(), mapVector.keys);
-      OrcColumnVector valuesVector = toOrcColumnVector(mapType.valueType(), mapVector.values);
+      OrcColumnVector keysVector =
+        toOrcColumnVector(mapType.keyType(), mapVector.keys, writerTimezone);
+      OrcColumnVector valuesVector =
+        toOrcColumnVector(mapType.valueType(), mapVector.values, writerTimezone);
       return new OrcMapColumnVector(
         type, vector, keysVector, valuesVector, mapVector.offsets, mapVector.lengths);
     } else {

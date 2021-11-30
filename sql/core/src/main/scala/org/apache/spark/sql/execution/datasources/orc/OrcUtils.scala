@@ -28,7 +28,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.hadoop.mapreduce.{InputSplit, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.impl.RecordReaderImpl
 import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
@@ -532,19 +535,51 @@ object OrcUtils extends Logging {
     }
   }
 
-  def fromOrcNTZ(ts: Timestamp): Long = {
-    val utcMicros = DateTimeUtils.millisToMicros(ts.getTime) +
+  def fromOrcNTZ(ts: Timestamp, writerTimezone: String): Long = {
+    val micros = DateTimeUtils.millisToMicros(ts.getTime) +
       (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-    val micros = DateTimeUtils.fromUTCTime(utcMicros, TimeZone.getDefault.getID)
-    micros
+    if (writerTimezone == null || writerTimezone == "") {
+      micros
+    } else {
+      DateTimeUtils.convertTz(
+        micros, TimeZone.getTimeZone(writerTimezone).toZoneId, TimeZone.getDefault.toZoneId)
+    }
   }
 
   def toOrcNTZ(micros: Long): OrcTimestamp = {
-    val utcMicros = DateTimeUtils.toUTCTime(micros, TimeZone.getDefault.getID)
-    val seconds = Math.floorDiv(utcMicros, MICROS_PER_SECOND)
-    val nanos = (utcMicros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
+    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
+    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
     val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
     result.setNanos(nanos.toInt)
     result
+  }
+
+  /**
+   * This method try to find the writer time zone.
+   */
+  def getWriterTimezone(
+      inputSplit: InputSplit,
+      taskAttemptContext: TaskAttemptContext): Option[String] = {
+    val split = inputSplit.asInstanceOf[FileSplit]
+    val conf = taskAttemptContext.getConfiguration()
+    val readOptions = OrcFile.readerOptions(conf).maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
+    val reader = OrcFile.createReader(split.getPath(), readOptions)
+    val options = org.apache.orc.mapred.OrcInputFormat.buildOptions(
+      conf, reader, split.getStart(), split.getLength()).useSelected(true)
+    val recordReader = reader.rows(options)
+    try {
+      val stripes = reader.getStripes().asScala
+      if (stripes.nonEmpty) {
+        assert(recordReader.isInstanceOf[RecordReaderImpl])
+        val stripeFooter =
+          recordReader.asInstanceOf[RecordReaderImpl].readStripeFooter(reader.getStripes().get(0))
+        Some(stripeFooter.getWriterTimezone())
+      } else {
+        None
+      }
+    } finally {
+      recordReader.close()
+      reader.close()
+    }
   }
 }

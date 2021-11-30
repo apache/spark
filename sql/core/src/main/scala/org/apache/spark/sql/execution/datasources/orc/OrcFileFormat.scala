@@ -172,9 +172,10 @@ class OrcFileFormat
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
+        val writerTimezone = OrcUtils.getWriterTimezone(fileSplit, taskAttemptContext)
 
         if (enableVectorizedReader) {
-          val batchReader = new OrcColumnarBatchReader(capacity)
+          val batchReader = new OrcColumnarBatchReader(capacity, writerTimezone.orNull)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.
@@ -200,7 +201,8 @@ class OrcFileFormat
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-          val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
+          val deserializer =
+            new OrcDeserializer(requiredSchema, requestedColIds, writerTimezone)
 
           if (partitionSchema.length == 0) {
             iter.map(value => unsafeProjection(deserializer.deserialize(value)))

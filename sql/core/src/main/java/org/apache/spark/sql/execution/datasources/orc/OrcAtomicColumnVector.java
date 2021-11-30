@@ -47,7 +47,9 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
   private DecimalColumnVector decimalData;
   private TimestampColumnVector timestampData;
 
-  OrcAtomicColumnVector(DataType type, ColumnVector vector) {
+  private String writerTimezone;
+
+  OrcAtomicColumnVector(DataType type, ColumnVector vector, String writerTimezone) {
     super(type, vector);
 
     if (type instanceof TimestampType) {
@@ -67,6 +69,8 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     } else {
       isDate = false;
     }
+
+    this.writerTimezone = writerTimezone;
 
     if (vector instanceof LongColumnVector) {
       longData = (LongColumnVector) vector;
@@ -114,7 +118,7 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     if (isTimestamp) {
       return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
     } else if (isTimestampNTZ) {
-      return OrcUtils.fromOrcNTZ(timestampData.asScratchTimestamp(index));
+      return OrcUtils.fromOrcNTZ(timestampData.asScratchTimestamp(index), writerTimezone);
     } else {
       return longData.vector[index];
     }

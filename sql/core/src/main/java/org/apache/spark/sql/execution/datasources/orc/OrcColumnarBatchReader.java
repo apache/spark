@@ -65,6 +65,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
 
+  private String writerTimezone;
+
   private StructField[] requiredFields;
 
   // The result columnar batch for vectorized execution by whole-stage codegen.
@@ -74,8 +76,9 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
-  public OrcColumnarBatchReader(int capacity) {
+  public OrcColumnarBatchReader(int capacity, String writerTimezone) {
     this.capacity = capacity;
+    this.writerTimezone = writerTimezone;
   }
 
 
@@ -181,7 +184,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           orcVectorWrappers[i] = missingCol;
         } else {
           orcVectorWrappers[i] = OrcColumnVectorUtils.toOrcColumnVector(
-            dt, wrap.batch().cols[colId]);
+            dt, wrap.batch().cols[colId], writerTimezone);
         }
       }
     }
