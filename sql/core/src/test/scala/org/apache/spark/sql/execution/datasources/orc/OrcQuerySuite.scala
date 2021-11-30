@@ -777,7 +777,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     } :+ (null, null)
 
     withOrcFile(data) { file =>
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
       }
     }
@@ -795,7 +795,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         val msg = intercept[SparkException] {
           spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
         }.getMessage
@@ -818,7 +818,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         val msg = intercept[SparkException] {
           spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
         }.getMessage
@@ -840,7 +840,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       Seq("America/Los_Angeles", "UTC", "Europe/Amsterdam").foreach { tz =>
         TimeZone.setDefault(TimeZone.getTimeZone(tz))
-        withAllOrcReaders {
+        withAllNativeOrcReaders {
           checkAnswer(sql(query), df)
         }
       }
