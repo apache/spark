@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
