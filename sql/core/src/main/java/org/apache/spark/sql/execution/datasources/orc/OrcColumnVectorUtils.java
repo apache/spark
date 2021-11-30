@@ -31,6 +31,7 @@ class OrcColumnVectorUtils {
    *
    * @param type The data type of column vector
    * @param vector Hive's column vector
+   * @param writerTimezone The time zone of Orc writer
    * @return Spark's column vector
    */
   static OrcColumnVector toOrcColumnVector(
