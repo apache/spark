@@ -163,40 +163,45 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     if (partitions <= 1) {
       Array.empty
     } else {
-      // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
-      // Cast to double to avoid overflowing ints or longs
-      val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
-      // Assume the input partitions are roughly balanced and over-sample a little bit.
-      val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
-      val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
-      if (numItems == 0L) {
-        Array.empty
-      } else {
-        // If a partition contains much more than the average number of items, we re-sample from it
-        // to ensure that enough items are collected from that partition.
-        val fraction = math.min(sampleSize / math.max(numItems, 1L), 1.0)
-        val candidates = ArrayBuffer.empty[(K, Float)]
-        val imbalancedPartitions = mutable.Set.empty[Int]
-        sketched.foreach { case (idx, n, sample) =>
-          if (fraction * n > sampleSizePerPartition) {
-            imbalancedPartitions += idx
-          } else {
-            // The weight is 1 over the sampling probability.
-            val weight = (n.toDouble / sample.length).toFloat
-            for (key <- sample) {
-              candidates += ((key, weight))
+      try {
+        rdd.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_IS_SAMPLING_JOB, "true")
+        // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
+        // Cast to double to avoid overflowing ints or longs
+        val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
+        // Assume the input partitions are roughly balanced and over-sample a little bit.
+        val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
+        val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
+        if (numItems == 0L) {
+          Array.empty
+        } else {
+          // If a partition contains much more than the average number of items,
+          // we re-sample from it to ensure that enough items are collected from that partition.
+          val fraction = math.min(sampleSize / math.max(numItems, 1L), 1.0)
+          val candidates = ArrayBuffer.empty[(K, Float)]
+          val imbalancedPartitions = mutable.Set.empty[Int]
+          sketched.foreach { case (idx, n, sample) =>
+            if (fraction * n > sampleSizePerPartition) {
+              imbalancedPartitions += idx
+            } else {
+              // The weight is 1 over the sampling probability.
+              val weight = (n.toDouble / sample.length).toFloat
+              for (key <- sample) {
+                candidates += ((key, weight))
+              }
             }
           }
+          if (imbalancedPartitions.nonEmpty) {
+            // Re-sample imbalanced partitions with the desired sampling probability.
+            val imbalanced = new PartitionPruningRDD(rdd.map(_._1), imbalancedPartitions.contains)
+            val seed = byteswap32(-rdd.id - 1)
+            val reSampled = imbalanced.sample(withReplacement = false, fraction, seed).collect()
+            val weight = (1.0 / fraction).toFloat
+            candidates ++= reSampled.map(x => (x, weight))
+          }
+          RangePartitioner.determineBounds(candidates, math.min(partitions, candidates.size))
         }
-        if (imbalancedPartitions.nonEmpty) {
-          // Re-sample imbalanced partitions with the desired sampling probability.
-          val imbalanced = new PartitionPruningRDD(rdd.map(_._1), imbalancedPartitions.contains)
-          val seed = byteswap32(-rdd.id - 1)
-          val reSampled = imbalanced.sample(withReplacement = false, fraction, seed).collect()
-          val weight = (1.0 / fraction).toFloat
-          candidates ++= reSampled.map(x => (x, weight))
-        }
-        RangePartitioner.determineBounds(candidates, math.min(partitions, candidates.size))
+      } finally {
+        rdd.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_IS_SAMPLING_JOB, "false")
       }
     }
   }

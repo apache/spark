@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -63,24 +63,28 @@ case class CollectMetricsExec(
     val collector = accumulator
     collector.reset()
     child.execute().mapPartitions { rows =>
-      // Only publish the value of the accumulator when the task has completed. This is done by
-      // updating a task local accumulator ('updater') which will be merged with the actual
-      // accumulator as soon as the task completes. This avoids the following problems during the
-      // heartbeat:
-      // - Correctness issues due to partially completed/visible updates.
-      // - Performance issues due to excessive serialization.
-      val updater = collector.copyAndReset()
-      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-        if (collector.isZero) {
-          collector.setState(updater)
-        } else {
-          collector.merge(updater)
+      if (!TaskContext.get().getLocalProperty(SparkContext.SPARK_JOB_IS_SAMPLING_JOB).toBoolean) {
+        // Only publish the value of the accumulator when the task has completed. This is done by
+        // updating a task local accumulator ('updater') which will be merged with the actual
+        // accumulator as soon as the task completes. This avoids the following problems during the
+        // heartbeat:
+        // - Correctness issues due to partially completed/visible updates.
+        // - Performance issues due to excessive serialization.
+        val updater = collector.copyAndReset()
+        TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+          if (collector.isZero) {
+            collector.setState(updater)
+          } else {
+            collector.merge(updater)
+          }
         }
-      }
 
-      rows.map { r =>
-        updater.add(r)
-        r
+        rows.map { r =>
+          updater.add(r)
+          r
+        }
+      } else {
+        rows
       }
     }
   }

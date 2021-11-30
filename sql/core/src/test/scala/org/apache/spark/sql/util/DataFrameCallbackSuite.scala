@@ -307,6 +307,23 @@ class DataFrameCallbackSuite extends QueryTest
     }
   }
 
+  test("SPARK-37487: get observable metrics with sort by callback") {
+    val df = spark.range(100)
+      .observe(
+        name = "my_event",
+        min($"id").as("min_val"),
+        max($"id").as("max_val"),
+        // Test unresolved alias
+        sum($"id"),
+        count(when($"id" % 2 === 0, 1)).as("num_even"))
+      .observe(
+        name = "other_event",
+        avg($"id").cast("int").as("avg_val"))
+      .sort($"id".desc)
+
+    validateObservedMetrics(df)
+  }
+
   private def validateObservedMetrics(df: Dataset[JLong]): Unit = {
     val metricMaps = ArrayBuffer.empty[Map[String, Row]]
     val listener = new QueryExecutionListener {
