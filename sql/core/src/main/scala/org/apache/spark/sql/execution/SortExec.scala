@@ -201,7 +201,7 @@ object SortExec {
     val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
       private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
       override def computePrefix(row: InternalRow):
-      UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
         val prefix = prefixProjection.apply(row)
         result.isNull = prefix.isNullAt(0)
         result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
