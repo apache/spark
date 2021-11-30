@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import org.apache.spark.sql.catalyst.expressions.{aggregate, And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.SortValue
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -250,7 +248,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       child match {
-        case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
+        case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
           val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
           if (limitPushed) {
             sHolder.pushedLimit = Some(limitValue)
@@ -258,9 +256,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           globalLimit
         case _ =>
           child transform {
-            case sort @ Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
-              if filter.length == 0 =>
-              val orders = DataSourceStrategy.translateSortOrders(order)
+            case sort @ Sort(orders, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+              if filter.isEmpty =>
               val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
               if (topNPushed) {
                 sHolder.pushedLimit = Some(limitValue)
@@ -298,7 +295,7 @@ case class ScanBuilderHolder(
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
-  var sortValues: Seq[SortValue] = Seq.empty[SortValue]
+  var sortValues: Seq[SortOrder] = Seq.empty[SortOrder]
 
   var pushedSample: Option[TableSampleInfo] = None
 }

@@ -20,9 +20,9 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.SortValue
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -40,6 +40,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
     with SupportsPushDownTableSample
+    with SupportsPushDownTopN
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -52,7 +53,7 @@ case class JDBCScanBuilder(
 
   private var pushedLimit = 0
 
-  private var sortValues: Array[SortValue] = Array.empty[SortValue]
+  private var sortValues: Array[SortOrder] = Array.empty[SortOrder]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -129,7 +130,7 @@ case class JDBCScanBuilder(
     false
   }
 
-  override def pushTopN(orders: Array[SortValue], limit: Int): Boolean = {
+  override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownTopN && JdbcDialects.get(jdbcOptions.url).supportsTopN) {
       pushedLimit = limit
       sortValues = orders
