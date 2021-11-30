@@ -5160,7 +5160,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If there is no good value, NaN is returned.
 
         .. note:: This API is dependent on :meth:`Index.is_monotonic_increasing`
-            which can be expensive.
+            which is expensive.
 
         Parameters
         ----------
@@ -5179,7 +5179,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Notes
         -----
-        Indices are assumed to be sorted. Raises if this is not the case.
+        Indices are assumed to be sorted. Raises if this is not the case and config
+        'compute.eager_check' is True. If 'compute.eager_check' is False pandas-on-Spark just
+        proceeds and performs by ignoring the indeces's order
 
         Examples
         --------
@@ -5210,13 +5212,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s.asof(30)
         2.0
+
+        >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
+        >>> with ps.option_context("compute.eager_check", False):
+        ...     s.asof(20)
+        ...
+        1.0
         """
         should_return_series = True
         if isinstance(self.index, ps.MultiIndex):
             raise ValueError("asof is not supported for a MultiIndex")
         if isinstance(where, (ps.Index, ps.Series, DataFrame)):
             raise ValueError("where cannot be an Index, Series or a DataFrame")
-        if not self.index.is_monotonic_increasing:
+        if get_option("compute.eager_check") and not self.index.is_monotonic_increasing:
             raise ValueError("asof requires a sorted index")
         if not is_list_like(where):
             should_return_series = False
