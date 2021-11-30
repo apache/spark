@@ -175,7 +175,7 @@ class BasicProfiler(Profiler):
         self._accumulator.add(st)  # type: ignore[arg-type]
 
     def stats(self) -> pstats.Stats:
-        return cast(pstats.Stats, self._accumulator.value)
+        return self._accumulator.value
 
 
 if __name__ == "__main__":
