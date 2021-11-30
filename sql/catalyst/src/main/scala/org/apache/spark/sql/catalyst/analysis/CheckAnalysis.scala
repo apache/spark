@@ -614,10 +614,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
         case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
           e.checkInputDataTypes().isFailure =>
-          e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) =>
-              issueFixed = false
-          }
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(_) =>
+                issueFixed = false
+            }
 
         case _ =>
       })
