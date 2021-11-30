@@ -288,10 +288,9 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
   test("SPARK-32234 read ORC table with column names all starting with '_col'") {
     Seq("native", "hive").foreach { orcImpl =>
-      Seq("false", "true").foreach { vectorized =>
-        withSQLConf(
-          SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
-          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized) {
+      withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
+        withAllNativeOrcReaders {
           withTable("test_hive_orc_impl") {
             spark.sql(
               s"""
