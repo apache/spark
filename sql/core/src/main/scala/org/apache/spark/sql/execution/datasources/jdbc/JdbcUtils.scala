@@ -23,6 +23,7 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -1025,7 +1027,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options,
-      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
+      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties, options))
   }
 
   /**
@@ -1078,24 +1080,48 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def checkIfIndexExists(
       conn: Connection,
-      indexName: String,
       sql: String,
-      indexColumnName: String,
       options: JDBCOptions): Boolean = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
       val rs = statement.executeQuery(sql)
-      while (rs.next()) {
-        val retrievedIndexName = rs.getString(indexColumnName)
-        if (conf.resolver(retrievedIndexName, indexName)) {
-          return true
-        }
-      }
-      false
+      rs.next
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+        false
     } finally {
       statement.close()
     }
+  }
+
+  /**
+   * Process index properties and return tuple of indexType and list of the other index properties.
+   */
+  def processIndexProperties(
+      properties: util.Map[String, String],
+      options: JDBCOptions
+    ): (String, Array[String]) = {
+    val dialect = JdbcDialects.get(options.url)
+    var indexType = ""
+    var indexPropertyList: Array[String] = Array.empty
+
+    if (!properties.isEmpty) {
+      properties.asScala.foreach { case (k, v) =>
+        if (k.equals(SupportsIndex.PROP_TYPE)) {
+          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
+            indexType = s"USING $v"
+          } else {
+            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
+              " The supported Index Types are: BTREE and HASH")
+          }
+        } else {
+          indexPropertyList = indexPropertyList :+ dialect.convertPropertyPairToString(k, v)
+        }
+      }
+    }
+    (indexType, indexPropertyList)
   }
 
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {

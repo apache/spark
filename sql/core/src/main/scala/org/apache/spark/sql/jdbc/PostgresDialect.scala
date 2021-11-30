@@ -21,12 +21,9 @@ import java.sql.{Connection, SQLException, Types}
 import java.util
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -180,34 +177,18 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
-      properties: util.Map[String, String]): String = {
+      properties: util.Map[String, String],
+      options: JDBCOptions): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
-    var indexPropertiesStr: String = ""
-    var hasIndexProperties: Boolean = false
-    var indexType = ""
+    var indexProperties = ""
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, options)
 
-    if (!properties.isEmpty) {
-      var indexPropertyList: Array[String] = Array.empty
-      properties.asScala.foreach { case (k, v) =>
-        if (k.equals(SupportsIndex.PROP_TYPE)) {
-          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
-            indexType = s"USING $v"
-          } else {
-            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
-              " The supported Index Types are: BTREE and HASH")
-          }
-        } else {
-          hasIndexProperties = true
-          indexPropertyList = indexPropertyList :+ s"$k = $v"
-        }
-      }
-      if (hasIndexProperties) {
-        indexPropertiesStr += "WITH (" + indexPropertyList.mkString(", ") + ")"
-      }
+    if (indexPropertyList.nonEmpty) {
+      indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
     }
 
     s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)}" +
-      s" $indexType (${columnList.mkString(", ")}) $indexPropertiesStr"
+      s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
   // SHOW INDEX syntax
@@ -217,14 +198,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       indexName: String,
       tableName: String,
       options: JDBCOptions): Boolean = {
-    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName'"
-    try {
-      JdbcUtils.checkIfIndexExists(conn, indexName, sql, "indexname", options)
-    } catch {
-      case _: Exception =>
-        logWarning("Cannot retrieved index info.")
-        false
-    }
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName' AND" +
+      s" indexname = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
   // DROP INDEX syntax
@@ -245,5 +221,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
     }
+  }
+
+  override def convertPropertyPairToString(key: String, value: String): String = {
+    s"$key = $value"
   }
 }
