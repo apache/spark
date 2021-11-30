@@ -4238,6 +4238,134 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df3, df4)
     }
   }
+
+  test("SPARK-37519: Support Relation With LateralView") {
+    // case 1 tableName
+    checkAnswer(
+      sql(
+        """
+          |WITH PERSON AS (
+          |SELECT 100 AS ID, 'John' AS NAME, 30 AS AGE, 1 AS CLASS, 'Street 1' AS ADDRESS
+          |UNION ALL
+          |SELECT 200 AS ID, 'Mary' AS NAME, NULL AS AGE, 1 AS CLASS, 'Street 2' AS ADDRESS
+          |UNION ALL
+          |SELECT 300 AS ID, 'Mike' AS NAME, 80 AS AGE, 3 AS CLASS, 'Street 3' AS ADDRESS
+          |UNION ALL
+          |SELECT 400 AS ID, 'Dan' AS NAME, 50 AS AGE, 4 AS CLASS, 'Street 4' AS ADDRESS
+          |)
+          |SELECT *
+          |FROM PERSON AS P1
+          |LATERAL VIEW EXPLODE(ARRAY(30, 60)) CC1 AS C_AGE1
+          |LEFT JOIN PERSON P2 ON P1.ID = P2.ID  AND CC1.C_AGE1=P2.AGE;
+          |""".stripMargin), Row(100, "John", 30, 1, "Street 1", 30,
+        100, "John", 30, 1, "Street 1")
+        :: Row(100, "John", 30, 1, "Street 1", 60,
+        null, null, null, null, null)
+        :: Row(200, "Mary", null, 1, "Street 2", 30,
+        null, null, null, null, null)
+        :: Row(200, "Mary", null, 1, "Street 2", 60,
+        null, null, null, null, null)
+        :: Row(300, "Mike", 80, 3, "Street 3", 30,
+        null, null, null, null, null)
+        :: Row(300, "Mike", 80, 3, "Street 3", 60,
+        null, null, null, null, null)
+        :: Row(400, "Dan", 50, 4, "Street 4", 30,
+        null, null, null, null, null)
+        :: Row(400, "Dan", 50, 4, "Street 4", 60,
+        null, null, null, null, null) :: Nil)
+    // case 2 aliasedQuery
+    checkAnswer(sql(
+      """
+        |WITH PERSON AS (
+        |SELECT 100 AS ID, 'John' AS NAME, 30 AS AGE, 1 AS CLASS, 'Street 1' AS ADDRESS
+        |UNION ALL
+        |SELECT 200 AS ID, 'Mary' AS NAME, NULL AS AGE, 1 AS CLASS, 'Street 2' AS ADDRESS
+        |UNION ALL
+        |SELECT 300 AS ID, 'Mike' AS NAME, 80 AS AGE, 3 AS CLASS, 'Street 3' AS ADDRESS
+        |UNION ALL
+        |SELECT 400 AS ID, 'Dan' AS NAME, 50 AS AGE, 4 AS CLASS, 'Street 4' AS ADDRESS
+        |)
+        |SELECT *
+        |FROM (SELECT * FROM PERSON) AS P1
+        |LATERAL VIEW EXPLODE(ARRAY(30, 60)) CC1 AS C_AGE1
+        |LEFT JOIN PERSON P2 ON P1.ID = P2.ID  AND CC1.C_AGE1=P2.AGE;
+        |""".stripMargin), Row(100, "John", 30, 1, "Street 1", 30,
+      100, "John", 30, 1, "Street 1")
+      :: Row(100, "John", 30, 1, "Street 1", 60,
+      null, null, null, null, null)
+      :: Row(200, "Mary", null, 1, "Street 2", 30,
+      null, null, null, null, null)
+      :: Row(200, "Mary", null, 1, "Street 2", 60,
+      null, null, null, null, null)
+      :: Row(300, "Mike", 80, 3, "Street 3", 30,
+      null, null, null, null, null)
+      :: Row(300, "Mike", 80, 3, "Street 3", 60,
+      null, null, null, null, null)
+      :: Row(400, "Dan", 50, 4, "Street 4", 30,
+      null, null, null, null, null)
+      :: Row(400, "Dan", 50, 4, "Street 4", 60,
+      null, null, null, null, null) :: Nil)
+    // case 3 aliasedRelation
+    checkAnswer(sql(
+      """
+        |WITH PERSON AS (
+        |SELECT 100 AS ID, 'John' AS NAME, 30 AS AGE, 1 AS CLASS, 'Street 1' AS ADDRESS
+        |UNION ALL
+        |SELECT 200 AS ID, 'Mary' AS NAME, NULL AS AGE, 1 AS CLASS, 'Street 2' AS ADDRESS
+        |),
+        |INFO AS (
+        |SELECT 100 AS INFO_ID, 100 AS SCORE
+        |UNION ALL
+        |SELECT 200 AS INFO_ID, 90 AS SCORE)
+        |SELECT * FROM (PERSON P1 INNER JOIN INFO P2 ON P1.ID = P2.INFO_ID)
+        |P1 (ID, NAME, AGE, CLASS, ADDRESS, INFO_ID, SCORE)
+        |LATERAL VIEW EXPLODE(ARRAY(30, 60)) CC1 AS C_AGE1
+        |LEFT JOIN PERSON P2 ON P1.ID = P2.ID  AND CC1.C_AGE1=P2.AGE
+        |""".stripMargin), Row(100, "John", 30, 1, "Street 1", 100, 100, 30,
+      100, "John", 30, 1, "Street 1")
+      :: Row(100, "John", 30, 1, "Street 1", 100, 100, 60,
+      null, null, null, null, null)
+      :: Row(200, "Mary", null, 1, "Street 2", 200, 90, 30,
+      null, null, null, null, null)
+      :: Row(200, "Mary", null, 1, "Street 2", 200, 90, 60,
+      null, null, null, null, null) :: Nil)
+    // case 4 inlineTableDefault2
+    checkAnswer(
+      sql(
+        """
+          |WITH PERSON AS (
+          |SELECT 100 AS ID, 'John' AS NAME, 30 AS AGE, 1 AS CLASS, 'Street 1' AS ADDRESS
+          |UNION ALL
+          |SELECT 200 AS ID, 'Mary' AS NAME, NULL AS AGE, 1 AS CLASS, 'Street 2' AS ADDRESS
+          |UNION ALL
+          |SELECT 300 AS ID, 'Mike' AS NAME, 80 AS AGE, 3 AS CLASS, 'Street 3' AS ADDRESS
+          |UNION ALL
+          |SELECT 400 AS ID, 'Dan' AS NAME, 50 AS AGE, 4 AS CLASS, 'Street 4' AS ADDRESS
+          |)
+          |SELECT *
+          |FROM VALUES (100, 'John', 30, 1, 'Street 1'),
+          |(200, 'Mary', NULL, 1, 'Street 2'),
+          |(300, 'Mike', 80, 3, 'Street 3'),
+          |(400, 'Dan', 50, 4, 'Street 4') AS P1 (ID, NAME, AGE, CLASS, ADDRESS2)
+          |LATERAL VIEW EXPLODE(ARRAY(30, 60)) CC1 AS C_AGE1
+          |LEFT JOIN PERSON P2 ON P1.ID = P2.ID  AND CC1.C_AGE1=P2.AGE
+          |""".stripMargin), Row(100, "John", 30, 1, "Street 1", 30,
+        100, "John", 30, 1, "Street 1")
+        :: Row(100, "John", 30, 1, "Street 1", 60,
+        null, null, null, null, null)
+        :: Row(200, "Mary", null, 1, "Street 2", 30,
+        null, null, null, null, null)
+        :: Row(200, "Mary", null, 1, "Street 2", 60,
+        null, null, null, null, null)
+        :: Row(300, "Mike", 80, 3, "Street 3", 30,
+        null, null, null, null, null)
+        :: Row(300, "Mike", 80, 3, "Street 3", 60,
+        null, null, null, null, null)
+        :: Row(400, "Dan", 50, 4, "Street 4", 30,
+        null, null, null, null, null)
+        :: Row(400, "Dan", 50, 4, "Street 4", 60,
+        null, null, null, null, null) :: Nil)
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -738,10 +738,12 @@ identifierComment
 
 relationPrimary
     : multipartIdentifier temporalClause?
-      sample? tableAlias                      #tableName
-    | '(' query ')' sample? tableAlias        #aliasedQuery
-    | '(' relation ')' sample? tableAlias     #aliasedRelation
-    | inlineTable                             #inlineTableDefault2
+      sample? tableAlias lateralView*         #tableName
+    | '(' query ')' sample?
+      tableAlias lateralView*                 #aliasedQuery
+    | '(' relation ')' sample?
+      tableAlias lateralView*                 #aliasedRelation
+    | inlineTable lateralView*                #inlineTableDefault2
     | functionTable                           #tableValuedFunction
     ;
 

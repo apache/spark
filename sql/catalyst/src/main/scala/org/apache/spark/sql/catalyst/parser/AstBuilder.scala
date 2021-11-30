@@ -1260,7 +1260,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val relation = UnresolvedRelation(tableId)
     val table = mayApplyAliasPlan(
       ctx.tableAlias, relation.optionalMap(ctx.temporalClause)(withTimeTravel))
-    table.optionalMap(ctx.sample)(withSample)
+    val tableWithSample = table.optionalMap(ctx.sample)(withSample)
+    if (!ctx.lateralView.isEmpty) {
+      ctx.lateralView.asScala.foldLeft(tableWithSample)(withGenerate)
+    } else {
+      tableWithSample
+    }
   }
 
   private def withTimeTravel(
@@ -1339,7 +1344,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
     val relation = plan(ctx.relation).optionalMap(ctx.sample)(withSample)
-    mayApplyAliasPlan(ctx.tableAlias, relation)
+    if (!ctx.lateralView.isEmpty) {
+      ctx.lateralView.asScala.foldLeft(mayApplyAliasPlan(ctx.tableAlias, relation))(withGenerate)
+    } else {
+      mayApplyAliasPlan(ctx.tableAlias, relation)
+    }
+  }
+
+  /**
+   * Create an inline table.
+   */
+  override def visitInlineTableDefault2(
+      ctx: InlineTableDefault2Context): LogicalPlan = withOrigin(ctx) {
+    if (!ctx.lateralView.isEmpty) {
+      ctx.lateralView.asScala.foldLeft(visitInlineTable(ctx.inlineTable()))(withGenerate)
+    } else {
+      visitInlineTable(ctx.inlineTable())
+    }
   }
 
   /**
@@ -1352,7 +1373,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
     val relation = plan(ctx.query).optionalMap(ctx.sample)(withSample)
-    if (ctx.tableAlias.strictIdentifier == null) {
+    val subQuery = if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
@@ -1360,6 +1381,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       SubqueryAlias("__auto_generated_subquery_name", relation)
     } else {
       mayApplyAliasPlan(ctx.tableAlias, relation)
+    }
+    if (!ctx.lateralView.isEmpty) {
+      ctx.lateralView.asScala.foldLeft(subQuery)(withGenerate)
+    } else {
+      subQuery
     }
   }
 
