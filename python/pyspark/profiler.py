@@ -77,7 +77,7 @@ class ProfilerCollector(object):
             if not showed and profiler:
                 profiler.show(id)
                 # mark it as showed
-                self.profilers[i][2] = True  # type: ignore[index]
+                self.profilers[i][2] = True
 
 
 class Profiler(object):
