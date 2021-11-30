@@ -305,9 +305,7 @@ class SparkSession(SparkConversionMixin):
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
             else:
-                jsparkSession = self._jvm.SparkSession(
-                    self._jsc.sc(), self._jvm.PythonUtils.toScalaMap(options)
-                )
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
