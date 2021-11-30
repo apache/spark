@@ -231,9 +231,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', 'Mon')' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2015-07-23 12:12:12'' is of timestamp_ntz type.
-To fix the error, you might need to add explicit type casts.
-To bypass the error with lenient type coercion rules, set spark.sql.ansi.enabled as false.
-; line 1 pos 7
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query
@@ -502,9 +500,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_add(date_view.date_str, 1)' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts.
-To bypass the error with lenient type coercion rules, set spark.sql.ansi.enabled as false.
-; line 1 pos 7
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query
@@ -514,9 +510,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve 'date_sub(date_view.date_str, 1)' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts.
-To bypass the error with lenient type coercion rules, set spark.sql.ansi.enabled as false.
-; line 1 pos 7
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query
@@ -599,9 +593,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 cannot resolve '(date_view.date_str - DATE '2001-09-28')' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts.
-To bypass the error with lenient type coercion rules, set spark.sql.ansi.enabled as false.
-; line 1 pos 7
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query
