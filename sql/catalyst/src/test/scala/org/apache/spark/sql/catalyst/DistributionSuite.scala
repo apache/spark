@@ -20,7 +20,10 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.ExprId
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType, ShortType, StringType}
 
 class DistributionSuite extends SparkFunSuite {
 
@@ -302,5 +305,41 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
       false)
+  }
+
+  test("SPARK-37502: Support cast aware output partitioning and required if it can up cast") {
+    val exprId1 = ExprId(1)
+    val exprId2 = ExprId(2)
+    def intAttr1: AttributeReference = $"a".int.withExprId(exprId1)
+    def longAttr2: AttributeReference = $"b".long.withExprId(exprId2)
+
+    Seq(
+      (Seq(intAttr1.cast(LongType)), Seq(intAttr1), true),
+      (Seq(intAttr1), Seq(intAttr1.cast(LongType)), true),
+      (Seq(intAttr1.cast(ShortType)), Seq(intAttr1), false),
+      (Seq(intAttr1), Seq(intAttr1.cast(ShortType)), false),
+      (Seq(intAttr1.cast(LongType)), Seq(intAttr1.cast(StringType)), true),
+      (Seq(intAttr1.cast(LongType)), Seq(intAttr1.cast(ShortType)), false),
+      (Seq(intAttr1.cast(LongType), longAttr2.cast(StringType)),
+        Seq(intAttr1.cast(DecimalType(12, 0)), longAttr2), true),
+      (Seq(intAttr1.cast(LongType), longAttr2.cast(StringType)),
+        Seq(intAttr1, longAttr2.cast(IntegerType)), false)
+    ).foreach {
+      case (left, right, satisfied) =>
+        checkSatisfied(
+          HashPartitioning(left, 10),
+          ClusteredDistribution(right, Some(10)),
+          satisfied)
+
+        checkSatisfied(
+          HashPartitioning(left, 10),
+          HashClusteredDistribution(right, Some(10)),
+          satisfied)
+
+        checkSatisfied(
+          RangePartitioning(left.map(_.asc), 10),
+          ClusteredDistribution(right, Some(10)),
+          satisfied)
+    }
   }
 }

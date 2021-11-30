@@ -210,7 +210,7 @@ case object SinglePartition extends Partitioning {
  * in the same partition.
  */
 case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+  extends Expression with Partitioning with Unevaluable with PartitioningSemanticEquals {
 
   override def children: Seq[Expression] = expressions
   override def nullable: Boolean = false
@@ -221,10 +221,10 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
+            case (l, r) => partitioningSemanticsEquals(l, r)
           }
         case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          expressions.forall(l => requiredClustering.exists(r => partitioningSemanticsEquals(l, r)))
         case _ => false
       }
     }
@@ -253,7 +253,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * into its child.
  */
 case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
-  extends Expression with Partitioning with Unevaluable {
+  extends Expression with Partitioning with Unevaluable with PartitioningSemanticEquals {
 
   override def children: Seq[SortOrder] = ordering
   override def nullable: Boolean = false
@@ -282,7 +282,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          ordering.map(_.child)
+            .forall(l => requiredClustering.exists(r => partitioningSemanticsEquals(l, r)))
         case _ => false
       }
     }

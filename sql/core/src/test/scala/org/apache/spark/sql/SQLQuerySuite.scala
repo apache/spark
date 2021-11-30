@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -4236,6 +4236,36 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       checkAnswer(df3, df4)
+    }
+  }
+
+  test("SPARK-37502: Support cast aware output partitioning and required if it can up cast") {
+    withTempView("v1", "v2", "v3") {
+      Seq(1).toDF("c1").createOrReplaceTempView("v1")
+      Seq(1L).toDF("c2").createOrReplaceTempView("v2")
+      Seq(1).toDF("c3").createOrReplaceTempView("v3")
+
+      def checkShuffleNumber(query: String, numShuffle: Int): Unit = {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val plan = sql(query).queryExecution.executedPlan
+          assert(
+            plan.collect {
+              case shuffle: ShuffleExchangeLike => shuffle
+            }.size == numShuffle)
+        }
+      }
+
+      checkShuffleNumber(
+        "SELECT * FROM v2 JOIN (SELECT c1, count(*) FROM v1 GROUP BY c1) v1 ON v1.c1 = v2.c2",
+        2)
+
+      checkShuffleNumber(
+        """
+          |SELECT * FROM v2 JOIN (SELECT c1, count(*) FROM v1 GROUP BY c1) v1 ON v1.c1 = v2.c2
+          |JOIN v3 ON v1.c1 = v3.c3
+        """.stripMargin,
+        3)
     }
   }
 }
