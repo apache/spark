@@ -291,6 +291,21 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.get.index === 0)
   }
 
+  test("skip unsatisfiable locality levels (the case TaskLocation is HostTaskLocation)") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("execA", "host1"))
+    val taskSet = FakeTask.createTaskSet(2, Seq(TaskLocation("host1")), Seq(TaskLocation("host2")))
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // HostTaskLocation host1 exactly match
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL)._1 !== None)
+
+    // There is no executor alive on HostTaskLocation host2, NODE_LOCAL should be rejected
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL)._1 === None)
+    assert(manager.resourceOffer("execA", "host1", ANY)._1 !== None)
+  }
+
   test("basic delay scheduling") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))

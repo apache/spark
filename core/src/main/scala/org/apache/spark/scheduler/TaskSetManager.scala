@@ -259,6 +259,7 @@ private[spark] class TaskSetManager(
       loc match {
         case e: ExecutorCacheTaskLocation =>
           pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e.executorId, new ArrayBuffer) += index
+          pendingTaskSetToAddTo.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
         case e: HDFSCacheTaskLocation =>
           val exe = sched.getExecutorsAliveOnHost(loc.host)
           exe match {
@@ -266,14 +267,21 @@ private[spark] class TaskSetManager(
               for (e <- set) {
                 pendingTaskSetToAddTo.forExecutor.getOrElseUpdate(e, new ArrayBuffer) += index
               }
+              pendingTaskSetToAddTo.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
               logInfo(s"Pending task $index has a cached location at ${e.host} " +
                 ", where there are executors " + set.mkString(","))
             case None => logDebug(s"Pending task $index has a cached location at ${e.host} " +
               ", but there are no executors alive there.")
           }
-        case _ =>
+        case _: HostTaskLocation =>
+          val exe = sched.getExecutorsAliveOnHost(loc.host)
+          exe match {
+            case Some(_) =>
+              pendingTaskSetToAddTo.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
+            case _ => logDebug(s"Pending task $index has a location at ${loc.host} " +
+              ", but there are no executors alive there.")
+          }
       }
-      pendingTaskSetToAddTo.forHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
 
       if (resolveRacks) {
         sched.getRackForHost(loc.host).foreach { rack =>
