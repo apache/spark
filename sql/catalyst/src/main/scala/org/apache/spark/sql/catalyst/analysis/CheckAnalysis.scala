@@ -648,8 +648,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
 
           val ref = dataTypes(nonAnsiPlan.children.head)
+          val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
           nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
-            val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
             // Check if the data types match.
             dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
               if (dataTypesAreCompatibleFn(dt1, dt2)) {
