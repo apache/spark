@@ -74,7 +74,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private implicit val schedulerEndpointEC = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
 
-  /** Application ID. This work for both cluster and client mode. */
+  /** Application ID. */
   protected var appId: Option[ApplicationId] = None
 
   /** Attempt ID. This is unset for client-mode schedulers */
