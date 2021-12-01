@@ -324,8 +324,6 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     partitionings.exists(_.satisfies(required))
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    require(satisfies(distribution), "createShuffleSpec should only be called after satisfies " +
-        "check is successful.")
     val filtered = partitionings.filter(_.satisfies(distribution))
     ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
   }
