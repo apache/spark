@@ -26,13 +26,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.StructType
 
-class CountAggregateOptimizationSuite extends PlanTest {
+class GenerateOptimizationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("CountAggregateOptimization", FixedPoint(100),
+    val batches = Batch("GenerateOptimization", FixedPoint(100),
       ColumnPruning,
       CollapseProject,
-      CountAggregateOptimization) :: Nil
+      GenerateOptimization) :: Nil
   }
 
   private val item = StructType.fromDDL("item_id int, item_data string, item_price int")

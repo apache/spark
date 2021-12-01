@@ -87,7 +87,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
-        CountAggregateOptimization,
+        GenerateOptimization,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -2164,30 +2164,12 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Prunes unnecessary fields from a [[Generate]] if it is under a count aggregation
- * query.
+ * Prunes unnecessary fields from a [[Generate]] if it is under a project which does not refer
+ * any generated attributes, .e.g., count-like aggregation on an exploded array.
  */
-object CountAggregateOptimization extends Rule[LogicalPlan] {
-  private def isLiteralCountAggFun(func: AggregateFunction): Boolean = func match {
-    case c: Count if c.children.size == 1 && c.children(0).isInstanceOf[Literal] => true
-    case _ => false
-  }
-
-  private def isCandidate(agg: Aggregate): Boolean = {
-    if (agg.aggregateExpressions.size == 1) {
-      agg.aggregateExpressions(0) match {
-        case Alias(ae: AggregateExpression, _) if isLiteralCountAggFun(ae.aggregateFunction) =>
-          true
-        case _ =>
-          false
-      }
-    } else {
-      false
-    }
-  }
-
-  private def pruningFields(agg: Aggregate): LogicalPlan = {
-    agg.transformDownWithPruning(_.containsPattern(GENERATE), ruleId) {
+object GenerateOptimization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+      _.containsAllPatterns(PROJECT, GENERATE), ruleId) {
       case p @ Project(_, g: Generate) if p.references.intersect(g.outputSet).isEmpty
           && g.generator.isInstanceOf[ExplodeBase] =>
         g.generator.children.head.dataType match {
@@ -2221,14 +2203,6 @@ object CountAggregateOptimization extends Rule[LogicalPlan] {
           case _ => p
         }
     }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
-    _.containsPattern(AGGREGATE), ruleId) {
-
-    case a @ Aggregate(_, _, _) if isCandidate(a) =>
-      pruningFields(a)
-  }
 }
 
 /**
