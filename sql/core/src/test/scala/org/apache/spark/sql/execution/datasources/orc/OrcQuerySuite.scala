@@ -827,12 +827,19 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-37463: read/write Timestamp ntz to Orc uses UTC timestamp") {
+  test("SPARK-37463: read/write Timestamp ntz to Orc with different time zone") {
     val localTimeZone = TimeZone.getDefault
     try {
       TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
 
-      val df = sql("select timestamp_ntz '2021-06-01 00:00:00' ts_ntz")
+      val sqlText = """
+                      |select
+                      | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
+                      | timestamp_ntz '1883-11-16 00:00:00.0' as ts_ntz2,
+                      | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
+                      |""".stripMargin
+
+      val df = sql(sqlText)
 
       df.write.mode("overwrite").orc("ts_ntz_orc")
 
