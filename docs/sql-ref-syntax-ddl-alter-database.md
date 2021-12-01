@@ -47,7 +47,7 @@ ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
 `ALTER DATABASE SET LOCATION` statement changes the default parent-directory where new tables will be added 
 for a database. Please note that it does not move the contents of the database's current directory to the newly 
 specified location or change the locations associated with any tables/partitions under the specified database 
-(available in Hive 3.0.0 and later).
+(available since Spark 3.0.0 with the Hive metastore version 3.0.0 and later).
 
 #### Syntax
 
