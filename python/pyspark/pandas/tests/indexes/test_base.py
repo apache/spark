@@ -18,7 +18,7 @@
 import inspect
 import unittest
 from distutils.version import LooseVersion
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,7 @@ from pyspark.pandas.missing.indexes import (
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
+    MissingPandasLikeTimedeltaIndex,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
@@ -456,6 +457,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "b": [4, 5, 6],
                 "c": pd.date_range("2011-01-01", freq="D", periods=3),
                 "d": pd.Categorical(["a", "b", "c"]),
+                "e": [timedelta(1), timedelta(2), timedelta(3)],
             }
         )
 
@@ -522,6 +524,27 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.set_index("c").index, name)()
 
+        # TimedeltaIndex functions
+        missing_functions = inspect.getmembers(MissingPandasLikeTimedeltaIndex, inspect.isfunction)
+        unsupported_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
+        ]
+        for name in unsupported_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.set_index("e").index, name)()
+
+        deprecated_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
+        ]
+        for name in deprecated_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
+            ):
+                getattr(psdf.set_index("e").index, name)()
+
         # Index properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeIndex, lambda o: isinstance(o, property)
@@ -577,6 +600,22 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 getattr(psdf.set_index(["a", "b"]).index, name)
 
         # DatetimeIndex properties
+        missing_properties = inspect.getmembers(
+            MissingPandasLikeDatetimeIndex, lambda o: isinstance(o, property)
+        )
+        unsupported_properties = [
+            name
+            for (name, type_) in missing_properties
+            if type_.fget.__name__ == "unsupported_property"
+        ]
+        for name in unsupported_properties:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.set_index("c").index, name)
+
+        # TimedeltaIndex properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeDatetimeIndex, lambda o: isinstance(o, property)
         )
