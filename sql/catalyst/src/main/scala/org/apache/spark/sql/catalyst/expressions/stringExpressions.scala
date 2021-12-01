@@ -465,6 +465,23 @@ abstract class StringPredicate extends BinaryExpression
 /**
  * A function that returns true if the string `left` contains the string `right`.
  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr1, expr2) - Returns a boolean value if expr2 is found inside expr1.
+    Returns NULL if either input expression is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SPARK');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
