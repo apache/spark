@@ -208,7 +208,7 @@ class Broadcast(Generic[T]):
     def __reduce__(self) -> Tuple[Callable[[int], "Broadcast[T]"], Tuple[int]]:
         if self._jbroadcast is None:
             raise RuntimeError("Broadcast can only be serialized in driver")
-        cast(Any, self._pickle_registry).add(self)
+        cast("BroadcastPickleRegistry", self._pickle_registry).add(self)
         return _from_id, (self._jbroadcast.id(),)
 
 
@@ -218,11 +218,11 @@ class BroadcastPickleRegistry(threading.local):
     def __init__(self) -> None:
         self.__dict__.setdefault("_registry", set())
 
-    def __iter__(self) -> Iterator[Broadcast]:
+    def __iter__(self) -> Iterator[Broadcast[Any]]:
         for bcast in self._registry:
             yield bcast
 
-    def add(self, bcast: Broadcast) -> None:
+    def add(self, bcast: Broadcast[Any]) -> None:
         self._registry.add(bcast)
 
     def clear(self) -> None:
