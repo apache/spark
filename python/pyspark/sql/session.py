@@ -289,7 +289,7 @@ class SparkSession(SparkConversionMixin):
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
 
-    def applyModifiableSetting(self, session: JavaObject, options: Dict[str, Any]):
+    def applyModifiableSetting(self, session: JavaObject, options: Dict[str, Any]) -> None:
         log4jLogger = self._jvm.org.apache.log4j
         LOGGER = log4jLogger.LogManager.getLogger("SparkSession")
         staticConfs: Dict[str, Any] = {}
@@ -311,7 +311,6 @@ class SparkSession(SparkConversionMixin):
                 "Using an existing SparkSession; some spark core configurations may not take"
                 + " effect."
             )
-        return
 
     def __init__(
         self,
