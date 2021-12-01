@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  *
  * A class used for watching K8s executor pods by ExternalClusterManagers.
  *
- * @since 2.4.0
+ * @since 3.1.3
  */
 @Stable
 @DeveloperApi
@@ -42,7 +42,7 @@ class ExecutorPodsWatchSnapshotSource(
 
   private var watchConnection: Closeable = _
 
-  @Since("2.4.0")
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
     logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
@@ -53,7 +53,7 @@ class ExecutorPodsWatchSnapshotSource(
       .watch(new ExecutorPodsWatcher())
   }
 
-  @Since("2.4.0")
+  @Since("3.1.3")
   def stop(): Unit = {
     if (watchConnection != null) {
       Utils.tryLogNonFatalError {

@@ -34,7 +34,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * :: DeveloperApi ::
  *
  * A class used for polling K8s executor pods by ExternalClusterManagers.
- * @since 2.4.0
+ * @since 3.1.3
  */
 @Stable
 @DeveloperApi
@@ -48,7 +48,7 @@ class ExecutorPodsPollingSnapshotSource(
 
   private var pollingFuture: Future[_] = _
 
-  @Since("2.4.0")
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
@@ -56,7 +56,7 @@ class ExecutorPodsPollingSnapshotSource(
       new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
-  @Since("2.4.0")
+  @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)
