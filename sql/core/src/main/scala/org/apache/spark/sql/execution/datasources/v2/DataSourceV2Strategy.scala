@@ -171,7 +171,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTableAsSelect(
       ResolvedDBObjectName(catalog, ident), parts, query, tableSpec, options, ifNotExists) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(tableSpec.properties)
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
