@@ -73,9 +73,8 @@ class TimedeltaIndex(Index):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "timedelta64[ns]"
-            return cast(TimedeltaIndex, Index(data, dtype=dtype, copy=copy, name=name))
+            # TODO(SPARK-37512): Support TimedeltaIndex creation given a timedelta Series/Index
+            raise NotImplementedError("Create a TimedeltaIndex from Index/Series is not supported")
 
         kwargs = dict(
             data=data,
