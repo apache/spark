@@ -853,7 +853,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       Seq("America/Los_Angeles", "UTC", "Europe/Amsterdam").foreach { tz =>
         TimeZone.setDefault(TimeZone.getTimeZone(tz))
-        withAllOrcReaders {
+        withAllNativeOrcReaders {
           checkAnswer(sql(query), df)
         }
       }
