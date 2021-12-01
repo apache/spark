@@ -457,7 +457,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "b": [4, 5, 6],
                 "c": pd.date_range("2011-01-01", freq="D", periods=3),
                 "d": pd.Categorical(["a", "b", "c"]),
-                "e": [timedelta(1), timedelta(2), timedelta(3)]
+                "e": [timedelta(1), timedelta(2), timedelta(3)],
             }
         )
 
