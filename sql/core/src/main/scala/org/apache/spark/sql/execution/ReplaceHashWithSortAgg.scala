@@ -93,47 +93,14 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
    * Check if `partialAgg` to be partial aggregate of `finalAgg`.
    */
   private def isPartialAgg(partialAgg: HashAggregateExec, finalAgg: HashAggregateExec): Boolean = {
-    val partialGroupExprs = partialAgg.groupingExpressions
-    val finalGroupExprs = finalAgg.groupingExpressions
-    val partialAggExprs = partialAgg.aggregateExpressions
-    val finalAggExprs = finalAgg.aggregateExpressions
-    val partialAggAttrs = partialAggExprs.flatMap(_.aggregateFunction.aggBufferAttributes)
-    val finalAggAttrs = finalAggExprs.map(_.resultAttribute)
-    val partialResultExprs = partialGroupExprs ++
-      partialAggExprs.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-
-    val groupExprsEqual = partialGroupExprs.length == finalGroupExprs.length &&
-      partialGroupExprs.zip(finalGroupExprs).forall {
-        case (e1, e2) => e1.semanticEquals(e2)
+    if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
+        finalAgg.aggregateExpressions.forall(_.mode == Final)) {
+      (finalAgg.logicalLink, partialAgg.logicalLink) match {
+        case (Some(agg1), Some(agg2)) => agg1.sameResult(agg2)
+        case _ => false
       }
-    val aggExprsEqual = partialAggExprs.length == finalAggExprs.length &&
-      partialAggExprs.forall(_.mode == Partial) && finalAggExprs.forall(_.mode == Final) &&
-      partialAggExprs.zip(finalAggExprs).forall {
-        case (e1, e2) => e1.aggregateFunction.semanticEquals(e2.aggregateFunction)
-      }
-    val isPartialAggAttrsValid = partialAggAttrs.length == partialAgg.aggregateAttributes.length &&
-      partialAggAttrs.zip(partialAgg.aggregateAttributes).forall {
-        case (a1, a2) => a1.semanticEquals(a2)
-      }
-    val isFinalAggAttrsValid = finalAggAttrs.length == finalAgg.aggregateAttributes.length &&
-      finalAggAttrs.zip(finalAgg.aggregateAttributes).forall {
-        case (a1, a2) => a1.semanticEquals(a2)
-      }
-    val isPartialResultExprsValid =
-      partialResultExprs.length == partialAgg.resultExpressions.length &&
-        partialResultExprs.zip(partialAgg.resultExpressions).forall {
-          case (a1, a2) => a1.semanticEquals(a2)
-        }
-    val isRequiredDistributionValid =
-      partialAgg.requiredChildDistributionExpressions.isEmpty &&
-      finalAgg.requiredChildDistributionExpressions.exists { exprs =>
-        exprs.length == finalGroupExprs.length &&
-          exprs.zip(finalGroupExprs).forall {
-            case (e1, e2) => e1.semanticEquals(e2)
-          }
-      }
-
-    groupExprsEqual && aggExprsEqual && isPartialAggAttrsValid && isFinalAggAttrsValid &&
-      isPartialResultExprsValid && isRequiredDistributionValid
+    } else {
+      false
+    }
   }
 }
