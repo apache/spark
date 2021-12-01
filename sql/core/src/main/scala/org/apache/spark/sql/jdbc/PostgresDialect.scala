@@ -226,4 +226,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def convertPropertyPairToString(key: String, value: String): String = {
     s"$key = $value"
   }
+
+  override def getSupportedIndexTypeList(): Array[String] = {
+    Array("BTREE", "HASH", "BRIN")
+  }
 }

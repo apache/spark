@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.connector.catalog.index.{TableIndex}
+import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -194,5 +194,9 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
     }
+  }
+
+  override def getSupportedIndexTypeList(): Array[String] = {
+    Array("BTREE", "HASH")
   }
 }

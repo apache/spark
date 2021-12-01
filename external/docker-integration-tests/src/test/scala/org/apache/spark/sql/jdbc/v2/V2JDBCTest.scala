@@ -210,7 +210,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +
-          s" The supported Index Types are: BTREE and HASH"))
+          s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +

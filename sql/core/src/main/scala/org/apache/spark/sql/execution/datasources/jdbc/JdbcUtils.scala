@@ -1106,15 +1106,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val dialect = JdbcDialects.get(options.url)
     var indexType = ""
     var indexPropertyList: Array[String] = Array.empty
+    val supportedIndexTypeList = dialect.getSupportedIndexTypeList()
 
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
         if (k.equals(SupportsIndex.PROP_TYPE)) {
-          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
+          if (containsIndexTypeIgnoreCase(supportedIndexTypeList, v)) {
             indexType = s"USING $v"
           } else {
             throw new UnsupportedOperationException(s"Index Type $v is not supported." +
-              " The supported Index Types are: BTREE and HASH")
+              s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
           }
         } else {
           indexPropertyList = indexPropertyList :+ dialect.convertPropertyPairToString(k, v)
@@ -1122,6 +1123,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
     }
     (indexType, indexPropertyList)
+  }
+
+  def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
+    if (supportedIndexTypeList.isEmpty) {
+      throw new UnsupportedOperationException(s"None of index type is supported.")
+    }
+    for (indexType <- supportedIndexTypeList) {
+      if (value.equalsIgnoreCase(indexType)) return true
+    }
+    false
   }
 
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {

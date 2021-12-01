@@ -367,6 +367,11 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Return list of supported index type
+   */
+  def getSupportedIndexTypeList(): Array[String] = Array.empty
+
+  /**
    * returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
