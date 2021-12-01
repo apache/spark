@@ -68,43 +68,46 @@ class SparkSqlAstBuilder extends AstBuilder {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.SET.getSymbol).trim match {
-      case configKeyValueDef(key, value) =>
-        SetCommand(Some(key -> Option(value.trim)))
-      case configKeyDef(key) =>
-        SetCommand(Some(key -> None))
-      case s if s == "-v" =>
-        SetCommand(Some("-v" -> None))
-      case s if s.isEmpty =>
-        SetCommand(None)
-      case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-        "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-        "in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
+    if (ctx.configKey() != null) {
+      val keyStr = ctx.configKey().getText
+      if (ctx.EQ() != null) {
+        remainder(ctx.EQ().getSymbol).trim match {
+          case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
+          case other => throw new ParseException(s"'$other' is an invalid property " +
+            s"value, please use quotes, e.g. SET `$keyStr`=`$other`", ctx)
+        }
+      } else {
+        SetCommand(Some(keyStr -> None))
+      }
+    } else {
+      remainder(ctx.SET.getSymbol).trim match {
+        case configKeyValueDef(key, value) =>
+          SetCommand(Some(key -> Option(value.trim)))
+        case configKeyDef(key) =>
+          SetCommand(Some(key -> None))
+        case s if s == "-v" =>
+          SetCommand(Some("-v" -> None))
+        case s if s.isEmpty =>
+          SetCommand(None)
+        case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
+          "'SET key=value'. If you want to include special characters in key, or include " +
+          "semicolon in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
+      }
     }
   }
 
   override def visitSetQuotedConfiguration(
       ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configValue() != null && ctx.configKey() != null) {
+    assert(ctx.configValue() != null)
+    if (ctx.configKey() != null) {
       SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
-    } else if (ctx.configValue() != null) {
+    } else {
       val valueStr = ctx.configValue().getText
       val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
       keyCandidate match {
         case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
-        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-          s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
-      }
-    } else {
-      val keyStr = ctx.configKey().getText
-      if (ctx.EQ() != null) {
-        remainder(ctx.EQ().getSymbol).trim match {
-          case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
-          case other => throw new ParseException(s"'$other' is an invalid property value, please " +
-            s"use quotes, e.g. SET `$keyStr`=`$other`", ctx)
-        }
-      } else {
-        SetCommand(Some(keyStr -> None))
+        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property " +
+          s"key, please use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
       }
     }
   }
