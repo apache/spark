@@ -48,7 +48,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   // The capacity of vectorized batch.
   private int capacity;
 
-  // If the orc file will be read is not write by Spark 3.1 or prior, use UTC timestamp.
+  // If the Orc file to be read is written by Spark 3.3 or after, use UTC timestamp.
   private boolean useUTCTimestamp;
 
   // Vectorized ORC Row Batch wrap.
