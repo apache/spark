@@ -837,10 +837,15 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     try {
       TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
 
-      val df = sql("""
-                     |select timestamp_ntz '2021-06-01 00:00:00' ts_ntz,
-                     |timestamp_ltz '2021-06-01 00:00:00' ts_ltz
-                     |""".stripMargin)
+      val sqlText = """
+                      |select
+                      | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
+                      | timestamp_ntz '1883-11-16 00:00:00.0' as ts_ntz2,
+                      | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3,
+                      | timestamp_ntz'1996-10-27T09:10:25.088353' as ts_ntz4
+                      |""".stripMargin
+
+      val df = sql(sqlText)
 
       df.write.mode("overwrite").orc("ts_ntz_orc")
 
