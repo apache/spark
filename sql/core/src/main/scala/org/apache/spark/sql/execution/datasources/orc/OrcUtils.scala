@@ -535,9 +535,9 @@ object OrcUtils extends Logging {
 
   def fromOrcNTZ(ts: Timestamp, writerTimezone: String): Long = {
     val millis = ts.getTime
-    val newMillis = Option(writerTimezone).map { tz =>
-      val writer = TimeZone.getTimeZone(tz)
-      val reader = TimeZone.getDefault
+    val reader = TimeZone.getDefault
+    val newMillis = Option(writerTimezone).map(TimeZone.getTimeZone(_))
+      .filterNot(_.hasSameRules(reader)).map { writer =>
       val writerOffset = writer.getOffset(millis)
       val readerOffset = reader.getOffset(millis)
       val adjustedMillis = millis + readerOffset - writerOffset
@@ -547,9 +547,8 @@ object OrcUtils extends Logging {
       val offset = readerOffset - adjustedWriter
       millis + offset
     }.getOrElse(millis)
-    val micros = DateTimeUtils.millisToMicros(newMillis) +
+    DateTimeUtils.millisToMicros(newMillis) +
       (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-    micros
   }
 
   def toOrcNTZ(micros: Long): OrcTimestamp = {
