@@ -913,25 +913,14 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         # SPARK-37495: Skip identical index checking of Series.compare when config
         # 'compute.eager_check' is disabled
         psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
-        psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
+        psser2 = ps.Series([1, 2, 3, 4, 5, 6], index=pd.Index([1, 2, 4, 3, 6, 7]))
         expected = ps.DataFrame(
-            {"self": [3, 4, 5, np.nan], "other": [4, 3, np.nan, 5.0]}, index=[3, 4, 5, 6]
+            {"self": [3, 4, 5, np.nan, np.nan], "other": [4, 3, np.nan, 5.0, 6.0]},
+            index=[3, 4, 5, 6, 7],
         )
 
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(expected, psser1.compare(psser2))
-
-        psser1 = ps.Series([1, 2, 3, 4, 5, 6], index=pd.Index([1, 2, 3, 4, 5, 6]))
-        psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 5]))
-
-        with self.assertRaisesRegex(
-            ValueError, "Can only compare identically-labeled Series objects"
-        ):
-            psser1.compare(psser2)
-        with ps.option_context("compute.eager_check", False), self.assertRaisesRegex(
-            ValueError, "Can only compare identically-labeled Series objects"
-        ):
-            psser1.compare(psser2)
 
     def test_different_columns(self):
         psdf1 = self.psdf1

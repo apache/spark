@@ -5868,8 +5868,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             if get_option("compute.eager_check") and not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")
-            elif len(self.index) != len(other.index):
-                raise ValueError("Can only compare identically-labeled Series objects")
 
             combined = combine_frames(self.to_frame(), other.to_frame())
 
