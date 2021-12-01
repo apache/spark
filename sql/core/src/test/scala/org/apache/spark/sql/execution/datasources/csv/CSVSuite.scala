@@ -1211,7 +1211,8 @@ abstract class CSVSuite
         }
         assert(
           err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
-          err.getCause.getMessage.contains("Unable to extract value"))
+          err.getCause.getMessage.contains("Unable to extract value") ||
+          err.getCause.getMessage.contains("Unable to extract ZoneId"))
       }
     }
   }
