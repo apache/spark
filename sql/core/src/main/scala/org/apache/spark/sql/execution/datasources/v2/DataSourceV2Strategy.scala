@@ -200,29 +200,29 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+    case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
+        parts, query, tableSpec, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
             staging,
-            ident,
+            ident.asIdentifier,
             parts,
             query,
             planLater(query),
-            propsWithOwner,
+            tableSpec,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            catalog,
-            ident,
+            catalog.asTableCatalog,
+            ident.asIdentifier,
             parts,
             query,
             planLater(query),
-            propsWithOwner,
+            tableSpec,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil

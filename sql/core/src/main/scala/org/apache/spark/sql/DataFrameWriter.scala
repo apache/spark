@@ -23,10 +23,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedDBObjectName, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -586,19 +586,22 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
-        ReplaceTableAsSelectStatement(
-          nameParts,
-          df.queryExecution.analyzed,
+        val tableSpec = TableSpec(
+          bucketSpec = None,
+          properties = Map.empty,
+          provider = Some(source),
+          options = Map.empty,
+          location = extraOptions.get("path"),
+          comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          serde = None,
+          external = false)
+        ReplaceTableAsSelect(
+          UnresolvedDBObjectName(nameParts, isNamespace = false),
           partitioningAsV2,
-          None,
-          Map.empty,
-          Some(source),
-          Map.empty,
-          extraOptions.get("path"),
-          extraOptions.get(TableCatalog.PROP_COMMENT),
-          extraOptions.toMap,
-          None,
-          orCreate = true)      // Create the table if it doesn't exist
+          df.queryExecution.analyzed,
+          tableSpec,
+          writeOptions = Map.empty,
+          orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
         // We have a potential race condition here in AppendMode, if the table suddenly gets

@@ -59,18 +59,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         convertTableProperties(c),
         orCreate = c.orCreate)
-
-    case c @ ReplaceTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      ReplaceTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c),
-        writeOptions = c.writeOptions,
-        orCreate = c.orCreate)
   }
 
   object NonSessionCatalogAndTable {

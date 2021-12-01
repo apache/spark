@@ -21,9 +21,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedDBObjectName, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.IntegerType
@@ -195,20 +195,22 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    runCommand(
-      ReplaceTableAsSelectStatement(
-        tableName,
-        logicalPlan,
-        partitioning.getOrElse(Seq.empty),
-        None,
-        properties.toMap,
-        provider,
-        Map.empty,
-        None,
-        None,
-        options.toMap,
-        None,
-        orCreate = orCreate))
+    val tableSpec = TableSpec(
+      bucketSpec = None,
+      properties = properties.toMap,
+      provider = provider,
+      options = Map.empty,
+      location = None,
+      comment = None,
+      serde = None,
+      external = false)
+    runCommand(ReplaceTableAsSelect(
+      UnresolvedDBObjectName(tableName, isNamespace = false),
+      partitioning.getOrElse(Seq.empty),
+      logicalPlan,
+      tableSpec,
+      writeOptions = options.toMap,
+      orCreate = orCreate))
   }
 }
 

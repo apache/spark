@@ -23,7 +23,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, ReplaceTableStatement, SerdeInfo, TableSpec}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -314,11 +314,13 @@ private[sql] object CatalogV2Util {
     convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
   }
 
-  def convertTableProperties(r: ReplaceTableAsSelectStatement): Map[String, String] = {
-    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  def convertTableProperties(t: TableSpec): Map[String, String] = {
+    val props = convertTableProperties(
+      t.properties, t.options, t.serde, t.location, t.comment, t.provider, t.external)
+    withDefaultOwnership(props)
   }
 
-  def convertTableProperties(
+  private def convertTableProperties(
       properties: Map[String, String],
       options: Map[String, String],
       serdeInfo: Option[SerdeInfo],
