@@ -22,7 +22,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.types.LongType
 
@@ -50,30 +50,40 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
       0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
-    val keys = Range.Long(0, numRows, 1)
-    val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
-    if (cacheLocality) {
+    val keys = Range.Long(0, numRows / duplicationFactor, 1)
+    val map = new LongToUnsafeRowMap(taskMemoryManager, numRows.toInt)
+
+    (0 until duplicationFactor).foreach { _ =>
       keys.foreach { k =>
-        (0 until duplicationFactor).foreach { _ =>
-          map.append(k, unsafeProj(InternalRow(k)))
-        }
-      }
-    } else {
-      (0 until duplicationFactor).foreach { _ =>
-        keys.foreach { k =>
-          map.append(k, unsafeProj(InternalRow(k)))
-        }
+        map.append(k, unsafeProj(InternalRow(k)))
       }
     }
-    map.optimize()
 
-    val threads = (0 to 100).map { _ =>
+    val mapToQuery = if (cacheLocality) {
+      val compactMap = new LongToUnsafeRowMap(taskMemoryManager, numRows.toInt)
+      val stagingResultRow = new UnsafeRow(1)
+      map.keys().foreach { keyRow =>
+        val key = keyRow.getLong(0)
+        map.get(key, stagingResultRow).foreach { value =>
+          compactMap.append(key, value)
+        }
+      }
+      map.free()
+      compactMap
+    } else {
+      map
+    }
+    mapToQuery.optimize()
+
+    val threads = (0 to 7).map { _ =>
       val thread = new Thread {
         override def run: Unit = {
           val row = unsafeProj(InternalRow(0L)).copy()
           keys.foreach { k =>
-            assert(map.getValue(k, row) eq row)
-            assert(row.getLong(0) == k)
+            mapToQuery.get(k, row).foreach { row =>
+              assert(row eq row)
+              assert(row.getLong(0) == k)
+            }
           }
         }
       }
@@ -81,32 +91,30 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
       thread
     }
     threads.foreach(_.join())
-    map.free()
+    mapToQuery.free()
   }
 
   def benchmarkLongToUnsafeRowMapMetrics(numRows: Int): Unit = {
     import scala.concurrent.duration._
 
     runBenchmark("LongToUnsafeRowMap metrics") {
-      val benchmark = new Benchmark(s"LongToUnsafeRowMap metrics - numRows: $numRows", numRows,
-        minNumIters = 20, minTime = 20.seconds,
-        output = output)
       Seq(false).foreach { offHeapEnabled =>
-        Seq(1, 16, 64, 256, 1024).foreach { keyDuplicationFactor =>
+        Seq(1000, 100000, 500000, 1000000, 2000000).foreach { keyDuplicationFactor =>
+          val benchmark = new Benchmark(s"LongToUnsafeRowMap metrics", numRows,
+            minNumIters = 20, minTime = 20.seconds, output = output)
           Seq(false, true).foreach { cacheLocality =>
             benchmark.addCase(s"LongToUnsafeRowMap - offHeadEnabled: $offHeapEnabled, " +
               s"keyDuplicationFactor: $keyDuplicationFactor, cacheLocality: $cacheLocality") { _ =>
               helper(numRows, offHeapEnabled, keyDuplicationFactor, cacheLocality)
             }
           }
+          benchmark.run()
         }
       }
-      benchmark.run()
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    benchmarkLongToUnsafeRowMapMetrics(1000000)
-    benchmarkLongToUnsafeRowMapMetrics(2000000)
+    benchmarkLongToUnsafeRowMapMetrics(80000000)
   }
 }

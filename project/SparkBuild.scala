@@ -1160,7 +1160,7 @@ object TestSettings {
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      s"-Xmx12g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
