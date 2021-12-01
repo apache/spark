@@ -105,3 +105,11 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- contains
+SELECT CONTAINS(null, 'Spark');
+SELECT CONTAINS('Spark SQL', null);
+SELECT CONTAINS(null, null);
+SELECT CONTAINS('Spark SQL', 'Spark');
+SELECT CONTAINS('Spark SQL', 'SQL');
+SELECT CONTAINS('Spark SQL', 'SPARK');
