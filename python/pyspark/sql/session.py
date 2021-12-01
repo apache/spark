@@ -278,7 +278,9 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    SparkSession.applyModifiableSetting(session, session._jsparkSession, self._options)
+                    SparkSession.applyModifiableSetting(
+                        session, session._jsparkSession, self._options
+                    )
                 return session
 
     builder = Builder()
@@ -332,7 +334,7 @@ class SparkSession(SparkConversionMixin):
                     self.applyModifiableSetting(jsparkSession, options)
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
-        else :
+        else:
             if options is not None:
                 self.applyModifiableSetting(jsparkSession, options)
         self._jsparkSession = jsparkSession
