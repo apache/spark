@@ -28,7 +28,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
-import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.hadoop.mapreduce.{InputSplit, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.orc.{mapreduce, BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
 import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
@@ -140,6 +142,50 @@ object OrcUtils extends Logging {
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(toStructType(schema))
+  }
+
+  /**
+   * Judge the Orc file be read is write by Spark 3.1 or prior.
+   */
+  def isOldOrcFile(schema: TypeDescription): Boolean = {
+    import TypeDescription.Category
+
+    def find(orcType: TypeDescription): Boolean = {
+      orcType.getCategory match {
+        case Category.STRUCT => findInStruct(orcType)
+        case Category.LIST => findInArray(orcType)
+        case Category.MAP => findInMap(orcType)
+        case Category.TIMESTAMP =>
+          if (orcType.getAttributeValue(CATALYST_TYPE_ATTRIBUTE_NAME) == null) {
+            true
+          } else {
+            false
+          }
+        case _ => false
+      }
+    }
+
+    def findInStruct(orcType: TypeDescription): Boolean = {
+      val fieldTypes = orcType.getChildren.asScala
+      for (fieldType <- fieldTypes) {
+        if (find(fieldType)) {
+          return true
+        }
+      }
+      false
+    }
+
+    def findInArray(orcType: TypeDescription): Boolean = {
+      val elementType = orcType.getChildren.get(0)
+      find(elementType)
+    }
+
+    def findInMap(orcType: TypeDescription): Boolean = {
+      val Seq(keyType, valueType) = orcType.getChildren.asScala.toSeq
+      find(keyType) || find(valueType)
+    }
+
+    find(schema)
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -541,5 +587,25 @@ object OrcUtils extends Logging {
     val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
     result.setNanos(nanos.toInt)
     result
+  }
+
+  /**
+   * This method references createRecordReader of OrcInputFormat.
+   * Just for call useUTCTimestamp of OrcFile.ReaderOptions.
+   *
+   * @return OrcMapreduceRecordReader
+   */
+  def createRecordReader[V <: WritableComparable[_]](
+      inputSplit: InputSplit,
+      taskAttemptContext: TaskAttemptContext,
+      useUTCTimestamp: Boolean): mapreduce.OrcMapreduceRecordReader[V] = {
+    val split = inputSplit.asInstanceOf[FileSplit]
+    val conf = taskAttemptContext.getConfiguration()
+    val readOptions = OrcFile.readerOptions(conf)
+      .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf)).useUTCTimestamp(useUTCTimestamp)
+    val file = OrcFile.createReader(split.getPath(), readOptions)
+    val options = org.apache.orc.mapred.OrcInputFormat.buildOptions(
+      conf, file, split.getStart(), split.getLength()).useSelected(true)
+    new mapreduce.OrcMapreduceRecordReader(file, options)
   }
 }
