@@ -14,11 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any
+from typing import cast, no_type_check, Any
 from functools import partial
 
+import pandas as pd
+from pandas.api.types import is_hashable
+
+from pyspark import pandas as ps
+from pyspark._globals import _NoValue
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
+from pyspark.pandas.series import Series
 
 
 class TimedeltaIndex(Index):
@@ -30,6 +36,39 @@ class TimedeltaIndex(Index):
     --------
     Index : The base pandas Index type.
     """
+
+    @no_type_check
+    def __new__(
+        cls,
+        data=None,
+        unit=None,
+        freq=_NoValue,
+        closed=None,
+        dtype=None,
+        copy=False,
+        name=None,
+    ) -> "TimedeltaIndex":
+        if not is_hashable(name):
+            raise TypeError("Index.name must be a hashable type")
+
+        if isinstance(data, (Series, Index)):
+            if dtype is None:
+                dtype = "timedelta64[ns]"
+            return cast(TimedeltaIndex, Index(data, dtype=dtype, copy=copy, name=name))
+
+        kwargs = dict(
+            data=data,
+            unit=unit,
+            closed=closed,
+            dtype=dtype,
+            copy=copy,
+            name=name,
+        )
+        if freq is not _NoValue:
+            kwargs["freq"] = freq
+        x = pd.TimedeltaIndex(**kwargs)
+        ps.from_pandas(x)
+        return cast(TimedeltaIndex, ps.from_pandas(pd.TimedeltaIndex(**kwargs)))
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeTimedeltaIndex, item):
