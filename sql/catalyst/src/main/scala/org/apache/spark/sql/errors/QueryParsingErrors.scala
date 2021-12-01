@@ -324,7 +324,7 @@ object QueryParsingErrors {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -334,13 +334,13 @@ object QueryParsingErrors {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$keyCandidate' is an invalid property key, please " +
       s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$valueCandidate' is an invalid property value, please " +
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
