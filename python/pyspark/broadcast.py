@@ -23,6 +23,7 @@ import threading
 import pickle
 from typing import (
     cast,
+    overload,
     Any,
     Callable,
     Dict,
@@ -83,6 +84,23 @@ class Broadcast(Generic[T]):
     >>> large_broadcast = sc.broadcast(range(10000))
     """
 
+    @overload  # On driver
+    def __init__(
+        self: "Broadcast[T]",
+        sc: "SparkContext",
+        value: T,
+        pickle_registry: "BroadcastPickleRegistry",
+    ):
+        ...
+
+    @overload  # On worker without decryption server
+    def __init__(self: "Broadcast[Any]", *, path: str):
+        ...
+
+    @overload  # On worker with decryption server
+    def __init__(self: "Broadcast[Any]", *, sock_file: str):
+        ...
+
     def __init__(
         self,
         sc: Optional["SparkContext"] = None,
@@ -112,7 +130,7 @@ class Broadcast(Generic[T]):
             else:
                 # no encryption, we can just write pickled data directly to the file from python
                 broadcast_out = f
-            self.dump(cast(T, value), broadcast_out)
+            self.dump(value, broadcast_out)  # type: ignore[arg-type]
             if sc._encryption_enabled:  # type: ignore[attr-defined]
                 self._python_broadcast.waitTillDataReceived()
             self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)  # type: ignore[attr-defined]
