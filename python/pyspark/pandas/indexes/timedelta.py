@@ -32,9 +32,30 @@ class TimedeltaIndex(Index):
     Immutable ndarray-like of timedelta64 data, represented internally as int64, and
     which can be boxed to timedelta objects.
 
+    Parameters
+    ----------
+    data  : array-like (1-dimensional), optional
+        Optional timedelta-like data to construct index with.
+    unit : unit of the arg (D,h,m,s,ms,us,ns) denote the unit, optional
+        Which is an integer/float number.
+    freq : str or pandas offset object, optional
+        One of pandas date offset strings or corresponding objects. The string
+        'infer' can be passed in order to set the frequency of the index as the
+        inferred frequency upon creation.
+    copy  : bool
+        Make a copy of input ndarray.
+    name : object
+        Name to be stored in the index.
+
     See Also
     --------
     Index : The base pandas Index type.
+
+    Examples
+    --------
+    >>> from datetime import timedelta
+    >>> ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)])
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
     """
 
     @no_type_check
@@ -66,8 +87,7 @@ class TimedeltaIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
-        x = pd.TimedeltaIndex(**kwargs)
-        ps.from_pandas(x)
+
         return cast(TimedeltaIndex, ps.from_pandas(pd.TimedeltaIndex(**kwargs)))
 
     def __getattr__(self, item: str) -> Any:
