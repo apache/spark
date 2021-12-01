@@ -2031,7 +2031,7 @@ class DataSourceV2SQLSuite
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
         "LOCATION 'file:/tmp'",
-        "TBLPROPERTIES(",
+        "TBLPROPERTIES (",
         "'prop1' = '1',",
         "'prop2' = '2',",
         "'prop3' = '3',",
