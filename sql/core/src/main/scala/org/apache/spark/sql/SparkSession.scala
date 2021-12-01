@@ -1058,7 +1058,11 @@ object SparkSession extends Logging {
       throw new IllegalStateException("No active or default Spark session found")))
   }
 
-  def applyModifiableSettings(
+  /**
+   * Apply modifiable settings to an existed SparkSession. This method are used
+   * both in scala and pyspark, so put this under SparkSession object.
+   */
+  private[sql] def applyModifiableSettings(
       session: SparkSession,
       options: java.util.HashMap[String, String]): Unit = {
     val (staticConfs, otherConfs) =
