@@ -357,6 +357,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTimestamp("2021-01-01T12:30:4294967297+4294967297:30", None)
   }
 
+  test("SPARK-37326: stringToTimestampWithoutTimeZone with failOnError") {
+    assert(
+      stringToTimestampWithoutTimeZone(
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
+      Some(DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2021, 11, 22, 10, 54, 27))))
+
+    assert(
+      stringToTimestampWithoutTimeZone(
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), true) ==
+      None)
+  }
+
   test("SPARK-15379: special invalid date string") {
     // Test stringToDate
     assert(toDate("2015-02-29 00:00:00").isEmpty)
