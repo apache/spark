@@ -152,13 +152,7 @@ case class ReplaceTableAsSelectExec(
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
-  val properties = {
-    val props = CatalogV2Util.convertTableProperties(
-      tableSpec.properties, tableSpec.options, tableSpec.serde,
-      tableSpec.location, tableSpec.comment, tableSpec.provider,
-      tableSpec.external)
-    CatalogV2Util.withDefaultOwnership(props)
-  }
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -209,13 +203,7 @@ case class AtomicReplaceTableAsSelectExec(
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
-  val properties = {
-    val props = CatalogV2Util.convertTableProperties(
-      tableSpec.properties, tableSpec.options, tableSpec.serde,
-      tableSpec.location, tableSpec.comment, tableSpec.provider,
-      tableSpec.external)
-    CatalogV2Util.withDefaultOwnership(props)
-  }
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     val schema = CharVarcharUtils.getRawSchema(query.schema, conf).asNullable

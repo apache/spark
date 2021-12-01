@@ -195,11 +195,21 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private def internalReplace(orCreate: Boolean): Unit = {
-    val tableSpec = TableSpec(None, properties.toMap, provider, Map.empty,
-      None, None, None, false)
+    val tableSpec = TableSpec(
+      bucketSpec = None,
+      properties = properties.toMap,
+      provider = provider,
+      options = Map.empty,
+      location = None,
+      comment = None,
+      serde = None,
+      external = false)
     runCommand(ReplaceTableAsSelect(
       UnresolvedDBObjectName(tableName, isNamespace = false),
-      partitioning.getOrElse(Seq.empty), logicalPlan, tableSpec, writeOptions = options.toMap,
+      partitioning.getOrElse(Seq.empty),
+      logicalPlan,
+      tableSpec,
+      writeOptions = options.toMap,
       orCreate = orCreate))
   }
 }

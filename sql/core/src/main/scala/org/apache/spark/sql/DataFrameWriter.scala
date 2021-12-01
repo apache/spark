@@ -586,12 +586,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
-        val tableSpec = TableSpec(None, Map.empty, Some(source), Map.empty,
-          extraOptions.get("path"), extraOptions.get(TableCatalog.PROP_COMMENT),
-          None, false)
+        val tableSpec = TableSpec(
+          bucketSpec = None,
+          properties = Map.empty,
+          provider = Some(source),
+          options = Map.empty,
+          location = extraOptions.get("path"),
+          comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          serde = None,
+          external = false)
         ReplaceTableAsSelect(
           UnresolvedDBObjectName(nameParts, isNamespace = false),
-          partitioningAsV2, df.queryExecution.analyzed, tableSpec, writeOptions = Map.empty,
+          partitioningAsV2,
+          df.queryExecution.analyzed,
+          tableSpec,
+          writeOptions = Map.empty,
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
