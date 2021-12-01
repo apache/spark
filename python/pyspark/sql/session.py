@@ -277,11 +277,25 @@ class SparkSession(SparkConversionMixin):
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
+                staticConfs: Dict[str, Any] = {}
+                otherConfs: Dict[str, Any] = {}
                 for key, value in self._options.items():
-                    if not session._jvm.org.apache.spark.sql.internal.SQLConf.isStaticConfigKey(
-                        key
-                    ):
-                        session._jsparkSession.sessionState().conf().setConfString(key, value)
+                    if session._jvm.org.apache.spark.sql.internal.SQLConf.isStaticConfigKey(key):
+                        staticConfs[key] = value
+                    else:
+                        otherConfs[key] = value
+                for key, value in otherConfs.items():
+                    session._jsparkSession.sessionState().conf().setConfString(key, value)
+                if not staticConfs:
+                    session._jsparkSession.logWarning(
+                        "Using an existing SparkSession; the static sql configurations will not take"
+                        + " effect."
+                    )
+                if not otherConfs:
+                    session._jsparkSession.logWarning(
+                        "Using an existing SparkSession; some spark core configurations may not take"
+                        + " effect."
+                    )
                 return session
 
     builder = Builder()
