@@ -26,7 +26,7 @@ license: |
 is issued if the database is not found in the system.
 
 ### ALTER PROPERTIES
-`ALTER DATABASE SET DBPROPERTIES` statement changes the metadata associated with a database.
+`ALTER DATABASE SET DBPROPERTIES` statement changes the properties associated with a database.
 The specified property values override any existing value with the same property name. 
 This command is mostly used to record the metadata for a database and may be used for auditing purposes.
 
