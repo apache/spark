@@ -496,7 +496,9 @@ private[joins] object UnsafeHashedRelation {
     // given linked list are next to each other in memory. This is simply to test
     // that ensuring such placement of the nodes improves performance
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
-    if (binaryMap.numValues() > binaryMap.numKeys() * 2) {
+    val sparkConf = SparkEnv.get.conf
+    if (binaryMap.numValues() > binaryMap.numKeys() * 2 &&
+      sparkConf.getOption("spark.sql.enableHashRelationOptimization").exists(_.equals("1"))) {
      val keys = candidate.keys.map(_.copy()).toArray
       val distinctKeys = keys.distinct
       scala.Console.err.print(s"Number of keys is ${keys.length}; distinct keys is " +
@@ -1120,7 +1122,9 @@ private[joins] object LongHashedRelation {
     }
     // if needed, compact the nodes of each linked lists such
     // that they are contiguous in memory
-    val mapToUse = if (!map.keyIsUnique) {
+    val sparkConf = SparkEnv.get.conf
+    val mapToUse = if (!map.keyIsUnique &&
+      sparkConf.getOption("spark.sql.enableHashRelationOptimization").exists(_.equals("1"))) {
       scala.Console.err.print(s"Compacting long map at ${System.currentTimeMillis()}\n")
       val resultRow = new UnsafeRow(numFields)
       val keyIt = map.keys()
