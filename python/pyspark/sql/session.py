@@ -278,9 +278,7 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    SparkSession.applyModifiableSetting(
-                        session, session._jsparkSession, self._options
-                    )
+                    session._jvm.SparkSession.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
     builder = Builder()
@@ -288,29 +286,6 @@ class SparkSession(SparkConversionMixin):
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
-
-    def applyModifiableSetting(self, session: JavaObject, options: Dict[str, Any]) -> None:
-        log4jLogger = self._jvm.org.apache.log4j
-        LOGGER = log4jLogger.LogManager.getLogger("SparkSession")
-        staticConfs: Dict[str, Any] = {}
-        otherConfs: Dict[str, Any] = {}
-        for key, value in options.items():
-            if self._jvm.org.apache.spark.sql.internal.SQLConf.isStaticConfigKey(key):
-                staticConfs[key] = value
-            else:
-                otherConfs[key] = value
-        for key, value in otherConfs.items():
-            session.sessionState().conf().setConfString(key, value)
-        if not staticConfs:
-            LOGGER.warn(
-                "Using an existing SparkSession; the static sql configurations will not take"
-                + " effect."
-            )
-        if not otherConfs:
-            LOGGER.warn(
-                "Using an existing SparkSession; some spark core configurations may not take"
-                + " effect."
-            )
 
     def __init__(
         self,
@@ -330,12 +305,12 @@ class SparkSession(SparkConversionMixin):
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
                 if options is not None:
-                    self.applyModifiableSetting(jsparkSession, options)
+                    self._jvm.SparkSession.applyModifiableSettings(jsparkSession, options)
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
         else:
             if options is not None:
-                self.applyModifiableSetting(jsparkSession, options)
+                self._jvm.SparkSession.applyModifiableSettings(jsparkSession, options)
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
