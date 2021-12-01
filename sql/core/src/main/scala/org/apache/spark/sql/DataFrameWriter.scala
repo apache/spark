@@ -330,9 +330,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
-              val tableSpec = TableSpec(None, Map.empty, Some(source), Map.empty,
-                extraOptions.get("path"), extraOptions.get(TableCatalog.PROP_COMMENT),
-                None, false)
+              val tableSpec = TableSpec(
+                bucketSpec = None,
+                properties = Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
+                provider = Some(source),
+                options = Map.empty,
+                location = extraOptions.get("path"),
+                comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+                serde = None,
+                external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedDBObjectName(
@@ -614,9 +620,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
-        val tableSpec = TableSpec(None, Map.empty, Some(source), Map.empty,
-          extraOptions.get("path"), extraOptions.get(TableCatalog.PROP_COMMENT),
-          None, false)
+        val tableSpec = TableSpec(
+          bucketSpec = None,
+          properties = Map.empty,
+          provider = Some(source),
+          options = Map.empty,
+          location = extraOptions.get("path"),
+          comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          serde = None,
+          external = false)
 
         CreateTableAsSelect(
           UnresolvedDBObjectName(nameParts, isNamespace = false),
