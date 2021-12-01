@@ -126,7 +126,7 @@ class DataSourceV2SQLSuite
       " PARTITIONED BY (id)" +
       " TBLPROPERTIES ('bar'='baz')" +
       " COMMENT 'this is a test table'" +
-      " LOCATION '/tmp/testcat/table_name'")
+      " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
@@ -149,7 +149,7 @@ class DataSourceV2SQLSuite
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
       Array("Comment", "this is a test table", ""),
-      Array("Location", "/tmp/testcat/table_name", ""),
+      Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
@@ -1179,8 +1179,9 @@ class DataSourceV2SQLSuite
               s" ('path'='bar', 'Path'='noop')")
             val tableCatalog = catalog("testcat").asTableCatalog
             val identifier = Identifier.of(Array(), "reservedTest")
-            assert(tableCatalog.loadTable(identifier).properties()
-              .get(TableCatalog.PROP_LOCATION) == "foo",
+            val location = tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION)
+            assert(location.startsWith("file:") && location.endsWith("foo"),
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
@@ -2012,7 +2013,7 @@ class DataSourceV2SQLSuite
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
-           |LOCATION '/tmp'
+           |LOCATION 'file:/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
@@ -2029,7 +2030,7 @@ class DataSourceV2SQLSuite
         "'via' = '2')",
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
-        "LOCATION '/tmp'",
+        "LOCATION 'file:/tmp'",
         "TBLPROPERTIES(",
         "'prop1' = '1',",
         "'prop2' = '2',",
