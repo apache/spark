@@ -714,10 +714,10 @@ class DirectKafkaStreamSuite
     )
     val result = kafkaStream.maxMessagesPerPartition(offsets)
     val expected = Map(
-      new TopicPartition(topic, 0) -> 5L,
-      new TopicPartition(topic, 1) -> 10L,
-      new TopicPartition(topic, 2) -> 20L,
-      new TopicPartition(topic, 3) -> 30L
+      new TopicPartition(topic, 0) -> 300L,
+      new TopicPartition(topic, 1) -> 300L,
+      new TopicPartition(topic, 2) -> 300L,
+      new TopicPartition(topic, 3) -> 300L
     )
     assert(result.contains(expected), s"Number of messages per partition must be at least equal" +
       s" to the specified minimum")
