@@ -23,8 +23,8 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, NullsFirst, NullsLast}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{lit, sum, udf}
@@ -168,7 +168,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("simple scan with top N") {
     val df1 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary").limit(1)
-    val expectedSorts1 = Seq(s"h2.test.employee.salary ${Ascending.sql} ${NullsFirst.sql}")
+    val expectedSorts1 =
+      Seq(SortValue(FieldReference("salary"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
     checkPushedTopN(df1, true, 1, expectedSorts1)
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
@@ -182,7 +183,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .orderBy($"salary".desc)
       .limit(1)
     val expectedSorts2 =
-      Seq(s"h2.test.employee.salary ${Descending.sql} ${NullsLast.sql}")
+      Seq(SortValue(FieldReference("salary"), SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
     checkPushedTopN(df2, true, 1, expectedSorts2)
     checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
 
@@ -193,7 +194,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }.get
     assert(scan.schema.names.sameElements(Seq("NAME", "SALARY")))
     val expectedSorts3 =
-      Seq(s"h2.test.employee.salary ${Ascending.sql} ${NullsLast.sql}")
+      Seq(SortValue(FieldReference("salary"), SortDirection.ASCENDING, NullOrdering.NULLS_LAST))
     checkPushedTopN(df3, true, 1, expectedSorts3)
     checkAnswer(df3, Seq(Row("david")))
 
@@ -210,7 +211,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .sort("SALARY")
       .limit(1)
     val expectedSorts5 =
-      Seq(s"h2.test.employee.SALARY ${Ascending.sql} ${NullsFirst.sql}")
+      Seq(SortValue(FieldReference("SALARY"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
     checkPushedTopN(df5, true, 1, expectedSorts5)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
@@ -228,13 +229,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkPushedTopN(df: DataFrame, pushed: Boolean, limit: Int = 0,
-      sortValues: Seq[String] = Seq.empty): Unit = {
+      sortValues: Seq[SortValue] = Seq.empty): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           if (pushed) {
             assert(v1.pushedDownOperators.limit === Some(limit))
-            assert(v1.pushedDownOperators.sortValues.map(_.sql) === sortValues)
+            assert(v1.pushedDownOperators.sortValues === sortValues)
           } else {
             assert(v1.pushedDownOperators.limit.isEmpty)
             assert(v1.pushedDownOperators.sortValues.isEmpty)

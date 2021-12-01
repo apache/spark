@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -254,19 +256,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             sHolder.pushedLimit = Some(limitValue)
           }
           globalLimit
-        case _ =>
-          child transform {
-            case sort @ Sort(orders, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
-              if filter.isEmpty =>
-              val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
-              if (topNPushed) {
-                sHolder.pushedLimit = Some(limitValue)
-                sHolder.sortValues = orders
-              }
-              sort
-            case other => other
+        case Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+          if filter.isEmpty =>
+          val orders = DataSourceStrategy.translateSortOrders(order)
+          val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
+          if (topNPushed) {
+            sHolder.pushedLimit = Some(limitValue)
+            sHolder.sortValues = orders
           }
           globalLimit
+        case Project(_, Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder)))
+          if filter.isEmpty =>
+          val orders = DataSourceStrategy.translateSortOrders(order)
+          val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
+          if (topNPushed) {
+            sHolder.pushedLimit = Some(limitValue)
+            sHolder.sortValues = orders
+          }
+          globalLimit
+        case _ => globalLimit
       }
   }
 

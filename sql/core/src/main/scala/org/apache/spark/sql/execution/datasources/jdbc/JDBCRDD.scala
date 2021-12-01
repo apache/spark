@@ -26,7 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -265,11 +264,7 @@ private[jdbc] class JDBCRDD(
 
   private def getOrderByClause: String = {
     if (sortValues.nonEmpty) {
-      val values = sortValues.map {
-        case SortOrder(PushableColumnWithoutNestedColumn(name), direction, nullOrdering, _) =>
-          s"$name ${direction.sql} ${nullOrdering.sql}"
-      }
-      s" ORDER BY ${values.mkString(", ")}"
+      s" ORDER BY ${sortValues.map(_.describe()).mkString(", ")}"
     } else {
       ""
     }

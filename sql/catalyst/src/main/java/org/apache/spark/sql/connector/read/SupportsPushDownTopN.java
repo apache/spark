@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.expressions.SortOrder;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to

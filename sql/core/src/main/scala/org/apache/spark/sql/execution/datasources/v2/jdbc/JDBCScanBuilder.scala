@@ -20,7 +20,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -123,7 +123,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit && JdbcDialects.get(jdbcOptions.url).supportsLimit) {
+    if (jdbcOptions.pushDownLimit) {
       pushedLimit = limit
       return true
     }
@@ -131,7 +131,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
-    if (jdbcOptions.pushDownTopN && JdbcDialects.get(jdbcOptions.url).supportsTopN) {
+    if (jdbcOptions.pushDownTopN) {
       pushedLimit = limit
       sortValues = orders
       return true

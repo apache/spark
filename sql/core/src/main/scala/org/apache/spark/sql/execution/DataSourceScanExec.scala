@@ -142,6 +142,16 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
+    val pushedTopN =
+      if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
+        s"""
+           |ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}
+           |LIMIT ${pushedDownOperators.limit.get}
+           |""".stripMargin
+      } else {
+        ""
+      }
+
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
@@ -149,7 +159,7 @@ case class RowDataSourceScanExec(
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
-      Map("PushedSortOrders" -> seqToString(pushedDownOperators.sortValues)) ++
+      Map("pushedTopN" -> pushedTopN) ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
