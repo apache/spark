@@ -1062,7 +1062,7 @@ object SparkSession extends Logging {
    * Apply modifiable settings to an existing [[SparkSession]]. This method are used
    * both in Scala and Python, so put this under [[SparkSession]] object.
    */
-  private[sql] def applyModifiableSettings(
+  def applyModifiableSettings(
       session: SparkSession,
       options: java.util.HashMap[String, String]): Unit = {
     val (staticConfs, otherConfs) =
