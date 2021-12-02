@@ -2173,18 +2173,12 @@ object GenerateOptimization extends Rule[LogicalPlan] {
       case p @ Project(_, g: Generate) if p.references.isEmpty
           && g.generator.isInstanceOf[ExplodeBase] =>
         g.generator.children.head.dataType match {
-          case ArrayType(StructType(fields), _) =>
-            val atomicFields = fields.collect {
-              case f: StructField if f.dataType.isInstanceOf[AtomicType] => f
-            }
-            val extractor = if (atomicFields.size > 0) {
-              // Pick an arbitrary atomic field, if any
-              ExtractValue(g.generator.children.head,
-                Literal(atomicFields(0).name), conf.resolver)
-            } else {
-              ExtractValue(g.generator.children.head,
-                Literal(fields(0).name), conf.resolver)
-            }
+          case ArrayType(StructType(fields), containsNull) =>
+            // Try to pick up smallest field
+            val sortedFields = fields.zipWithIndex.sortBy(f => f._1.dataType.defaultSize)
+            val extractor = GetArrayStructFields(g.generator.children.head, sortedFields(0)._1,
+              sortedFields(0)._2, fields.length, containsNull || sortedFields(0)._1.nullable)
+
             val rewrittenG = g.transformExpressions {
               case e: ExplodeBase =>
                 e.withNewChildren(Seq(extractor))

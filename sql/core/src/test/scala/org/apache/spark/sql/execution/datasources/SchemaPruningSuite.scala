@@ -905,7 +905,7 @@ abstract class SchemaPruningSuite
         val read = spark.table("table")
         val query = read.select(explode($"items").as('item)).select(count($"*"))
 
-        checkScan(query, "struct<items:array<struct<itemData:string>>>")
+        checkScan(query, "struct<items:array<struct<itemId:long>>>")
         checkAnswer(query, Row(2) :: Nil)
       }
     }
