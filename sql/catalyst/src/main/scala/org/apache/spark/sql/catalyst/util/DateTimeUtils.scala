@@ -445,19 +445,19 @@ object DateTimeUtils {
    * number of microseconds since the epoch. The result will be independent of time zones.
    *
    * If the input string contains a component associated with time zone, the method will return
-   * `None` if `failOnError` is set to `true`. If `failOnError` is set to `false`, the method
+   * `None` if `allowTimeZone` is set to `false`. If `allowTimeZone` is set to `true`, the method
    * will simply discard the time zone component. Enable the check to detect situations like parsing
    * a timestamp with time zone as TimestampNTZType.
    *
    * The return type is [[Option]] in order to distinguish between 0L and null. Please
    * refer to `parseTimestampString` for the allowed formats.
    */
-  def stringToTimestampWithoutTimeZone(s: UTF8String, failOnError: Boolean): Option[Long] = {
+  def stringToTimestampWithoutTimeZone(s: UTF8String, allowTimeZone: Boolean): Option[Long] = {
     try {
       val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
       // If the input string can't be parsed as a timestamp without time zone, or it contains only
       // the time part of a timestamp and we can't determine its date, return None.
-      if (segments.isEmpty || justTime || failOnError && zoneIdOpt.isDefined) {
+      if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
         return None
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
@@ -473,16 +473,16 @@ object DateTimeUtils {
   /**
    * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
    * number of microseconds since the epoch. The result is independent of time zones. Zone id
-   * component will be discarded and ignored.
+   * component will be ignored.
    * The return type is [[Option]] in order to distinguish between 0L and null. Please
    * refer to `parseTimestampString` for the allowed formats.
    */
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
-    stringToTimestampWithoutTimeZone(s, false)
+    stringToTimestampWithoutTimeZone(s, true)
   }
 
   def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
-    stringToTimestampWithoutTimeZone(s, false).getOrElse {
+    stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampNTZType)
     }
   }
