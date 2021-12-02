@@ -323,11 +323,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
-              val catalog = if (ident.namespace().isEmpty) {
-                Array(dsOptions.get("catalog"))
-              } else {
-                ident.namespace()
-              }
+              val catalog = CatalogV2Util.getTableProviderCatalog(
+                supportsExtract, catalogManager, dsOptions)
 
               val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
               val tableSpec = TableSpec(
@@ -342,7 +339,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedDBObjectName(
-                    catalog.toSeq :+ ident.name,
+                    catalog.name :: ident.name :: Nil,
                     isNamespace = false
                   ),
                   partitioningAsV2,
