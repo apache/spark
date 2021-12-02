@@ -215,15 +215,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       } else {
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
-
-        val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
-          normalizedTable.schema.find(_.name == partCol).get
-        }
-
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
-
-        c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
+        c.copy(tableDesc = normalizedTable)
       }
 
     case create: V2CreateTablePlan if create.childrenResolved =>

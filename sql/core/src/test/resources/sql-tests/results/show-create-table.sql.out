@@ -136,9 +136,9 @@ SHOW CREATE TABLE tbl
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE `default`.`tbl` (
+  `a` INT,
   `b` STRING,
-  `c` INT,
-  `a` INT)
+  `c` INT)
 USING parquet
 PARTITIONED BY (a)
 

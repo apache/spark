@@ -226,6 +226,27 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-37517: Keep consistent columns order with user specified") {
+    val t = "SPARK_37517"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint NOT NULL,
+           |  c ARRAY<INT>,
+           |  d STRUCT<x: INT, y: ARRAY<BOOLEAN>>
+           |)
+           |USING PARQUET
+           |PARTITIONED BY (a)
+        """.stripMargin)
+      val expected = s"CREATE TABLE `default`.`$t` (" +
+        s" `a` BIGINT NOT NULL, `b` BIGINT, `c` ARRAY<INT>," +
+        s" `d` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>) USING PARQUET PARTITIONED BY (a)"
+      assert(getShowDDL(s"SHOW CREATE TABLE $t") == expected)
+    }
+  }
+
   protected def getShowDDL(showCreateTableSql: String): String = {
     sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim).mkString(" ")
   }

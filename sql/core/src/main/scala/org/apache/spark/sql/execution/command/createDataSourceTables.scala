@@ -105,7 +105,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
       case _ =>
         table.copy(
-          schema = dataSource.schema,
+          schema = table.schema.merge(dataSource.schema),
           partitionColumnNames = partitionColumnNames,
           // If metastore partition management for file source tables is enabled, we start off with
           // partition provider hive, but no partitions in the metastore. The user has to call
