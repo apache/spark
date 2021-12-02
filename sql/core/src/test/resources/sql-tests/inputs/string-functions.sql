@@ -113,3 +113,15 @@ SELECT CONTAINS(null, null);
 SELECT CONTAINS('Spark SQL', 'Spark');
 SELECT CONTAINS('Spark SQL', 'SQL');
 SELECT CONTAINS('Spark SQL', 'SPARK');
+
+SELECT startswith('Spark SQL', 'ark');
+SELECT startswith('Spark SQL', 'Spa');
+SELECT startswith(null, 'Spark');
+SELECT startswith('Spark', null);
+SELECT startswith(null, null);
+
+SELECT endswith('Spark SQL', 'QL');
+SELECT endswith('Spark SQL', 'Spa');
+SELECT endswith(null, 'Spark');
+SELECT endswith('Spark', null);
+SELECT endswith(null, null);
