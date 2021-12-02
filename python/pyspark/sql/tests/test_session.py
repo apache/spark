@@ -20,6 +20,7 @@ import unittest
 
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
+from pyspark.sql.functions import col
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase
 
@@ -93,7 +94,7 @@ class SparkSessionTests3(unittest.TestCase):
         active = SparkSession.getActiveSession()
         self.assertEqual(active, None)
 
-    def test_SparkSession(self):
+    def test_spark_session(self):
         spark = SparkSession.builder.master("local").config("some-config", "v2").getOrCreate()
         try:
             self.assertEqual(spark.conf.get("some-config"), "v2")
@@ -105,6 +106,13 @@ class SparkSessionTests3(unittest.TestCase):
             spark.sql("CREATE TABLE table1 (name STRING, age INT) USING parquet")
             self.assertEqual(spark.table("table1").columns, ["name", "age"])
             self.assertEqual(spark.range(3).count(), 3)
+
+            # SPARK-37516: Only plain column references work as variable in SQL.
+            self.assertEqual(
+                spark.sql("select {c} from range(1)", c=col("id")).first(), spark.range(1).first()
+            )
+            with self.assertRaisesRegex(ValueError, "Column"):
+                spark.sql("select {c} from range(10)", c=col("id") + 1)
         finally:
             spark.sql("DROP DATABASE test_db CASCADE")
             spark.stop()
