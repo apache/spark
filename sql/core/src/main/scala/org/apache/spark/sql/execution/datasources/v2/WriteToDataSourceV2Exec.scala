@@ -75,13 +75,7 @@ case class CreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends TableWriteExecHelper {
 
-  val properties = {
-    val props = CatalogV2Util.convertTableProperties(
-      tableSpec.properties, tableSpec.options, tableSpec.serde,
-      tableSpec.location, tableSpec.comment, tableSpec.provider,
-      tableSpec.external)
-    CatalogV2Util.withDefaultOwnership(props)
-  }
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -121,13 +115,7 @@ case class AtomicCreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends TableWriteExecHelper {
 
-  val properties = {
-    val props = CatalogV2Util.convertTableProperties(
-      tableSpec.properties, tableSpec.options, tableSpec.serde,
-      tableSpec.location, tableSpec.comment, tableSpec.provider,
-      tableSpec.external)
-    CatalogV2Util.withDefaultOwnership(props)
-  }
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
