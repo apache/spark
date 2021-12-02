@@ -1060,7 +1060,7 @@ object SparkSession extends Logging {
 
   /**
    * Apply modifiable settings to an existed SparkSession. This method are used
-   * both in scala and Pyspark, so put this under SparkSession object.
+   * both in Scala and Python, so put this under [[SparkSession]] object.
    */
   private[sql] def applyModifiableSettings(
       session: SparkSession,
