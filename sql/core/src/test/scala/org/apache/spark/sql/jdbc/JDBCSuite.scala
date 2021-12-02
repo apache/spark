@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import org.h2.jdbc.JdbcSQLException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -46,7 +46,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest with BeforeAndAfter with SharedSparkSession {
+class JDBCSuite extends QueryTest
+  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -787,8 +788,9 @@ class JDBCSuite extends QueryTest with BeforeAndAfter with SharedSparkSession {
   }
 
   test("compile filters") {
+    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
-      JdbcDialects.get("jdbc:").compileFilter(f) getOrElse("")
+      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
     assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))

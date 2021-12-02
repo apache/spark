@@ -272,7 +272,7 @@ private[sql] case class JDBCRelation(
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      filters.filter(JdbcDialects.get(jdbcOptions.url).compileFilter(_).isEmpty)
+      filters.filter(JDBCRDD.compileFilter(_, JdbcDialects.get(jdbcOptions.url)).isEmpty)
     } else {
       filters
     }
