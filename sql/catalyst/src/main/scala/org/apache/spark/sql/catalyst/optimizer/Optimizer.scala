@@ -2170,7 +2170,7 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
 object GenerateOptimization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
       _.containsAllPatterns(PROJECT, GENERATE), ruleId) {
-      case p @ Project(_, g: Generate) if p.references.intersect(g.outputSet).isEmpty
+      case p @ Project(_, g: Generate) if p.references.isEmpty
           && g.generator.isInstanceOf[ExplodeBase] =>
         g.generator.children.head.dataType match {
           case ArrayType(StructType(fields), _) =>
