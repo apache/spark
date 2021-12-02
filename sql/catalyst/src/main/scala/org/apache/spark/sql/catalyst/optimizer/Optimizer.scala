@@ -2173,7 +2173,7 @@ object GenerateOptimization extends Rule[LogicalPlan] {
       case p @ Project(_, g: Generate) if p.references.isEmpty
           && g.generator.isInstanceOf[ExplodeBase] =>
         g.generator.children.head.dataType match {
-          case ArrayType(StructType(fields), containsNull) =>
+          case ArrayType(StructType(fields), containsNull) if fields.length > 1 =>
             // Try to pick up smallest field
             val sortedFields = fields.zipWithIndex.sortBy(f => f._1.dataType.defaultSize)
             val extractor = GetArrayStructFields(g.generator.children.head, sortedFields(0)._1,
