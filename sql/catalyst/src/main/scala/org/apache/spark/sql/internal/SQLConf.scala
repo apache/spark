@@ -1012,7 +1012,7 @@ object SQLConf {
   val PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
     buildConf("spark.sql.parquet.enableNestedColumnVectorizedReader")
       .doc("Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map). " +
-          s"Note to enable this ${PARQUET_VECTORIZED_READER_ENABLED.key} also needs to be enabled.")
+          s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)

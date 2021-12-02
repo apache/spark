@@ -352,7 +352,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           checkColumn(childColumn);
         }
       }
-    } else { // a missing column which is either primitive or complex
+    } else { // A missing column which is either primitive or complex
       if (column.required()) {
         // Column is missing in data but the required data is non-nullable. This file is invalid.
         throw new IOException("Required column is missing in data file. Col: " +
@@ -405,7 +405,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
           datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
         cv.setColumnReader(reader);
       } else {
-        // not in missing columns and is a complex type: this must be a struct
+        // Not in missing columns and is a complex type: this must be a struct
         for (ParquetColumnVector childCv : cv.getChildren()) {
           initColumnReader(pages, childCv);
         }

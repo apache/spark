@@ -96,13 +96,13 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     this.in = in;
     if (fixedWidth) {
-      // initialize for repetition and definition levels
+      // Initialize for repetition and definition levels
       if (readLength) {
         int length = readIntLittleEndian();
         this.in = in.sliceStream(length);
       }
     } else {
-      // initialize for values
+      // Initialize for values
       if (in.available() > 0) {
         init(in.read());
       }
@@ -200,7 +200,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int leftInPage = state.valuesToReadInPage;
 
     while (leftInBatch > 0 && leftInPage > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (currentCount == 0 && !readNextGroup()) break;
       int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
 
       long rangeStart = state.currentRangeStart();
@@ -213,11 +213,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       } else if (rowId > rangeEnd) {
         state.nextRange();
       } else {
-        // the range [rowId, rowId + n) overlaps with the current row range in state
+        // The range [rowId, rowId + n) overlaps with the current row range in state
         long start = Math.max(rangeStart, rowId);
         long end = Math.min(rangeEnd, rowId + n - 1);
 
-        // skip the part [rowId, start)
+        // Skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
           skipValues(toSkip, state, valueReader, updater);
@@ -225,7 +225,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           leftInPage -= toSkip;
         }
 
-        // read the part [start, end]
+        // Read the part [start, end]
         n = (int) (end - start + 1);
 
         switch (mode) {
@@ -234,7 +234,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
               updater.readValues(n, state.valueOffset, values, valueReader);
               state.valueOffset += n;
             } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
-              // only add null if this represents a null element, but not for the case where a
+              // Only add null if this represents a null element, but not for the case where a
               // struct itself is null
               nulls.putNulls(state.valueOffset, n);
               state.valueOffset += n;
@@ -243,15 +243,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
             break;
           case PACKED:
             for (int i = 0; i < n; ++i) {
-              int v = currentBuffer[currentBufferIdx++];
-              if (v == state.maxDefinitionLevel) {
+              int value = currentBuffer[currentBufferIdx++];
+              if (value == state.maxDefinitionLevel) {
                 updater.readValue(state.valueOffset++, values, valueReader);
-              } else if (!state.isRequired && v == state.maxDefinitionLevel - 1) {
-                // only add null if this represents a null element, but not for the case where a
+              } else if (!state.isRequired && value == state.maxDefinitionLevel - 1) {
+                // Only add null if this represents a null element, but not for the case where a
                 // struct itself is null
                 nulls.putNull(state.valueOffset++);
               }
-              defLevels.putInt(state.levelOffset + i, v);
+              defLevels.putInt(state.levelOffset + i, value);
             }
             break;
         }
@@ -320,16 +320,16 @@ public final class VectorizedRleValuesReader extends ValuesReader
     while ((leftInBatch > 0 || !state.lastListCompleted) && leftInPage > 0) {
       if (currentCount == 0 && !readNextGroup()) break;
 
-      // values to read in the current RLE/PACKED block, must be <= what's left in the page
+      // Values to read in the current RLE/PACKED block, must be <= what's left in the page
       int valuesLeftInBlock = Math.min(leftInPage, currentCount);
 
-      // the current row range start and end
+      // The current row range start and end
       long rangeStart = state.currentRangeStart();
       long rangeEnd = state.currentRangeEnd();
 
       switch (mode) {
         case RLE:
-          // this RLE block is consist of top-level rows, so we'll need to check
+          // This RLE block is consist of top-level rows, so we'll need to check
           // if the rows should be skipped according to row indexes.
           if (currentValue == 0) {
             if (leftInBatch == 0) {
@@ -339,21 +339,21 @@ public final class VectorizedRleValuesReader extends ValuesReader
               int n = Math.min(leftInBatch, valuesLeftInBlock);
 
               if (rowId + n < rangeStart) {
-                // need to skip all rows in [rowId, rowId + n)
+                // Need to skip all rows in [rowId, rowId + n)
                 defLevelProcessor.skipValues(n);
                 rowId += n;
                 currentCount -= n;
                 leftInPage -= n;
               } else if (rowId > rangeEnd) {
-                // the current row index already beyond the current range: move to the next range
+                // The current row index already beyond the current range: move to the next range
                 // and repeat
                 state.nextRange();
               } else {
-                // the range [rowId, rowId + n) overlaps with the current row range
+                // The range [rowId, rowId + n) overlaps with the current row range
                 long start = Math.max(rangeStart, rowId);
                 long end = Math.min(rangeEnd, rowId + n - 1);
 
-                // skip the rows in [rowId, start)
+                // Skip the rows in [rowId, start)
                 int toSkip = (int) (start - rowId);
                 if (toSkip > 0) {
                   defLevelProcessor.skipValues(toSkip);
@@ -362,10 +362,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
                   leftInPage -= toSkip;
                 }
 
-                // read the rows in [start, end]
+                // Read the rows in [start, end]
                 n = (int) (end - start + 1);
 
-                leftInBatch -= n;
                 if (n > 0) {
                   repLevels.appendInts(n, 0);
                   defLevelProcessor.readValues(n);
@@ -373,11 +372,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
                 rowId += n;
                 currentCount -= n;
+                leftInBatch -= n;
                 leftInPage -= n;
               }
             }
           } else {
-            // not a top-level row: just read all the repetition levels in the block if the row
+            // Not a top-level row: just read all the repetition levels in the block if the row
             // should be included according to row indexes, else skip the rows.
             if (!state.shouldSkip) {
               repLevels.appendInts(valuesLeftInBlock, currentValue);
@@ -397,15 +397,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
                 state.lastListCompleted = true;
                 break;
               } else if (rowId < rangeStart) {
-                // this is a top-level row, therefore check if we should skip it with row indexes
+                // This is a top-level row, therefore check if we should skip it with row indexes
                 // the row is before the current range, skip it
                 defLevelProcessor.skipValues(1);
               } else if (rowId > rangeEnd) {
-                // the row is after the current range, move to the next range and compare again
+                // The row is after the current range, move to the next range and compare again
                 state.nextRange();
                 break;
               } else {
-                // the row is in the current range, decrement the row counter and read it
+                // The row is in the current range, decrement the row counter and read it
                 leftInBatch--;
                 repLevels.appendInt(0);
                 defLevelProcessor.readValues(1);
@@ -426,7 +426,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       }
     }
 
-    // process all the batched def levels
+    // Process all the batched def levels
     defLevelProcessor.finish();
 
     state.rowsToReadInBatch = leftInBatch;
@@ -524,7 +524,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int n = total;
     int initialValueOffset = state.valueOffset;
     while (n > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(n, this.currentCount);
       switch (mode) {
         case RLE:
@@ -532,7 +532,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             updater.readValues(num, state.valueOffset, values, valueReader);
             state.valueOffset += num;
           } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
-            // only add null if this represents a null element, but not the case when a
+            // Only add null if this represents a null element, but not the case when a
             // collection is null or empty.
             nulls.putNulls(state.valueOffset, num);
             state.valueOffset += num;
@@ -545,7 +545,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             if (currentValue == state.maxDefinitionLevel) {
               updater.readValue(state.valueOffset++, values, valueReader);
             } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
-              // only add null if this represents a null element, but not the case when a
+              // Only add null if this represents a null element, but not the case when a
               // collection is null or empty.
               nulls.putNull(state.valueOffset++);
             }
@@ -577,11 +577,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valuesReader,
       ParquetVectorUpdater updater) {
     while (n > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(n, this.currentCount);
       switch (mode) {
         case RLE:
-          // we only need to skip non-null values from `valuesReader` since nulls are represented
+          // We only need to skip non-null values from `valuesReader` since nulls are represented
           // via definition levels which are skipped here via decrementing `currentCount`.
           if (currentValue == state.maxDefinitionLevel) {
             updater.skipValues(num, valuesReader);
@@ -589,7 +589,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           break;
         case PACKED:
           for (int i = 0; i < num; ++i) {
-            // same as above, only skip non-null values from `valuesReader`
+            // Same as above, only skip non-null values from `valuesReader`
             if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
               updater.skipValues(1, valuesReader);
             }
@@ -608,7 +608,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (currentCount == 0 && !readNextGroup()) break;
       int n = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:
@@ -866,7 +866,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private void skipValues(int n) {
     int left = n;
     while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:

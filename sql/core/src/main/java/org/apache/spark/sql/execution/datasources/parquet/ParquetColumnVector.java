@@ -89,7 +89,7 @@ final class ParquetColumnVector {
           vector.getChild(i), capacity, memoryMode, missingColumns);
         children.add(childCv);
 
-        // only use levels from non-missing child, this can happen if only some but not all
+        // Only use levels from non-missing child, this can happen if only some but not all
         // fields of a struct are missing.
         if (!childCv.vector.isAllNull()) {
           this.repetitionLevels = childCv.repetitionLevels;
@@ -97,7 +97,7 @@ final class ParquetColumnVector {
         }
       }
 
-      // this can happen if all the fields of a struct are missing, in which case we should mark
+      // This can happen if all the fields of a struct are missing, in which case we should mark
       // the struct itself as a missing column
       if (repetitionLevels == null) {
         vector.setAllNull();
@@ -153,6 +153,10 @@ final class ParquetColumnVector {
     }
   }
 
+  /**
+   * Resets this Parquet column vector, which includes resetting all the writable column vectors
+   * (used to store values, definition levels, and repetition levels) for this and all its children.
+   */
   void reset() {
     // nothing to do if the column itself is missing
     if (vector.isAllNull()) return;
@@ -165,29 +169,48 @@ final class ParquetColumnVector {
     }
   }
 
+  /**
+   * Returns the {@link ParquetColumn} of this column vector.
+   */
   ParquetColumn getColumn() {
     return this.column;
   }
 
+  /**
+   * Returns the writable column vector used to store values.
+   */
   WritableColumnVector getValueVector() {
     return this.vector;
   }
 
+  /**
+   * Returns the writable column vector used to store repetition levels.
+   */
   WritableColumnVector getRepetitionLevelVector() {
     return this.repetitionLevels;
   }
 
+  /**
+   * Returns the writable column vector used to store definition levels.
+   */
   WritableColumnVector getDefinitionLevelVector() {
     return this.definitionLevels;
   }
 
+  /**
+   * Returns the column reader for reading a Parquet column.
+   */
   VectorizedColumnReader getColumnReader() {
     return this.columnReader;
   }
 
+  /**
+   * Sets the column vector to 'reader'. Note this can only be called on a primitive Parquet
+   * column.
+   */
   void setColumnReader(VectorizedColumnReader reader) {
     if (!isPrimitive) {
-      throw new IllegalStateException("can't set reader for non-primitive column");
+      throw new IllegalStateException("Can't set reader for non-primitive column");
     }
     this.columnReader = reader;
   }
@@ -214,18 +237,18 @@ final class ParquetColumnVector {
       vector.reserve(rowId + 1);
       int definitionLevel = definitionLevels.getInt(i);
       if (definitionLevel == maxDefinitionLevel - 1) {
-        // the collection is null
+        // Collection is null
         vector.putNull(rowId++);
       } else if (definitionLevel == maxDefinitionLevel) {
-        // collection is defined but empty
+        // Collection is defined but empty
         vector.putNotNull(rowId);
         vector.putArray(rowId, offset, 0);
         rowId++;
       } else if (definitionLevel > maxDefinitionLevel) {
-        // collection is defined and non-empty: find out how many top element there is till the
+        // Collection is defined and non-empty: find out how many top elements are there until the
         // start of the next array.
         vector.putNotNull(rowId);
-        int length = getCollectionSize(maxElementRepetitionLevel, i + 1);
+        int length = getCollectionSize(maxElementRepetitionLevel, i);
         vector.putArray(rowId, offset, length);
         offset += length;
         rowId++;
@@ -244,12 +267,12 @@ final class ParquetColumnVector {
     int nonnullRowId = 0;
     boolean hasRepetitionLevels = repetitionLevels.getElementsAppended() > 0;
     for (int i = 0; i < definitionLevels.getElementsAppended(); i++) {
-      // if repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
+      // If repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
       // element in struct<array<int>>), and we should skip the definition level since it doesn't
       // represent with the struct.
       if (!hasRepetitionLevels || repetitionLevels.getInt(i) <= maxRepetitionLevel) {
         if (definitionLevels.getInt(i) == maxDefinitionLevel - 1) {
-          // the struct is null
+          // Struct is null
           vector.putNull(rowId);
           rowId++;
         } else if (definitionLevels.getInt(i) >= maxDefinitionLevel) {
@@ -274,8 +297,16 @@ final class ParquetColumnVector {
     }
   }
 
-  private int getNextCollectionStart(int maxRepetitionLevel, int elementIndex) {
-    int idx = elementIndex + 1;
+  /**
+   * For a collection (i.e., array or map) element at index 'idx', returns the starting index of
+   * the next collection after it.
+   *
+   * @param maxRepetitionLevel the maximum repetition level for the elements in this collection
+   * @param idx the index of this collection in the Parquet column
+   * @return the starting index of the next collection
+   */
+  private int getNextCollectionStart(int maxRepetitionLevel, int idx) {
+    idx += 1;
     for (; idx < repetitionLevels.getElementsAppended(); idx++) {
       if (repetitionLevels.getInt(idx) <= maxRepetitionLevel) {
         break;
@@ -284,13 +315,20 @@ final class ParquetColumnVector {
     return idx;
   }
 
+  /**
+   * Gets the size of a collection (i.e., array or map) element, starting at 'idx'.
+   *
+   * @param maxRepetitionLevel the maximum repetition level for the elements in this collection
+   * @param idx the index of this collection in the Parquet column
+   * @return the size of this collection
+   */
   private int getCollectionSize(int maxRepetitionLevel, int idx) {
     int size = 1;
-    for (; idx < repetitionLevels.getElementsAppended(); idx++) {
+    for (idx += 1; idx < repetitionLevels.getElementsAppended(); idx++) {
       if (repetitionLevels.getInt(idx) <= maxRepetitionLevel) {
         break;
       } else if (repetitionLevels.getInt(idx) <= maxRepetitionLevel + 1) {
-        // only count elements which belong to the current collection
+        // Only count elements which belong to the current collection
         // For instance, suppose we have the following Parquet schema:
         //
         // message schema {                        max rl   max dl
@@ -311,7 +349,7 @@ final class ParquetColumnVector {
         // repetition levels: [0, 2, 1, 2, 0, 2, 1, 2]
         // definition levels: [2, 2, 2, 2, 2, 2, 2, 2]
         //
-        // when calculating collection size for the outer array, we should only count repetition
+        // When calculating collection size for the outer array, we should only count repetition
         // levels whose value is <= 1 (which is the max repetition level for the inner array)
         size++;
       }
