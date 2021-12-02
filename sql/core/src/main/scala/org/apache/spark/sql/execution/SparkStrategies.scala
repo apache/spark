@@ -826,7 +826,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.RepartitionByExpression =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE
-        } else if (r.adapativePartition) {
+        } else if (r.adaptivePartition) {
           REBALANCE_PARTITIONS_BY_COL
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION_BY_COL

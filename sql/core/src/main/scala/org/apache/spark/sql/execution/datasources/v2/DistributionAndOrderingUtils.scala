@@ -38,14 +38,15 @@ object DistributionAndOrderingUtils {
 
       val queryWithDistribution = if (distribution.nonEmpty) {
         if (numPartitions > 0) {
+          // the conversion to catalyst expressions above produces SortOrder expressions
+          // for OrderedDistribution and generic expressions for ClusteredDistribution
+          // this allows RepartitionByExpression to pick either range or hash partitioning
           RepartitionByExpression(distribution, query, numPartitions)
         } else {
+          // if numPartitions is not specified by the data source, Spark optimizes the
+          // partitions if necessary.
           RepartitionByExpression(distribution, query, conf.numShufflePartitions, true)
         }
-        // the conversion to catalyst expressions above produces SortOrder expressions
-        // for OrderedDistribution and generic expressions for ClusteredDistribution
-        // this allows RepartitionByExpression to pick either range or hash partitioning
-
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else {
