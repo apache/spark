@@ -30,7 +30,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
-    _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
 
