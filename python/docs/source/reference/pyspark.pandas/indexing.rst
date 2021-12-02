@@ -337,7 +337,7 @@ DatatimeIndex
    DatetimeIndex
 
 TimedeltaIndex
--------------
+--------------
 .. autosummary::
    :toctree: api/
 
