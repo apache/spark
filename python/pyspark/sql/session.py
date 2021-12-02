@@ -278,7 +278,9 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    session._jvm.SparkSession.applyModifiableSettings(session._jsparkSession, self._options)
+                    getattr(getattr(session._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                        session._jsparkSession, self._options
+                    )
                 return session
 
     builder = Builder()
@@ -304,11 +306,15 @@ class SparkSession(SparkConversionMixin):
                 and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
-                self._jvm.SparkSession.applyModifiableSettings(jsparkSession, options)
+                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                    jsparkSession, options
+                )
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
         else:
-            self._jvm.SparkSession.applyModifiableSettings(jsparkSession, options)
+            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                jsparkSession, options
+            )
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
