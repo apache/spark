@@ -278,9 +278,9 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    getattr(getattr(session._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
-                        session._jsparkSession, self._options
-                    )
+                    getattr(
+                        getattr(session._jvm, "SparkSession$"), "MODULE$"
+                    ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
     builder = Builder()
