@@ -55,3 +55,7 @@ class TimedeltaOps(DataTypeOps):
             return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+    def prepare(self, col: pd.Series) -> pd.Series:
+        """Prepare column when from_pandas."""
+        return col
