@@ -185,19 +185,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
-      val newProps = tableSpec.properties.get(TableCatalog.PROP_LOCATION).map { loc =>
-        tableSpec.properties + (TableCatalog.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
-      }.getOrElse(tableSpec.properties)
-
+      val qualifiedLocation = tableSpec.location.map(makeQualifiedDBObjectPath(_))
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(
-            staging, ident.asIdentifier, schema, parts, tableSpec.copy(properties = newProps),
+          AtomicReplaceTableExec(staging, ident.asIdentifier, schema, parts,
+            tableSpec.copy(location = qualifiedLocation),
             orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
-          ReplaceTableExec(
-            catalog.asTableCatalog, ident.asIdentifier, schema, parts,
-            tableSpec.copy(properties = newProps), orCreate = orCreate, invalidateCache) :: Nil
+          ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, schema, parts,
+            tableSpec.copy(location = qualifiedLocation), orCreate = orCreate,
+            invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
