@@ -177,11 +177,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
-      properties: util.Map[String, String],
-      options: JDBCOptions): String = {
+      properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
     var indexProperties = ""
-    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, options)
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "postgresql")
 
     if (indexPropertyList.nonEmpty) {
       indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
@@ -221,13 +220,5 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
     }
-  }
-
-  override def convertPropertyPairToString(key: String, value: String): String = {
-    s"$key = $value"
-  }
-
-  override def getSupportedIndexTypeList(): Array[String] = {
-    Array("BTREE", "HASH", "BRIN")
   }
 }

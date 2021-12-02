@@ -306,8 +306,7 @@ abstract class JdbcDialect extends Serializable with Logging{
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
-      properties: util.Map[String, String],
-      options: JDBCOptions): String = {
+      properties: util.Map[String, String]): String = {
     throw new UnsupportedOperationException("createIndex is not supported")
   }
 
@@ -358,18 +357,6 @@ abstract class JdbcDialect extends Serializable with Logging{
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(message, cause = Some(e))
   }
-
-  /**
-   * Convert key-value property pair to string
-   */
-  def convertPropertyPairToString(key: String, value: String): String = {
-    s"$key $value"
-  }
-
-  /**
-   * Return list of supported index type
-   */
-  def getSupportedIndexTypeList(): Array[String] = Array.empty
 
   /**
    * returns the LIMIT clause for the SELECT statement

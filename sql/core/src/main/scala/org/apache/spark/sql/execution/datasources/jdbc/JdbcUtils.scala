@@ -24,6 +24,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -1027,7 +1028,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options,
-      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties, options))
+      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
   }
 
   /**
@@ -1101,12 +1102,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def processIndexProperties(
       properties: util.Map[String, String],
-      options: JDBCOptions
+      catalogName: String
     ): (String, Array[String]) = {
-    val dialect = JdbcDialects.get(options.url)
     var indexType = ""
-    var indexPropertyList: Array[String] = Array.empty
-    val supportedIndexTypeList = dialect.getSupportedIndexTypeList()
+    val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
+    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
 
     if (!properties.isEmpty) {
       properties.asScala.foreach { case (k, v) =>
@@ -1118,11 +1118,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
               s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
           }
         } else {
-          indexPropertyList = indexPropertyList :+ dialect.convertPropertyPairToString(k, v)
+          indexPropertyList.append(convertPropertyPairToString(catalogName, k, v))
         }
       }
     }
-    (indexType, indexPropertyList)
+    (indexType, indexPropertyList.toArray)
   }
 
   def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
@@ -1133,6 +1133,22 @@ object JdbcUtils extends Logging with SQLConfHelper {
       if (value.equalsIgnoreCase(indexType)) return true
     }
     false
+  }
+
+  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
+    catalogName match {
+      case "mysql" => Array("BTREE", "HASH")
+      case "postgresql" => Array("BTREE", "HASH", "BRIN")
+      case _ => Array.empty
+    }
+  }
+
+  def convertPropertyPairToString(catalogName: String, key: String, value: String): String = {
+    catalogName match {
+      case "mysql" => s"$key $value"
+      case "postgresql" => s"$key = $value"
+      case _ => ""
+    }
   }
 
   def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {

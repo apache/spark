@@ -116,10 +116,9 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       tableName: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
-      properties: util.Map[String, String],
-      options: JDBCOptions): String = {
+      properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
-    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, options)
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "mysql")
 
     // columnsProperties doesn't apply to MySQL so it is ignored
     s"CREATE INDEX ${quoteIdentifier(indexName)} $indexType ON" +
@@ -194,9 +193,5 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
     }
-  }
-
-  override def getSupportedIndexTypeList(): Array[String] = {
-    Array("BTREE", "HASH")
   }
 }
