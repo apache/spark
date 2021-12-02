@@ -20,7 +20,6 @@ A wrapper class for Spark DataFrame to behave similar to pandas DataFrame.
 """
 from collections import OrderedDict, defaultdict, namedtuple
 from collections.abc import Mapping
-from distutils.version import LooseVersion
 import re
 import warnings
 import inspect
@@ -58,10 +57,7 @@ from pandas.tseries.frequencies import DateOffset, to_offset
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
-if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-    from pandas.core.dtypes.common import infer_dtype_from_object
-else:
-    from pandas.core.dtypes.common import _get_dtype_from_object as infer_dtype_from_object
+from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
@@ -3128,17 +3124,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-
-            @no_type_check
-            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
-                return pdf.at_time(time, asof).reset_index()
-
-        else:
-
-            @no_type_check
-            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
-                return pdf.at_time(time, asof, axis).reset_index()
+        @no_type_check
+        def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
+            return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
         # a default index, which will never be used. So use "distributed" index as a dummy
@@ -12103,17 +12091,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _repr_html_(self) -> str:
         max_display_count = get_option("display.max_rows")
-        # pandas 0.25.1 has a regression about HTML representation so 'bold_rows'
-        # has to be set as False explicitly. See https://github.com/pandas-dev/pandas/issues/28204
-        bold_rows = not (LooseVersion("0.25.1") == LooseVersion(pd.__version__))
         if max_display_count is None:
-            return self._to_internal_pandas().to_html(notebook=True, bold_rows=bold_rows)
+            return self._to_internal_pandas().to_html(notebook=True)
 
         pdf = self._get_or_create_repr_pandas_cache(max_display_count)
         pdf_length = len(pdf)
         pdf = pdf.iloc[:max_display_count]
         if pdf_length > max_display_count:
-            repr_html = pdf.to_html(show_dimensions=True, notebook=True, bold_rows=bold_rows)
+            repr_html = pdf.to_html(show_dimensions=True, notebook=True)
             match = REPR_HTML_PATTERN.search(repr_html)
             if match is not None:
                 nrows = match.group("rows")
@@ -12124,7 +12109,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "{by} {cols} columns</p>\n</div>".format(rows=nrows, by=by, cols=ncols)
                 )
                 return REPR_HTML_PATTERN.sub(footer, repr_html)
-        return pdf.to_html(notebook=True, bold_rows=bold_rows)
+        return pdf.to_html(notebook=True)
 
     def __getitem__(self, key: Any) -> Any:
         from pyspark.pandas.series import Series
