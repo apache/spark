@@ -39,6 +39,7 @@ class RpcAddressSuite extends SparkFunSuite {
       RpcAddress.fromSparkURL("spark://1.2. 3.4:1234")
     }
     assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
+    assert("INVALID_MASTER_URL" === e.getErrorClass)
   }
 
   test("fromSparkURL: invalid scheme") {
@@ -46,6 +47,7 @@ class RpcAddressSuite extends SparkFunSuite {
       RpcAddress.fromSparkURL("invalid://1.2.3.4:1234")
     }
     assert("Invalid master URL: invalid://1.2.3.4:1234" === e.getMessage)
+    assert("INVALID_MASTER_URL" === e.getErrorClass)
   }
 
   test("toSparkURL") {

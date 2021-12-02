@@ -318,6 +318,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance().serialize(1))
     assert(thrown.getMessage.contains("Failed to register classes with Kryo"))
+    assert(thrown.getErrorClass.equals("KRYO_CLASS_REGISTRATION_FAILED"))
   }
 
   test("default class loader can be set by a different thread") {
