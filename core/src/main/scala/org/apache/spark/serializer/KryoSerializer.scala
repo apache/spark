@@ -180,8 +180,8 @@ class KryoSerializer(conf: SparkConf)
           .foreach { reg => reg.registerClasses(kryo) }
       } catch {
         case e: Exception =>
-          throw new SparkException(s"Failed to register classes with Kryo", e)
-      }
+          throw new SparkException(errorClass = "KRYO_CLASS_REGISTRATION_FAILED",
+            messageParameters = Array.empty, cause = e)      }
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
@@ -387,8 +387,8 @@ private[spark] class KryoSerializerInstance(
       kryo.writeClassAndObject(output, t)
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
-        throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          s"increase ${KRYO_SERIALIZER_MAX_BUFFER_SIZE.key} value.", e)
+        throw new SparkException(errorClass = "KRYO_SERIALIZATION_FAILED",
+          messageParameters = Array(e.getMessage, KRYO_SERIALIZER_MAX_BUFFER_SIZE.key), cause = e)
     } finally {
       releaseKryo(kryo)
     }

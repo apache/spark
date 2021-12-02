@@ -679,16 +679,13 @@ private[spark] object Utils extends Logging {
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
           )
           if (!destFile.delete()) {
-            throw new SparkException(
-              "Failed to delete %s while attempting to overwrite it with %s".format(
-                destFile.getAbsolutePath,
-                sourceFile.getAbsolutePath
-              )
-            )
+            throw new SparkException(errorClass = "COPY_FILE_FAILURE_CANNOT_DELETE_OLD_FILE",
+              messageParameters = Array(destFile.getAbsolutePath, sourceFile.getAbsolutePath),
+              cause = null)
           }
         } else {
-          throw new SparkException(
-            s"File $destFile exists and does not match contents of $url")
+          throw new SparkException(errorClass = "COPY_FILE_FAILURE_FILE_EXISTS",
+            messageParameters = Array(destFile.toString, url), cause = null)
         }
       } else {
         // Do nothing if the file contents are the same, i.e. this file has been copied
@@ -1358,7 +1355,8 @@ private[spark] object Utils extends Logging {
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
       logError(s"Process $command exited with code $exitCode: $output")
-      throw new SparkException(s"Process $command exited with code $exitCode")
+      throw new SparkException(errorClass = "COMMAND_EXECUTION_FAILURE",
+        messageParameters = Array(command.toString, exitCode.toString), cause = null)
     }
     output.toString
   }
@@ -2200,7 +2198,8 @@ private[spark] object Utils extends Logging {
 
     } catch {
       case e: IOException =>
-        throw new SparkException(s"Failed when loading Spark properties from $filename", e)
+        throw new SparkException(errorClass = "SPARK_PROPERTIES_LOADING_FAILURE",
+          messageParameters = Array(filename), cause = e)
     } finally {
       inReader.close()
     }
@@ -2397,7 +2396,8 @@ private[spark] object Utils extends Logging {
       }
     }
     // Should never happen
-    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
+    throw new SparkException(errorClass = "SERVICE_START_FAILURE",
+      messageParameters = Array(serviceString, startPort.toString), cause = null)
   }
 
   /**
@@ -2503,12 +2503,16 @@ private[spark] object Utils extends Logging {
         uri.getFragment != null ||
         uri.getQuery != null ||
         uri.getUserInfo != null) {
-        throw new SparkException("Invalid master URL: " + sparkUrl)
+        throw new SparkException(errorClass = "INVALID_MASTER_URL",
+          messageParameters = Array(sparkUrl),
+          cause = null)
       }
       (host, port)
     } catch {
       case e: java.net.URISyntaxException =>
-        throw new SparkException("Invalid master URL: " + sparkUrl, e)
+        throw new SparkException(errorClass = "INVALID_MASTER_URL",
+          messageParameters = Array(sparkUrl),
+          cause = e)
     }
   }
 
@@ -2893,13 +2897,9 @@ private[spark] object Utils extends Logging {
         Some(ext)
       } catch {
         case _: NoSuchMethodException =>
-          throw new SparkException(
-            s"$name did not have a zero-argument constructor or a" +
-              " single-argument constructor that accepts SparkConf. Note: if the class is" +
-              " defined inside of another Scala class, then its constructors may accept an" +
-              " implicit parameter that references the enclosing class; in this case, you must" +
-              " define the class as a top-level class in order to prevent this extra" +
-              " parameter from breaking Spark's ability to find a valid constructor.")
+          throw new SparkException(errorClass = "EXTENSION_CONSTRUCTOR_NOT_FOUND",
+            messageParameters = Array(name),
+            cause = null)
 
         case e: InvocationTargetException =>
           e.getCause() match {

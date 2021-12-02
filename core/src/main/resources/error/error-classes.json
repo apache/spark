@@ -3,6 +3,12 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "AVRO_READING_ERROR" : {
+    "message" : [ "Error reading avro data -- encountered an unknown fingerprint: %s, not sure what schema to use. This could happen if you registered additional schemas after starting your spark context." ]
+  },
+  "AWAIT_RESULT_EXCEPTION" : {
+    "message" : [ "Exception thrown in awaitResult." ]
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
@@ -19,8 +25,17 @@
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
   },
+  "COMMAND_EXECUTION_FAILURE" : {
+    "message" : [ "Process %s exited with code %s" ]
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
+  "COPY_FILE_FAILURE_CANNOT_DELETE_OLD_FILE" : {
+    "message" : [ "Failed to delete %s while attempting to overwrite it with %s." ]
+  },
+  "COPY_FILE_FAILURE_FILE_EXISTS" : {
+    "message" : [ "File %s exists and does not match contents of %s" ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero. To return NULL instead, use 'try_divide'. If necessary set %s to false (except for ANSI interval type) to bypass this error." ],
@@ -29,6 +44,9 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "EXTENSION_CONSTRUCTOR_NOT_FOUND" : {
+    "message" : [ "%s did not have a zero-argument constructor or a single-argument constructor that accepts SparkConf. Note: if the class is defined inside of another Scala class, then its constructors may accept an implicit parameter that references the enclosing class; in this case, you must define the class as a top-level class in order to prevent this extra parameter from breaking Spark's ability to find a valid constructor." ]
   },
   "FAILED_EXECUTE_UDF" : {
     "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ]
@@ -50,6 +68,9 @@
   },
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
+  },
+  "GLOB_PATH_RESOLVE_AMBIGUITY" : {
+    "message" : [ "%s resolves ambiguously to multiple files: %s" ]
   },
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
@@ -89,6 +110,15 @@
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
+  "INVALID_MASTER_URL" : {
+    "message" : [ "Invalid master URL: %s" ]
+  },
+  "KRYO_CLASS_REGISTRATION_FAILED" : {
+    "message" : [ "Failed to register classes with Kryo." ]
+  },
+  "KRYO_SERIALIZATION_FAILED" : {
+    "message" : [ "Kryo serialization failed: %s. To avoid this, increase %s value." ]
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
   },
@@ -123,6 +153,15 @@
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
+  },
+  "SERVICE_START_FAILURE" : {
+    "message" : [ "Failed to start service%s on port %s" ]
+  },
+  "SHUFFLE_SIZE_EXCEEDED_LIMIT" : {
+    "message" : [ "Not storing remote shuffles, bytes needed %s exceeds size limit %s." ]
+  },
+  "SPARK_PROPERTIES_LOADING_FAILURE" : {
+    "message" : [ "Failed when loading Spark properties from %s" ]
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]

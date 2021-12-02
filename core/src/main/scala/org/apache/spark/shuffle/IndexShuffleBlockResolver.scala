@@ -220,7 +220,9 @@ private[spark] class IndexShuffleBlockResolver(
     remoteShuffleMaxDisk.foreach { maxBytes =>
       val bytesUsed = getShuffleBytesStored()
       if (maxBytes < bytesUsed) {
-        throw new SparkException(s"Not storing remote shuffles $bytesUsed exceeds $maxBytes")
+        throw new SparkException(errorClass = "SHUFFLE_SIZE_EXCEEDED_LIMIT",
+          messageParameters = Array(bytesUsed.toString, maxBytes.toString),
+          cause = null)
       }
     }
     val file = blockId match {

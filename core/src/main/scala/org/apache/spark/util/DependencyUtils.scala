@@ -271,8 +271,10 @@ private[spark] object DependencyUtils extends Logging {
     Utils.stringToSeq(paths).flatMap { path =>
       val (base, fragment) = splitOnFragment(path)
       (resolveGlobPath(base, hadoopConf), fragment) match {
-        case (resolved, Some(_)) if resolved.length > 1 => throw new SparkException(
-            s"${base.toString} resolves ambiguously to multiple files: ${resolved.mkString(",")}")
+        case (resolved, Some(_)) if resolved.length > 1 =>
+          throw new SparkException(errorClass = "GLOB_PATH_RESOLVE_AMBIGUITY",
+            messageParameters = Array(base.toString, resolved.mkString(",")),
+            cause = null)
         case (resolved, Some(namedAs)) => resolved.map(_ + "#" + namedAs)
         case (resolved, _) => resolved
       }

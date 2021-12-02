@@ -298,7 +298,8 @@ private[spark] object ThreadUtils {
       // the exception.
       case NonFatal(t)
           if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw new SparkException(errorClass = "AWAIT_RESULT_EXCEPTION",
+          messageParameters = Array.empty, cause = t)
     }
   }
   // scalastyle:on awaitresult
@@ -315,7 +316,8 @@ private[spark] object ThreadUtils {
         throw e.throwable
       case NonFatal(t)
         if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw new SparkException(errorClass = "AWAIT_RESULT_EXCEPTION",
+          messageParameters = Array.empty, cause = t)
     }
   }
 
@@ -335,7 +337,8 @@ private[spark] object ThreadUtils {
     } catch {
       // TimeoutException is thrown in the current thread, so not need to warp the exception.
       case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
+        throw new SparkException(errorClass = "AWAIT_RESULT_EXCEPTION",
+          messageParameters = Array.empty, cause = t)
     }
   }
   // scalastyle:on awaitready

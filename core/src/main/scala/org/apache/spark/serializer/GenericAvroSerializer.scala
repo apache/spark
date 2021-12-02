@@ -139,10 +139,8 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
           schemas.get(fingerprint) match {
             case Some(s) => new Schema.Parser().parse(s)
             case None =>
-              throw new SparkException(
-                "Error reading attempting to read avro data -- encountered an unknown " +
-                  s"fingerprint: $fingerprint, not sure what schema to use.  This could happen " +
-                  "if you registered additional schemas after starting your spark context.")
+              throw new SparkException(errorClass = "AVRO_READING_ERROR",
+                messageParameters = Array(fingerprint.toString), cause = null)
           }
         })
       } else {
