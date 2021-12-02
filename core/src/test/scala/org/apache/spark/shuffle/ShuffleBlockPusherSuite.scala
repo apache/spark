@@ -20,11 +20,11 @@ package org.apache.spark.shuffle
 import java.io.{File, FileNotFoundException, IOException}
 import java.net.ConnectException
 import java.nio.ByteBuffer
-import java.util.concurrent.{LinkedBlockingQueue, Semaphore}
+import java.util.concurrent.{LinkedBlockingQueue}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.{Mock, MockitoAnnotations}
+import org.mockito.{ArgumentMatchers, Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -154,34 +154,34 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("Ensure all the blocks are pushed before notifying driver about push completion") {
     conf.set(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS, 12)
     conf.set("spark.shuffle.push.maxBlockBatchSize", "20b")
-    var numRequest = 0
-    when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
+    when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1),
+      BlockManagerId("slow-client", "slow-client", 1)))
+    when(shuffleClient.pushBlocks(ArgumentMatchers.eq("slow-client"), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        numRequest += 1
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         blocks.foreach { blockId =>
-          if (numRequest == 1) {
-            blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
-          } else {
-            Future {
-              blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
-            } (ExecutionContext.global)
-          }
+          blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
         }
       })
-    val semaphore = new Semaphore(0)
-    val blockPusher = new TestShuffleBlockPusher(conf, Option(semaphore))
+    when(shuffleClient.pushBlocks(ArgumentMatchers.eq("test-client"), any(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
+        blocks.foreach { blockId =>
+          blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
+        }
+      })
+    val blockPusher = new TestShuffleBlockPusher(conf)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     blockPusher.initiateBlockPush(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 5 }, dependency, 0)
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
     blockPusher.runPendingTasks()
-    semaphore.acquire()
     assert(blockPusher.bytesInFlight <= 0)
-    assert(pushRequests.length == 1)
-    verifyPushRequests(pushRequests, Seq(10))
+    assert(pushRequests.length == 2)
+    verifyPushRequests(pushRequests, Seq(6, 4))
     verifyBlockPushCompleted(blockPusher)
   }
 
@@ -428,8 +428,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   private class TestShuffleBlockPusher(
-      conf: SparkConf,
-      semaphore: Option[Semaphore] = None) extends ShuffleBlockPusher(conf) {
+      conf: SparkConf) extends ShuffleBlockPusher(conf) {
     val tasks = new LinkedBlockingQueue[Runnable]
 
     override protected def submitTask(task: Runnable): Unit = {
@@ -446,7 +445,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     override def notifyDriverAboutPushCompletion(): Unit = {
       super.notifyDriverAboutPushCompletion()
-      semaphore.foreach(_.release())
+      assert(bytesInFlight <= 0)
     }
 
     override protected def createRequestBuffer(
