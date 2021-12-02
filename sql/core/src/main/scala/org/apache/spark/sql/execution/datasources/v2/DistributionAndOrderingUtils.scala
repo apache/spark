@@ -37,15 +37,15 @@ object DistributionAndOrderingUtils {
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
-        val finalNumPartitions = if (numPartitions > 0) {
-          numPartitions
+        if (numPartitions > 0) {
+          RepartitionByExpression(distribution, query, numPartitions)
         } else {
-          conf.numShufflePartitions
+          RepartitionByExpression(distribution, query, conf.numShufflePartitions, true)
         }
         // the conversion to catalyst expressions above produces SortOrder expressions
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RepartitionByExpression to pick either range or hash partitioning
-        RepartitionByExpression(distribution, query, finalNumPartitions)
+
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else {

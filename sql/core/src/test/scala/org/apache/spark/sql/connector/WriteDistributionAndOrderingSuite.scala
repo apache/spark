@@ -34,7 +34,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -63,36 +65,51 @@ class WriteDistributionAndOrderingSuite
   private val resolver = conf.resolver
 
   test("ordered distribution and sort with same exprs: append") {
-    checkOrderedDistributionAndSortWithSameExprs("append")
+    Seq(false, true).foreach { skew =>
+      // if true, skew data: 144, 88, 88, 144, 80
+      // after repartition: 72, 72, 88, 88, 80
+      checkOrderedDistributionAndSortWithSameExprs("append", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with same exprs: overwrite") {
-    checkOrderedDistributionAndSortWithSameExprs("overwrite")
+    Seq(false, true).foreach { skew =>
+      // if true, skew data: 144, 88, 88, 144, 80
+      // after repartition: 72, 72, 88, 88, 80
+      checkOrderedDistributionAndSortWithSameExprs("overwrite", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with same exprs: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      // if true, skew data: 144, 88, 88, 144, 80
+      // after repartition: 72, 72, 88, 88, 80
+      checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: append") {
-    checkOrderedDistributionAndSortWithSameExprs("append", Some(10))
+    checkOrderedDistributionAndSortWithSameExprs("append", Some(10), false)
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithSameExprs("overwrite", Some(10))
+    checkOrderedDistributionAndSortWithSameExprs("overwrite", Some(10), false)
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", Some(10))
-  }
-
-  private def checkOrderedDistributionAndSortWithSameExprs(command: String): Unit = {
-    checkOrderedDistributionAndSortWithSameExprs(command, None)
+    checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", Some(10), false)
   }
 
   private def checkOrderedDistributionAndSortWithSameExprs(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkOrderedDistributionAndSortWithSameExprs(command, None, testSkewed)
+  }
+
+  private def checkOrderedDistributionAndSortWithSameExprs(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
@@ -114,40 +131,56 @@ class WriteDistributionAndOrderingSuite
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("clustered distribution and sort with same exprs: append") {
-    checkClusteredDistributionAndSortWithSameExprs("append")
+    Seq(false, true).foreach { skew =>
+      // if true, Skew data: 0, 224, 144, 160, 72
+      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithSameExprs("append", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with same exprs: overwrite") {
-    checkClusteredDistributionAndSortWithSameExprs("overwrite")
+    Seq(false, true).foreach { skew =>
+      // if true, Skew data: 0, 224, 144, 160, 72
+      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithSameExprs("overwrite", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with same exprs: overwriteDynamic") {
-    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      // if true, Skew data: 0, 224, 144, 160, 72
+      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: append") {
-    checkClusteredDistributionAndSortWithSameExprs("append", Some(10))
+    checkClusteredDistributionAndSortWithSameExprs("append", Some(10), false)
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: overwrite") {
-    checkClusteredDistributionAndSortWithSameExprs("overwrite", Some(10))
+    checkClusteredDistributionAndSortWithSameExprs("overwrite", Some(10), false)
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: overwriteDynamic") {
-    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", Some(10))
-  }
-
-  private def checkClusteredDistributionAndSortWithSameExprs(command: String): Unit = {
-    checkClusteredDistributionAndSortWithSameExprs(command, None)
+    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", Some(10), false)
   }
 
   private def checkClusteredDistributionAndSortWithSameExprs(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkClusteredDistributionAndSortWithSameExprs(command, None, testSkewed)
+  }
+
+  private def checkClusteredDistributionAndSortWithSameExprs(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -178,41 +211,57 @@ class WriteDistributionAndOrderingSuite
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("clustered distribution and sort with extended exprs: append") {
-    checkClusteredDistributionAndSortWithExtendedExprs("append")
+    Seq(false, true).foreach { skew =>
+      // Skew data: 144, 144, 0, 144, 232
+      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithExtendedExprs("append", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with extended exprs: overwrite") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwrite")
+    Seq(false, true).foreach { skew =>
+      // Skew data: 144, 144, 0, 144, 232
+      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithExtendedExprs("overwrite", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with extended exprs: overwriteDynamic") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      // Skew data: 144, 144, 0, 144, 232
+      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
+      checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: append") {
-    checkClusteredDistributionAndSortWithExtendedExprs("append", Some(10))
+    checkClusteredDistributionAndSortWithExtendedExprs("append", Some(10), false)
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: overwrite") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwrite", Some(10))
+    checkClusteredDistributionAndSortWithExtendedExprs("overwrite", Some(10), false)
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", Some(10))
-  }
-
-  private def checkClusteredDistributionAndSortWithExtendedExprs(command: String): Unit = {
-    checkClusteredDistributionAndSortWithExtendedExprs(command, None)
+    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", Some(10), false)
   }
 
   private def checkClusteredDistributionAndSortWithExtendedExprs(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkClusteredDistributionAndSortWithExtendedExprs(command, None, testSkewed)
+  }
+
+  private def checkClusteredDistributionAndSortWithExtendedExprs(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -243,7 +292,8 @@ class WriteDistributionAndOrderingSuite
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("unspecified distribution and local sort: append") {
@@ -353,37 +403,46 @@ class WriteDistributionAndOrderingSuite
   }
 
   test("ordered distribution and sort with manual global sort: append") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("append")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualGlobalSort("append", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual global sort: overwrite") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("overwrite")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual global sort: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("append", Some(10))
+    checkOrderedDistributionAndSortWithManualGlobalSort("append", Some(10), false)
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", Some(10))
+    checkOrderedDistributionAndSortWithManualGlobalSort("overwrite", Some(10), false)
   }
 
   test("ordered distribution and sort with manual global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic", Some(10))
-  }
-
-  private def checkOrderedDistributionAndSortWithManualGlobalSort(command: String): Unit = {
-    checkOrderedDistributionAndSortWithManualGlobalSort(command, None)
+    checkOrderedDistributionAndSortWithManualGlobalSort("overwriteDynamic", Some(10), false)
   }
 
   private def checkOrderedDistributionAndSortWithManualGlobalSort(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkOrderedDistributionAndSortWithManualGlobalSort(command, None, testSkewed)
+  }
+
+  private def checkOrderedDistributionAndSortWithManualGlobalSort(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -413,42 +472,53 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("ordered distribution and sort with incompatible global sort: append") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with incompatible global sort: overwrite") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with incompatible global sort: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
+        "overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append", Some(10))
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("append", Some(10), false)
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: " +
     "overwrite") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite", Some(10))
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwrite", Some(10), false)
   }
 
   test("ordered distribution and sort with incompatible global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwriteDynamic", Some(10))
-  }
-
-  private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(command: String): Unit = {
-    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(command, None)
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort("overwriteDynamic", Some(10), false)
   }
 
   private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkOrderedDistributionAndSortWithIncompatibleGlobalSort(command, None, testSkewed)
+  }
+
+  private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -478,41 +548,51 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy(df("data").desc, df("id").asc),
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("ordered distribution and sort with manual local sort: append") {
-    checkOrderedDistributionAndSortWithManualLocalSort("append")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualLocalSort("append", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual local sort: overwrite") {
-    checkOrderedDistributionAndSortWithManualLocalSort("overwrite")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualLocalSort("overwrite", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual local sort: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: append") {
-    checkOrderedDistributionAndSortWithManualLocalSort("append", Some(10))
+    checkOrderedDistributionAndSortWithManualLocalSort("append", Some(10), false)
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: overwrite") {
-    checkOrderedDistributionAndSortWithManualLocalSort("overwrite", Some(10))
+    checkOrderedDistributionAndSortWithManualLocalSort("overwrite", Some(10), false)
   }
 
   test("ordered distribution and sort with manual local sort with numPartitions: " +
     "overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic", Some(10))
-  }
-
-  private def checkOrderedDistributionAndSortWithManualLocalSort(command: String): Unit = {
-    checkOrderedDistributionAndSortWithManualLocalSort(command, None)
+    checkOrderedDistributionAndSortWithManualLocalSort("overwriteDynamic", Some(10), false)
   }
 
   private def checkOrderedDistributionAndSortWithManualLocalSort(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkOrderedDistributionAndSortWithManualLocalSort(command, None, testSkewed)
+  }
+
+  private def checkOrderedDistributionAndSortWithManualLocalSort(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -542,42 +622,53 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.sortWithinPartitions("data", "id"),
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("clustered distribution and local sort with manual global sort: append") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual global sort: overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual global sort: overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualGlobalSort(
+        "overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: append") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", Some(10))
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", Some(10), false)
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: " +
     "overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", Some(10))
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", Some(10), false)
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic", Some(10))
-  }
-
-  private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(command: String): Unit = {
-    checkClusteredDistributionAndLocalSortWithManualGlobalSort(command, None)
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic", Some(10), false)
   }
 
   private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort(command, None, testSkewed)
+  }
+
+  private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -608,42 +699,53 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   test("clustered distribution and local sort with manual local sort: append") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("append")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualLocalSort("append", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual local sort: overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual local sort: overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic")
+    Seq(false, true).foreach { skew =>
+      checkClusteredDistributionAndLocalSortWithManualLocalSort(
+        "overwriteDynamic", testSkewed = skew)
+    }
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: append") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("append", Some(10))
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("append", Some(10), false)
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: " +
     "overwrite") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", Some(10))
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", Some(10), false)
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: " +
     "overwriteDynamic") {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic", Some(10))
-  }
-
-  private def checkClusteredDistributionAndLocalSortWithManualLocalSort(command: String): Unit = {
-    checkClusteredDistributionAndLocalSortWithManualLocalSort(command, None)
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic", Some(10), false)
   }
 
   private def checkClusteredDistributionAndLocalSortWithManualLocalSort(
       command: String,
-      targetNumPartitions: Option[Int]): Unit = {
+      testSkewed: Boolean = false): Unit = {
+    checkClusteredDistributionAndLocalSortWithManualLocalSort(command, None, testSkewed)
+  }
+
+  private def checkClusteredDistributionAndLocalSortWithManualLocalSort(
+      command: String,
+      targetNumPartitions: Option[Int],
+      testSkewed: Boolean): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
@@ -674,7 +776,8 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
-      writeCommand = command)
+      writeCommand = command,
+      testSkewed = testSkewed)
   }
 
   private def checkWriteRequirements(
@@ -685,37 +788,67 @@ class WriteDistributionAndOrderingSuite
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
       writeCommand: String = "append",
-      expectAnalysisException: Boolean = false): Unit = {
+      expectAnalysisException: Boolean = false,
+      testSkewed: Boolean = false): Unit = {
+      catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
+        tableOrdering, tableNumPartitions)
 
-    catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions)
-
-    val df = spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
-    val writer = writeTransform(df).writeTo(tableNameAsString)
-
-    def executeCommand(): SparkPlan = writeCommand match {
-      case "append" => execute(writer.append())
-      case "overwrite" => execute(writer.overwrite(lit(true)))
-      case "overwriteDynamic" => execute(writer.overwritePartitions())
-    }
-
-    if (expectAnalysisException) {
-      intercept[AnalysisException] {
-        executeCommand()
+      val df = if (!testSkewed) {
+        spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
+      } else {
+        import testImplicits._
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
+          .toDF("id", "data")
       }
-    } else {
-      val executedPlan = executeCommand()
 
-      checkPartitioningAndOrdering(executedPlan, expectedWritePartitioning, expectedWriteOrdering)
+      val writer = writeTransform(df).writeTo(tableNameAsString)
 
-      checkAnswer(spark.table(tableNameAsString), df)
-    }
+      def executeCommand(): SparkPlan = writeCommand match {
+        case "append" => execute(writer.append())
+        case "overwrite" => execute(writer.overwrite(lit(true)))
+        case "overwriteDynamic" => execute(writer.overwritePartitions())
+      }
+
+      if (expectAnalysisException) {
+        intercept[AnalysisException] {
+          executeCommand()
+        }
+      } else if (!testSkewed) {
+        withSQLConf(
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+          val executedPlan = executeCommand()
+
+          checkPartitioningAndOrdering(
+            executedPlan, expectedWritePartitioning, expectedWriteOrdering)
+
+          checkAnswer(spark.table(tableNameAsString), df)
+        }
+      } else {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+          val executedPlan = executeCommand()
+
+          checkPartitioningAndOrdering(
+            executedPlan, expectedWritePartitioning, expectedWriteOrdering, true)
+
+          checkAnswer(spark.table(tableNameAsString), df)
+        }
+     }
+    catalog.dropTable(ident)
   }
 
   private def checkPartitioningAndOrdering(
       plan: SparkPlan,
       partitioning: physical.Partitioning,
-      ordering: Seq[catalyst.expressions.SortOrder]): Unit = {
+      ordering: Seq[catalyst.expressions.SortOrder],
+      testSkewed: Boolean = false): Unit = {
 
     val sorts = collect(plan) { case s: SortExec => s }
     assert(sorts.size <= 1, "must be at most one sort")
@@ -723,16 +856,20 @@ class WriteDistributionAndOrderingSuite
     assert(shuffles.size <= 1, "must be at most one shuffle")
 
     val actualPartitioning = plan.outputPartitioning
-    val expectedPartitioning = partitioning match {
-      case p: physical.RangePartitioning =>
-        val resolvedOrdering = p.ordering.map(resolveAttrs(_, plan))
-        p.copy(ordering = resolvedOrdering.asInstanceOf[Seq[catalyst.expressions.SortOrder]])
-      case p: physical.HashPartitioning =>
-        val resolvedExprs = p.expressions.map(resolveAttrs(_, plan))
-        p.copy(expressions = resolvedExprs)
-      case other => other
+    if (!testSkewed) {
+      val expectedPartitioning = partitioning match {
+        case p: physical.RangePartitioning =>
+          val resolvedOrdering = p.ordering.map(resolveAttrs(_, plan))
+          p.copy(ordering = resolvedOrdering.asInstanceOf[Seq[catalyst.expressions.SortOrder]])
+        case p: physical.HashPartitioning =>
+          val resolvedExprs = p.expressions.map(resolveAttrs(_, plan))
+          p.copy(expressions = resolvedExprs)
+        case other => other
+      }
+      assert(actualPartitioning == expectedPartitioning, "partitioning must match")
+    } else {
+      assert(actualPartitioning.numPartitions > conf.numShufflePartitions)
     }
-    assert(actualPartitioning == expectedPartitioning, "partitioning must match")
 
     val actualOrdering = plan.outputOrdering
     val expectedOrdering = ordering.map(resolveAttrs(_, plan))
