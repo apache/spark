@@ -226,6 +226,21 @@ class SparkSessionExtensions {
     preCBORules += builder
   }
 
+  private[this] val earlyScanPushDownRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildEarlyScanPushDownRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    earlyScanPushDownRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
+   * The injected rules will be executed once after the operator optimization batch and
+   * after any push down optimization rules.
+   */
+  def injectEarlyScanPushDownRules(builder: RuleBuilder): Unit = {
+    earlyScanPushDownRules += builder
+  }
+
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
 
   private[sql] def buildPlannerStrategies(session: SparkSession): Seq[Strategy] = {

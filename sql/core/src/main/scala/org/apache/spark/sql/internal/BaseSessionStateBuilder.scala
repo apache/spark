@@ -270,7 +270,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+  protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildEarlyScanPushDownRules(session)
+  }
 
   /**
    * Custom rules for rewriting plans after operator optimization and before CBO.

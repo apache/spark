@@ -95,6 +95,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-37518: inject a early scan push down rule") {
+    withSession(Seq(_.injectEarlyScanPushDownRules(MyRule))) { session =>
+      assert(session.sessionState.optimizer.earlyScanPushDownRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
