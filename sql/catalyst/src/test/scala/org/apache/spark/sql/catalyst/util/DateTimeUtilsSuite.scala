@@ -357,15 +357,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTimestamp("2021-01-01T12:30:4294967297+4294967297:30", None)
   }
 
-  test("SPARK-37326: stringToTimestampWithoutTimeZone with failOnError") {
+  test("SPARK-37326: stringToTimestampWithoutTimeZone with allowTimeZone") {
     assert(
       stringToTimestampWithoutTimeZone(
-        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), true) ==
       Some(DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2021, 11, 22, 10, 54, 27))))
 
     assert(
       stringToTimestampWithoutTimeZone(
-        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), true) ==
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
       None)
   }
 

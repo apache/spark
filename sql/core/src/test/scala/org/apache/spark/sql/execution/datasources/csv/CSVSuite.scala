@@ -1012,16 +1012,14 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_NTZ values") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+  test("SPARK-37326: Write and infer TIMESTAMP_NTZ values with a non-default pattern") {
+    withTempPath { path =>
       val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
       exp.write
         .format("csv")
         .option("header", "true")
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
-        .save(path)
+        .save(path.getAbsolutePath)
 
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
         val res = spark.read
@@ -1029,7 +1027,7 @@ abstract class CSVSuite
           .option("inferSchema", "true")
           .option("header", "true")
           .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
-          .load(path)
+          .load(path.getAbsolutePath)
 
         assert(res.dtypes === exp.dtypes)
         checkAnswer(res, exp)
@@ -1037,16 +1035,14 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-37326: Use different pattern to write and infer TIMESTAMP_LTZ values") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+  test("SPARK-37326: Write and infer TIMESTAMP_LTZ values with a non-default pattern") {
+    withTempPath { path =>
       val exp = spark.sql("select timestamp_ltz'2020-12-12 12:12:12' as col0")
       exp.write
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
-        .save(path)
+        .save(path.getAbsolutePath)
 
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
         val res = spark.read
@@ -1054,7 +1050,7 @@ abstract class CSVSuite
           .option("inferSchema", "true")
           .option("header", "true")
           .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
-          .load(path)
+          .load(path.getAbsolutePath)
 
         assert(res.dtypes === exp.dtypes)
         checkAnswer(res, exp)
@@ -1063,37 +1059,33 @@ abstract class CSVSuite
   }
 
   test("SPARK-37326: Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+    withTempPath { path =>
       val exp = spark.sql("""
         select
           timestamp_ntz'2020-12-12 12:12:12' as col1,
           timestamp_ltz'2020-12-12 12:12:12' as col2
         """)
 
-      exp.write.format("csv").option("header", "true").save(path)
+      exp.write.format("csv").option("header", "true").save(path.getAbsolutePath)
 
       val res = spark.read
         .format("csv")
         .schema("col1 TIMESTAMP_NTZ, col2 TIMESTAMP_LTZ")
         .option("header", "true")
-        .load(path)
+        .load(path.getAbsolutePath)
 
       checkAnswer(res, exp)
     }
   }
 
   test("SPARK-37326: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+    withTempPath { path =>
       val exp = spark.sql("""
         select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
         select timestamp_ntz'2020-12-12 12:12:12' as col0
         """)
 
-      exp.write.format("csv").option("header", "true").save(path)
+      exp.write.format("csv").option("header", "true").save(path.getAbsolutePath)
 
       val timestampTypes = Seq(
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
@@ -1105,7 +1097,7 @@ abstract class CSVSuite
             .format("csv")
             .option("inferSchema", "true")
             .option("header", "true")
-            .load(path)
+            .load(path.getAbsolutePath)
 
           if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
             checkAnswer(res, exp)
@@ -1124,9 +1116,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-37326: Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+    withTempPath { path =>
       Seq(
         "col0",
         "2020-12-12T12:12:12.000",
@@ -1135,19 +1125,19 @@ abstract class CSVSuite
         "2020-12-12T12:12:12.000"
       ).toDF("data")
         .coalesce(1)
-        .write.text(path)
+        .write.text(path.getAbsolutePath)
 
       for (policy <- Seq("exception", "corrected", "legacy")) {
         withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
           val res = spark.read.format("csv")
             .option("inferSchema", "true")
             .option("header", "true")
-            .load(path)
+            .load(path.getAbsolutePath)
 
           if (policy == "legacy") {
             // Timestamps without timezone are parsed as strings, so the col0 type would be
             // StringType which is similar to reading without schema inference.
-            val exp = spark.read.format("csv").option("header", "true").load(path)
+            val exp = spark.read.format("csv").option("header", "true").load(path.getAbsolutePath)
             checkAnswer(res, exp)
           } else {
             val exp = spark.sql("""
@@ -1164,9 +1154,7 @@ abstract class CSVSuite
   }
 
   test("SPARK-37326: Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
-    withTempDir { dir =>
-      val path = s"${dir.getCanonicalPath}/csv"
-
+    withTempPath { path =>
       Seq(
         "2020-12-12T12:12:12.000",
         "2020-12-12T17:12:12.000Z",
@@ -1174,13 +1162,15 @@ abstract class CSVSuite
         "2020-12-12T12:12:12.000"
       ).toDF("data")
         .coalesce(1)
-        .write.text(path)
+        .write.text(path.getAbsolutePath)
 
       for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
         val reader = spark.read.format("csv").schema("col0 TIMESTAMP_NTZ")
         val res = timestampNTZFormat match {
-          case Some(format) => reader.option("timestampNTZFormat", format).load(path)
-          case None => reader.load(path)
+          case Some(format) =>
+            reader.option("timestampNTZFormat", format).load(path.getAbsolutePath)
+          case None =>
+            reader.load(path.getAbsolutePath)
         }
 
         checkAnswer(
@@ -1204,10 +1194,9 @@ abstract class CSVSuite
 
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
-      withTempDir { dir =>
-        val path = s"${dir.getCanonicalPath}/csv"
+      withTempPath { path =>
         val err = intercept[SparkException] {
-          exp.write.format("csv").option("timestampNTZFormat", pattern).save(path)
+          exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
         assert(
           err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
