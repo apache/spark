@@ -169,8 +169,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
         partitioning, tableSpec.copy(location = qualifiedLocation), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(
-      ResolvedDBObjectName(catalog, ident), parts, query, tableSpec, options, ifNotExists) =>
+    case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
+        options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
