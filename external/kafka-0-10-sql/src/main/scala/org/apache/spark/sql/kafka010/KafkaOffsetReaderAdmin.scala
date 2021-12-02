@@ -387,11 +387,11 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
     // Calculate offset ranges
     val offsetRangesBase = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+      val fromOffset = fromPartitionOffsets.getOrElse(tp,
         // This should not happen since topicPartitions contains all partitions not in
         // fromPartitionOffsets
         throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }
+      )
       val untilOffset = untilPartitionOffsets(tp)
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq

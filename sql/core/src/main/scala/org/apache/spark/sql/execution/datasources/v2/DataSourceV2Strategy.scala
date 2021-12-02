@@ -94,11 +94,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
-  private def makeQualifiedNamespacePath(location: String): String = {
-    val warehousePath = session.sharedState.conf.get(WAREHOUSE_PATH)
-    val nsPath = CatalogUtils.makeQualifiedNamespacePath(
-      CatalogUtils.stringToURI(location), warehousePath, session.sharedState.hadoopConf)
-    CatalogUtils.URIToString(nsPath)
+  private def makeQualifiedDBObjectPath(location: String): String = {
+    CatalogUtils.makeQualifiedDBObjectPath(session.sharedState.conf.get(WAREHOUSE_PATH),
+      location, session.sharedState.hadoopConf)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -165,9 +163,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
-    case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
-      CreateTableExec(catalog, ident, schema, parts, propsWithOwner, ifNotExists) :: Nil
+    case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
+        tableSpec, ifNotExists) =>
+      val qualifiedLocation = tableSpec.location.map(makeQualifiedDBObjectPath(_))
+      CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
+        partitioning, tableSpec.copy(location = qualifiedLocation), ifNotExists) :: Nil
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -185,7 +185,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+      val newProps = props.get(TableCatalog.PROP_LOCATION).map { loc =>
+        props + (TableCatalog.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
+      }.getOrElse(props)
+      val propsWithOwner = CatalogV2Util.withDefaultOwnership(newProps)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(
@@ -197,29 +200,29 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+    case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
+        parts, query, tableSpec, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
             staging,
-            ident,
+            ident.asIdentifier,
             parts,
             query,
             planLater(query),
-            propsWithOwner,
+            tableSpec,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            catalog,
-            ident,
+            catalog.asTableCatalog,
+            ident.asIdentifier,
             parts,
             query,
             planLater(query),
-            propsWithOwner,
+            tableSpec,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
@@ -323,7 +326,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,
-        Map(SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(location))) :: Nil
+        Map(SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(location))) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
@@ -333,7 +336,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateNamespace(ResolvedDBObjectName(catalog, name), ifNotExists, properties) =>
       val finalProperties = properties.get(SupportsNamespaces.PROP_LOCATION).map { loc =>
-        properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedNamespacePath(loc))
+        properties + (SupportsNamespaces.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
       }.getOrElse(properties)
       CreateNamespaceExec(catalog.asNamespaceCatalog, name, ifNotExists, finalProperties) :: Nil
 

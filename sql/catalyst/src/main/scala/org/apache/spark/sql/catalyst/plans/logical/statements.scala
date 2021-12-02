@@ -124,25 +124,6 @@ object SerdeInfo {
 }
 
 /**
- * A CREATE TABLE command, as parsed from SQL.
- *
- * This is a metadata-only command and is not used to write data to the created table.
- */
-case class CreateTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends LeafParsedStatement
-
-/**
  * A CREATE TABLE AS SELECT command, as parsed from SQL.
  */
 case class CreateTableAsSelectStatement(
@@ -183,29 +164,6 @@ case class ReplaceTableStatement(
     comment: Option[String],
     serde: Option[SerdeInfo],
     orCreate: Boolean) extends LeafParsedStatement
-
-/**
- * A REPLACE TABLE AS SELECT command, as parsed from SQL.
- */
-case class ReplaceTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(
-    newChild: LogicalPlan): ReplaceTableAsSelectStatement = copy(asSelect = newChild)
-}
-
 
 /**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.

@@ -147,6 +147,10 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  def getApplicationId(): ApplicationId = {
+    appId
+  }
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -166,7 +170,7 @@ private[spark] class Client(
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def submitApplication(): Unit = {
     ResourceRequestHelper.validateResources(sparkConf)
 
     try {
@@ -198,7 +202,7 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
-      val containerContext = createContainerLaunchContext(newAppResponse)
+      val containerContext = createContainerLaunchContext()
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
@@ -206,7 +210,6 @@ private[spark] class Client(
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-      this.appId
     } catch {
       case e: Throwable =>
         if (stagingDirPath != null) {
@@ -339,7 +342,7 @@ private[spark] class Client(
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
-  def getApplicationReport(appId: ApplicationId): ApplicationReport =
+  def getApplicationReport(): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 
   /**
@@ -910,8 +913,7 @@ private[spark] class Client(
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
-    : ContainerLaunchContext = {
+  private def createContainerLaunchContext(): ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
@@ -1096,7 +1098,6 @@ private[spark] class Client(
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
-      appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
       interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
@@ -1105,7 +1106,7 @@ private[spark] class Client(
       Thread.sleep(interval)
       val report: ApplicationReport =
         try {
-          getApplicationReport(appId)
+          getApplicationReport
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
@@ -1268,7 +1269,7 @@ private[spark] class Client(
   def run(): Unit = {
     submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
-      val report = getApplicationReport(appId)
+      val report = getApplicationReport
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report, getDriverLogsLink(report)))
@@ -1276,7 +1277,7 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
+      val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
           logError(s"Application diagnostics message: $err")

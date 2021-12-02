@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
 import pandas as pd
 
@@ -341,14 +339,8 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assert_eq(psdf.count(numeric_only=True), pdf.count(numeric_only=True))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
-            self.assert_eq(psdf.product(numeric_only=True), pdf.product(numeric_only=True))
-        else:
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
-            self.assert_eq(
-                psdf.product(numeric_only=True), pdf.product(numeric_only=True).astype(int)
-            )
+        self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+        self.assert_eq(psdf.product(numeric_only=True), pdf.product(numeric_only=True))
 
         self.assert_eq(psdf.mean(numeric_only=True), pdf.mean(numeric_only=True))
 
@@ -395,17 +387,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"i": [0, 1, 2], "b": [False, False, True], "s": ["x", "y", "z"]})
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
-            self.assert_eq(
-                psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
-            )
-        else:
-            self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True).astype(int))
-            self.assert_eq(
-                psdf[["i", "b"]].sum(numeric_only=False),
-                pdf[["i", "b"]].sum(numeric_only=False).astype(int),
-            )
+        self.assert_eq(psdf.sum(numeric_only=True), pdf.sum(numeric_only=True))
+        self.assert_eq(
+            psdf[["i", "b"]].sum(numeric_only=False), pdf[["i", "b"]].sum(numeric_only=False)
+        )
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.sum(numeric_only=False)

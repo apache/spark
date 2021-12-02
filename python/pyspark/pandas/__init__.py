@@ -61,6 +61,7 @@ from pyspark.pandas.indexes.category import CategoricalIndex
 from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
+from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 from pyspark.pandas.series import Series
 from pyspark.pandas.groupby import NamedAgg
 
@@ -79,6 +80,7 @@ __all__ = [  # noqa: F405
     "Float64Index",
     "CategoricalIndex",
     "DatetimeIndex",
+    "TimedeltaIndex",
     "sql",
     "range",
     "concat",

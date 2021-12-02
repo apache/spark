@@ -455,6 +455,7 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expression[Contains]("contains"),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true),

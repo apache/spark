@@ -3152,10 +3152,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
-      throw QueryParsingErrors.fromOrInNotAllowedInShowDatabasesError(ctx)
-    }
-
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowNamespaces(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
@@ -3414,7 +3410,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a table, returning a [[CreateTableStatement]] logical plan.
+   * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelectStatement]] logical plan.
    *
    * Expected format:
    * {{{
@@ -3481,14 +3477,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
+        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+          serdeInfo, external)
         val schema = StructType(columns ++ partCols)
-        CreateTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
-          options, location, comment, serdeInfo, external = external, ifNotExists = ifNotExists)
+        CreateTable(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
 
   /**
-   * Replace a table, returning a [[ReplaceTableStatement]] logical plan.
+   * Replace a table, returning a [[ReplaceTableStatement]] or [[ReplaceTableAsSelect]]
+   * logical plan.
    *
    * Expected format:
    * {{{
@@ -3554,9 +3554,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, writeOptions = Map.empty, serdeInfo,
-          orCreate = orCreate)
+        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+          serdeInfo, false)
+        ReplaceTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns

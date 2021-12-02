@@ -259,7 +259,7 @@ object CatalogUtils {
     new Path(str).toUri
   }
 
-  def makeQualifiedNamespacePath(
+  def makeQualifiedDBObjectPath(
       locationUri: URI,
       warehousePath: String,
       hadoopConf: Configuration): URI = {
@@ -269,6 +269,14 @@ object CatalogUtils {
       val fullPath = new Path(warehousePath, CatalogUtils.URIToString(locationUri))
       makeQualifiedPath(fullPath.toUri, hadoopConf)
     }
+  }
+
+  def makeQualifiedDBObjectPath(
+      warehouse: String,
+      location: String,
+      hadoopConf: Configuration): String = {
+    val nsPath = makeQualifiedDBObjectPath(stringToURI(location), warehouse, hadoopConf)
+    URIToString(nsPath)
   }
 
   def makeQualifiedPath(path: URI, hadoopConf: Configuration): URI = {

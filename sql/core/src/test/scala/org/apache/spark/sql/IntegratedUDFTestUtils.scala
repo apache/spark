@@ -27,11 +27,11 @@ import org.scalatest.Assertions._
 import org.apache.spark.TestUtils
 import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunction, PythonUtils}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF and
@@ -218,6 +218,29 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String
   }
 
+  class PythonUDFWithoutId(
+      name: String,
+      func: PythonFunction,
+      dataType: DataType,
+      children: Seq[Expression],
+      evalType: Int,
+      udfDeterministic: Boolean,
+      resultId: ExprId)
+    extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic, resultId) {
+
+    def this(pudf: PythonUDF) = {
+      this(pudf.name, pudf.func, pudf.dataType, pudf.children,
+        pudf.evalType, pudf.udfDeterministic, pudf.resultId)
+    }
+
+    override def toString: String = s"$name(${children.mkString(", ")})"
+
+    override protected def withNewChildrenInternal(
+        newChildren: IndexedSeq[Expression]): PythonUDFWithoutId = {
+      new PythonUDFWithoutId(super.withNewChildrenInternal(newChildren))
+    }
+  }
+
   /**
    * A Python UDF that takes one column, casts into string, executes the Python native function,
    * and casts back to the type of input column.
@@ -253,7 +276,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         val expr = e.head
         assert(expr.resolved, "column should be resolved to use the same type " +
           "as input. Try df(name) or df.col(name)")
-        Cast(super.builder(Cast(expr, StringType) :: Nil), expr.dataType)
+        val pythonUDF = new PythonUDFWithoutId(
+          super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
+        Cast(pythonUDF, expr.dataType)
       }
     }
 
@@ -297,7 +322,9 @@ object IntegratedUDFTestUtils extends SQLHelper {
         val expr = e.head
         assert(expr.resolved, "column should be resolved to use the same type " +
           "as input. Try df(name) or df.col(name)")
-        Cast(super.builder(Cast(expr, StringType) :: Nil), expr.dataType)
+        val pythonUDF = new PythonUDFWithoutId(
+          super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
+        Cast(pythonUDF, expr.dataType)
       }
     }
 
