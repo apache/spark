@@ -3014,6 +3014,16 @@ class DataSourceV2SQLSuite
         sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
       )
       assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+
+      val e6 = intercept[AnalysisException](
+        sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
+      )
+      assert(e6.message.contains("Cannot time travel path-based tables"))
+
+      val e7 = intercept[AnalysisException](
+        sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
+      )
+      assert(e7.message.contains("Cannot time travel subqueries from WITH clause"))
     }
   }
 
