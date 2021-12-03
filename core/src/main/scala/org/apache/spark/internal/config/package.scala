@@ -2267,4 +2267,13 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark]val MAX_RDD_NAME_LENGTH = ConfigBuilder("spark.rdd.nameMaxLength")
+    .internal()
+    .doc("Maximum number of characters for RDD name. For example, some of the HadoopRDD API will" +
+      "use the path parameter as RDD name which could be extremely long")
+    .version("3.3.0")
+    .intConf
+    .checkValue(_ > 3, "This value must be bigger than 3.")
+    .createWithDefault(256)
 }

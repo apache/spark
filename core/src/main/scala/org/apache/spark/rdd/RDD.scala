@@ -28,11 +28,12 @@ import scala.reflect.{classTag, ClassTag}
 import scala.util.hashing
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
+import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.TextOutputFormat
-
 import org.apache.spark._
+
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
@@ -47,10 +48,8 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
-  Utils => collectionUtils}
-import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
-  SamplingUtils}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap, Utils => collectionUtils}
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -152,7 +151,7 @@ abstract class RDD[T: ClassTag](
 
   /** Assign a name to this RDD */
   def setName(_name: String): this.type = {
-    name = _name
+    name = StringUtils.abbreviate(_name, conf.get(MAX_RDD_NAME_LENGTH))
     this
   }
 
