@@ -1509,7 +1509,7 @@ object SQLConf {
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
