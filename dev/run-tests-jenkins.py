@@ -174,9 +174,6 @@ def main():
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.7"
     if "test-hadoop3.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
-    # Switch the Hive profile based on the PR title:
-    if "test-hive2.3" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_HIVE_PROFILE"] = "hive2.3"
     # Switch the Scala profile based on the PR title:
     if "test-scala2.13" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_SCALA_PROFILE"] = "scala2.13"

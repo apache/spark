@@ -132,7 +132,7 @@ object SortOrder {
 case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
-    case BooleanType | DateType | TimestampType | _: IntegralType =>
+    case BooleanType | DateType | TimestampType | _: IntegralType | _: AnsiIntervalType =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       if (nullAsSmallest) Long.MinValue else Long.MaxValue
@@ -154,7 +154,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   private lazy val calcPrefix: Any => Long = child.child.dataType match {
     case BooleanType => (raw) =>
       if (raw.asInstanceOf[Boolean]) 1 else 0
-    case DateType | TimestampType | _: IntegralType => (raw) =>
+    case DateType | TimestampType | _: IntegralType | _: AnsiIntervalType => (raw) =>
       raw.asInstanceOf[java.lang.Number].longValue()
     case FloatType | DoubleType => (raw) => {
       val dVal = raw.asInstanceOf[java.lang.Number].doubleValue()
@@ -198,7 +198,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"$input ? 1L : 0L"
       case _: IntegralType =>
         s"(long) $input"
-      case DateType | TimestampType =>
+      case DateType | TimestampType | _: AnsiIntervalType =>
         s"(long) $input"
       case FloatType | DoubleType =>
         s"$DoublePrefixCmp.computePrefix((double)$input)"

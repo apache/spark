@@ -436,6 +436,8 @@ private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
+private[spark] case class MapSizesByExecutorId(
+  iter: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])], enableBatchFetch: Boolean)
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -512,12 +514,19 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     getMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
   }
 
+  // For testing
+  def getPushBasedShuffleMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
+      : MapSizesByExecutorId = {
+    getPushBasedShuffleMapSizesByExecutorId(shuffleId, 0, Int.MaxValue, reduceId, reduceId + 1)
+  }
+
   /**
    * Called from executors to get the server URIs and output sizes for each shuffle block that
    * needs to be read from a given range of map output partitions (startPartition is included but
    * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
-   * but endMapIndex is excluded). If endMapIndex=Int.MaxValue, the actual endMapIndex will be
-   * changed to the length of total map outputs.
+   * but endMapIndex is excluded) when push based shuffle is not enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
@@ -530,6 +539,28 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+
+  /**
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a given range of map output partitions (startPartition is included but
+   * endPartition is excluded from the range) within a range of mappers (startMapIndex is included
+   * but endMapIndex is excluded) when push based shuffle is enabled for the specific shuffle
+   * dependency. If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length
+   * of total map outputs.
+   *
+   * @return A case class object which includes two attributes. The first attribute is a sequence
+   *         of 2-item tuples, where the first item in the tuple is a BlockManagerId, and the
+   *         second item is a sequence of (shuffle block id, shuffle block size, map index) tuples
+   *         tuples describing the shuffle blocks that are stored at that block manager. Note that
+   *         zero-sized blocks are excluded in the result. The second attribute is a boolean flag,
+   *         indicating whether batch fetch can be enabled.
+   */
+  def getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): MapSizesByExecutorId
 
   /**
    * Called from executors upon fetch failure on an entire merged shuffle reduce partition.
@@ -617,7 +648,7 @@ private[spark] class MapOutputTrackerMaster(
   private val mapOutputTrackerMasterMessages =
     new LinkedBlockingQueue[MapOutputTrackerMasterMessage]
 
-  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver = true)
 
   // Thread pool used for handling map output status requests. This is a separate thread pool
   // to ensure we don't block the normal dispatcher threads.
@@ -1060,12 +1091,25 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   // This method is only called in local-mode.
-  def getMapSizesByExecutorId(
+  override def getMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val mapSizesByExecutorId = getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
+  }
+
+  // This method is only called in local-mode.
+  override def getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
@@ -1077,7 +1121,7 @@ private[spark] class MapOutputTrackerMaster(
             shuffleId, startPartition, endPartition, statuses, startMapIndex, actualEndMapIndex)
         }
       case None =>
-        Iterator.empty
+        MapSizesByExecutorId(Iterator.empty, true)
     }
   }
 
@@ -1126,7 +1170,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
 
-  private val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
+  // This must be lazy to ensure that it is initialized when the first task is run and not at
+  // executor startup time. At startup time, user-added libraries may not have been
+  // downloaded to the executor, causing `isPushBasedShuffleEnabled` to fail when it tries to
+  // instantiate a serializer. See the followup to SPARK-36705 for more details.
+  private lazy val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf, isDriver = false)
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
@@ -1140,8 +1188,38 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       endMapIndex: Int,
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    val mapSizesByExecutorId = getMapSizesByExecutorIdImpl(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = false)
+    assert(mapSizesByExecutorId.enableBatchFetch == true)
+    mapSizesByExecutorId.iter
+  }
+
+  override def getPushBasedShuffleMapSizesByExecutorId(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int): MapSizesByExecutorId = {
+    getMapSizesByExecutorIdImpl(
+      shuffleId, startMapIndex, endMapIndex, startPartition, endPartition, useMergeResult = true)
+  }
+
+  private def getMapSizesByExecutorIdImpl(
+      shuffleId: Int,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int,
+      useMergeResult: Boolean): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
-    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
+      // EnableBatchFetch can be set to false during stage retry when the
+      // shuffleDependency.shuffleMergeEnabled is set to false, and Driver
+      // has already collected the mergedStatus for its shuffle dependency.
+      // In this case, boolean check helps to insure that the unnecessary
+      // mergeStatus won't be fetched, thus mergedOutputStatuses won't be
+      // passed to convertMapStatuses. See details in [SPARK-37023].
+      if (useMergeResult) fetchMergeResult else false)
     try {
       val actualEndMapIndex =
         if (endMapIndex == Int.MaxValue) mapOutputStatuses.length else endMapIndex
@@ -1165,7 +1243,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf, fetchMergeResult)
     try {
       val mergeStatus = mergeResultStatuses(partitionId)
       // If the original MergeStatus is no longer available, we cannot identify the list of
@@ -1190,7 +1268,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, fetchMergeResult)
     try {
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId, mapOutputStatuses,
         chunkTracker)
@@ -1212,8 +1290,9 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private def getStatuses(
       shuffleId: Int,
-      conf: SparkConf): (Array[MapStatus], Array[MergeStatus]) = {
-    if (fetchMergeResult) {
+      conf: SparkConf,
+      canFetchMergeResult: Boolean): (Array[MapStatus], Array[MergeStatus]) = {
+    if (canFetchMergeResult) {
       val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
       val mergeOutputStatuses = mergeStatuses.get(shuffleId).orNull
 
@@ -1435,10 +1514,10 @@ private[spark] object MapOutputTracker extends Logging {
       mapStatuses: Array[MapStatus],
       startMapIndex : Int,
       endMapIndex: Int,
-      mergeStatuses: Option[Array[MergeStatus]] = None):
-      Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+      mergeStatuses: Option[Array[MergeStatus]] = None): MapSizesByExecutorId = {
     assert (mapStatuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long, Int)]]
+    var enableBatchFetch = true
     // Only use MergeStatus for reduce tasks that fetch all map outputs. Since a merged shuffle
     // partition consists of blocks merged in random order, we are unable to serve map index
     // subrange requests. However, when a reduce task needs to fetch blocks from a subrange of
@@ -1447,8 +1526,10 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.exists(_.nonEmpty) && startMapIndex == 0
+    if (mergeStatuses.exists(_.exists(_ != null)) && startMapIndex == 0
       && endMapIndex == mapStatuses.length) {
+      enableBatchFetch = false
+      logDebug(s"Disable shuffle batch fetch as Push based shuffle is enabled for $shuffleId.")
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
@@ -1493,7 +1574,7 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
-    splitsByAddress.mapValues(_.toSeq).iterator
+    MapSizesByExecutorId(splitsByAddress.mapValues(_.toSeq).iterator, enableBatchFetch)
   }
 
   /**

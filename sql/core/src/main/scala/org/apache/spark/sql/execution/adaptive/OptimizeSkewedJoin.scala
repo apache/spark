@@ -21,9 +21,14 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -48,9 +53,8 @@ import org.apache.spark.sql.internal.SQLConf
  * (L3, R3-1), (L3, R3-2),
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
-object OptimizeSkewedJoin extends AQEShuffleReadRule {
-
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
+  extends Rule[SparkPlan] {
 
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
@@ -194,8 +198,10 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
     }
     logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
     if (numSkewedLeft > 0 || numSkewedRight > 0) {
-      Some((AQEShuffleReadExec(left, leftSidePartitions.toSeq),
-        AQEShuffleReadExec(right, rightSidePartitions.toSeq)))
+      Some((
+        SkewJoinChildWrapper(AQEShuffleReadExec(left, leftSidePartitions.toSeq)),
+        SkewJoinChildWrapper(AQEShuffleReadExec(right, rightSidePartitions.toSeq))
+      ))
     } else {
       None
     }
@@ -205,25 +211,19 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
         s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
-      val newChildren = tryOptimizeJoinChildren(left, right, joinType)
-      if (newChildren.isDefined) {
-        val (newLeft, newRight) = newChildren.get
-        smj.copy(
-          left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
-      } else {
-        smj
-      }
+      tryOptimizeJoinChildren(left, right, joinType).map {
+        case (newLeft, newRight) =>
+          smj.copy(
+            left = s1.copy(child = newLeft), right = s2.copy(child = newRight), isSkewJoin = true)
+      }.getOrElse(smj)
 
     case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
         ShuffleStage(left: ShuffleQueryStageExec),
         ShuffleStage(right: ShuffleQueryStageExec), false) =>
-      val newChildren = tryOptimizeJoinChildren(left, right, joinType)
-      if (newChildren.isDefined) {
-        val (newLeft, newRight) = newChildren.get
-        shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
-      } else {
-        shj
-      }
+      tryOptimizeJoinChildren(left, right, joinType).map {
+        case (newLeft, newRight) =>
+          shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
+      }.getOrElse(shj)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -250,7 +250,26 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
       // SHJ
       //   Shuffle
       //   Shuffle
-      optimizeSkewJoin(plan)
+      val optimized = optimizeSkewJoin(plan)
+      val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
+        ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
+      } else {
+        ValidateRequirements.validate(optimized)
+      }
+      // Two cases we will apply the skewed join optimization:
+      //   1. optimize the skew join without extra shuffle
+      //   2. optimize the skew join with extra shuffle but the force-apply config is true.
+      if (requirementSatisfied) {
+        optimized.transform {
+          case SkewJoinChildWrapper(child) => child
+        }
+      } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
+        ensureRequirements.apply(optimized).transform {
+          case SkewJoinChildWrapper(child) => child
+        }
+      } else {
+        plan
+      }
     } else {
       plan
     }
@@ -258,9 +277,20 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
 
   object ShuffleStage {
     def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-      case s: ShuffleQueryStageExec if s.mapStats.isDefined && isSupported(s.shuffle) =>
+      case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
+        s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS =>
         Some(s)
       case _ => None
     }
   }
+}
+
+// After optimizing skew joins, we need to run EnsureRequirements again to add necessary shuffles
+// caused by skew join optimization. However, this shouldn't apply to the sub-plan under skew join,
+// as it's guaranteed to satisfy distribution requirement.
+case class SkewJoinChildWrapper(plan: SparkPlan) extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override def output: Seq[Attribute] = plan.output
+  override def outputPartitioning: Partitioning = plan.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
 }

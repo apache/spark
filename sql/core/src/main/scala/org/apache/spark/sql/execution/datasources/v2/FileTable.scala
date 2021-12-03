@@ -149,5 +149,5 @@ abstract class FileTable(
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE).asJava
+  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
 }

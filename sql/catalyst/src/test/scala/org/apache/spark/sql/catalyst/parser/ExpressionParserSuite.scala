@@ -933,9 +933,34 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_timestamp", CurrentTimestamp())
     }
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+    }
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      testNonAnsiBehavior()
+    }
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      testNonAnsiBehavior()
+    }
+  }
+
+  test("SPARK-36736: (NOT) ILIKE (ANY | SOME | ALL) expressions") {
+    Seq("any", "some").foreach { quantifier =>
+      assertEqual(s"a ilike $quantifier ('FOO%', 'b%')", lower($"a") likeAny("foo%", "b%"))
+      assertEqual(s"a not ilike $quantifier ('foo%', 'B%')", lower($"a") notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a ilike $quantifier ('FOO%', 'B%'))", !(lower($"a") likeAny("foo%", "b%")))
+    }
+    assertEqual("a ilike all ('Foo%', 'b%')", lower($"a") likeAll("foo%", "b%"))
+    assertEqual("a not ilike all ('foo%', 'B%')", lower($"a") notLikeAll("foo%", "b%"))
+    assertEqual("not (a ilike all ('foO%', 'b%'))", !(lower($"a") likeAll("foo%", "b%")))
+
+    Seq("any", "some", "all").foreach { quantifier =>
+      intercept(s"a ilike $quantifier()", "Expected something between '(' and ')'")
     }
   }
 }

@@ -30,16 +30,9 @@
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
     <jersey-1.version>1.19</jersey-1.version>
-    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
   </properties>
 
   <profiles>
-    <profile>
-      <id>hadoop-provided</id>
-      <properties>
-        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
-      </properties>
-    </profile>
     <profile>
       <id>hadoop-2.7</id>
       <dependencies>
@@ -82,6 +75,18 @@
         <activeByDefault>true</activeByDefault>
       </activation>
       <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
+          <version>${hadoop.version}</version>
+          <scope>test</scope>
+        </dependency>
         <!-- Used by MiniYARNCluster -->
         <dependency>
           <groupId>org.bouncycastle</groupId>
@@ -126,18 +131,6 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>${hadoop-client-api.artifact}</artifactId>
       <version>${hadoop.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${hadoop.deps.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>test</scope>
     </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->

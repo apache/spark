@@ -35,8 +35,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, ImplicitCastInputTypes, UpCast}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -66,6 +66,7 @@ class SessionCatalog(
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
+    functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
   import SessionCatalog._
@@ -85,6 +86,7 @@ class SessionCatalog(
       new Configuration(),
       new CatalystSqlParser(),
       DummyFunctionResourceLoader,
+      DummyFunctionExpressionBuilder,
       conf.tableRelationCacheSize,
       conf.metadataCacheTTL)
   }
@@ -208,9 +210,7 @@ class SessionCatalog(
    * FileSystem is changed.
    */
   private def makeQualifiedPath(path: URI): URI = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath).toUri
+    CatalogUtils.makeQualifiedPath(path, hadoopConf)
   }
 
   private def requireDbExists(db: String): Unit = {
@@ -252,12 +252,7 @@ class SessionCatalog(
   }
 
   private def makeQualifiedDBPath(locationUri: URI): URI = {
-    if (locationUri.isAbsolute) {
-      locationUri
-    } else {
-      val fullPath = new Path(conf.warehousePath, CatalogUtils.URIToString(locationUri))
-      makeQualifiedPath(fullPath.toUri)
-    }
+    CatalogUtils.makeQualifiedDBObjectPath(locationUri, conf.warehousePath, hadoopConf)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
@@ -862,50 +857,72 @@ class SessionCatalog(
     }
   }
 
+  private def isHiveCreatedView(metadata: CatalogTable): Boolean = {
+    // For views created by hive without explicit column names, there will be auto-generated
+    // column names like "_c0", "_c1", "_c2"...
+    metadata.viewQueryColumnNames.isEmpty &&
+      metadata.schema.fieldNames.exists(_.matches("_c[0-9]+"))
+  }
+
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
       throw new IllegalStateException("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
-      parser.parsePlan(viewText)
+      try {
+        parser.parseQuery(viewText)
+      } catch {
+        case _: ParseException =>
+          throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)
+      }
     }
-    val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
-      // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
-      // output is the same with the view output.
-      metadata.schema.fieldNames.toSeq
-    } else {
-      assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
-      metadata.viewQueryColumnNames
-    }
+    val projectList = if (!isHiveCreatedView(metadata)) {
+      val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
+        // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
+        // output is the same with the view output.
+        metadata.schema.fieldNames.toSeq
+      } else {
+        assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
+        metadata.viewQueryColumnNames
+      }
 
-    // For view queries like `SELECT * FROM t`, the schema of the referenced table/view may
-    // change after the view has been created. We need to add an extra SELECT to pick the columns
-    // according to the recorded column names (to get the correct view column ordering and omit
-    // the extra columns that we don't require), with UpCast (to make sure the type change is
-    // safe) and Alias (to respect user-specified view column names) according to the view schema
-    // in the catalog.
-    // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
-    // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
-    // number of duplications, and pick the corresponding attribute by ordinal.
-    val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
-    val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
-      identity
-    } else {
-      _.toLowerCase(Locale.ROOT)
-    }
-    val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
-    val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
-    val viewDDL = buildViewDDL(metadata, isTempView)
+      // For view queries like `SELECT * FROM t`, the schema of the referenced table/view may
+      // change after the view has been created. We need to add an extra SELECT to pick the columns
+      // according to the recorded column names (to get the correct view column ordering and omit
+      // the extra columns that we don't require), with UpCast (to make sure the type change is
+      // safe) and Alias (to respect user-specified view column names) according to the view schema
+      // in the catalog.
+      // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
+      // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
+      // number of duplications, and pick the corresponding attribute by ordinal.
+      val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
+      val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
+        identity
+      } else {
+        _.toLowerCase(Locale.ROOT)
+      }
+      val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+      val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
+      val viewDDL = buildViewDDL(metadata, isTempView)
 
-    val projectList = viewColumnNames.zip(metadata.schema).map { case (name, field) =>
-      val normalizedName = normalizeColName(name)
-      val count = nameToCounts(normalizedName)
-      val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
-      nameToCurrentOrdinal(normalizedName) = ordinal + 1
-      val col = GetViewColumnByNameAndOrdinal(
-        metadata.identifier.toString, name, ordinal, count, viewDDL)
-      Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
+      viewColumnNames.zip(metadata.schema).map { case (name, field) =>
+        val normalizedName = normalizeColName(name)
+        val count = nameToCounts(normalizedName)
+        val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
+        nameToCurrentOrdinal(normalizedName) = ordinal + 1
+        val col = GetViewColumnByNameAndOrdinal(
+          metadata.identifier.toString, name, ordinal, count, viewDDL)
+        Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
+      }
+    } else {
+      // For view created by hive, the parsed view plan may have different output columns with
+      // the schema stored in metadata. For example: `CREATE VIEW v AS SELECT 1 FROM t`
+      // the schema in metadata will be `_c0` while the parsed view plan has column named `1`
+      metadata.schema.zipWithIndex.map { case (field, index) =>
+        val col = GetColumnByOrdinal(index, field.dataType)
+        Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
+      }
     }
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
@@ -1420,43 +1437,7 @@ class SessionCatalog(
    */
   private def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     val clazz = Utils.classForName(functionClassName)
-    (input: Seq[Expression]) => makeFunctionExpression(name, clazz, input)
-  }
-
-  /**
-   * Constructs a [[Expression]] based on the provided class that represents a function.
-   *
-   * This performs reflection to decide what type of [[Expression]] to return in the builder.
-   */
-  protected def makeFunctionExpression(
-      name: String,
-      clazz: Class[_],
-      input: Seq[Expression]): Expression = {
-    // Unfortunately we need to use reflection here because UserDefinedAggregateFunction
-    // and ScalaUDAF are defined in sql/core module.
-    val clsForUDAF =
-      Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
-    if (clsForUDAF.isAssignableFrom(clazz)) {
-      val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      val e = cls.getConstructor(
-          classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int], classOf[Option[String]])
-        .newInstance(
-          input,
-          clazz.getConstructor().newInstance().asInstanceOf[Object],
-          Int.box(1),
-          Int.box(1),
-          Some(name))
-        .asInstanceOf[ImplicitCastInputTypes]
-
-      // Check input argument size
-      if (e.inputTypes.size != input.size) {
-        throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          name, e.inputTypes.size.toString, input.size)
-      }
-      e
-    } else {
-      throw QueryCompilationErrors.noHandlerForUDAFError(clazz.getCanonicalName)
-    }
+    (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
   }
 
   /**
@@ -1524,16 +1505,12 @@ class SessionCatalog(
    * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
-    // copied from HiveSessionCatalog
-    val hiveFunctions = Seq("histogram_numeric")
-
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function
     name.database.isEmpty &&
       (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)) &&
       !FunctionRegistry.builtin.functionExists(name) &&
-      !TableFunctionRegistry.builtin.functionExists(name) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+      !TableFunctionRegistry.builtin.functionExists(name)
   }
 
   def isTempFunction(name: String): Boolean = {
@@ -1626,6 +1603,11 @@ class SessionCatalog(
       if (!isResolvingView ||
           !isTemporaryFunction(name) ||
           referredTempFunctionNames.contains(name.funcName)) {
+        // We are not resolving a view and the function is a temp one, add it to `AnalysisContext`,
+        // so during the view creation, we can save all referred temp functions to view metadata
+        if (!isResolvingView && isTemporaryFunction(name)) {
+          AnalysisContext.get.referredTempFunctionNames.add(name.funcName)
+        }
         // This function has been already loaded into the function registry.
         return registry.lookupFunction(name, children)
       }

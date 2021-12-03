@@ -667,7 +667,14 @@ case class HashAggregateExec(
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported && isNotByteArrayDecimalType
+    val isEnabledForAggModes =
+      if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
+        true
+      } else {
+        !conf.getConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP_PARTIAL_ONLY)
+      }
+
+    isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
   }
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
@@ -1144,6 +1151,15 @@ case class HashAggregateExec(
         s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
+  }
+
+  /**
+   * The corresponding [[SortAggregateExec]] to get same result as this node.
+   */
+  def toSortAggregate: SortAggregateExec = {
+    SortAggregateExec(
+      requiredChildDistributionExpressions, groupingExpressions, aggregateExpressions,
+      aggregateAttributes, initialInputBufferOffset, resultExpressions, child)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =

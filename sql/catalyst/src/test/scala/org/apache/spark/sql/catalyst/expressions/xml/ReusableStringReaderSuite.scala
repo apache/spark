@@ -49,7 +49,7 @@ class ReusableStringReaderSuite extends SparkFunSuite {
     val reader = new ReusableStringReader
 
     if (reader.markSupported()) {
-      reader.asInstanceOf[ReusableStringReader].set(fox)
+      reader.set(fox)
       assert(reader.ready())
 
       val cc = new Array[Char](6)
@@ -73,14 +73,14 @@ class ReusableStringReaderSuite extends SparkFunSuite {
 
   test("skip") {
     val reader = new ReusableStringReader
-    reader.asInstanceOf[ReusableStringReader].set(fox)
+    reader.set(fox)
 
     // skip entire the data:
     var skipped = reader.skip(fox.length() + 1)
     assert(fox.length() == skipped)
     assert(-1 == reader.read())
 
-    reader.asInstanceOf[ReusableStringReader].set(fox) // reset the data
+    reader.set(fox) // reset the data
     val cc = new Array[Char](6)
     var read = reader.read(cc)
     assert(read == 6)

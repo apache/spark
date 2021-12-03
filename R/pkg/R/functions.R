@@ -41,6 +41,8 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -647,6 +649,19 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bit_length}: Calculates the bit length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases bit_length bit_length,Column-method
+#' @note length since 3.3.0
+setMethod("bit_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bit_length", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwise_not}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
@@ -870,6 +885,19 @@ setMethod("cosh",
             column(jc)
           })
 
+#' @details
+#' \code{cot}: Returns the cotangent of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases cot cot,Column-method
+#' @note cot since 3.3.0
+setMethod("cot",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "cot", x@jc)
+            column(jc)
+          })
+
 #' Returns the number of items in a group
 #'
 #' This can be used as a column aggregate function with \code{Column} as input,
@@ -899,6 +927,19 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{csc}: Returns the cosecant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases csc csc,Column-method
+#' @note csc since 3.3.0
+setMethod("csc",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "csc", x@jc)
             column(jc)
           })
 
@@ -1428,6 +1469,30 @@ setMethod("ltrim",
           })
 
 #' @details
+#' \code{make_date}: Create date from year, month and day fields.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              x@jc, y@jc, z@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1437,6 +1502,29 @@ setMethod("max",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1489,6 +1577,29 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1553,6 +1664,19 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{octet_length}: Calculates the byte length for the specified string column.
+#'
+#' @rdname column_string_functions
+#' @aliases octet_length octet_length,Column-method
+#' @note length since 3.3.0
+setMethod("octet_length",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "octet_length", x@jc)
             column(jc)
           })
 
@@ -3348,6 +3472,19 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "rpad",
                               x@jc, as.integer(len), pad)
+            column(jc)
+          })
+
+#' @details
+#' \code{sec}: Returns the secant of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sec sec,Column-method
+#' @note sec since 3.3.0
+setMethod("sec",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sec", x@jc)
             column(jc)
           })
 

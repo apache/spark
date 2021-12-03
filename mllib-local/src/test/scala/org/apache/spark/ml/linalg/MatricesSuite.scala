@@ -596,8 +596,8 @@ class MatricesSuite extends SparkMLFunSuite {
       new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
 
-    val dAT = dA.transpose.asInstanceOf[DenseMatrix]
-    val sAT = sA.transpose.asInstanceOf[SparseMatrix]
+    val dAT = dA.transpose
+    val sAT = sA.transpose
     val dATexpected =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
     val sATexpected =
@@ -611,7 +611,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sA(2, 1) === sAT(1, 2))
 
     assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
-    assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
+    assert(dA.values.eq(dAT.transpose.values), "should not copy array")
 
     assert(dAT.toSparse.asBreeze === sATexpected.asBreeze)
     assert(sAT.toDense.asBreeze === dATexpected.asBreeze)

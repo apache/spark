@@ -165,7 +165,7 @@ private[r] class RBackendHandler(server: RBackend)
 
         // Write status bit
         writeInt(dos, 0)
-        writeObject(dos, ret.asInstanceOf[AnyRef], server.jvmObjectTracker)
+        writeObject(dos, ret, server.jvmObjectTracker)
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
         val ctors = cls.getConstructors

@@ -220,6 +220,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         UTF8String.fromString(data),
         DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
         .map(DateTimeUtils.toJavaTimestamp).orNull, converter)
+      case TimestampNTZType =>
+        wrapperConvertException(data => DateTimeUtils.stringToTimestampWithoutTimeZone(
+          UTF8String.fromString(data)).map(DateTimeUtils.microsToLocalDateTime).orNull, converter)
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)

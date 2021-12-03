@@ -141,7 +141,7 @@ SELECT array(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ExceptAll can only be performed on tables with the compatible column types. array<int> <> int at the first column of the second table
+ExceptAll can only be performed on tables with the compatible column types. The first column of the second table is array<int> type which is not compatible with int at same column of first table
 
 
 -- !query

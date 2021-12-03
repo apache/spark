@@ -39,7 +39,11 @@ case class ShowTablePropertiesExec(
       case Some(p) =>
         val propValue = properties
           .getOrElse(p, s"Table ${catalogTable.name} does not have property: $p")
-        Seq(toCatalystRow(p, propValue))
+        if (output.length == 1) {
+          Seq(toCatalystRow(propValue))
+        } else {
+          Seq(toCatalystRow(p, propValue))
+        }
       case None =>
         properties.toSeq.sortBy(_._1).map(kv =>
           toCatalystRow(kv._1, kv._2)).toSeq

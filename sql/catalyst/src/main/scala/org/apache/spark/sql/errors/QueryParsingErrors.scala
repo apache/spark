@@ -248,10 +248,6 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
-    new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
-  }
-
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved table property, $msg.", ctx)
@@ -328,7 +324,7 @@ object QueryParsingErrors {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -338,13 +334,13 @@ object QueryParsingErrors {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$keyCandidate' is an invalid property key, please " +
       s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$valueCandidate' is an invalid property value, please " +
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
@@ -390,5 +386,47 @@ object QueryParsingErrors {
 
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
+  }
+
+  def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
+    new ParseException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+  }
+
+  def defineTempViewWithIfNotExistsError(ctx: CreateViewContext): Throwable = {
+    new ParseException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.", ctx)
+  }
+
+  def notAllowedToAddDBPrefixForTempViewError(
+      database: String,
+      ctx: CreateViewContext): Throwable = {
+    new ParseException(
+      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.", ctx)
+  }
+
+  def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
+    new ParseException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+  }
+
+  def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
+    new ParseException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.", ctx)
+  }
+
+  def unsupportedFunctionNameError(quoted: String, ctx: CreateFunctionContext): Throwable = {
+    new ParseException(s"Unsupported function name '$quoted'", ctx)
+  }
+
+  def specifyingDBInCreateTempFuncError(
+      databaseName: String,
+      ctx: CreateFunctionContext): Throwable = {
+    new ParseException(
+      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+  }
+
+  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
+    new ParseException(Some(command), "Unclosed bracketed comment", position, position)
+  }
+
+  def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid time travel spec: $reason.", ctx)
   }
 }

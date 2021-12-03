@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
@@ -132,7 +130,7 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
   override def schema(): StructType = V1ReadFallbackCatalog.schema
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.BATCH_READ).asJava
+    util.EnumSet.of(TableCapability.BATCH_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

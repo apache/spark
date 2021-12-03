@@ -34,28 +34,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
       ResolvedDBObjectName(catalog, name)
 
-    case c @ CreateTableStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      CreateV2Table(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        c.tableSchema,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c),
-        ignoreIfExists = c.ifNotExists)
-
-    case c @ CreateTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      CreateTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c),
-        writeOptions = c.writeOptions,
-        ignoreIfExists = c.ifNotExists)
+    case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
+      ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
@@ -67,30 +47,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         c.partitioning ++ c.bucketSpec.map(_.asTransform),
         convertTableProperties(c),
         orCreate = c.orCreate)
-
-    case c @ ReplaceTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      ReplaceTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c),
-        writeOptions = c.writeOptions,
-        orCreate = c.orCreate)
-
-    case UseStatement(isNamespaceSet, nameParts) =>
-      if (isNamespaceSet) {
-        SetCatalogAndNamespace(catalogManager, None, Some(nameParts))
-      } else {
-        val CatalogAndNamespace(catalog, ns) = nameParts
-        val namespace = if (ns.nonEmpty) Some(ns) else None
-        SetCatalogAndNamespace(catalogManager, Some(catalog.name()), namespace)
-      }
-
-    case ShowCurrentNamespaceStatement() =>
-      ShowCurrentNamespace(catalogManager)
   }
 
   object NonSessionCatalogAndTable {

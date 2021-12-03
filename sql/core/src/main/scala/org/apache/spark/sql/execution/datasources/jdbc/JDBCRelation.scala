@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -278,12 +279,18 @@ private[sql] case class JDBCRelation(
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
+    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
+      filters
+    } else {
+      Array.empty[Filter]
+    }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      filters,
+      pushedFilters,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
   }
@@ -292,7 +299,9 @@ private[sql] case class JDBCRelation(
       requiredColumns: Array[String],
       finalSchema: StructType,
       filters: Array[Filter],
-      groupByColumns: Option[Array[String]]): RDD[Row] = {
+      groupByColumns: Option[Array[String]],
+      tableSample: Option[TableSampleInfo],
+      limit: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
@@ -302,7 +311,9 @@ private[sql] case class JDBCRelation(
       parts,
       jdbcOptions,
       Some(finalSchema),
-      groupByColumns).asInstanceOf[RDD[Row]]
+      groupByColumns,
+      tableSample,
+      limit).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

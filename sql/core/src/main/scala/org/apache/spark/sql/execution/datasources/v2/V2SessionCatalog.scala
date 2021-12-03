@@ -53,7 +53,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       case Array(db) =>
         catalog
           .listTables(db)
-          .map(ident => Identifier.of(Array(ident.database.getOrElse("")), ident.table))
+          .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
           .toArray
       case _ =>
         throw QueryCompilationErrors.noSuchNamespaceError(namespace)
@@ -69,6 +69,28 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     V1Table(catalogTable)
+  }
+
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    failTimeTravel(ident, loadTable(ident))
+  }
+
+  private def failTimeTravel(ident: Identifier, t: Table): Table = {
+    t match {
+      case V1Table(catalogTable) =>
+        if (catalogTable.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.viewNotSupportTimeTravelError(
+            ident.namespace() :+ ident.name())
+        } else {
+          throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+        }
+
+      case _ => throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
+    }
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -188,8 +210,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       ident.namespace match {
         case Array(db) =>
           TableIdentifier(ident.name, Some(db))
-        case _ =>
-          throw QueryCompilationErrors.requiresSinglePartNamespaceError(ident)
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
   }
@@ -275,6 +297,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     case _ =>
       throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+  }
+
+  def isTempView(ident: Identifier): Boolean = {
+    catalog.isTempView(ident.namespace() :+ ident.name())
   }
 
   override def toString: String = s"V2SessionCatalog($name)"

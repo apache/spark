@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.math.Numeric._
 import scala.math.Ordering
 
-import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
+import org.apache.spark.sql.catalyst.util.{MathUtils, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
@@ -93,23 +93,23 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
 
 
 private[sql] object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
-  override def plus(x: Int, y: Int): Int = Math.addExact(x, y)
+  override def plus(x: Int, y: Int): Int = MathUtils.addExact(x, y)
 
-  override def minus(x: Int, y: Int): Int = Math.subtractExact(x, y)
+  override def minus(x: Int, y: Int): Int = MathUtils.subtractExact(x, y)
 
-  override def times(x: Int, y: Int): Int = Math.multiplyExact(x, y)
+  override def times(x: Int, y: Int): Int = MathUtils.multiplyExact(x, y)
 
-  override def negate(x: Int): Int = Math.negateExact(x)
+  override def negate(x: Int): Int = MathUtils.negateExact(x)
 }
 
 private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
-  override def plus(x: Long, y: Long): Long = Math.addExact(x, y)
+  override def plus(x: Long, y: Long): Long = MathUtils.addExact(x, y)
 
-  override def minus(x: Long, y: Long): Long = Math.subtractExact(x, y)
+  override def minus(x: Long, y: Long): Long = MathUtils.subtractExact(x, y)
 
-  override def times(x: Long, y: Long): Long = Math.multiplyExact(x, y)
+  override def times(x: Long, y: Long): Long = MathUtils.multiplyExact(x, y)
 
-  override def negate(x: Long): Long = Math.negateExact(x)
+  override def negate(x: Long): Long = MathUtils.negateExact(x)
 
   override def toInt(x: Long): Int =
     if (x == x.toInt) {

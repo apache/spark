@@ -393,7 +393,7 @@ abstract class RDD[T: ClassTag](
         }
       // Need to compute the block.
       case Right(iter) =>
-        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
+        new InterruptibleIterator(context, iter)
     }
   }
 

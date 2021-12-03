@@ -29,6 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.util.{Failure, Success}
 
 import io.netty.util.internal.OutOfDirectMemoryError
+import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{MapOutputTracker, TaskContext}
@@ -38,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
-import org.apache.spark.network.util.{JavaUtils, NettyUtils, TransportConf}
+import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -1303,7 +1304,7 @@ private class BufferReleasingInputStream(
         val diagnosisResponse = checkedInOpt.map { checkedIn =>
           iterator.diagnoseCorruption(checkedIn, address, blockId)
         }
-        JavaUtils.closeQuietly(this)
+        IOUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
         iterator.throwFetchFailedException(blockId, mapIndex, address, e, diagnosisResponse)

@@ -1,3 +1,21 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
 ===================================
 Type Support in Pandas API on Spark
 ===================================
@@ -26,7 +44,7 @@ The example below shows how data types are casted from PySpark DataFrame to pand
     DataFrame[tinyint: tinyint, decimal: decimal(10,0), float: float, double: double, integer: int, long: bigint, short: smallint, timestamp: timestamp, string: string, boolean: boolean, date: date]
 
     # 3. Convert PySpark DataFrame to pandas-on-Spark DataFrame
-    >>> psdf = sdf.to_pandas_on_spark()
+    >>> psdf = sdf.pandas_api()
 
     # 4. Check the pandas-on-Spark data types
     >>> psdf.dtypes
