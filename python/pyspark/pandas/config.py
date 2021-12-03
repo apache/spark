@@ -201,7 +201,8 @@ _options: List[Option] = [
             "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
             "validation beforehand, but it will cause a performance overhead. Otherwise, "
             "pandas-on-Spark skip the validation and will be slightly different from pandas. "
-            "Affected APIs: `Series.dot`."
+            "Affected APIs: `Series.dot`, `Series.asof`, `FractionalExtensionOps.astype`, "
+            "`IntegralExtensionOps.astype`, `FractionalOps.astype`, `DecimalOps.astype`."
         ),
         default=True,
         types=bool,

@@ -1034,6 +1034,13 @@ object QueryExecutionErrors {
         s"[$token] as target spark data type [$dataType].")
   }
 
+  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
+  : Throwable = {
+    new RuntimeException(
+      s"Cannot parse field value ${value} for pattern ${pattern} " +
+        s"as target spark data type [$dataType].")
+  }
+
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
     new RuntimeException(
       s"Failed to parse an empty string for data type ${dataType.catalogString}")
@@ -1894,4 +1901,3 @@ object QueryExecutionErrors {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
 }
-

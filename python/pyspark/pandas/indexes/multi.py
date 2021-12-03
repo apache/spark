@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
@@ -106,31 +105,16 @@ class MultiIndex(Index):
         name=None,
         verify_integrity: bool = True,
     ) -> "MultiIndex":
-        if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-            if levels is None or codes is None:
-                raise TypeError("Must pass both levels and codes")
-
-            pidx = pd.MultiIndex(
-                levels=levels,
-                labels=codes,
-                sortorder=sortorder,
-                names=names,
-                dtype=dtype,
-                copy=copy,
-                name=name,
-                verify_integrity=verify_integrity,
-            )
-        else:
-            pidx = pd.MultiIndex(
-                levels=levels,
-                codes=codes,
-                sortorder=sortorder,
-                names=names,
-                dtype=dtype,
-                copy=copy,
-                name=name,
-                verify_integrity=verify_integrity,
-            )
+        pidx = pd.MultiIndex(
+            levels=levels,
+            codes=codes,
+            sortorder=sortorder,
+            names=names,
+            dtype=dtype,
+            copy=copy,
+            name=name,
+            verify_integrity=verify_integrity,
+        )
         return ps.from_pandas(pidx)
 
     @property

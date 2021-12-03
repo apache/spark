@@ -217,6 +217,10 @@ def as_spark_type(
     elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M"):
         return types.TimestampNTZType() if prefer_timestamp_ntz else types.TimestampType()
 
+    # DayTimeIntervalType
+    elif tpe in (datetime.timedelta, np.timedelta64, "timedelta64[ns]"):
+        return types.DayTimeIntervalType()
+
     # categorical types
     elif isinstance(tpe, CategoricalDtype) or (isinstance(tpe, str) and type == "category"):
         return types.LongType()
@@ -330,6 +334,8 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     (dtype('O'), DateType)
     >>> pandas_on_spark_type(datetime.datetime)
     (dtype('<M8[ns]'), TimestampType)
+    >>> pandas_on_spark_type(datetime.timedelta)
+    (dtype('<m8[ns]'), DayTimeIntervalType(0,3))
     >>> pandas_on_spark_type(List[bool])
     (dtype('O'), ArrayType(BooleanType,true))
     """

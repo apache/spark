@@ -1524,6 +1524,17 @@ class InternalFrame(object):
         >>> data_fields
         [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
          InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
+
+        >>> pdf = pd.DataFrame({
+        ...     "td": [datetime.timedelta(0)], "td_obj": [datetime.timedelta(0)]
+        ... })
+        >>> pdf.td_obj = pdf.td_obj.astype("object")
+        >>> _, _, _, _, data_fields = (
+        ...     InternalFrame.prepare_pandas_frame(pdf)
+        ... )
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=timedelta64[ns],struct_field=StructField(td,DayTimeIntervalType(0,3),false)),
+         InternalField(dtype=object,struct_field=StructField(td_obj,DayTimeIntervalType(0,3),false))]
         """
         pdf = pdf.copy()
 

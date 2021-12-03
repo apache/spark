@@ -145,7 +145,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val numRecords = 100
 
         val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
-        (0 until numRecords).map { i =>
+        (0 until numRecords).foreach { i =>
           val record = new SimpleGroup(schema)
           for (group <- Seq(0, 2, 4)) {
             record.add(group, 1000L) // millis
