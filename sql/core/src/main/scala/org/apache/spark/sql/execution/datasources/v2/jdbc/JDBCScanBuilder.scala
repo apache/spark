@@ -72,8 +72,8 @@ case class JDBCScanBuilder(
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val compiledAgg = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate(_))
-    if (compiledAgg.length != aggregation.aggregateExpressions.length) return false
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate(_))
+    if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val groupByCols = aggregation.groupByColumns.map { col =>
       if (col.fieldNames.length != 1) return false
@@ -84,7 +84,7 @@ case class JDBCScanBuilder(
     // e.g. "DEPT","NAME",MAX("SALARY"),MIN("BONUS") =>
     // SELECT "DEPT","NAME",MAX("SALARY"),MIN("BONUS") FROM "test"."employee"
     //   GROUP BY "DEPT", "NAME"
-    val selectList = groupByCols ++ compiledAgg
+    val selectList = groupByCols ++ compiledAggs
     val groupByClause = if (groupByCols.isEmpty) {
       ""
     } else {
