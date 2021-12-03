@@ -17,15 +17,46 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class ReplaceSingleProjectionExpandSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("OptimizeLimitZero", Once,
+      Batch("ReplaceSingleProjectionExpand", Once,
         ReplaceSingleProjectionExpand) :: Nil
+  }
+
+  test("Replace single projection expand with project") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = Expand(
+        Seq(Seq('a, 'b, Literal(4))),
+        Seq('a, 'b, 'c.int),
+        relation
+      ).analyze
+    val expected = relation
+      .select('a, 'b, Literal(4) as "c")
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
+  }
+
+  test("Do not change expand with multiple projections") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = Expand(
+      Seq(
+        Seq('a, 'b, Literal(4)),
+        Seq('b, 'a, Literal(5))
+      ),
+      Seq('a, 'b, 'c.int),
+      relation
+    ).analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
   }
 
 }
