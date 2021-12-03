@@ -124,3 +124,18 @@ case class TryDivide(left: Expression, right: Expression, child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(child = newChild)
 }
+
+case class TryElementAt(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(ElementAt(left, right, failOnError = false)))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "try_element_at"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
+}
