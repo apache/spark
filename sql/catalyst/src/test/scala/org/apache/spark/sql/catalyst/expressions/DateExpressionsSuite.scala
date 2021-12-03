@@ -1451,6 +1451,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+
   }
 
   test("to_timestamp exception mode") {
