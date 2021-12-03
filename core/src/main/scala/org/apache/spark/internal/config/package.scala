@@ -1739,7 +1739,7 @@ package object config {
         "the codec")
       .version("0.8.0")
       .stringConf
-      .createWithDefaultString("lz4")
+      .createWithDefaultString("zstd")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERSIZE =
     ConfigBuilder("spark.io.compression.zstd.bufferSize")
