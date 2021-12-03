@@ -611,4 +611,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
       s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
   }
+
+  test("SPARK-37471: spark-sql support nested bracketed comment ") {
+    runCliWithin(1.minute)(
+      """
+        |/* SELECT /*+ HINT() */ 4; */
+        |SELECT 1;
+        |""".stripMargin -> "SELECT 1"
+    )
+  }
 }
