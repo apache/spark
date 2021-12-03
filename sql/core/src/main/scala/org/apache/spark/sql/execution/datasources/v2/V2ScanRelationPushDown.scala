@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LogicalPlan, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -256,24 +256,31 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             sHolder.pushedLimit = Some(limitValue)
           }
           globalLimit
-        case Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+        case Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
           if filter.isEmpty =>
           val orders = DataSourceStrategy.translateSortOrders(order)
           val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
           if (topNPushed) {
             sHolder.pushedLimit = Some(limitValue)
             sHolder.sortValues = orders
+            val localLimit = globalLimit.child.asInstanceOf[LocalLimit].copy(child = operation)
+            globalLimit.copy(child = localLimit)
+          } else {
+            globalLimit
           }
-          globalLimit
-        case Project(_, Sort(order, _, ScanOperation(_, filter, sHolder: ScanBuilderHolder)))
-          if filter.isEmpty =>
+        case project @ Project(_, Sort(order, _,
+          operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))) if filter.isEmpty =>
           val orders = DataSourceStrategy.translateSortOrders(order)
           val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
           if (topNPushed) {
             sHolder.pushedLimit = Some(limitValue)
             sHolder.sortValues = orders
+            val localLimit = globalLimit.child.asInstanceOf[LocalLimit]
+              .copy(child = project.copy(child = operation))
+            globalLimit.copy(child = localLimit)
+          } else {
+            globalLimit
           }
-          globalLimit
         case _ => globalLimit
       }
   }

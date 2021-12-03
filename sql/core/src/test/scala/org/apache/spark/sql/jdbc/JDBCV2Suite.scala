@@ -192,40 +192,50 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val scan = df3.queryExecution.optimizedPlan.collectFirst {
       case s: DataSourceV2ScanRelation => s
     }.get
-    assert(scan.schema.names.sameElements(Seq("NAME", "SALARY")))
+    assert(scan.schema.names.sameElements(Seq("NAME")))
     val expectedSorts3 =
       Seq(SortValue(FieldReference("salary"), SortDirection.ASCENDING, NullOrdering.NULLS_LAST))
     checkPushedTopN(df3, true, 1, expectedSorts3)
     checkAnswer(df3, Seq(Row("david")))
 
-    val df4 = spark.read
+    val df4 = spark.read.table("h2.test.employee")
+      .where($"dept" === 1).orderBy($"salary")
+    checkPushedTopN(df4, false, 0)
+    checkAnswer(df4, Seq(Row(1, "cathy", 9000.00, 1200.0), Row(1, "amy", 10000.00, 1000.0)))
+
+    val df5 = spark.read.table("h2.test.employee")
+      .where($"dept" === 1).limit(1)
+    checkPushedTopN(df5, false, 1)
+    checkAnswer(df5, Seq(Row(1, "amy", 10000.00, 1000.0)))
+
+    val df6 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .orderBy("DEPT")
       .limit(1)
-    checkPushedTopN(df4, false, 0)
-    checkAnswer(df4, Seq(Row(1, 19000.00)))
+    checkPushedTopN(df6, false, 0)
+    checkAnswer(df6, Seq(Row(1, 19000.00)))
 
-    val df5 = spark.read
+    val df7 = spark.read
       .table("h2.test.employee")
       .sort("SALARY")
       .limit(1)
     val expectedSorts5 =
       Seq(SortValue(FieldReference("SALARY"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-    checkPushedTopN(df5, true, 1, expectedSorts5)
-    checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0)))
+    checkPushedTopN(df7, true, 1, expectedSorts5)
+    checkAnswer(df7, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df6 = spark.read
+    val df8 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .sort($"SALARY".desc)
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedTopN(df6, false, 0)
-    checkAnswer(df6, Seq(Row(10000.00, 1000.0, "amy")))
+    checkPushedTopN(df8, false, 0)
+    checkAnswer(df8, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
   private def checkPushedTopN(df: DataFrame, pushed: Boolean, limit: Int = 0,
@@ -236,6 +246,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           if (pushed) {
             assert(v1.pushedDownOperators.limit === Some(limit))
             assert(v1.pushedDownOperators.sortValues === sortValues)
+          } else if (limit > 0) {
+            assert(v1.pushedDownOperators.limit === Some(limit))
           } else {
             assert(v1.pushedDownOperators.limit.isEmpty)
             assert(v1.pushedDownOperators.sortValues.isEmpty)

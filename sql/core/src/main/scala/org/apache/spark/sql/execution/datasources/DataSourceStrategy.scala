@@ -729,15 +729,13 @@ object DataSourceStrategy
   protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortOrderV2] = {
     sortOrders.map {
       case SortOrder(PushableColumnWithoutNestedColumn(name), directionV1, nullOrderingV1, _) =>
-        val (directionV2, nullOrderingV2) = (directionV1, nullOrderingV1) match {
-          case (Ascending, NullsFirst) =>
-            (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
-          case (Ascending, NullsLast) =>
-            (SortDirection.ASCENDING, NullOrdering.NULLS_LAST)
-          case (Descending, NullsFirst) =>
-            (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
-          case (Descending, NullsLast) =>
-            (SortDirection.DESCENDING, NullOrdering.NULLS_LAST)
+        val directionV2 = directionV1 match {
+          case Ascending => SortDirection.ASCENDING
+          case Descending => SortDirection.DESCENDING
+        }
+        val nullOrderingV2 = nullOrderingV1 match {
+          case NullsFirst => NullOrdering.NULLS_FIRST
+          case NullsLast => NullOrdering.NULLS_LAST
         }
         SortValue(FieldReference(name), directionV2, nullOrderingV2)
     }
