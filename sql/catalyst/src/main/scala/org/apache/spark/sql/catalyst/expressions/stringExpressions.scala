@@ -467,7 +467,7 @@ abstract class StringPredicate extends BinaryExpression
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns a BOOLEAN. The value is True if right is found inside left.
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
