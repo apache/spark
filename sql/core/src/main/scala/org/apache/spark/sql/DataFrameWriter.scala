@@ -326,10 +326,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
               val tableSpec = TableSpec(
                 bucketSpec = None,
-                properties = Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
+                properties = Map.empty,
                 provider = Some(source),
                 options = Map.empty,
                 location = extraOptions.get("path"),
