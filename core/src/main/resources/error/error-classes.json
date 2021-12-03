@@ -74,9 +74,6 @@
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
   },
-  "INVALID_STRING_INDEX" : {
-    "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
-  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
@@ -91,6 +88,9 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_STRING_INDEX" : {
+    "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
