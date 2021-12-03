@@ -296,7 +296,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidStringIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -348,11 +348,13 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidStringIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
+      // scalastyle:on line.size.limit
     } else {
       ""
     }

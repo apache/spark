@@ -168,6 +168,11 @@ object QueryExecutionErrors {
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
+  def invalidStringIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_STRING_INDEX",
+      messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
+  }
+
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
