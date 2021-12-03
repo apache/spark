@@ -245,7 +245,8 @@ jobs:
   pyspark:
     needs: configure-jobs
     # Run PySpark coverage scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and fored repository
+    # Run scheduled jobs with JDK 17 in Apache Spark
+    # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
       || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
