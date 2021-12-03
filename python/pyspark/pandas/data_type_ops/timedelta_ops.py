@@ -54,7 +54,7 @@ class TimedeltaOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            raise TypeError("cannot astype a datetimelike from [timedelta64[ns]] to [bool]")
+            raise TypeError("cannot astype a timedelta from [%s] to [bool]" % dtype)
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:
