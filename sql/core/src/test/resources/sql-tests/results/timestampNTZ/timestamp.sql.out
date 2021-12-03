@@ -357,10 +357,9 @@ struct<to_timestamp(2019-10-06 10:11:12.12, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):tim
 -- !query
 select to_timestamp('2019-10-06 10:11:12.123UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(2019-10-06 10:11:12.123UTC, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-java.lang.RuntimeException
-Cannot parse field value 2019-10-06 10:11:12.123UTC for pattern yyyy-MM-dd HH:mm:ss.SSSSSS[zzz] as target spark data type [TimestampNTZType].
+2019-10-06 10:11:12.123
 
 
 -- !query
@@ -374,19 +373,17 @@ struct<to_timestamp(2019-10-06 10:11:12.1234, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):t
 -- !query
 select to_timestamp('2019-10-06 10:11:12.12345CST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(2019-10-06 10:11:12.12345CST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-java.lang.RuntimeException
-Cannot parse field value 2019-10-06 10:11:12.12345CST for pattern yyyy-MM-dd HH:mm:ss.SSSSSS[zzz] as target spark data type [TimestampNTZType].
+2019-10-06 10:11:12.12345
 
 
 -- !query
 select to_timestamp('2019-10-06 10:11:12.123456PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(2019-10-06 10:11:12.123456PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-java.lang.RuntimeException
-Cannot parse field value 2019-10-06 10:11:12.123456PST for pattern yyyy-MM-dd HH:mm:ss.SSSSSS[zzz] as target spark data type [TimestampNTZType].
+2019-10-06 10:11:12.123456
 
 
 -- !query
@@ -400,10 +397,9 @@ NULL
 -- !query
 select to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<>
+struct<to_timestamp(123456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp_ntz>
 -- !query output
-java.lang.RuntimeException
-Cannot parse field value 123456 2019-10-06 10:11:12.123456PST for pattern SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz] as target spark data type [TimestampNTZType].
+2019-10-06 10:11:12.123456
 
 
 -- !query
