@@ -94,15 +94,24 @@ class MyRDD(
     dependencies: List[Dependency[_]],
     locations: Seq[Seq[String]] = Nil,
     @(transient @param) tracker: MapOutputTrackerMaster = null,
-    indeterminate: Boolean = false)
+    indeterminate: Boolean = false,
+    inputBytes: Seq[Option[Long]] = Seq.empty)
   extends RDD[(Int, Int)](sc, dependencies) with Serializable {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
 
-  override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
-    override def index: Int = i
-  }).toArray
+  override def getPartitions: Array[Partition] = if (inputBytes.isEmpty) {
+    (0 until numPartitions).map(i => new Partition {
+      override def index: Int = i
+    }).toArray
+  } else {
+    assert(inputBytes.size == numPartitions)
+    (0 until numPartitions).map(i => new Partition {
+      override def index: Int = i
+      override def predictedInputBytes: Option[Long] = inputBytes(i)
+    }).toArray
+  }
 
   override protected def getOutputDeterministicLevel = {
     if (indeterminate) DeterministicLevel.INDETERMINATE else super.getOutputDeterministicLevel
@@ -3849,6 +3858,38 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
+  }
+
+  test("SPARK-37528: Support reorder tasks during scheduling by shuffle partition size in AQE") {
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val inputBytes: Seq[Option[Long]] = Seq(Some(1), Some(3), Some(2))
+    val rdd = new MyRDD(sc, inputBytes.size, Nil, inputBytes = inputBytes)
+    submit(rdd, (0 until 3).toArray)
+    assert(taskSets.size == 1)
+    assert(taskSets.head.tasks.size == 3)
+    assert(taskSets.head.tasks(0).partition.predictedInputBytes == Some(3))
+    assert(taskSets.head.tasks(1).partition.predictedInputBytes == Some(2))
+    assert(taskSets.head.tasks(2).partition.predictedInputBytes == Some(1))
+    taskSets.clear()
+
+    val inputBytes2: Seq[Option[Long]] = Seq(Some(1), Some(3), Some(2), None)
+    val rdd2 = new MyRDD(sc, inputBytes2.size, Nil, inputBytes = inputBytes2)
+    submit(rdd2, (0 until 4).toArray)
+    assert(taskSets.size == 1)
+    assert(taskSets.head.tasks.size == 4)
+    assert(taskSets.head.tasks(0).partition.predictedInputBytes == Some(1))
+    assert(taskSets.head.tasks(1).partition.predictedInputBytes == Some(3))
+    assert(taskSets.head.tasks(2).partition.predictedInputBytes == Some(2))
+    assert(taskSets.head.tasks(3).partition.predictedInputBytes == None)
+    taskSets.clear()
   }
 
   /**

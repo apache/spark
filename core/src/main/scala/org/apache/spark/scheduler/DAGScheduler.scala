@@ -265,6 +265,8 @@ private[spark] class DAGScheduler(
   private val shuffleMergeFinalizeWaitSec =
     sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT)
 
+  private val reorderTasksEnabled = sc.getConf.get(config.SCHEDULER_REORDER_TASKS)
+
   // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
   // initialized lazily
   private lazy val externalShuffleClient: Option[BlockStoreClient] =
@@ -1521,10 +1523,19 @@ private[spark] class DAGScheduler(
     }
 
     if (tasks.nonEmpty) {
-      logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
-        s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      var reordered = false
+      val orderedTasks =
+        if (reorderTasksEnabled && tasks.forall(_.partition.predictedInputBytes.isDefined)) {
+          reordered = true
+          tasks.sortBy(_.partition.predictedInputBytes.get)(Ordering[Long].reverse)
+        } else {
+          tasks
+        }
+      logInfo(s"Submitting ${orderedTasks.size} missing tasks from $stage (${stage.rdd}), " +
+        s"reordered: $reordered. (first 15 tasks are for partitions " +
+        s"${orderedTasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
+        orderedTasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
         stage.resourceProfileId))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark

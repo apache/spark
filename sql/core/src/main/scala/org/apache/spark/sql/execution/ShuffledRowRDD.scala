@@ -68,7 +68,9 @@ case class CoalescedMapperPartitionSpec(
  * The [[Partition]] used by [[ShuffledRowRDD]].
  */
 private final case class ShuffledRowRDDPartition(
-  index: Int, spec: ShufflePartitionSpec) extends Partition
+  index: Int,
+  spec: ShufflePartitionSpec,
+  @transient override val predictedInputBytes: Option[Long] = None) extends Partition
 
 /**
  * A dummy partitioner for use with records whose partition ids have been pre-computed (i.e. for
@@ -169,7 +171,25 @@ class ShuffledRowRDD(
 
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](partitionSpecs.length) { i =>
-      ShuffledRowRDDPartition(i, partitionSpecs(i))
+      val partitionSpec = partitionSpecs(i)
+      partitionSpec match {
+        case CoalescedPartitionSpec(_, _, dataSize) if dataSize.isDefined =>
+          ShuffledRowRDDPartition(i, partitionSpec, dataSize)
+
+        case PartialReducerPartitionSpec(_, _, _, dataSize) =>
+          ShuffledRowRDDPartition(i, partitionSpec, Some(dataSize))
+
+        // TODO: Force use AQE shuffle read with CoalescedPartitionSpec if no stage optimizer rule
+        //  work
+        // Non-AQE shuffle read
+        case CoalescedPartitionSpec(_, _, None) =>
+          ShuffledRowRDDPartition(i, partitionSpec)
+
+        // TODO: Support reorder tasks with PartialMapperPartitionSpec and
+        //  CoalescedMapperPartitionSpec
+        case _ =>
+          ShuffledRowRDDPartition(i, partitionSpec)
+      }
     }
   }
 
