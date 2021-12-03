@@ -163,26 +163,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           tableSpec = newTableSpec)
       }
 
-    case c @ CreateTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
+    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _)
+      if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.provider, c.options, c.location, c.serde, ctas = true)
+        c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
+        ctas = true)
       if (!isV2Provider(provider)) {
-        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
-          c.comment, storageFormat, c.external)
-        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTableV1(tableDesc, mode, Some(c.asSelect))
+        val tableDesc = buildCatalogTable(name.asTableIdentifier, new StructType,
+          c.partitioning, c.tableSpec.bucketSpec, c.tableSpec.properties, provider,
+          c.tableSpec.location, c.tableSpec.comment, storageFormat, c.tableSpec.external)
+        val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTableV1(tableDesc, mode, Some(c.query))
       } else {
-        CreateTableAsSelect(
-          catalog.asTableCatalog,
-          tbl.asIdentifier,
-          // convert the bucket spec and add it as a transform
-          c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          c.asSelect,
-          convertTableProperties(c),
-          writeOptions = c.writeOptions,
-          ignoreIfExists = c.ifNotExists)
+        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
+        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
+          tableSpec = newTableSpec)
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>

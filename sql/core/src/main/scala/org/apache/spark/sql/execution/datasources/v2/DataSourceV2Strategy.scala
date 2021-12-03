@@ -169,16 +169,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
         partitioning, tableSpec.copy(location = qualifiedLocation), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+    case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
+        options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
-            propsWithOwner, writeOptions, ifNotExists) :: Nil
+          AtomicCreateTableAsSelectExec(staging, ident.asIdentifier, parts, query, planLater(query),
+            tableSpec, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
-            propsWithOwner, writeOptions, ifNotExists) :: Nil
+          CreateTableAsSelectExec(catalog.asTableCatalog, ident.asIdentifier, parts, query,
+            planLater(query), tableSpec, writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>

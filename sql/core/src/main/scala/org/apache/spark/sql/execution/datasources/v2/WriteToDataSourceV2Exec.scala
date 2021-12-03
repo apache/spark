@@ -71,9 +71,11 @@ case class CreateTableAsSelectExec(
     partitioning: Seq[Transform],
     plan: LogicalPlan,
     query: SparkPlan,
-    properties: Map[String, String],
+    tableSpec: TableSpec,
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends TableWriteExecHelper {
+
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -109,9 +111,11 @@ case class AtomicCreateTableAsSelectExec(
     partitioning: Seq[Transform],
     plan: LogicalPlan,
     query: SparkPlan,
-    properties: Map[String, String],
+    tableSpec: TableSpec,
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends TableWriteExecHelper {
+
+  val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
