@@ -21,7 +21,8 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * An aggregate function that returns the population standard deviation calculated from values of a group.
+ * An aggregate function that returns the population standard deviation calculated from
+ * values of a group.
  *
  * @since 3.3.0
  */

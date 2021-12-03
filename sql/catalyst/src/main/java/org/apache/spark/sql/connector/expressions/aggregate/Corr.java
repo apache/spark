@@ -21,7 +21,8 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * An aggregate function that returns Pearson coefficient of correlation between a set of number pairs.
+ * An aggregate function that returns Pearson coefficient of correlation between
+ * a set of number pairs.
  *
  * @since 3.3.0
  */
