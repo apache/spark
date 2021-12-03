@@ -26,6 +26,7 @@ IMAGE_TAG="N/A"
 JAVA_IMAGE_TAG="8-jre-slim"
 SPARK_TGZ="N/A"
 MVN="$TEST_ROOT_DIR/build/mvn"
+DOCKER_FILE="N/A"
 EXCLUDE_TAGS=""
 
 # Parse arguments
@@ -57,6 +58,10 @@ while (( "$#" )); do
       ;;
     --spark-tgz)
       SPARK_TGZ="$2"
+      shift
+      ;;
+    --docker-file)
+      DOCKER_FILE="$2"
       shift
       ;;
     --test-exclude-tags)
@@ -97,8 +102,12 @@ then
   IMAGE_TAG=${VERSION}_$(uuidgen)
   cd $SPARK_INPUT_DIR
 
-  # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
-  JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
+  if [[ $DOCKER_FILE == "N/A" ]]; then
+    # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
+    JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
+  else
+    JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE"
+  fi
 
   # Build PySpark image
   LANGUAGE_BINDING_BUILD_ARGS="-p $DOCKER_FILE_BASE_PATH/bindings/python/Dockerfile"
