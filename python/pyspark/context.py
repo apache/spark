@@ -260,7 +260,7 @@ class SparkContext(object):
         if environment:
             for key, value in environment.items():
                 self._conf.setExecutorEnv(key, value)
-        for key, value in DEFAULT_CONFIGS.items():  # type: ignore[assignment]
+        for key, value in DEFAULT_CONFIGS.items():
             self._conf.setIfMissing(key, value)
 
         # Check that we have at least the required parameters
