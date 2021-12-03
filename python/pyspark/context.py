@@ -78,7 +78,7 @@ __all__ = ["SparkContext"]
 
 # These are special default configs for PySpark, they will overwrite
 # the default ones for Spark if they are not configured by user.
-DEFAULT_CONFIGS = {
+DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
 }
@@ -172,7 +172,7 @@ class SparkContext(object):
         appName: Optional[str] = None,
         sparkHome: Optional[str] = None,
         pyFiles: Optional[List[str]] = None,
-        environment: Optional[Dict[str, str]] = None,
+        environment: Optional[Dict[str, Any]] = None,
         batchSize: int = 0,
         serializer: "Serializer" = CPickleSerializer(),
         conf: Optional[SparkConf] = None,
@@ -222,7 +222,7 @@ class SparkContext(object):
         appName: Optional[str],
         sparkHome: Optional[str],
         pyFiles: Optional[List[str]],
-        environment: Optional[Dict[str, str]],
+        environment: Optional[Dict[str, Any]],
         batchSize: int,
         serializer: Serializer,
         conf: Optional[SparkConf],
