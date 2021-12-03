@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, AnyOrSome, Corr, Count, CountStar, CovarPop, CovarSamp, Every, Max, Min, StddevPop, StddevSamp, Sum, VarPop, VarSamp}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -717,8 +717,34 @@ object DataSourceStrategy
               Some(new Count(FieldReference(name), agg.isDistinct))
             case _ => None
           }
-        case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
+        case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Sum(FieldReference(name), agg.isDistinct))
+        case every @ aggregate.BoolAnd(PushableColumnWithoutNestedColumn(name))
+          if every.nodeName == "every" =>
+          Some(new Every(FieldReference(name)))
+        case any @ aggregate.BoolOr(PushableColumnWithoutNestedColumn(name))
+          if any.nodeName == "any" =>
+          Some(new AnyOrSome(FieldReference(name), AnyOrSome.ANY))
+        case some @ aggregate.BoolOr(PushableColumnWithoutNestedColumn(name))
+          if some.nodeName == "some" =>
+          Some(new AnyOrSome(FieldReference(name), AnyOrSome.SOME))
+        case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new VarPop(FieldReference(name)))
+        case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new VarSamp(FieldReference(name)))
+        case aggregate.StddevPop(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new StddevPop(FieldReference(name)))
+        case aggregate.StddevSamp(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new StddevSamp(FieldReference(name)))
+        case aggregate.CovPopulation(PushableColumnWithoutNestedColumn(left),
+          PushableColumnWithoutNestedColumn(right), _) =>
+          Some(new CovarPop(FieldReference(left), FieldReference(right)))
+        case aggregate.CovSample(PushableColumnWithoutNestedColumn(left),
+          PushableColumnWithoutNestedColumn(right), _) =>
+          Some(new CovarSamp(FieldReference(left), FieldReference(right)))
+        case aggregate.Corr(PushableColumnWithoutNestedColumn(x),
+          PushableColumnWithoutNestedColumn(y), _) =>
+          Some(new Corr(FieldReference(x), FieldReference(y)))
         case _ => None
       }
     } else {
