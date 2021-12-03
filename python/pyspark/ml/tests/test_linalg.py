@@ -20,7 +20,7 @@ import array as pyarray
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
-from pyspark.serializers import PickleSerializer
+from pyspark.serializers import CPickleSerializer
 from pyspark.ml.linalg import (
     DenseMatrix,
     DenseVector,
@@ -37,7 +37,7 @@ from pyspark.sql import Row
 
 class VectorTests(MLlibTestCase):
     def _test_serialize(self, v):
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(bytearray(ser.dumps(v)))
         nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(jvec)))

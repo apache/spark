@@ -122,7 +122,7 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE multipartIdentifier                                          #use
-    | USE NAMESPACE multipartIdentifier                                #useNamespace
+    | USE namespace multipartIdentifier                                #useNamespace
     | SET CATALOG (identifier | STRING)                                #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
@@ -134,7 +134,7 @@ statement
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
-    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
+    | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
@@ -228,7 +228,7 @@ statement
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
-    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -257,7 +257,7 @@ statement
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
     | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ .*?)?                                          #setQuotedConfiguration
+    | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
@@ -380,6 +380,12 @@ namespace
     : NAMESPACE
     | DATABASE
     | SCHEMA
+    ;
+
+namespaces
+    : NAMESPACES
+    | DATABASES
+    | SCHEMAS
     ;
 
 describeFuncName
@@ -616,7 +622,7 @@ fromClause
 
 temporalClause
     : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | STRING)
-    | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=STRING
+    | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=valueExpression
     ;
 
 aggregationClause
@@ -731,7 +737,8 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier temporalClause? sample? tableAlias  #tableName
+    : multipartIdentifier temporalClause?
+      sample? tableAlias                      #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -1229,6 +1236,7 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SCHEMAS
     | SECOND
     | SEMI
     | SEPARATED
@@ -1500,6 +1508,7 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SCHEMAS
     | SECOND
     | SELECT
     | SEPARATED
@@ -1627,7 +1636,7 @@ CURRENT_USER: 'CURRENT_USER';
 DAY: 'DAY';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
-DATABASES: 'DATABASES' | 'SCHEMAS';
+DATABASES: 'DATABASES';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1773,6 +1782,7 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 SECOND: 'SECOND';
 SCHEMA: 'SCHEMA';
+SCHEMAS: 'SCHEMAS';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';

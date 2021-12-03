@@ -126,7 +126,7 @@ class DataSourceV2SQLSuite
       " PARTITIONED BY (id)" +
       " TBLPROPERTIES ('bar'='baz')" +
       " COMMENT 'this is a test table'" +
-      " LOCATION '/tmp/testcat/table_name'")
+      " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
@@ -149,7 +149,7 @@ class DataSourceV2SQLSuite
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
       Array("Comment", "this is a test table", ""),
-      Array("Location", "/tmp/testcat/table_name", ""),
+      Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
@@ -1179,8 +1179,9 @@ class DataSourceV2SQLSuite
               s" ('path'='bar', 'Path'='noop')")
             val tableCatalog = catalog("testcat").asTableCatalog
             val identifier = Identifier.of(Array(), "reservedTest")
-            assert(tableCatalog.loadTable(identifier).properties()
-              .get(TableCatalog.PROP_LOCATION) == "foo",
+            val location = tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION)
+            assert(location.startsWith("file:") && location.endsWith("foo"),
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
@@ -1316,18 +1317,6 @@ class DataSourceV2SQLSuite
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", ""))
       )
-    }
-  }
-
-  test("SPARK-37444: ALTER NAMESPACE .. SET LOCATION using v2 catalog with empty location") {
-    val ns = "testcat.ns1.ns2"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test_1'")
-      val e = intercept[IllegalArgumentException] {
-        sql(s"ALTER DATABASE $ns SET LOCATION ''")
-      }
-      assert(e.getMessage.contains("Can not create a Path from an empty string"))
     }
   }
 
@@ -2024,7 +2013,7 @@ class DataSourceV2SQLSuite
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
-           |LOCATION '/tmp'
+           |LOCATION 'file:/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
@@ -2041,7 +2030,7 @@ class DataSourceV2SQLSuite
         "'via' = '2')",
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
-        "LOCATION '/tmp'",
+        "LOCATION 'file:/tmp'",
         "TBLPROPERTIES(",
         "'prop1' = '1',",
         "'prop2' = '2',",
@@ -2923,8 +2912,40 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("Mock time travel test") {
+  test("Check HasPartitionKey from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+          .loadTable(Identifier.of(Array(), "tbl"))
+          .asInstanceOf[InMemoryPartitionTable]
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      var partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 3))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 2)
+      assert(partKeys.toSet == Set(1, 2))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 4))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 5)
+      assert(partKeys.toSet == Set(1, 2, 3, 4, 5))
+    }
+  }
+
+  test("time travel") {
     sql("use testcat")
+    // The testing in-memory table simply append the version/timestamp to the table name when
+    // looking up tables.
     val t1 = "testcat.tSnapshot123456789"
     val t2 = "testcat.t2345678910"
     withTable(t1, t2) {
@@ -2940,26 +2961,13 @@ class DataSourceV2SQLSuite
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
-      assert(sql("SELECT * FROM t FOR VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t FOR VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
-
-      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
-      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
     }
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2019-01-29 00:37:58"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val ts2 = DateTimeUtils.stringToTimestampAnsi(
-      UTF8String.fromString("2021-01-29 00:37:58"),
+      UTF8String.fromString("2021-01-29 00:00:00"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
@@ -2975,21 +2983,37 @@ class DataSourceV2SQLSuite
 
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
         === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect
         === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
+        === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
         === Array(Row(7), Row(8)))
 
-      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
-        === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
-        === Array(Row(7), Row(8)))
+      val e1 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
+      )
+      assert(e1.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e2 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF 'abc'").collect()
+      )
+      assert(e2.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e3 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF current_user()").collect()
+      )
+      assert(e3.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e4 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF CAST(rand() AS STRING)").collect()
+      )
+      assert(e4.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e5 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
+      )
+      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
     }
   }
 

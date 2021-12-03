@@ -116,7 +116,7 @@ private[sql] class RocksDBStateStoreProvider
         rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
       }
       def nativeOpsMetrics(typ: String): Long = {
-        rocksDBMetrics.nativeOpsMetrics.get(typ).getOrElse(0)
+        rocksDBMetrics.nativeOpsMetrics.getOrElse(typ, 0)
       }
 
       val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](

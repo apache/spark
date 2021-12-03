@@ -35,7 +35,6 @@ from typing import (
 from collections import OrderedDict
 from collections.abc import Iterable
 from datetime import tzinfo
-from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
@@ -2440,13 +2439,9 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-                # Always sort when multi-index columns, and if there are Series, never sort.
-                sort = len(merged_columns[0]) > 1 or (num_series == 0 and sort)
-            else:
-                # Always sort when multi-index columns or there are more than two Series,
-                # and if there is only one Series, never sort.
-                sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
+            # Always sort when multi-index columns or there are more than two Series,
+            # and if there is only one Series, never sort.
+            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
 
             if sort:
                 # FIXME: better ordering

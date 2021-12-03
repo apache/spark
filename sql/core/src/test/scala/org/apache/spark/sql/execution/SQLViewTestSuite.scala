@@ -378,6 +378,21 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-37219: time travel is unsupported") {
+    val viewName = createView("testView", "SELECT 1 col")
+    withView(viewName) {
+      val e1 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
+      )
+      assert(e1.message.contains(s"$viewName is a view which does not support time travel"))
+
+      val e2 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
+      )
+      assert(e2.message.contains(s"$viewName is a view which does not support time travel"))
+    }
+  }
 }
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {

@@ -29,7 +29,7 @@ from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, T
 from pyspark.serializers import (
     CloudPickleSerializer,
     BatchedSerializer,
-    PickleSerializer,
+    CPickleSerializer,
     MarshalSerializer,
     UTF8Deserializer,
     NoOpSerializer,
@@ -446,7 +446,7 @@ class RDDTests(ReusedPySparkTestCase):
         a = self.sc.parallelize(range(5))
         b = self.sc.parallelize(range(100, 105))
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
-        a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
+        a = a._reserialize(BatchedSerializer(CPickleSerializer(), 2))
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
         # regression test for SPARK-4841

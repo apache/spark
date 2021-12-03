@@ -359,9 +359,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             )
 
         # DataFrame
-        if check_extension and (
-            LooseVersion("1.0") <= LooseVersion(pd.__version__) < LooseVersion("1.1")
-        ):
+        if check_extension and LooseVersion(pd.__version__) < LooseVersion("1.1"):
             self.assert_eq(
                 (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
             )
@@ -392,9 +390,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # DataFrame
-        if check_extension and (
-            LooseVersion("1.0") <= LooseVersion(pd.__version__) < LooseVersion("1.1")
-        ):
+        if check_extension and LooseVersion(pd.__version__) < LooseVersion("1.1"):
             self.assert_eq(
                 (psdf1 + psdf2 - psdf3).sort_index(), (pdf1 + pdf2 - pdf3).sort_index(), almost=True
             )
@@ -420,26 +416,9 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         assert_eq((psser1 * psser2 * psser3).sort_index(), (pser1 * pser2 * pser3).sort_index())
 
         if check_extension and not extension_float_dtypes_available:
-            if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-                self.assert_eq(
-                    (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
-                )
-            else:
-                expected = pd.Series(
-                    [249.0, np.nan, 0.0, 0.88, np.nan, np.nan, np.nan, np.nan, np.nan, -np.inf]
-                    + [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
-                    index=pd.MultiIndex(
-                        [
-                            ["cow", "falcon", "koala", "koalas", "lama"],
-                            ["length", "power", "speed", "weight"],
-                        ],
-                        [
-                            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 3, 3, 3, 4, 4, 4],
-                            [0, 1, 2, 2, 3, 0, 0, 1, 2, 3, 0, 0, 3, 3, 0, 2, 3],
-                        ],
-                    ),
-                )
-                self.assert_eq((psser1 - psser2 / psser3).sort_index(), expected)
+            self.assert_eq(
+                (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
+            )
         else:
             assert_eq((psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index())
 
@@ -1665,13 +1644,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psidx1 * 10 + psidx2, pidx1 * 10 + pidx2)
         self.assert_eq(psidx1.rename(None) * 10 + psidx2, pidx1.rename(None) * 10 + pidx2)
-
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-            self.assert_eq(psidx1 * 10 + psidx2.rename(None), pidx1 * 10 + pidx2.rename(None))
-        else:
-            self.assert_eq(
-                psidx1 * 10 + psidx2.rename(None), (pidx1 * 10 + pidx2.rename(None)).rename(None)
-            )
+        self.assert_eq(psidx1 * 10 + psidx2.rename(None), pidx1 * 10 + pidx2.rename(None))
 
         pidx3 = pd.Index([11, 12, 13])
         psidx3 = ps.from_pandas(pidx3)
@@ -1689,11 +1662,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psidx3 = ps.from_pandas(pidx3)
 
         self.assert_eq(psidx1 * 10 + psidx2, pidx1 * 10 + pidx2)
-
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-            self.assert_eq(psidx1 * 10 + psidx3, pidx1 * 10 + pidx3)
-        else:
-            self.assert_eq(psidx1 * 10 + psidx3, (pidx1 * 10 + pidx3).rename(None))
+        self.assert_eq(psidx1 * 10 + psidx3, pidx1 * 10 + pidx3)
 
     def test_align(self):
         pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])

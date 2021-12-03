@@ -69,6 +69,16 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
+  public Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
+    return asTableCatalog().loadTable(ident, timestamp);
+  }
+
+  @Override
+  public Table loadTable(Identifier ident, String version) throws NoSuchTableException {
+    return asTableCatalog().loadTable(ident, version);
+  }
+
+  @Override
   public void invalidateTable(Identifier ident) {
     asTableCatalog().invalidateTable(ident);
   }
