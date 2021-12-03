@@ -122,7 +122,7 @@ class SQLContext(object):
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
-        self._jsqlContext: JavaObject = jsqlContext
+        self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
         if (
