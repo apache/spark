@@ -168,8 +168,8 @@ object QueryExecutionErrors {
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
-  def invalidStringIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_STRING_INDEX",
+  def invalidInputIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_INPUT_INDEX",
       messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
   }
 

@@ -296,7 +296,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidStringIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
         } else {
           null
         }
