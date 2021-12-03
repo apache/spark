@@ -3540,6 +3540,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val partitioning = partitionExpressions(partTransforms, partCols, ctx)
+    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+      serdeInfo, false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3554,8 +3556,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
-          serdeInfo, false)
         ReplaceTableAsSelect(
           UnresolvedDBObjectName(table, isNamespace = false),
           partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
@@ -3563,12 +3563,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
-        val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
-          serdeInfo, external)
         val schema = StructType(columns ++ partCols)
         ReplaceTable(
           UnresolvedDBObjectName(table, isNamespace = false),
-          schema, partitioning, tableSpec, orCreate = orCreate)
+          schema, partitioning, tableSpec.copy(external = external), orCreate = orCreate)
     }
   }
 
