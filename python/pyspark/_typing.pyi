@@ -21,7 +21,6 @@ from typing_extensions import Protocol
 
 F = TypeVar("F", bound=Callable)
 T_co = TypeVar("T_co", covariant=True)
-T = TypeVar("T", covariant=True)
 U = TypeVar("U", bound="SupportsIAdd")
 
 PrimitiveType = Union[bool, float, int, str]
