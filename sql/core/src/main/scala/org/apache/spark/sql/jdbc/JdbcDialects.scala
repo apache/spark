@@ -196,32 +196,32 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   /**
    * Converts aggregate function to String representing a SQL expression.
-   * @param aggregates The aggregate functions to be converted.
+   * @param aggregate The aggregate function to be converted.
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregates(aggregates: Seq[AggregateFunc]): Option[Seq[String]] = {
-    Some(aggregates.map {
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
       case min: Min =>
         if (min.column.fieldNames.length != 1) return None
-        s"MIN(${quoteIdentifier(min.column.fieldNames.head)})"
+        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
       case max: Max =>
         if (max.column.fieldNames.length != 1) return None
-        s"MAX(${quoteIdentifier(max.column.fieldNames.head)})"
+        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
       case count: Count =>
         if (count.column.fieldNames.length != 1) return None
         val distinct = if (count.isDistinct) "DISTINCT " else ""
         val column = quoteIdentifier(count.column.fieldNames.head)
-        s"COUNT($distinct$column)"
+        Some(s"COUNT($distinct$column)")
       case sum: Sum =>
         if (sum.column.fieldNames.length != 1) return None
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
         val column = quoteIdentifier(sum.column.fieldNames.head)
-        s"SUM($distinct$column)"
+        Some(s"SUM($distinct$column)")
       case _: CountStar =>
-        s"COUNT(*)"
-      case _ => return None
-    })
+        Some(s"COUNT(*)")
+      case _ => None
+    }
   }
 
   /**
