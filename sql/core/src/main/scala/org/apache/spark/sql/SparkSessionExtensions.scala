@@ -237,7 +237,7 @@ class SparkSessionExtensions {
    * The injected rules will be executed once after the operator optimization batch and
    * after any push down optimization rules.
    */
-  def injectEarlyScanPushDownRules(builder: RuleBuilder): Unit = {
+  def injectEarlyScanPushDownRule(builder: RuleBuilder): Unit = {
     earlyScanPushDownRules += builder
   }
 
