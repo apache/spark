@@ -363,7 +363,7 @@ class SparkContext(object):
             self.profiler_collector = None  # type: ignore[assignment]
 
         # create a signal handler which would be invoked on receiving SIGINT
-        def signal_handler(signal: Any, frame: Any) -> None:
+        def signal_handler(signal: Any, frame: Any) -> NoReturn:
             self.cancelAllJobs()
             raise KeyboardInterrupt()
 
