@@ -45,7 +45,7 @@ object DistributionAndOrderingUtils {
         } else {
           // if numPartitions is not specified by the data source, Spark optimizes the
           // partitions if necessary.
-          RepartitionByExpression(distribution, query, conf.numShufflePartitions, true)
+          RepartitionByExpression(distribution, query, conf.numShufflePartitions, false)
         }
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
