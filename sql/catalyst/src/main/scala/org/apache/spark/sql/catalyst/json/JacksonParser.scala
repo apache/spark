@@ -262,7 +262,7 @@ class JacksonParser(
     case TimestampNTZType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timestampNTZFormatter.parseWithoutTimeZone(parser.getText)
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
       }
 
     case DateType =>
