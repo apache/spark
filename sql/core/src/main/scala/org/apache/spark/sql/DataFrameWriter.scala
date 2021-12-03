@@ -339,7 +339,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedDBObjectName(
-                    catalog.name :: ident.name :: Nil,
+                    catalog.name +: ident.namespace.toSeq :+ ident.name,
                     isNamespace = false
                   ),
                   partitioningAsV2,
