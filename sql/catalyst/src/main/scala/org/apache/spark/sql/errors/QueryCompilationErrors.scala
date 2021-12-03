@@ -66,6 +66,12 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
+  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
+    new AnalysisException(
+      errorClass = "ILLEGAL_SUBSTRING",
+      messageParameters = Array(subject, illegalContent))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -2373,6 +2379,19 @@ object QueryCompilationErrors {
   }
 
   def invalidTimeTravelSpecError(): Throwable = {
-    new AnalysisException("Cannot specify both version and timestamp when scanning the table.")
+    new AnalysisException(
+      "Cannot specify both version and timestamp when time travelling the table.")
+  }
+
+  def invalidTimestampExprForTimeTravel(expr: Expression): Throwable = {
+    new AnalysisException(s"${expr.sql} is not a valid timestamp expression for time travel.")
+  }
+
+  def viewNotSupportTimeTravelError(viewName: Seq[String]): Throwable = {
+    new AnalysisException(viewName.quoted + " is a view which does not support time travel.")
+  }
+
+  def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
+    new UnsupportedOperationException(s"Table $tableName does not support time travel.")
   }
 }

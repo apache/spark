@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 /**
@@ -309,6 +310,11 @@ case class ShuffledHashJoinExec(
     }
 
     streamResultIter ++ buildResultIter
+  }
+
+  override def supportCodegen: Boolean = joinType match {
+    case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
+    case _ => true
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

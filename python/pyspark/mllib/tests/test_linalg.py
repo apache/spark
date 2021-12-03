@@ -21,7 +21,7 @@ import unittest
 from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
-from pyspark.serializers import PickleSerializer
+from pyspark.serializers import CPickleSerializer
 from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
     Vector,
     SparseVector,
@@ -43,7 +43,7 @@ from pyspark.testing.utils import have_scipy
 
 class VectorTests(MLlibTestCase):
     def _test_serialize(self, v):
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(v)))
         nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvec)))
@@ -512,7 +512,7 @@ class SciPyTests(MLlibTestCase):
     def test_serialize(self):
         from scipy.sparse import lil_matrix
 
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
         lil[3, 0] = 2

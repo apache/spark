@@ -194,7 +194,7 @@
     <htmlunit.version>2.50.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.2</commons-cli.version>
+    <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.0</tink.version>
     <!--
@@ -3351,11 +3351,6 @@
     <profile>
       <id>hadoop-3.2</id>
       <!-- Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-      <id>hive-2.3</id>
-      <!-- Default hive profile. Uses global properties. -->
     </profile>
 
     <profile>

@@ -24,7 +24,7 @@ import datetime
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, assert_true, lit
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import (
     StringType,
@@ -36,6 +36,7 @@ from pyspark.sql.types import (
     StructType,
     StructField,
     TimestampNTZType,
+    DayTimeIntervalType,
 )
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
@@ -606,6 +607,23 @@ class UDFTests(ReusedSQLTestCase):
             df.selectExpr("assert_true('1970-01-01 00:00:00' == CAST(dt AS STRING))").collect()
             self.assertEqual(df.schema[0].dataType.typeName(), "timestamp_ntz")
             self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+
+    def test_udf_daytime_interval(self):
+        # SPARK-37277: Support DayTimeIntervalType in Python UDF
+        @udf(DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND))
+        def noop(x):
+            assert x == datetime.timedelta(microseconds=123)
+            return x
+
+        df = self.spark.createDataFrame(
+            [(datetime.timedelta(microseconds=123),)], schema="td interval day to second"
+        ).select(noop("td").alias("td"))
+
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.td.cast("string"))
+        ).collect()
+        self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
+        self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
     def test_nonparam_udf_with_aggregate(self):
         import pyspark.sql.functions as f

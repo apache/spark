@@ -19,11 +19,7 @@ package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Helper methods for working with the logical expressions API.
@@ -359,27 +355,5 @@ private[sql] object SortValue {
       Some((sort.expression, sort.direction, sort.nullOrdering))
     case _ =>
       None
-  }
-}
-
-private[sql] sealed trait TimeTravelSpec
-
-private[sql] case class AsOfTimestamp(timestamp: Long) extends TimeTravelSpec
-private[sql] case class AsOfVersion(version: String) extends TimeTravelSpec
-
-private[sql] object TimeTravelSpec {
-  def create(timestamp: Option[String], version: Option[String]) : Option[TimeTravelSpec] = {
-    if (timestamp.nonEmpty && version.nonEmpty) {
-      throw QueryCompilationErrors.invalidTimeTravelSpecError()
-    } else if (timestamp.nonEmpty) {
-      val ts = DateTimeUtils.stringToTimestampAnsi(
-        UTF8String.fromString(timestamp.get),
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      Some(AsOfTimestamp(ts))
-    } else if (version.nonEmpty) {
-      Some(AsOfVersion(version.get))
-    } else {
-      None
-    }
   }
 }

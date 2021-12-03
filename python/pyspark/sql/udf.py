@@ -18,12 +18,14 @@
 User-defined function related classes and functions
 """
 import functools
+import inspect
 import sys
 from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import SparkContext
+from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType  # type: ignore[attr-defined]
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
@@ -209,16 +211,16 @@ class UserDefinedFunction(object):
         # This is unlikely, doesn't affect correctness,
         # and should have a minimal performance impact.
         if self._judf_placeholder is None:
-            self._judf_placeholder = self._create_judf()
+            self._judf_placeholder = self._create_judf(self.func)
         return self._judf_placeholder
 
-    def _create_judf(self) -> JavaObject:
+    def _create_judf(self, func: Callable[..., Any]) -> JavaObject:
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, self.func, self.returnType)
+        wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(  # type: ignore[attr-defined]
             self._name, wrapped_func, jdt, self.evalType, self.deterministic
@@ -226,9 +228,29 @@ class UserDefinedFunction(object):
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        judf = self._judf
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-        return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
+
+        profiler: Optional[Profiler] = None
+        if sc.profiler_collector:
+            f = self.func
+            profiler = sc.profiler_collector.new_udf_profiler(sc)
+
+            @functools.wraps(f)
+            def func(*args: Any, **kwargs: Any) -> Any:
+                assert profiler is not None
+                return profiler.profile(f, *args, **kwargs)
+
+            func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+
+            judf = self._create_judf(func)
+        else:
+            judf = self._judf
+
+        jPythonUDF = judf.apply(_to_seq(sc, cols, _to_java_column))
+        if profiler is not None:
+            id = jPythonUDF.expr().resultId().id()
+            sc.profiler_collector.add_profiler(id, profiler)
+        return Column(jPythonUDF)
 
     # This function is for improving the online help system in the interactive interpreter.
     # For example, the built-in help / pydoc.help. It wraps the UDF with the docstring and

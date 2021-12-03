@@ -345,24 +345,6 @@ def get_hadoop_profiles(hadoop_version):
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
-def get_hive_profiles(hive_version):
-    """
-    For the given Hive version tag, return a list of Maven/SBT profile flags for
-    building and testing against that Hive version.
-    """
-
-    sbt_maven_hive_profiles = {
-        "hive2.3": ["-Phive-2.3"],
-    }
-
-    if hive_version in sbt_maven_hive_profiles:
-        return sbt_maven_hive_profiles[hive_version]
-    else:
-        print("[error] Could not find", hive_version, "in the list. Valid options",
-              " are", sbt_maven_hive_profiles.keys())
-        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-
 def build_spark_maven(extra_profiles):
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
@@ -616,7 +598,6 @@ def main():
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
@@ -627,14 +608,12 @@ def main():
         build_tool = "sbt"
         scala_version = os.environ.get("SCALA_PROFILE")
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         if "GITHUB_ACTIONS" in os.environ:
             test_env = "github_actions"
         else:
             test_env = "local"
 
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version) + \
-        get_scala_profiles(scala_version)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
     print("[info] Using build tool", build_tool, "with profiles",
           *(extra_profiles + ["under environment", test_env]))

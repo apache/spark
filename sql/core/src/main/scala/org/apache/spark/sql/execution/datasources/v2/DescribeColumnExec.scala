@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 case class DescribeColumnExec(
     override val output: Seq[Attribute],
@@ -37,7 +38,8 @@ case class DescribeColumnExec(
     }
 
     rows += toCatalystRow("col_name", column.name)
-    rows += toCatalystRow("data_type", column.dataType.catalogString)
+    rows += toCatalystRow("data_type",
+      CharVarcharUtils.getRawType(column.metadata).getOrElse(column.dataType).catalogString)
     rows += toCatalystRow("comment", comment)
 
     // TODO: The extended description (isExtended = true) can be added here.
