@@ -728,9 +728,7 @@ private[spark] class DAGScheduler(
                 // Mark mapStage as available with shuffle outputs only after shuffle merge is
                 // finalized with push based shuffle. If not, subsequent ShuffleMapStage won't
                 // read from merged output as the MergeStatuses are not available.
-                if (!mapStage.isAvailable ||
-                  (mapStage.shuffleDep.shuffleMergeEnabled &&
-                    !mapStage.shuffleDep.shuffleMergeFinalized)) {
+                if (!mapStage.isAvailable || !mapStage.shuffleDep.shuffleMergeFinalized) {
                   missing += mapStage
                 }
               case narrowDep: NarrowDependency[_] =>
@@ -1688,7 +1686,7 @@ private[spark] class DAGScheduler(
         // finalization task and undo what it might have already done.
         if (scheduleShuffleMergeFinalize(shuffleStage, delay = 0,
           registerMergeResults = false)) {
-          handleShuffleMergeFinalized(shuffleStage)
+          eventProcessLoop.post(ShuffleMergeFinalized(shuffleStage))
         }
       } else {
         scheduleShuffleMergeFinalize(shuffleStage, shuffleMergeFinalizeWaitSec)
@@ -2320,16 +2318,26 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleShuffleMergeFinalized(stage: ShuffleMapStage): Unit = {
-    // Only update MapOutputTracker metadata if the stage is still active. i.e not cancelled.
-    if (runningStages.contains(stage)) {
-      stage.shuffleDep.markShuffleMergeFinalized()
-      processShuffleMapStageCompletion(stage)
-      logInfo(s"$stage (${stage.name}) shuffle merge is finalized")
-    } else {
-      // Unregister all merge results if the stage is currently not
-      // active (i.e. the stage is cancelled)
-      mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
+  private[scheduler] def handleShuffleMergeFinalized(stage: ShuffleMapStage,
+        shuffleMergeId: Int): Unit = {
+    // Check if update is for the same merge id - finalization might have completed for an earlier
+    // adaptive attempt while the stage might have failed/killed and shuffle id is getting
+    // re-executing now.
+    if (stage.shuffleDep.shuffleMergeId == shuffleMergeId) {
+      if (stage.pendingPartitions.isEmpty) {
+        if (runningStages.contains(stage)) {
+          stage.shuffleDep.markShuffleMergeFinalized()
+          processShuffleMapStageCompletion(stage)
+        } else {
+          // Unregister all merge results if the stage is currently not
+          // active (i.e. the stage is cancelled)
+          mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
+        }
+      } else {
+        // stage still running, mark merge finalized. Stage completion will invoke
+        // processShuffleMapStageCompletion
+        stage.shuffleDep.markShuffleMergeFinalized()
+      }
     }
   }
 
@@ -2804,7 +2812,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
       dagScheduler.handleRegisterMergeStatuses(stage, mergeStatuses)
 
     case ShuffleMergeFinalized(stage) =>
-      dagScheduler.handleShuffleMergeFinalized(stage)
+      dagScheduler.handleShuffleMergeFinalized(stage, stage.shuffleDep.shuffleMergeId)
 
     case ShufflePushCompleted(shuffleId, shuffleMergeId, mapIndex) =>
       dagScheduler.handleShufflePushCompleted(shuffleId, shuffleMergeId, mapIndex)

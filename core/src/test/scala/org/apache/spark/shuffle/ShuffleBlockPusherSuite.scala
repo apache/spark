@@ -20,7 +20,7 @@ package org.apache.spark.shuffle
 import java.io.{File, FileNotFoundException, IOException}
 import java.net.ConnectException
 import java.nio.ByteBuffer
-import java.util.concurrent.{LinkedBlockingQueue}
+import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -151,9 +151,12 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     verifyBlockPushCompleted(blockPusher)
   }
 
-  test("Ensure all the blocks are pushed before notifying driver about push completion") {
+  test("SPARK-33701: Ensure all the blocks are pushed before notifying driver" +
+    " about push completion") {
     conf.set(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS, 12)
     conf.set("spark.shuffle.push.maxBlockBatchSize", "20b")
+    // Different remote servers to send 2 different requests to ensure that all the blocks
+    // are pushed before notifying driver about push completion
     when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1),
       BlockManagerId("slow-client", "slow-client", 1)))
     when(shuffleClient.pushBlocks(ArgumentMatchers.eq("slow-client"), any(), any(), any(), any()))
@@ -179,8 +182,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
     blockPusher.runPendingTasks()
-    assert(blockPusher.bytesInFlight <= 0)
     assert(pushRequests.length == 2)
+    assert(blockPusher.bytesInFlight <= 0)
     verifyPushRequests(pushRequests, Seq(6, 4))
     verifyBlockPushCompleted(blockPusher)
   }
