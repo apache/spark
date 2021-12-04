@@ -351,7 +351,7 @@ case class Elt(
       // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidStringIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
       // scalastyle:on line.size.limit
