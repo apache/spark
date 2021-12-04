@@ -202,6 +202,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
         parts, query, tableSpec, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      val tableSpecWithQualifiedLocation = tableSpec.copy(
+        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -210,7 +212,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            tableSpec,
+            tableSpecWithQualifiedLocation,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
@@ -221,7 +223,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            tableSpec,
+            tableSpecWithQualifiedLocation,
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
