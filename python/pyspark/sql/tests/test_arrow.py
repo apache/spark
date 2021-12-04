@@ -425,6 +425,13 @@ class ArrowTests(ReusedSQLTestCase):
             # Changing that to use a StringArray would be backwards incompatible.
             assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
+    def test_createDataFrame_with_int64(self):
+        # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            pandas_df = pd.DataFrame({"col": [1, 2, 3, None]}, dtype="Int64")
+            df = self.spark.createDataFrame(pandas_df)
+            assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
+
     def test_toPandas_with_map_type(self):
         pdf = pd.DataFrame({"id": [0, 1, 2, 3],
                             "m": [{}, {"a": 1}, {"a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}]})
