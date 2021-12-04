@@ -721,7 +721,7 @@ class DDLParserSuite extends AnalysisTest {
         assert(create.ignoreIfExists == expectedIfNotExists)
       case ctas: CreateTableAsSelect if newTableToken == "CREATE" =>
         assert(ctas.ignoreIfExists == expectedIfNotExists)
-      case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
+      case replace: ReplaceTable if newTableToken == "REPLACE" =>
       case replace: ReplaceTableAsSelect if newTableToken == "REPLACE" =>
       case other =>
         fail("First token in statement does not match the expected parsed plan; CREATE TABLE" +
@@ -2298,18 +2298,18 @@ class DDLParserSuite extends AnalysisTest {
             create.tableSpec.comment,
             create.tableSpec.serde,
             create.tableSpec.external)
-        case replace: ReplaceTableStatement =>
+        case replace: ReplaceTable =>
           TableSpec(
-            replace.tableName,
+            replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
-            replace.bucketSpec,
-            replace.properties,
-            replace.provider,
-            replace.options,
-            replace.location,
-            replace.comment,
-            replace.serde)
+            replace.tableSpec.bucketSpec,
+            replace.tableSpec.properties,
+            replace.tableSpec.provider,
+            replace.tableSpec.options,
+            replace.tableSpec.location,
+            replace.tableSpec.comment,
+            replace.tableSpec.serde)
         case ctas: CreateTableAsSelect =>
           TableSpec(
             ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
