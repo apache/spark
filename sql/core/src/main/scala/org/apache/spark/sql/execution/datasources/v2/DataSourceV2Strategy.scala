@@ -165,9 +165,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      val qualifiedLocation = tableSpec.location.map(makeQualifiedDBObjectPath(_))
+      val tableSpecWithQualifiedLocation = tableSpec.copy(
+        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
-        partitioning, tableSpec.copy(location = qualifiedLocation), ifNotExists) :: Nil
+        partitioning, tableSpecWithQualifiedLocation, ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
         options, ifNotExists) =>
@@ -187,16 +188,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
-      val qualifiedLocation = tableSpec.location.map(makeQualifiedDBObjectPath(_))
+      val tableSpecWithQualifiedLocation = tableSpec.copy(
+        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident.asIdentifier, schema, parts,
-            tableSpec.copy(location = qualifiedLocation),
-            orCreate = orCreate, invalidateCache) :: Nil
+            tableSpecWithQualifiedLocation, orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, schema, parts,
-            tableSpec.copy(location = qualifiedLocation), orCreate = orCreate,
-            invalidateCache) :: Nil
+            tableSpecWithQualifiedLocation, orCreate = orCreate, invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
