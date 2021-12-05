@@ -3034,6 +3034,26 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             almost=True,
         )
 
+    def test_pivot_table_underscore_in_columns(self):
+        pdf = pd.DataFrame(
+            {
+                "a_a": [4, 2, 3, 4, 8, 6],
+                "b": [1, 2, 2, 4, 2, 4],
+                "e": [10, 20, 20, 40, 20, 40],
+                "c": [1, 2, 9, 4, 7, 4],
+                "d": [-1, -2, -3, -4, -5, -6],
+            },
+            index=np.random.rand(6),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # Checking if both DataFrames have the same results
+        self.assert_eq(
+            psdf.pivot_table(columns="a_a", values="b").sort_index(),
+            pdf.pivot_table(columns="a_a", values="b").sort_index(),
+            almost=True,
+        )
+
     def test_pivot_table_and_index(self):
         # https://github.com/databricks/koalas/issues/805
         pdf = pd.DataFrame(

@@ -57,6 +57,8 @@ from pandas.tseries.frequencies import DateOffset, to_offset
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
+import itertools
+
 from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
@@ -6061,10 +6063,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     column_name_to_index = dict(
                         zip(self._internal.data_spark_column_names, self._internal.column_labels)
                     )
-                    column_labels = [
-                        tuple(list(column_name_to_index[name.split("_")[1]]) + [name.split("_")[0]])
-                        for name in data_columns
-                    ]
+                    _columns = set(self[columns].tolist())
+                    _values = itertools.chain.from_iterable(values)
+                    column_labels = [i for i in itertools.product(_values, _columns)]
                     column_label_names = (
                         [cast(Optional[Name], None)] * column_labels_level(values)
                     ) + [columns]
