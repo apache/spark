@@ -3048,31 +3048,63 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         # Checking if both DataFrames have the same results
-        self.assert_eq(
-            psdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index(),
-            pdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index(),
-            almost=True,
-        )
+        ktable = psdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index()
+        ptable = pdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index()
+        self.assert_eq(ktable, ptable)
+        self.assert_eq(ktable.index, ptable.index)
+        self.assert_eq(repr(ktable.index), repr(ptable.index))
 
-    def test_pivot_table_underscore_in_values(self):
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples(
+            [("x", "a"), ("x", "b"), ("y", "e"), ("z", "c"), ("w", "d")]
+        )
+        pdf.columns = columns
+        psdf.columns = columns
+        ktable = psdf.pivot_table(
+            index=[("z", "c")], columns=("x", "a"), values=[("x", "b"), ("w", "d")]
+        ).sort_index()
+        ptable = pdf.pivot_table(
+            index=[("z", "c")], columns=[("x", "a")], values=[("x", "b"), ("w", "d")]
+        ).sort_index()
+        self.assert_eq(ktable, ptable)
+        self.assert_eq(ktable.index, ptable.index)
+        self.assert_eq(repr(ktable.index), repr(ptable.index))
+
+    def test_pivot_table_underscore_in_values_column_name(self):
         pdf = pd.DataFrame(
             {
                 "a": [4, 2, 3, 4, 8, 6],
                 "b_b": [1, 2, 2, 4, 2, 4],
                 "e": [10, 20, 20, 40, 20, 40],
                 "c": [1, 2, 9, 4, 7, 4],
-                "d_d": [-1, -2, -3, -4, -5, -6],
+                "d": [-1, -2, -3, -4, -5, -6],
             },
             index=np.random.rand(6),
         )
         psdf = ps.from_pandas(pdf)
 
         # Checking if both DataFrames have the same results
-        self.assert_eq(
-            psdf.pivot_table(index=["c"], columns="a", values=["b_b", "d_d"]).sort_index(),
-            pdf.pivot_table(index=["c"], columns="a", values=["b_b", "d_d"]).sort_index(),
-            almost=True,
+        ktable = psdf.pivot_table(index=["c"], columns="a", values=["b_b", "d"]).sort_index()
+        ptable = pdf.pivot_table(index=["c"], columns="a", values=["b_b", "d"]).sort_index()
+        self.assert_eq(ktable, ptable)
+        self.assert_eq(ktable.index, ptable.index)
+        self.assert_eq(repr(ktable.index), repr(ptable.index))
+
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples(
+            [("x", "a"), ("x", "b_b"), ("y", "e"), ("z", "c"), ("w", "d")]
         )
+        pdf.columns = columns
+        psdf.columns = columns
+        ktable = psdf.pivot_table(
+            index=[("z", "c")], columns=("x", "a"), values=[("x", "b_b"), ("w", "d")]
+        ).sort_index()
+        ptable = pdf.pivot_table(
+            index=[("z", "c")], columns=[("x", "a")], values=[("x", "b_b"), ("w", "d")]
+        ).sort_index()
+        self.assert_eq(ktable, ptable)
+        self.assert_eq(ktable.index, ptable.index)
+        self.assert_eq(repr(ktable.index), repr(ptable.index))
 
     def test_pivot_table_and_index(self):
         # https://github.com/databricks/koalas/issues/805
