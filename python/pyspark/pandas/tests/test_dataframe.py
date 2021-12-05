@@ -3054,7 +3054,6 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             almost=True,
         )
 
-
     def test_pivot_table_underscore_in_values(self):
         pdf = pd.DataFrame(
             {
@@ -3074,6 +3073,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             pdf.pivot_table(index=["c"], columns="a", values=["b_b", "d_d"]).sort_index(),
             almost=True,
         )
+
     def test_pivot_table_and_index(self):
         # https://github.com/databricks/koalas/issues/805
         pdf = pd.DataFrame(
