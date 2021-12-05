@@ -6063,9 +6063,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     column_name_to_index = dict(
                         zip(self._internal.data_spark_column_names, self._internal.column_labels)
                     )
-                    _columns = set(self[columns].tolist())
-                    _values = itertools.chain.from_iterable(values)
-                    column_labels = [i for i in itertools.product(_values, _columns)]
+                    _columns = [str(i) for i in self[columns].unique().tolist()]
+                    column_labels = [tuple(list(i[0]) + [i[1]]) for i in itertools.product(values, _columns)]
+                    column_labels.sort()
                     column_label_names = (
                         [cast(Optional[Name], None)] * column_labels_level(values)
                     ) + [columns]
