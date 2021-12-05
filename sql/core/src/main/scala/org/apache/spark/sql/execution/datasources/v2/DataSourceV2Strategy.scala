@@ -172,13 +172,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
         options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      val tableSpecWithQualifiedLocation = tableSpec.copy(
+        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident.asIdentifier, parts, query, planLater(query),
-            tableSpec, writeOptions, ifNotExists) :: Nil
+            tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(catalog.asTableCatalog, ident.asIdentifier, parts, query,
-            planLater(query), tableSpec, writeOptions, ifNotExists) :: Nil
+            planLater(query), tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
