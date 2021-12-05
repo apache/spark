@@ -36,6 +36,9 @@ class SourceOptions(
   // A flag to always respect the Spark schema restored from the table properties
   val respectSparkSchema: Boolean = parameters
     .get(RESPECT_SPARK_SCHEMA).map(_.toBoolean).getOrElse(DEFAULT_RESPECT_SPARK_SCHEMA)
+
+  // Expected parallelism from the data source properties.
+  val parallel: Option[Int] = parameters.get(PARALLEL).map(_.toInt)
 }
 
 
@@ -46,5 +49,7 @@ object SourceOptions {
 
   val RESPECT_SPARK_SCHEMA = "respectSparkSchema"
   val DEFAULT_RESPECT_SPARK_SCHEMA = false
+
+  val PARALLEL = "parallel"
 
 }
