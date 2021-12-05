@@ -3004,3 +3004,40 @@ case class SubtractDates(
 object SubtractDates {
   def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }
+
+case class ConvertTimezone(
+    sourceTz: Expression,
+    targetTz: Expression,
+    sourceTs: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def first: Expression = sourceTz
+  override def second: Expression = targetTz
+  override def third: Expression = sourceTs
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
+  override def dataType: DataType = TimestampNTZType
+
+  override def nullSafeEval(micros: Any, srcTz: Any, tgtTz: Any): Any = {
+    DateTimeUtils.convertTimestampNtzToAnotherTz(
+      micros.asInstanceOf[Long],
+      srcTz.asInstanceOf[String],
+      tgtTz.asInstanceOf[String])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (micros, srcTz, tgtTz) => {
+      s"""$dtu.convertTimestampNtzToAnotherTz($micros, $srcTz, $tgtTz)"""
+    })
+  }
+
+  override def prettyName: String = "convert_timezone"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ConvertTimezone = {
+    copy(sourceTz = newFirst, targetTz = newSecond, sourceTs = newThird)
+  }
+}
