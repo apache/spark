@@ -23,7 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException, UnresolvedDBObjectName, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.IntegerType
@@ -107,21 +107,23 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   override def create(): Unit = {
+    val tableSpec = TableSpec(
+      bucketSpec = None,
+      properties = properties.toMap,
+      provider = provider,
+      options = Map.empty,
+      location = None,
+      comment = None,
+      serde = None,
+      external = false)
     runCommand(
-      CreateTableAsSelectStatement(
-        tableName,
-        logicalPlan,
+      CreateTableAsSelect(
+        UnresolvedDBObjectName(tableName, isNamespace = false),
         partitioning.getOrElse(Seq.empty),
-        None,
-        properties.toMap,
-        provider,
-        Map.empty,
-        None,
-        None,
+        logicalPlan,
+        tableSpec,
         options.toMap,
-        None,
-        ifNotExists = false,
-        external = false))
+        false))
   }
 
   override def replace(): Unit = {

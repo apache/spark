@@ -5781,6 +5781,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare to another Series and show the differences.
 
+        .. note:: This API is slightly different from pandas when indexes from both Series
+            are not identical and config 'compute.eager_check' is False. pandas raises an exception;
+            however, pandas-on-Spark just proceeds and performs by ignoring mismatches.
+
+            >>> psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
+            >>> psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
+            >>> psser1.compare(psser2)  # doctest: +SKIP
+            ...
+            ValueError: Can only compare identically-labeled Series objects
+
+            >>> with ps.option_context("compute.eager_check", False):
+            ...     psser1.compare(psser2)  # doctest: +SKIP
+            ...
+               self  other
+            3   3.0    4.0
+            4   4.0    3.0
+            5   5.0    NaN
+            6   NaN    5.0
+
         Parameters
         ----------
         other : Series
@@ -5847,7 +5866,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
             )
         else:
-            if not self.index.equals(other.index):
+            if get_option("compute.eager_check") and not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")
 
             combined = combine_frames(self.to_frame(), other.to_frame())
