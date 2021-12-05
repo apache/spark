@@ -401,7 +401,7 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
-    - name: Install Java ${{ needs.configure-jobs.outputs.java }}
+    - name: Install Java
        uses: actions/setup-java@v1
        with:
          java-version: ${{ needs.configure-jobs.outputs.java }}
