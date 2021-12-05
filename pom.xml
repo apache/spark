@@ -1222,7 +1222,7 @@
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3.x -->
           <exclusion>
             <groupId>javax.ws.rs</groupId>
             <artifactId>jsr311-api</artifactId>
@@ -1534,7 +1534,7 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3.x -->
           <exclusion>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP-java7</artifactId>
