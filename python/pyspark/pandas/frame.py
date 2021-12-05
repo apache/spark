@@ -6056,18 +6056,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     # E.g. if column is b and values is ['b','e'],
                     # then ['2_b', '2_e', '3_b', '3_e'].
 
-                    # We sort the columns of Spark DataFrame by values.
-                    data_columns.sort(key=lambda x: x.split("_", 1)[1])
-                    sdf = sdf.select(index_columns + data_columns)
-
-                    column_name_to_index = dict(
-                        zip(self._internal.data_spark_column_names, self._internal.column_labels)
-                    )
                     _columns = [str(i) for i in self[columns].unique().tolist()]
                     column_labels = [
                         tuple(list(i[0]) + [i[1]]) for i in itertools.product(values, _columns)
                     ]
                     column_labels.sort()
+                    # We sort the columns of Spark DataFrame by values.
+                    if len(values[0]) > 1:
+                        data_columns = [
+                            "_".join([i[-1], str(i[:-1]).replace("'", "")]) for i in column_labels
+                        ]
+                    else:
+                        data_columns = [
+                            "_".join([i[-1], str(i[0]).replace("'", "")]) for i in column_labels
+                        ]
+                    sdf = sdf.select(index_columns + data_columns)
                     column_label_names = (
                         [cast(Optional[Name], None)] * column_labels_level(values)
                     ) + [columns]

@@ -3034,10 +3034,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             almost=True,
         )
 
-    def test_pivot_table_underscore_in_columns(self):
+    def test_pivot_table_underscore_in_column_elements(self):
         pdf = pd.DataFrame(
             {
-                "a_a": [4, 2, 3, 4, 8, 6],
+                "a": ["4_4", "2_2", "3_3", "4_4", "8_8", "6_6"],
                 "b": [1, 2, 2, 4, 2, 4],
                 "e": [10, 20, 20, 40, 20, 40],
                 "c": [1, 2, 9, 4, 7, 4],
@@ -3049,8 +3049,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Checking if both DataFrames have the same results
         self.assert_eq(
-            psdf.pivot_table(columns="a_a", values="b").sort_index(),
-            pdf.pivot_table(columns="a_a", values="b").sort_index(),
+            psdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index(),
+            pdf.pivot_table(index=["c"], columns="a", values=["b", "d"]).sort_index(),
             almost=True,
         )
 
