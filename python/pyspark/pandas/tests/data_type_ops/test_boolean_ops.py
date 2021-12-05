@@ -215,12 +215,8 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
-            self.assert_eq(1 // b_pser, 1 // b_psser)
-            self.assert_eq(0.1 // b_pser, 0.1 // b_psser)
-        else:
-            self.assert_eq(1 // b_psser, pd.Series([1.0, 1.0, np.inf], name="bool"))
-            self.assert_eq(0.1 // b_psser, pd.Series([0.0, 0.0, np.inf], name="bool"))
+        self.assert_eq(1 // b_pser, 1 // b_psser)
+        self.assert_eq(0.1 // b_pser, 0.1 // b_psser)
         self.assertRaises(TypeError, lambda: "x" // b_psser)
         self.assertRaises(TypeError, lambda: True // b_psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // b_psser)

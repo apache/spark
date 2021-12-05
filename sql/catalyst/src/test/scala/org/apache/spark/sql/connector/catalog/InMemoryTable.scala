@@ -173,8 +173,8 @@ class InMemoryTable(
       partitionSchema: StructType,
       from: Seq[Any],
       to: Seq[Any]): Boolean = {
-    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from.mkString("/")))
-    val newRows = new BufferedRows(to.mkString("/"))
+    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from))
+    val newRows = new BufferedRows(to)
     rows.rows.foreach { r =>
       val newRow = new GenericInternalRow(r.numFields)
       for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
@@ -197,7 +197,7 @@ class InMemoryTable(
 
   protected def createPartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
     if (!dataMap.contains(key)) {
-      val emptyRows = new BufferedRows(key.toArray.mkString("/"))
+      val emptyRows = new BufferedRows(key)
       val rows = if (key.length == schema.length) {
         emptyRows.withRow(InternalRow.fromSeq(key))
       } else emptyRows
@@ -215,7 +215,7 @@ class InMemoryTable(
       val key = getKey(row)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
-        .getOrElse(key -> new BufferedRows(key.toArray.mkString("/")).withRow(row))
+        .getOrElse(key -> new BufferedRows(key).withRow(row))
       addPartitionKey(key)
     })
     this
@@ -290,7 +290,7 @@ class InMemoryTable(
           case In(attrName, values) if attrName == partitioning.head.name =>
             val matchingKeys = values.map(_.toString).toSet
             data = data.filter(partition => {
-              val key = partition.asInstanceOf[BufferedRows].key
+              val key = partition.asInstanceOf[BufferedRows].keyString
               matchingKeys.contains(key)
             })
 
@@ -508,13 +508,19 @@ object InMemoryTable {
   }
 }
 
-class BufferedRows(
-    val key: String = "") extends WriterCommitMessage with InputPartition with Serializable {
+class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
+    with InputPartition with HasPartitionKey with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
 
   def withRow(row: InternalRow): BufferedRows = {
     rows.append(row)
     this
+  }
+
+  def keyString(): String = key.toArray.mkString("/")
+
+  override def partitionKey(): InternalRow = {
+    InternalRow.fromSeq(key)
   }
 
   def clear(): Unit = rows.clear()
@@ -538,7 +544,7 @@ private class BufferedRowsReader(
   private def addMetadata(row: InternalRow): InternalRow = {
     val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
-      case "_partition" => UTF8String.fromString(partition.key)
+      case "_partition" => UTF8String.fromString(partition.keyString)
     }.toArray)
     new JoinedRow(row, metadataRow)
   }

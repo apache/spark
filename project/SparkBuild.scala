@@ -639,13 +639,19 @@ object KubernetesIntegrationTests {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
+        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
+        val extraOptions = if (dockerFile.isDefined) {
+          Seq("-f", s"${dockerFile.get}")
+        } else {
+          Seq("-b", s"java_image_tag=$javaImageTag")
+        }
         val cmd = Seq(dockerTool, "-m",
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile",
-          "-b", s"java_image_tag=${sys.env.getOrElse("JAVA_IMAGE_TAG", "8-jre-slim")}",
+          "-R", s"$bindingsDir/R/Dockerfile") ++
+          extraOptions :+
           "build"
-        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")

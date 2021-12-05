@@ -245,17 +245,21 @@ jobs:
   pyspark:
     needs: configure-jobs
     # Run PySpark coverage scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and fored repository
+    # Run scheduled jobs with JDK 17 in Apache Spark
+    # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
+      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
       || needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210930
+      image: dongjoon/apache-spark-github-action-image:20211116
     strategy:
       fail-fast: false
       matrix:
+        java:
+          - ${{ needs.configure-jobs.outputs.java }}
         modules:
           - >-
             pyspark-sql, pyspark-mllib, pyspark-resource
@@ -308,6 +312,10 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+    - name: Install Java ${{ matrix.java }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9)
       run: |
         python3.9 -m pip list
@@ -350,7 +358,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210930
+      image: dongjoon/apache-spark-github-action-image:20211116
     env:
       HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -417,7 +425,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
     container:
-      image: dongjoon/apache-spark-github-action-image:20210930
+      image: dongjoon/apache-spark-github-action-image:20211116
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
