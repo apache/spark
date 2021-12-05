@@ -354,7 +354,9 @@ jobs:
 
   sparkr:
     needs: configure-jobs
-    if: needs.configure-jobs.outputs.type == 'regular'
+    if: >-
+      needs.configure-jobs.outputs.type == 'regular'
+      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
