@@ -1956,38 +1956,36 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!nonDeterministicQueryPlan.deterministic)
   }
 
-  test("Merge non-correlated scalar subqueries",
-    DisableAdaptiveExecution("reuse is dynamic in AQE")) {
-    Seq(true, false).foreach { reuse =>
-      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
-        val df = sql(
-          """
-            |SELECT
-            |  (SELECT avg(key) FROM testData) +
-            |  (SELECT sum(key) FROM testData) +
-            |  (SELECT count(distinct key) FROM testData)
-            |FROM testData
-            |LIMIT 1
+  test("Merge non-correlated scalar subqueries") {
+    Seq(true, false).foreach { enableAQE =>
+      Seq(true, false).foreach { enableReuse =>
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+          SQLConf.SUBQUERY_REUSE_ENABLED.key -> enableReuse.toString) {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT avg(key) FROM testData) +
+              |  (SELECT sum(key) FROM testData) +
+              |  (SELECT count(distinct key) FROM testData)
+              |FROM testData
+              |LIMIT 1
           """.stripMargin)
+          df.collect()
 
-        var countSubqueryExec = 0
-        var countReuseSubqueryExec = 0
-        df.queryExecution.executedPlan.transformAllExpressions {
-          case s @ ScalarSubquery(_: SubqueryExec, _) =>
-            countSubqueryExec += 1
-            s
-          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
-            countReuseSubqueryExec += 1
-            s
-        }
+          val plan = df.queryExecution.executedPlan
+          val countSubqueryExec = collectWithSubqueries(plan) { case _: SubqueryExec => 1 }.sum
+          val countReusedSubqueryExec =
+            collectWithSubqueries(plan) { case _: ReusedSubqueryExec => 1 }.sum
 
-        if (reuse) {
-          assert(countSubqueryExec == 1, "Missing or unexpected SubqueryExec in the plan")
-          assert(countReuseSubqueryExec == 2,
-            "Missing or unexpected reused ReusedSubqueryExec in the plan")
-        } else {
-          assert(countSubqueryExec == 3, "Missing or unexpected SubqueryExec in the plan")
-          assert(countReuseSubqueryExec == 0, "Unexpected reused ReusedSubqueryExec in the plan")
+          if (enableReuse) {
+            assert(countSubqueryExec == 1, "Missing or unexpected SubqueryExec in the plan")
+            assert(countReusedSubqueryExec == 2,
+              "Missing or unexpected reused ReusedSubqueryExec in the plan")
+          } else {
+            assert(countSubqueryExec == 3, "Missing or unexpected SubqueryExec in the plan")
+            assert(countReusedSubqueryExec == 0, "Unexpected reused ReusedSubqueryExec in the plan")
+          }
         }
       }
     }
