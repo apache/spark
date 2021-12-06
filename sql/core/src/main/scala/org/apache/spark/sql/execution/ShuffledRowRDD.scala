@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Arrays
 
+import scala.math.Ordering
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -138,7 +140,8 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
-    partitionSpecs: Array[ShufflePartitionSpec])
+    partitionSpecs: Array[ShufflePartitionSpec],
+    @transient val mapOutputStatistics: Option[MapOutputStatistics] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   def this(
@@ -177,9 +180,18 @@ class ShuffledRowRDD(
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     partition.asInstanceOf[ShuffledRowRDDPartition].spec match {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
-        // TODO order by partition size.
-        startReducerIndex.until(endReducerIndex).flatMap { reducerIndex =>
-          tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
+        mapOutputStatistics match {
+          case Some(mapOutput) =>
+            startReducerIndex.until(endReducerIndex)
+              .map(reducerIndex => (reducerIndex, mapOutput.bytesByPartitionId(reducerIndex)))
+              .sortBy(_._2)(implicitly[Ordering[Long]].reverse)
+              .flatMap { case (reducerIndex, _) =>
+                tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
+              }
+          case _ =>
+            startReducerIndex.until(endReducerIndex).flatMap { reducerIndex =>
+              tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
+            }
         }
 
       case PartialReducerPartitionSpec(_, startMapIndex, endMapIndex, _) =>

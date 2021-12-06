@@ -149,7 +149,11 @@ case class ShuffleExchangeExec(
   override def numPartitions: Int = shuffleDependency.partitioner.numPartitions
 
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[InternalRow] = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionSpecs)
+    val mapOutputStatistics = mapOutputStatisticsFuture.value match {
+      case Some(value) if value.isSuccess => Option(value.get)
+      case _ => None
+    }
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionSpecs, mapOutputStatistics)
   }
 
   override def runtimeStatistics: Statistics = {

@@ -2307,6 +2307,36 @@ class AdaptiveQueryExecSuite
       assert(bhj.length == 1)
     }
   }
+
+  test("SPARK-37559: ShuffledRowRDD get preferred locations order by reduce size") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10000") {
+
+      def findShuffledRowRDD(query: String): ShuffledRowRDD = {
+        val df = sql(query)
+        df.collect()
+        var rdd = df.rdd
+        while (!rdd.isInstanceOf[ShuffledRowRDD]) {
+          rdd = rdd.firstParent
+        }
+        assert(rdd.isInstanceOf[ShuffledRowRDD])
+        rdd.asInstanceOf[ShuffledRowRDD]
+      }
+
+      Seq(true, false).foreach { enableAqe =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAqe.toString) {
+          val shuffledRowRDD = findShuffledRowRDD(
+            "SELECT /*+ REPARTITION */ * FROM range(10)")
+          if (enableAqe) {
+            assert(shuffledRowRDD.mapOutputStatistics.isDefined)
+          } else {
+            assert(shuffledRowRDD.mapOutputStatistics.isEmpty)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
