@@ -99,7 +99,12 @@ private[spark] class HiveDelegationTokenProvider
         s"$principal at $metastoreUri")
 
       doAsRealUser {
-        val hive = Hive.get(conf, classOf[HiveConf])
+        val hive = conf match {
+          case hiveConf: HiveConf =>
+            Hive.getWithoutRegisterFns(hiveConf)
+          case _ =>
+            Hive.get(conf, classOf[HiveConf])
+        }
         val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
 
         val hive2Token = new Token[DelegationTokenIdentifier]()
