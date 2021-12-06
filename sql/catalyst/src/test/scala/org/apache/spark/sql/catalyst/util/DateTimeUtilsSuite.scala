@@ -946,7 +946,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Amsterdam")
     ).foreach { case ((inputTs, sourceTz), (expectedTs, targetTz)) =>
       val micros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(inputTs))
-      val result = DateTimeUtils.convertTimestampNtzToAnotherTz(micros, sourceTz, targetTz)
+      val result = DateTimeUtils.convertTimestampNtzToAnotherTz(sourceTz, targetTz, micros)
       val expectedMicros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(expectedTs))
       assert(expectedMicros === result,
         s"The difference is ${(result - expectedMicros) / MICROS_PER_HOUR} hours")

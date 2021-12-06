@@ -3018,18 +3018,17 @@ case class ConvertTimezone(
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
 
-  override def nullSafeEval(micros: Any, srcTz: Any, tgtTz: Any): Any = {
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
     DateTimeUtils.convertTimestampNtzToAnotherTz(
-      micros.asInstanceOf[Long],
-      srcTz.asInstanceOf[String],
-      tgtTz.asInstanceOf[String])
+      srcTz.asInstanceOf[UTF8String].toString,
+      tgtTz.asInstanceOf[UTF8String].toString,
+      micros.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (micros, srcTz, tgtTz) => {
-      s"""$dtu.convertTimestampNtzToAnotherTz($micros, $srcTz, $tgtTz)"""
-    })
+    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
   }
 
   override def prettyName: String = "convert_timezone"
