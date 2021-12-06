@@ -188,7 +188,7 @@ CREATE TEMPORARY VIEW parquetTable
 USING org.apache.spark.sql.parquet
 OPTIONS (
   path "examples/src/main/resources/people.parquet",
-  parallel "12000"
+  parallel "100"
 )
 
 SELECT * FROM parquetTable
