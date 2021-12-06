@@ -423,6 +423,23 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-37546: ReplaceTableAsSelect should store location as qualified") {
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+    Seq(basicIdentifier, atomicIdentifier).foreach { identifier =>
+      withTable(identifier) {
+        spark.sql(s"CREATE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id, data FROM source")
+        spark.sql(s"REPLACE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id FROM source")
+        val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
+          .filter("col_name = 'Location'")
+          .select("data_type").head.getString(0)
+        assert(location === "file:/tmp/foo")
+      }
+    }
+  }
+
   test("ReplaceTableAsSelect: basic v2 implementation.") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
