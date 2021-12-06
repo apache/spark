@@ -70,7 +70,6 @@ from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
-    from pyspark.serializers import Serializer
     from pyspark.accumulators import AccumulatorParam
 
 __all__ = ["SparkContext"]
@@ -178,8 +177,8 @@ class SparkContext(object):
         conf: Optional[SparkConf] = None,
         gateway: Optional[JavaGateway] = None,
         jsc: Optional[JavaObject] = None,
-        profiler_cls: type = BasicProfiler,
-        udf_profiler_cls: type = UDFBasicProfiler,
+        profiler_cls: Type[BasicProfiler] = BasicProfiler,
+        udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
     ):
 
         if (
@@ -227,8 +226,8 @@ class SparkContext(object):
         serializer: Serializer,
         conf: Optional[SparkConf],
         jsc: JavaObject,
-        profiler_cls: type,
-        udf_profiler_cls: type = UDFBasicProfiler,
+        profiler_cls: Type[BasicProfiler] = BasicProfiler,
+        udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
     ) -> None:
         self.environment = environment or {}
         # java gateway must have been launched at this point.
@@ -643,7 +642,7 @@ class SparkContext(object):
                 assert numSlices is not None
                 return start0 + int((split * size / numSlices)) * step
 
-            def f(split: int, iterator: Iterable) -> Iterable:
+            def f(split: int, iterator: Iterable[T]) -> Iterable:
                 # it's an empty iterator here but we need this line for triggering the
                 # logic of signal handling in FramedSerializer.load_stream, for instance,
                 # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
