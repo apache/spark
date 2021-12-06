@@ -1178,16 +1178,24 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
         e.children.exists(_.isInstanceOf[UserDefinedExpression]) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
-      // Exclude child's constraints to guarantee idempotency
-      val inferredFilters = ExpressionSet(
-        Seq(
-          GreaterThan(Size(g.children.head), Literal(0)),
-          IsNotNull(g.children.head)
-        )
-      ) -- generate.child.constraints
+      val input = g.children.head
+      // Generating extra predicates here has overheads/risks:
+      //   - We may evaluate expensive input expressions multiple times.
+      //   - We may infer too many constraints later.
+      //   - The input expression may fail to be evaluated under ANSI mode. If we reorder the
+      //     predicates and evaluate the input expression first, we may fail the query unexpectedly.
+      // To be safe, here we only generate extra predicates if the input is an attribute.
+      if (input.isInstanceOf[Attribute]) {
+        // Exclude child's constraints to guarantee idempotency
+        val inferredFilters = ExpressionSet(
+          Seq(GreaterThan(Size(input), Literal(0)), IsNotNull(input))
+        ) -- generate.child.constraints
 
-      if (inferredFilters.nonEmpty) {
-        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+        if (inferredFilters.nonEmpty) {
+          generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+        } else {
+          generate
+        }
       } else {
         generate
       }
