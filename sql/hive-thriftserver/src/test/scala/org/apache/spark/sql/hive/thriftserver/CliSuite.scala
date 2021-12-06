@@ -620,4 +620,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         |""".stripMargin -> "SELECT 1"
     )
   }
+
+  test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    runCliWithin(2.minute)(
+      // Unclosed comment
+      """
+        |/* SELECT /*+ HINT() 4; */;
+        |""".stripMargin -> "Error in query",
+      // Unclosed comment with query.
+      """
+        |/* SELECT /*+ HINT() 4; */
+        |SELECT 1;
+        |""".stripMargin -> "1",
+      // Whole comment.
+      """
+        |/* SELECT /*+ HINT() */ 4; */;
+        |""".stripMargin -> ""
+    )
+  }
 }
