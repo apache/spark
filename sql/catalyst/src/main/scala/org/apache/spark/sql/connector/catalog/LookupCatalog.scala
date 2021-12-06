@@ -191,8 +191,8 @@ private[sql] trait LookupCatalog extends Logging {
         } else {
           ident.namespace match {
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
-            case _ =>
-              throw QueryCompilationErrors.unsupportedFunctionNameError(ident.toString)
+            case other =>
+              throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
           }
         }
 

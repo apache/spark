@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, IOException}
+import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
@@ -210,13 +210,7 @@ private class HistoryServerDiskManager(
   def committed(): Long = committedUsage.get()
 
   private def deleteStore(path: File): Unit = {
-    try {
-      FileUtils.deleteDirectory(path)
-    } catch {
-      // Handle simultaneous eviction of the same app
-      case e: IOException =>
-        if (path.exists()) throw e
-    }
+    FileUtils.deleteDirectory(path)
     listing.delete(classOf[ApplicationStoreInfo], path.getAbsolutePath())
   }
 

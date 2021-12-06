@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -158,6 +158,56 @@ class PlanParserSuite extends AnalysisTest {
         |/*/*foo*//*bar*/*/
         |SELECT * FROM a
       """.stripMargin, plan)
+  }
+
+  test("nested bracketed comment case seven") {
+    val plan = OneRowRelation().select(Literal(1).as("a"))
+    assertEqual(
+      """
+        |/*abc*/
+        |select 1 as a
+        |/*
+        |
+        |2 as b
+        |/*abc */
+        |, 3 as c
+        |
+        |/**/
+        |*/
+      """.stripMargin, plan)
+  }
+
+  test("unclosed bracketed comment one") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |""".stripMargin
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
+  }
+
+  test("unclosed bracketed comment two") {
+    val query = """
+                  |/*abc*/
+                  |select 1 as a
+                  |/*
+                  |
+                  |2 as b
+                  |/*abc */
+                  |, 3 as c
+                  |
+                  |/**/
+                  |select 4 as d
+                  |""".stripMargin
+    val e = intercept[ParseException](parsePlan(query))
+    assert(e.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("case insensitive") {
@@ -1202,5 +1252,51 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       "TRANSFORM with serde is only supported in hive mode")
+  }
+
+
+  test("as of syntax") {
+    def testVersion(version: String, plan: LogicalPlan): Unit = {
+      Seq("VERSION", "SYSTEM_VERSION").foreach { keyword =>
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c $keyword AS OF $version"), plan)
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c FOR $keyword AS OF $version"), plan)
+      }
+    }
+
+    testVersion("'Snapshot123456789'", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        None,
+        Some("Snapshot123456789"))))
+
+    testVersion("123456789", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        None,
+        Some("123456789"))))
+
+    def testTimestamp(timestamp: String, plan: LogicalPlan): Unit = {
+      Seq("TIMESTAMP", "SYSTEM_TIME").foreach { keyword =>
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c $keyword AS OF $timestamp"), plan)
+        comparePlans(parsePlan(s"SELECT * FROM a.b.c FOR $keyword AS OF $timestamp"), plan)
+      }
+    }
+
+    testTimestamp("'2019-01-29 00:37:58'", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(Literal("2019-01-29 00:37:58")),
+        None)))
+
+    testTimestamp("current_date()", Project(Seq(UnresolvedStar(None)),
+      RelationTimeTravel(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Some(UnresolvedFunction(Seq("current_date"), Nil, isDistinct = false)),
+        None)))
+
+    intercept("SELECT * FROM a.b.c TIMESTAMP AS OF col",
+      "timestamp expression cannot refer to any columns")
+    intercept("SELECT * FROM a.b.c TIMESTAMP AS OF (select 1)",
+      "timestamp expression cannot contain subqueries")
   }
 }

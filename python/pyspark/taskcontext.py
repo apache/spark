@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Type, Dict, List, Optional, Union, cast
+from typing import ClassVar, Type, Dict, List, Optional, Union, cast
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.resource import ResourceInformation
@@ -29,7 +29,7 @@ class TaskContext(object):
     :meth:`TaskContext.get`.
     """
 
-    _taskContext: Optional["TaskContext"] = None
+    _taskContext: ClassVar[Optional["TaskContext"]] = None
 
     _attemptNumber: Optional[int] = None
     _partitionId: Optional[int] = None
@@ -81,7 +81,7 @@ class TaskContext(object):
         return cast(int, self._partitionId)
 
     def attemptNumber(self) -> int:
-        """"
+        """ "
         How many times this task has been attempted.  The first task attempt will be assigned
         attemptNumber = 0, and subsequent attempts will have increasing attempt numbers.
         """
@@ -123,7 +123,7 @@ def _load_from_socket(
     port: Optional[Union[str, int]],
     auth_secret: str,
     function: int,
-    all_gather_message: Optional[str] = None
+    all_gather_message: Optional[str] = None,
 ) -> List[str]:
     """
     Load data from a given socket, this is a blocking method thus only return when the socket
@@ -171,8 +171,8 @@ class BarrierTaskContext(TaskContext):
     This API is experimental
     """
 
-    _port = None
-    _secret = None
+    _port: ClassVar[Optional[Union[str, int]]] = None
+    _secret: ClassVar[Optional[str]] = None
 
     @classmethod
     def _getOrCreate(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":
@@ -200,14 +200,12 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise RuntimeError('It is not in a barrier stage')
+            raise RuntimeError("It is not in a barrier stage")
         return cls._taskContext
 
     @classmethod
     def _initialize(
-        cls: Type["BarrierTaskContext"],
-        port: Optional[Union[str, int]],
-        secret: str
+        cls: Type["BarrierTaskContext"], port: Optional[Union[str, int]], secret: str
     ) -> None:
         """
         Initialize BarrierTaskContext, other methods within BarrierTaskContext can only be called
@@ -233,8 +231,9 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError("Not supported to call barrier() before initialize " +
-                               "BarrierTaskContext.")
+            raise RuntimeError(
+                "Not supported to call barrier() before initialize " + "BarrierTaskContext."
+            )
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
 
@@ -257,8 +256,9 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
-            raise RuntimeError("Not supported to call barrier() before initialize " +
-                               "BarrierTaskContext.")
+            raise RuntimeError(
+                "Not supported to call barrier() before initialize " + "BarrierTaskContext."
+            )
         else:
             return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
 
@@ -274,8 +274,9 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError("Not supported to call getTaskInfos() before initialize " +
-                               "BarrierTaskContext.")
+            raise RuntimeError(
+                "Not supported to call getTaskInfos() before initialize " + "BarrierTaskContext."
+            )
         else:
             addresses = cast(Dict[str, str], self._localProperties).get("addresses", "")
             return [BarrierTaskInfo(h.strip()) for h in addresses.split(",")]

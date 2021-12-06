@@ -686,6 +686,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with decimal(38,18) at same column of first table
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

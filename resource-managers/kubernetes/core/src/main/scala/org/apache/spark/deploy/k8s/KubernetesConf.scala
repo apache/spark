@@ -21,7 +21,7 @@ import java.util.{Locale, UUID}
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -94,6 +94,7 @@ private[spark] class KubernetesDriverConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
@@ -155,6 +156,7 @@ private[spark] class KubernetesExecutorConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),

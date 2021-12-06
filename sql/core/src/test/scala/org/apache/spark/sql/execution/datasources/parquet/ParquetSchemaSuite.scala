@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -2207,6 +2208,36 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     writeLegacyParquetFormat = false)
+
+  // The behavior of reading/writing TimestampNTZ type is independent of the configurations
+  // SQLConf.PARQUET_INT96_AS_TIMESTAMP and SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE
+  Seq(true, false).foreach { int96AsTimestamp =>
+    Seq(INT96, TIMESTAMP_MILLIS, TIMESTAMP_MICROS).foreach { outputTsType =>
+      testSchema(
+        s"TimestampNTZ written and read as INT64 with TIMESTAMP_MICROS - " +
+          s"int96AsTimestamp as $int96AsTimestamp, outputTimestampType: $outputTsType",
+        StructType(Seq(StructField("f1", TimestampNTZType))),
+        """message root {
+          |  optional INT64 f1 (TIMESTAMP(MICROS,false));
+          |}
+        """.stripMargin,
+        binaryAsString = true,
+        int96AsTimestamp = int96AsTimestamp,
+        writeLegacyParquetFormat = true,
+        outputTimestampType = outputTsType)
+    }
+
+    testParquetToCatalyst(
+      s"TimestampNTZ read as INT64 with TIMESTAMP_MILLIS - " +
+        s"int96AsTimestamp as $int96AsTimestamp",
+      StructType(Seq(StructField("f1", TimestampNTZType))),
+      """message root {
+        |  optional INT64 f1 (TIMESTAMP(MILLIS,false));
+        |}
+        """.stripMargin,
+      binaryAsString = true,
+      int96AsTimestamp = int96AsTimestamp)
+  }
 
   private def testSchemaClipping(
       testName: String,

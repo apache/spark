@@ -19,7 +19,10 @@ from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast
 import py4j
 from py4j.java_collections import JavaArray  # type: ignore[import]
 from py4j.java_gateway import (  # type: ignore[import]
-    JavaClass, JavaGateway, JavaObject, is_instance_of
+    JavaClass,
+    JavaGateway,
+    JavaObject,
+    is_instance_of,
 )
 from py4j.protocol import Py4JJavaError  # type: ignore[import]
 
@@ -36,19 +39,22 @@ class CapturedException(Exception):
         desc: Optional[str] = None,
         stackTrace: Optional[str] = None,
         cause: Optional[Py4JJavaError] = None,
-        origin: Optional[Py4JJavaError] = None
+        origin: Optional[Py4JJavaError] = None,
     ):
         # desc & stackTrace vs origin are mutually exclusive.
         # cause is optional.
-        assert ((origin is not None and desc is None and stackTrace is None)
-                or (origin is None and desc is not None and stackTrace is not None))
+        assert (origin is not None and desc is None and stackTrace is None) or (
+            origin is None and desc is not None and stackTrace is not None
+        )
 
         self.desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
         self.stackTrace = (
-            stackTrace if stackTrace is not None
+            stackTrace
+            if stackTrace is not None
             else (
-                SparkContext._jvm  # type: ignore[attr-defined]
-                .org.apache.spark.util.Utils.exceptionString(origin)
+                SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(  # type: ignore[attr-defined]
+                    origin
+                )
             )
         )
         self.cause = convert_exception(cause) if cause is not None else None
@@ -72,7 +78,8 @@ class CapturedException(Exception):
 
         gw = SparkContext._gateway  # type: ignore[attr-defined]
         if self._origin is not None and is_instance_of(
-                gw, self._origin, "org.apache.spark.SparkThrowable"):
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
             return self._origin.getErrorClass()
         else:
             return None
@@ -82,7 +89,8 @@ class CapturedException(Exception):
 
         gw = SparkContext._gateway  # type: ignore[attr-defined]
         if self._origin is not None and is_instance_of(
-                gw, self._origin, "org.apache.spark.SparkThrowable"):
+            gw, self._origin, "org.apache.spark.SparkThrowable"
+        ):
             return self._origin.getSqlState()
         else:
             return None
@@ -147,26 +155,32 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
     if is_instance_of(gw, e, "org.apache.spark.sql.catalyst.parser.ParseException"):
         return ParseException(origin=e)
     # Order matters. ParseException inherits AnalysisException.
-    elif is_instance_of(gw, e, 'org.apache.spark.sql.AnalysisException'):
+    elif is_instance_of(gw, e, "org.apache.spark.sql.AnalysisException"):
         return AnalysisException(origin=e)
-    elif is_instance_of(gw, e, 'org.apache.spark.sql.streaming.StreamingQueryException'):
+    elif is_instance_of(gw, e, "org.apache.spark.sql.streaming.StreamingQueryException"):
         return StreamingQueryException(origin=e)
-    elif is_instance_of(gw, e, 'org.apache.spark.sql.execution.QueryExecutionException'):
+    elif is_instance_of(gw, e, "org.apache.spark.sql.execution.QueryExecutionException"):
         return QueryExecutionException(origin=e)
-    elif is_instance_of(gw, e, 'java.lang.IllegalArgumentException'):
+    elif is_instance_of(gw, e, "java.lang.IllegalArgumentException"):
         return IllegalArgumentException(origin=e)
-    elif is_instance_of(gw, e, 'org.apache.spark.SparkUpgradeException'):
+    elif is_instance_of(gw, e, "org.apache.spark.SparkUpgradeException"):
         return SparkUpgradeException(origin=e)
 
     c: Py4JJavaError = e.getCause()
     stacktrace: str = jvm.org.apache.spark.util.Utils.exceptionString(e)
     if c is not None and (
-            is_instance_of(gw, c, 'org.apache.spark.api.python.PythonException')
-            # To make sure this only catches Python UDFs.
-            and any(map(lambda v: "org.apache.spark.sql.execution.python" in v.toString(),
-                        c.getStackTrace()))):
-        msg = ("\n  An exception was thrown from the Python worker. "
-               "Please see the stack trace below.\n%s" % c.getMessage())
+        is_instance_of(gw, c, "org.apache.spark.api.python.PythonException")
+        # To make sure this only catches Python UDFs.
+        and any(
+            map(
+                lambda v: "org.apache.spark.sql.execution.python" in v.toString(), c.getStackTrace()
+            )
+        )
+    ):
+        msg = (
+            "\n  An exception was thrown from the Python worker. "
+            "Please see the stack trace below.\n%s" % c.getMessage()
+        )
         return PythonException(msg, stacktrace)
 
     return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
@@ -184,6 +198,7 @@ def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
                 raise converted from None
             else:
                 raise
+
     return deco
 
 
@@ -225,22 +240,22 @@ def toJArray(gateway: JavaGateway, jtype: JavaClass, arr: Sequence[Any]) -> Java
 
 
 def require_test_compiled() -> None:
-    """ Raise Exception if test classes are not compiled
-    """
+    """Raise Exception if test classes are not compiled"""
     import os
     import glob
-    try:
-        spark_home = os.environ['SPARK_HOME']
-    except KeyError:
-        raise RuntimeError('SPARK_HOME is not defined in environment')
 
-    test_class_path = os.path.join(
-        spark_home, 'sql', 'core', 'target', '*', 'test-classes')
+    try:
+        spark_home = os.environ["SPARK_HOME"]
+    except KeyError:
+        raise RuntimeError("SPARK_HOME is not defined in environment")
+
+    test_class_path = os.path.join(spark_home, "sql", "core", "target", "*", "test-classes")
     paths = glob.glob(test_class_path)
 
     if len(paths) == 0:
         raise RuntimeError(
-            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path)
+            "%s doesn't exist. Spark sql test classes are not compiled." % test_class_path
+        )
 
 
 class ForeachBatchFunction(object):
@@ -256,6 +271,7 @@ class ForeachBatchFunction(object):
 
     def call(self, jdf: JavaObject, batch_id: int) -> None:
         from pyspark.sql.dataframe import DataFrame
+
         try:
             self.func(DataFrame(jdf, self.sql_ctx), batch_id)
         except Exception as e:
@@ -263,7 +279,7 @@ class ForeachBatchFunction(object):
             raise e
 
     class Java:
-        implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+        implements = ["org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction"]
 
 
 def to_str(value: Any) -> Optional[str]:
@@ -284,7 +300,11 @@ def is_timestamp_ntz_preferred() -> bool:
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
     jvm = SparkContext._jvm  # type: ignore[attr-defined]
-    return jvm is not None and getattr(
-        getattr(jvm.org.apache.spark.sql.internal, "SQLConf$"),
-        "MODULE$"
-    ).get().timestampType().typeName() == "timestamp_ntz"
+    return (
+        jvm is not None
+        and getattr(getattr(jvm.org.apache.spark.sql.internal, "SQLConf$"), "MODULE$")
+        .get()
+        .timestampType()
+        .typeName()
+        == "timestamp_ntz"
+    )

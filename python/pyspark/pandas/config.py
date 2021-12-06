@@ -88,7 +88,7 @@ class Option:
         doc: str,
         default: Any,
         types: Union[Tuple[type, ...], type] = str,
-        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, "")
+        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, ""),
     ):
         self.key = key
         self.doc = doc
@@ -201,7 +201,9 @@ _options: List[Option] = [
             "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
             "validation beforehand, but it will cause a performance overhead. Otherwise, "
             "pandas-on-Spark skip the validation and will be slightly different from pandas. "
-            "Affected APIs: `Series.dot`."
+            "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
+            "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
+            "`FractionalOps.astype`, `DecimalOps.astype`."
         ),
         default=True,
         types=bool,

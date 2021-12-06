@@ -313,6 +313,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Converts the output of this plan to row-based if it is columnar plan.
+   */
+  def toRowBased: SparkPlan = if (supportsColumnar) ColumnarToRowExec(this) else this
+
+  /**
    * Packing the UnsafeRows into byte array for faster serialization.
    * The byte arrays are in the following format:
    * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]

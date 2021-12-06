@@ -60,6 +60,26 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  override def loadTable(ident: Identifier, version: String): Table = {
+    val versionIdent = Identifier.of(ident.namespace, ident.name + version)
+    Option(tables.get(versionIdent)) match {
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
+
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    val timestampIdent = Identifier.of(ident.namespace, ident.name + timestamp)
+    Option(tables.get(timestampIdent)) match {
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
+
   override def invalidateTable(ident: Identifier): Unit = {
     invalidatedTables.add(ident)
   }

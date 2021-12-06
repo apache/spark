@@ -17,14 +17,17 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException, \
-    SparkUpgradeException
+from pyspark.sql.utils import (
+    AnalysisException,
+    ParseException,
+    IllegalArgumentException,
+    SparkUpgradeException,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 
 
 class UtilsTests(ReusedSQLTestCase):
-
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
@@ -37,20 +40,27 @@ class UtilsTests(ReusedSQLTestCase):
 
     def test_spark_upgrade_exception(self):
         # SPARK-32161 : Test case to Handle SparkUpgradeException in pythonic way
-        df = self.spark.createDataFrame([("2014-31-12",)], ['date_str'])
-        df2 = df.select('date_str',
-                        to_date(from_unixtime(unix_timestamp('date_str', 'yyyy-dd-aa'))))
+        df = self.spark.createDataFrame([("2014-31-12",)], ["date_str"])
+        df2 = df.select(
+            "date_str", to_date(from_unixtime(unix_timestamp("date_str", "yyyy-dd-aa")))
+        )
         self.assertRaises(SparkUpgradeException, df2.collect)
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
-        self.assertRaisesRegex(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                               lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
+        self.assertRaisesRegex(
+            IllegalArgumentException,
+            "Setting negative mapred.reduce.tasks",
+            lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
+        )
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
-        self.assertRaisesRegex(IllegalArgumentException, "1024 is not in the permitted values",
-                               lambda: df.select(sha2(df.a, 1024)).collect())
+        self.assertRaisesRegex(
+            IllegalArgumentException,
+            "1024 is not in the permitted values",
+            lambda: df.select(sha2(df.a, 1024)).collect(),
+        )
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
@@ -72,7 +82,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

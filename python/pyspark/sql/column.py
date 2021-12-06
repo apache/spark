@@ -28,7 +28,7 @@ from typing import (
     Optional,
     Tuple,
     TYPE_CHECKING,
-    Union
+    Union,
 )
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
@@ -64,7 +64,8 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
             "Invalid argument, not a string or column: "
             "{0} of type {1}. "
             "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
-            "function.".format(col, type(col)))
+            "function.".format(col, type(col))
+        )
     return jcol
 
 
@@ -104,19 +105,22 @@ def _unary_op(
     name: str,
     doc: str = "unary operator",
 ) -> Callable[["Column"], "Column"]:
-    """ Create a method for given unary operator """
+    """Create a method for given unary operator"""
+
     def _(self: "Column") -> "Column":
         jc = getattr(self._jc, name)()
         return Column(jc)
+
     _.__doc__ = doc
     return _
 
 
-def _func_op(name: str, doc: str = '') -> Callable[["Column"], "Column"]:
+def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
         jc = getattr(sc._jvm.functions, name)(self._jc)
         return Column(jc)
+
     _.__doc__ = doc
     return _
 
@@ -132,6 +136,7 @@ def _bin_func_op(
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
         return Column(njc)
+
     _.__doc__ = doc
     return _
 
@@ -140,11 +145,10 @@ def _bin_op(
     name: str,
     doc: str = "binary operator",
 ) -> Callable[
-    ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]],
-    "Column"
+    ["Column", Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]], "Column"
 ]:
-    """ Create a method for given binary operator
-    """
+    """Create a method for given binary operator"""
+
     def _(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
@@ -152,6 +156,7 @@ def _bin_op(
         jc = other._jc if isinstance(other, Column) else other
         njc = getattr(self._jc, name)(jc)
         return Column(njc)
+
     _.__doc__ = doc
     return _
 
@@ -160,12 +165,13 @@ def _reverse_op(
     name: str,
     doc: str = "binary operator",
 ) -> Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"]:
-    """ Create a method for binary operator (this object is on right side)
-    """
+    """Create a method for binary operator (this object is on right side)"""
+
     def _(self: "Column", other: Union["LiteralType", "DecimalLiteral"]) -> "Column":
         jother = _create_column_from_literal(other)
         jc = getattr(jother, name)(self._jc)
         return Column(jc)
+
     _.__doc__ = doc
     return _
 
@@ -196,68 +202,64 @@ class Column(object):
     __neg__ = _func_op("negate")
     __add__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("plus")
+        _bin_op("plus"),
     )
     __sub__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("minus")
+        _bin_op("minus"),
     )
     __mul__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("multiply")
+        _bin_op("multiply"),
     )
     __div__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("divide")
+        _bin_op("divide"),
     )
     __truediv__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("divide")
+        _bin_op("divide"),
     )
     __mod__ = cast(
         Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("mod")
+        _bin_op("mod"),
     )
     __radd__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("plus")
+        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("plus")
     )
     __rsub__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("minus")
+        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("minus")
     )
     __rmul__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_op("multiply")
+        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("multiply")
     )
     __rdiv__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide")
+        _reverse_op("divide"),
     )
     __rtruediv__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide")
+        _reverse_op("divide"),
     )
     __rmod__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("mod")
+        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("mod")
     )
 
     __pow__ = _bin_func_op("pow")
     __rpow__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _bin_func_op("pow", reverse=True)
+        _bin_func_op("pow", reverse=True),
     )
 
     # logistic operators
-    def __eq__(   # type: ignore[override]
+    def __eq__(  # type: ignore[override]
         self,
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
         """binary function"""
         return _bin_op("equalTo")(self, other)
 
-    def __ne__(   # type: ignore[override]
+    def __ne__(  # type: ignore[override]
         self,
         other: Any,
     ) -> "Column":
@@ -333,16 +335,18 @@ class Column(object):
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
-    __and__ = _bin_op('and')
-    __or__ = _bin_op('or')
-    __invert__ = _func_op('not')
+    __and__ = _bin_op("and")
+    __or__ = _bin_op("or")
+    __invert__ = _func_op("not")
     __rand__ = _bin_op("and")
     __ror__ = _bin_op("or")
 
     # container operators
     def __contains__(self, item: Any) -> None:
-        raise ValueError("Cannot apply 'in' operator against a column: please use 'contains' "
-                         "in a string column or 'array_contains' function for an array column.")
+        raise ValueError(
+            "Cannot apply 'in' operator against a column: please use 'contains' "
+            "in a string column or 'array_contains' function for an array column."
+        )
 
     # bitwise operators
     _bitwiseOR_doc = """
@@ -420,7 +424,7 @@ class Column(object):
                 "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[key]` or `column.key` syntax "
                 "instead.",
-                FutureWarning
+                FutureWarning,
             )
         return self[key]
 
@@ -452,7 +456,7 @@ class Column(object):
                 "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[name]` or `column.name` syntax "
                 "instead.",
-                FutureWarning
+                FutureWarning,
             )
         return self[name]
 
@@ -691,11 +695,11 @@ class Column(object):
         if type(startPos) != type(length):
             raise TypeError(
                 "startPos and length must be the same type. "
-                "Got {startPos_t} and {length_t}, respectively."
-                .format(
+                "Got {startPos_t} and {length_t}, respectively.".format(
                     startPos_t=type(startPos),
                     length_t=type(length),
-                ))
+                )
+            )
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
@@ -722,7 +726,7 @@ class Column(object):
             cols = cast(Tuple, cols[0])
         cols = cast(
             Tuple,
-            [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
+            [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols],
         )
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
         jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
@@ -868,20 +872,19 @@ class Column(object):
         99
         """
 
-        metadata = kwargs.pop('metadata', None)
-        assert not kwargs, 'Unexpected kwargs where passed: %s' % kwargs
+        metadata = kwargs.pop("metadata", None)
+        assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
 
         sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
         if len(alias) == 1:
             if metadata:
-                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
-                    json.dumps(metadata))
+                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
                 return Column(getattr(self._jc, "as")(alias[0], jmeta))
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))
         else:
             if metadata:
-                raise ValueError('metadata can only be provided for a single column')
+                raise ValueError("metadata can only be provided for a single column")
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
@@ -903,6 +906,7 @@ class Column(object):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
             from pyspark.sql import SparkSession
+
             spark = SparkSession.builder.getOrCreate()
             jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
@@ -1031,14 +1035,18 @@ class Column(object):
         +---+-----+----+---+
         """
         from pyspark.sql.window import WindowSpec
+
         if not isinstance(window, WindowSpec):
             raise TypeError("window should be WindowSpec")
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
     def __nonzero__(self) -> None:
-        raise ValueError("Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
-                         "'~' for 'not' when building DataFrame boolean expressions.")
+        raise ValueError(
+            "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+            "'~' for 'not' when building DataFrame boolean expressions."
+        )
+
     __bool__ = __nonzero__
 
     def __repr__(self) -> str:
@@ -1049,20 +1057,20 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.column
+
     globs = pyspark.sql.column.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.column tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[4]").appName("sql.column tests").getOrCreate()
     sc = spark.sparkContext
-    globs['spark'] = spark
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
+    globs["spark"] = spark
+    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
+        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
+    )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.column, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.column,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

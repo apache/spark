@@ -330,6 +330,12 @@ private[sql] class AvroDeserializer(
           (updater, ordinal, _) => updater.setNullAt(ordinal)
         }
 
+      case (INT, _: YearMonthIntervalType) => (updater, ordinal, value) =>
+        updater.setInt(ordinal, value.asInstanceOf[Int])
+
+      case (LONG, _: DayTimeIntervalType) => (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Long])
+
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
   }

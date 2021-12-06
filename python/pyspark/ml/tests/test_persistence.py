@@ -21,30 +21,43 @@ import tempfile
 import unittest
 
 from pyspark.ml import Transformer
-from pyspark.ml.classification import DecisionTreeClassifier, FMClassifier, \
-    FMClassificationModel, LogisticRegression, MultilayerPerceptronClassifier, \
-    MultilayerPerceptronClassificationModel, OneVsRest, OneVsRestModel
+from pyspark.ml.classification import (
+    DecisionTreeClassifier,
+    FMClassifier,
+    FMClassificationModel,
+    LogisticRegression,
+    MultilayerPerceptronClassifier,
+    MultilayerPerceptronClassificationModel,
+    OneVsRest,
+    OneVsRestModel,
+)
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel
-from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegression, \
-    GeneralizedLinearRegressionModel, \
-    LinearRegression
+from pyspark.ml.regression import (
+    DecisionTreeRegressor,
+    GeneralizedLinearRegression,
+    GeneralizedLinearRegressionModel,
+    LinearRegression,
+)
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import MockUnaryTransformer, SparkSessionTestCase
 
 
 class TestDefaultSolver(SparkSessionTestCase):
-
     def test_multilayer_load(self):
-        df = self.spark.createDataFrame([(0.0, Vectors.dense([0.0, 0.0])),
-                                         (1.0, Vectors.dense([0.0, 1.0])),
-                                         (1.0, Vectors.dense([1.0, 0.0])),
-                                         (0.0, Vectors.dense([1.0, 1.0]))],
-                                        ["label",  "features"])
+        df = self.spark.createDataFrame(
+            [
+                (0.0, Vectors.dense([0.0, 0.0])),
+                (1.0, Vectors.dense([0.0, 1.0])),
+                (1.0, Vectors.dense([1.0, 0.0])),
+                (0.0, Vectors.dense([1.0, 1.0])),
+            ],
+            ["label", "features"],
+        )
 
         mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
         model = mlp.fit(df)
@@ -59,9 +72,9 @@ class TestDefaultSolver(SparkSessionTestCase):
         self.assertEqual(transformed1.take(4), transformed2.take(4))
 
     def test_fm_load(self):
-        df = self.spark.createDataFrame([(1.0, Vectors.dense(1.0)),
-                                         (0.0, Vectors.sparse(1, [], []))],
-                                        ["label",  "features"])
+        df = self.spark.createDataFrame(
+            [(1.0, Vectors.dense(1.0)), (0.0, Vectors.sparse(1, [], []))], ["label", "features"]
+        )
         fm = FMClassifier(factorSize=2, maxIter=50, stepSize=2.0)
         model = fm.fit(df)
         self.assertEqual(model.getSolver(), "adamW")
@@ -75,11 +88,15 @@ class TestDefaultSolver(SparkSessionTestCase):
         self.assertEqual(transformed1.take(2), transformed2.take(2))
 
     def test_glr_load(self):
-        df = self.spark.createDataFrame([(1.0, Vectors.dense(0.0, 0.0)),
-                                         (1.0, Vectors.dense(1.0, 2.0)),
-                                         (2.0, Vectors.dense(0.0, 0.0)),
-                                         (2.0, Vectors.dense(1.0, 1.0))],
-                                        ["label",  "features"])
+        df = self.spark.createDataFrame(
+            [
+                (1.0, Vectors.dense(0.0, 0.0)),
+                (1.0, Vectors.dense(1.0, 2.0)),
+                (2.0, Vectors.dense(0.0, 0.0)),
+                (2.0, Vectors.dense(1.0, 1.0)),
+            ],
+            ["label", "features"],
+        )
         glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
         model = glr.fit(df)
         self.assertEqual(model.getSolver(), "irls")
@@ -94,7 +111,6 @@ class TestDefaultSolver(SparkSessionTestCase):
 
 
 class PersistenceTest(SparkSessionTestCase):
-
     def test_linear_regression(self):
         lr = LinearRegression(maxIter=1)
         path = tempfile.mkdtemp()
@@ -103,12 +119,17 @@ class PersistenceTest(SparkSessionTestCase):
         lr2 = LinearRegression.load(lr_path)
         self.assertEqual(lr.uid, lr2.uid)
         self.assertEqual(type(lr.uid), type(lr2.uid))
-        self.assertEqual(lr2.uid, lr2.maxIter.parent,
-                         "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
-                         % (lr2.uid, lr2.maxIter.parent))
-        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
-                         "Loaded LinearRegression instance default params did not match " +
-                         "original defaults")
+        self.assertEqual(
+            lr2.uid,
+            lr2.maxIter.parent,
+            "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
+            % (lr2.uid, lr2.maxIter.parent),
+        )
+        self.assertEqual(
+            lr._defaultParamMap[lr.maxIter],
+            lr2._defaultParamMap[lr2.maxIter],
+            "Loaded LinearRegression instance default params did not match " + "original defaults",
+        )
         try:
             rmtree(path)
         except OSError:
@@ -118,9 +139,10 @@ class PersistenceTest(SparkSessionTestCase):
         # Most of the validation is done in the Scala side, here we just check
         # that we output text rather than parquet (e.g. that the format flag
         # was respected).
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
         lr = LinearRegression(maxIter=1)
         model = lr.fit(df)
         path = tempfile.mkdtemp()
@@ -137,13 +159,18 @@ class PersistenceTest(SparkSessionTestCase):
         lr_path = path + "/logreg"
         lr.save(lr_path)
         lr2 = LogisticRegression.load(lr_path)
-        self.assertEqual(lr2.uid, lr2.maxIter.parent,
-                         "Loaded LogisticRegression instance uid (%s) "
-                         "did not match Param's uid (%s)"
-                         % (lr2.uid, lr2.maxIter.parent))
-        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
-                         "Loaded LogisticRegression instance default params did not match " +
-                         "original defaults")
+        self.assertEqual(
+            lr2.uid,
+            lr2.maxIter.parent,
+            "Loaded LogisticRegression instance uid (%s) "
+            "did not match Param's uid (%s)" % (lr2.uid, lr2.maxIter.parent),
+        )
+        self.assertEqual(
+            lr._defaultParamMap[lr.maxIter],
+            lr2._defaultParamMap[lr2.maxIter],
+            "Loaded LogisticRegression instance default params did not match "
+            + "original defaults",
+        )
         try:
             rmtree(path)
         except OSError:
@@ -157,12 +184,17 @@ class PersistenceTest(SparkSessionTestCase):
         kmeans2 = KMeans.load(km_path)
         self.assertEqual(kmeans.uid, kmeans2.uid)
         self.assertEqual(type(kmeans.uid), type(kmeans2.uid))
-        self.assertEqual(kmeans2.uid, kmeans2.k.parent,
-                         "Loaded KMeans instance uid (%s) did not match Param's uid (%s)"
-                         % (kmeans2.uid, kmeans2.k.parent))
-        self.assertEqual(kmeans._defaultParamMap[kmeans.k], kmeans2._defaultParamMap[kmeans2.k],
-                         "Loaded KMeans instance default params did not match " +
-                         "original defaults")
+        self.assertEqual(
+            kmeans2.uid,
+            kmeans2.k.parent,
+            "Loaded KMeans instance uid (%s) did not match Param's uid (%s)"
+            % (kmeans2.uid, kmeans2.k.parent),
+        )
+        self.assertEqual(
+            kmeans._defaultParamMap[kmeans.k],
+            kmeans2._defaultParamMap[kmeans2.k],
+            "Loaded KMeans instance default params did not match " + "original defaults",
+        )
         try:
             rmtree(path)
         except OSError:
@@ -172,8 +204,12 @@ class PersistenceTest(SparkSessionTestCase):
         # Most of the validation is done in the Scala side, here we just check
         # that we output text rather than parquet (e.g. that the format flag
         # was respected).
-        data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
-                (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
+        data = [
+            (Vectors.dense([0.0, 0.0]),),
+            (Vectors.dense([1.0, 1.0]),),
+            (Vectors.dense([9.0, 8.0]),),
+            (Vectors.dense([8.0, 9.0]),),
+        ]
         df = self.spark.createDataFrame(data, ["features"])
         kmeans = KMeans(k=2, seed=1)
         model = kmeans.fit(df)
@@ -309,9 +345,8 @@ class PersistenceTest(SparkSessionTestCase):
         temp_path = tempfile.mkdtemp()
 
         try:
-            df = self.spark.range(0, 10).toDF('input')
-            tf = MockUnaryTransformer(shiftVal=2)\
-                .setInputCol("input").setOutputCol("shiftedInput")
+            df = self.spark.range(0, 10).toDF("input")
+            tf = MockUnaryTransformer(shiftVal=2).setInputCol("input").setOutputCol("shiftedInput")
             tf2 = Binarizer(threshold=6, inputCol="shiftedInput", outputCol="binarized")
             pl = Pipeline(stages=[tf, tf2])
             model = pl.fit(df)
@@ -333,10 +368,15 @@ class PersistenceTest(SparkSessionTestCase):
 
     def _run_test_onevsrest(self, LogisticRegressionCls):
         temp_path = tempfile.mkdtemp()
-        df = self.spark.createDataFrame([(0.0, 0.5, Vectors.dense(1.0, 0.8)),
-                                         (1.0, 0.5, Vectors.sparse(2, [], [])),
-                                         (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
-                                        ["label", "wt", "features"])
+        df = self.spark.createDataFrame(
+            [
+                (0.0, 0.5, Vectors.dense(1.0, 0.8)),
+                (1.0, 0.5, Vectors.sparse(2, [], [])),
+                (2.0, 1.0, Vectors.dense(0.5, 0.5)),
+            ]
+            * 10,
+            ["label", "wt", "features"],
+        )
 
         lr = LogisticRegressionCls(maxIter=5, regParam=0.01)
         ovr = OneVsRest(classifier=lr)
@@ -357,6 +397,7 @@ class PersistenceTest(SparkSessionTestCase):
 
     def test_onevsrest(self):
         from pyspark.testing.mlutils import DummyLogisticRegression
+
         self._run_test_onevsrest(LogisticRegression)
         self._run_test_onevsrest(DummyLogisticRegression)
 
@@ -366,13 +407,18 @@ class PersistenceTest(SparkSessionTestCase):
         dtc_path = path + "/dtc"
         dt.save(dtc_path)
         dt2 = DecisionTreeClassifier.load(dtc_path)
-        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
-                         "Loaded DecisionTreeClassifier instance uid (%s) "
-                         "did not match Param's uid (%s)"
-                         % (dt2.uid, dt2.maxDepth.parent))
-        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
-                         "Loaded DecisionTreeClassifier instance default params did not match " +
-                         "original defaults")
+        self.assertEqual(
+            dt2.uid,
+            dt2.maxDepth.parent,
+            "Loaded DecisionTreeClassifier instance uid (%s) "
+            "did not match Param's uid (%s)" % (dt2.uid, dt2.maxDepth.parent),
+        )
+        self.assertEqual(
+            dt._defaultParamMap[dt.maxDepth],
+            dt2._defaultParamMap[dt2.maxDepth],
+            "Loaded DecisionTreeClassifier instance default params did not match "
+            + "original defaults",
+        )
         try:
             rmtree(path)
         except OSError:
@@ -384,13 +430,18 @@ class PersistenceTest(SparkSessionTestCase):
         dtr_path = path + "/dtr"
         dt.save(dtr_path)
         dt2 = DecisionTreeClassifier.load(dtr_path)
-        self.assertEqual(dt2.uid, dt2.maxDepth.parent,
-                         "Loaded DecisionTreeRegressor instance uid (%s) "
-                         "did not match Param's uid (%s)"
-                         % (dt2.uid, dt2.maxDepth.parent))
-        self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
-                         "Loaded DecisionTreeRegressor instance default params did not match " +
-                         "original defaults")
+        self.assertEqual(
+            dt2.uid,
+            dt2.maxDepth.parent,
+            "Loaded DecisionTreeRegressor instance uid (%s) "
+            "did not match Param's uid (%s)" % (dt2.uid, dt2.maxDepth.parent),
+        )
+        self.assertEqual(
+            dt._defaultParamMap[dt.maxDepth],
+            dt2._defaultParamMap[dt2.maxDepth],
+            "Loaded DecisionTreeRegressor instance default params did not match "
+            + "original defaults",
+        )
         try:
             rmtree(path)
         except OSError:
@@ -401,7 +452,7 @@ class PersistenceTest(SparkSessionTestCase):
 
         lr = LogisticRegression()
         lr.setMaxIter(50)
-        lr.setThreshold(.75)
+        lr.setThreshold(0.75)
         writer = DefaultParamsWriter(lr)
 
         savePath = temp_path + "/lr"
@@ -414,7 +465,7 @@ class PersistenceTest(SparkSessionTestCase):
         self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
 
         # test overwrite
-        lr.setThreshold(.8)
+        lr.setThreshold(0.8)
         writer.overwrite().save(savePath)
 
         reader = DefaultParamsReadable.read()
@@ -428,7 +479,7 @@ class PersistenceTest(SparkSessionTestCase):
         self.assertFalse(lr.isSet(lr.getParam("threshold")))
 
         lr.setMaxIter(50)
-        lr.setThreshold(.75)
+        lr.setThreshold(0.75)
 
         # `threshold` is set by user, default param `predictionCol` is not set by user.
         self.assertTrue(lr.isSet(lr.getParam("threshold")))
@@ -440,8 +491,10 @@ class PersistenceTest(SparkSessionTestCase):
         self.assertTrue("defaultParamMap" in metadata)
 
         reader = DefaultParamsReadable.read()
-        metadataStr = json.dumps(metadata, separators=[',',  ':'])
-        loadedMetadata = reader._parseMetaData(metadataStr, )
+        metadataStr = json.dumps(metadata, separators=[",", ":"])
+        loadedMetadata = reader._parseMetaData(
+            metadataStr,
+        )
         reader.getAndSetParams(lr, loadedMetadata)
 
         self.assertTrue(lr.isSet(lr.getParam("threshold")))
@@ -449,16 +502,20 @@ class PersistenceTest(SparkSessionTestCase):
         self.assertTrue(lr.hasDefault(lr.getParam("predictionCol")))
 
         # manually create metadata without `defaultParamMap` section.
-        del metadata['defaultParamMap']
-        metadataStr = json.dumps(metadata, separators=[',',  ':'])
-        loadedMetadata = reader._parseMetaData(metadataStr, )
+        del metadata["defaultParamMap"]
+        metadataStr = json.dumps(metadata, separators=[",", ":"])
+        loadedMetadata = reader._parseMetaData(
+            metadataStr,
+        )
         with self.assertRaisesRegex(AssertionError, "`defaultParamMap` section not found"):
             reader.getAndSetParams(lr, loadedMetadata)
 
         # Prior to 2.4.0, metadata doesn't have `defaultParamMap`.
-        metadata['sparkVersion'] = '2.3.0'
-        metadataStr = json.dumps(metadata, separators=[',',  ':'])
-        loadedMetadata = reader._parseMetaData(metadataStr, )
+        metadata["sparkVersion"] = "2.3.0"
+        metadataStr = json.dumps(metadata, separators=[",", ":"])
+        loadedMetadata = reader._parseMetaData(
+            metadataStr,
+        )
         reader.getAndSetParams(lr, loadedMetadata)
 
 
@@ -467,7 +524,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

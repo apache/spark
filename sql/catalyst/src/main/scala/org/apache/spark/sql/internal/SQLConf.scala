@@ -662,6 +662,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
+
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
@@ -1011,6 +1020,17 @@ object SQLConf {
         "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
         "that Spark query performance may degrade if this is enabled and there are many " +
         "partitions to be listed. If this is disabled, Spark will fail the query instead.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
+    buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
+      .doc("When this config is enabled, if the predicates are not supported by Hive or Spark " +
+        "does fallback due to encountering MetaException from the metastore, " +
+        "Spark will instead prune partitions by getting the partition names first " +
+        "and then evaluating the filter expressions on the client side. " +
+        "Note that the predicates with TimeZoneAwareExpression is not supported.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -1493,6 +1513,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1751,6 +1778,30 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER shuffled hash join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER sort merge join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.existenceSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for Existence sort merge join.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3743,6 +3794,9 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruningFallbackOnException: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
+
+  def metastorePartitionPruningFastFallback: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
