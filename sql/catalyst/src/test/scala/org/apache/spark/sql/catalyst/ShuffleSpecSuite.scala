@@ -347,6 +347,17 @@ class ShuffleSpecSuite extends SparkFunSuite {
     )
   }
 
+  test("canCreatePartitioning") {
+    val distribution = ClusteredDistribution(Seq($"a", $"b"))
+    assert(HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution).canCreatePartitioning)
+    assert(SinglePartitionShuffleSpec.canCreatePartitioning)
+    assert(ShuffleSpecCollection(Seq(
+        HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),
+        HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10), distribution)))
+      .canCreatePartitioning)
+    assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
+  }
+
   test("createPartitioning: HashShuffleSpec") {
     checkCreatePartitioning(
       HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
@@ -377,26 +388,28 @@ class ShuffleSpecSuite extends SparkFunSuite {
   }
 
   test("createPartitioning: other specs") {
+    val distribution = ClusteredDistribution(Seq($"a", $"b"))
     checkCreatePartitioning(SinglePartitionShuffleSpec,
-      ClusteredDistribution(Seq($"a", $"b")),
+      distribution,
       SinglePartition
     )
 
     checkCreatePartitioning(SinglePartitionShuffleSpec,
-      ClusteredDistribution(Seq($"a", $"b")),
+      distribution,
       SinglePartition
-    )
-
-    checkCreatePartitioning(RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))),
-      ClusteredDistribution(Seq($"c", $"d")),
-      HashPartitioning(Seq($"c", $"d"), 10)
     )
 
     checkCreatePartitioning(ShuffleSpecCollection(Seq(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
-      RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))))),
+      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),
+        RangeShuffleSpec(10, distribution))),
       ClusteredDistribution(Seq($"c", $"d")),
       HashPartitioning(Seq($"c"), 10)
     )
+
+    // unsupported cases
+
+    val msg = intercept[Exception](RangeShuffleSpec(10, distribution)
+      .createPartitioning(distribution.clustering))
+    assert(msg.getMessage.contains("Operation unsupported"))
   }
 }
