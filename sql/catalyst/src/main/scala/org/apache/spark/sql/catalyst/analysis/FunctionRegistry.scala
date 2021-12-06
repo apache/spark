@@ -582,6 +582,7 @@ object FunctionRegistry {
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
+    expression[ConvertTimezone]("convert_timezone"),
 
     // collection functions
     expression[CreateArray]("array"),

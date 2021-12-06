@@ -997,6 +997,23 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts a timestamp without time zone from a source to target time zone.
+   *
+   * @param sourceTz The time zone for the input timestamp without time zone.
+   * @param targetTz The time zone to which the input timestamp should be converted.
+   * @param micros The offset in microseconds represents a local timestamp.
+   * @return The timestamp without time zone represents the same moment (physical time) as
+   *         the input timestamp in the input time zone, but in the destination time zone.
+   */
+  def convertTimestampNtzToAnotherTz(sourceTz: String, targetTz: String, micros: Long): Long = {
+    val ldt = microsToLocalDateTime(micros)
+      .atZone(getZoneId(sourceTz))
+      .withZoneSameInstant(getZoneId(targetTz))
+      .toLocalDateTime
+    localDateTimeToMicros(ldt)
+  }
+
+  /**
    * Returns a timestamp of given timezone from UTC timestamp, with the same string
    * representation in their timezone.
    */
