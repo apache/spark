@@ -719,15 +719,6 @@ object DataSourceStrategy
           }
         case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Sum(FieldReference(name), agg.isDistinct))
-        case every @ aggregate.BoolAnd(PushableColumnWithoutNestedColumn(name))
-          if every.nodeName == "every" =>
-          Some(new Every(FieldReference(name)))
-        case any @ aggregate.BoolOr(PushableColumnWithoutNestedColumn(name))
-          if any.nodeName == "any" =>
-          Some(new AnyOrSome(FieldReference(name), AnyOrSome.ANY))
-        case some @ aggregate.BoolOr(PushableColumnWithoutNestedColumn(name))
-          if some.nodeName == "some" =>
-          Some(new AnyOrSome(FieldReference(name), AnyOrSome.SOME))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new VarPop(FieldReference(name)))
         case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) =>

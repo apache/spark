@@ -28,21 +28,21 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class Corr implements AggregateFunc {
-    private final NamedReference x;
-    private final NamedReference y;
+    private final NamedReference left;
+    private final NamedReference right;
 
     public Corr(NamedReference left, NamedReference right) {
-        this.x = left;
-        this.y = right;
+        this.left = left;
+        this.right = right;
     }
 
-    public NamedReference getX() { return x; }
+    public NamedReference left() { return left; }
 
-    public NamedReference getY() { return y; }
+    public NamedReference right() { return right; }
 
     @Override
     public String toString() {
-        return "CORR(" + x.describe() + "," + y.describe() + ")";
+        return "CORR(" + left.describe() + "," + right.describe() + ")";
     }
 
     @Override

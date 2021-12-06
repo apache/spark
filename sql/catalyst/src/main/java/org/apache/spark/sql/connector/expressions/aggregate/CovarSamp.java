@@ -35,9 +35,9 @@ public final class CovarSamp implements AggregateFunc {
         this.right = right;
     }
 
-    public NamedReference getLeft() { return left; }
+    public NamedReference left() { return left; }
 
-    public NamedReference getRight() { return right; }
+    public NamedReference right() { return right; }
 
     @Override
     public String toString() {
