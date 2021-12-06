@@ -3382,7 +3382,7 @@ object SQLConf {
 
   val HASHED_RELATION_REORDER_FACTOR = buildConf("spark.sql.hashedRelationReorderFactor")
     .doc("The HashedRelation will be reordered if the number of unique keys times this factor is " +
-      "less than equal to the total number of keys in the HashedRelation. " +
+      "less than equal to the total number of rows in the HashedRelation. " +
       "The reordering places all rows with the same key adjacent to each other to improve " +
       "spatial locality. This provides a performance boost while iterating over the rows for a " +
       "given key due to increased cache hits")

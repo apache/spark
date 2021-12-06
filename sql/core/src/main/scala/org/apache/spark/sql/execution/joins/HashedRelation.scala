@@ -463,6 +463,19 @@ private[joins] object UnsafeHashedRelation extends Logging {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
+    def mapAppendHelper(_key: UnsafeRow, _row: UnsafeRow, _map: BytesToBytesMap): Unit = {
+      val _loc = _map.lookup(_key.getBaseObject, _key.getBaseOffset, _key.getSizeInBytes)
+      if (!(ignoresDuplicatedKey && _loc.isDefined)) {
+        val success = _loc.append(
+          _key.getBaseObject, _key.getBaseOffset, _key.getSizeInBytes,
+          _row.getBaseObject, _row.getBaseOffset, _row.getSizeInBytes)
+        if (!success) {
+          _map.free()
+          throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
+        }
+      }
+    }
+
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
     val binaryMap = new BytesToBytesMap(
@@ -479,16 +492,7 @@ private[joins] object UnsafeHashedRelation extends Logging {
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull || allowsNullKey) {
-        val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-        if (!(ignoresDuplicatedKey && loc.isDefined)) {
-          val success = loc.append(
-            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-            row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
-          if (!success) {
-            binaryMap.free()
-            throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
-          }
-        }
+        mapAppendHelper(key, row, binaryMap)
       } else if (isNullAware) {
         binaryMap.free()
         return HashedRelationWithAllNullKeys
@@ -499,39 +503,23 @@ private[joins] object UnsafeHashedRelation extends Logging {
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
     val reorderMap = reorderFactor.exists(_ * binaryMap.numKeys() <= binaryMap.numValues())
     if (reorderMap) {
-      // TODO: add logging
-      // TODO: handle exception if OOM
-     val keys = candidate.keys.map(_.copy()).toArray
-      val distinctKeys = keys.distinct
-      scala.Console.err.print(s"Number of keys is ${keys.length}; distinct keys is " +
-        s"${distinctKeys.length} key schema ${key}\n")
-      val sizeEstimate = binaryMap.numKeys()
+      logInfo(s"Reordering BytesToBytesMap, uniqueKeys: ${binaryMap.numKeys()}, " +
+        s"totalNumValues: ${binaryMap.numValues()}")
       val newBinaryMap = new BytesToBytesMap(
         taskMemoryManager,
         // Only 70% of the slots can be used before growing, more capacity help to reduce collision
-        (sizeEstimate * 1.5 + 1).toInt,
+        (binaryMap.numKeys() * 1.5 + 1).toInt,
         pageSizeBytes)
-      scala.Console.err.print(s"Compacting binary map at ${System.currentTimeMillis()}\n")
-      for (keyFromOldMap <- distinctKeys) {
-        val input = candidate.get(keyFromOldMap)
-        while (input.hasNext) {
-          val row = input.next().asInstanceOf[UnsafeRow]
+      candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
+        val rowIter = candidate.get(key)
+        while (rowIter.hasNext) {
+          val row = rowIter.next().asInstanceOf[UnsafeRow]
           val unsafeKey = keyGenerator(row)
-          val loc = newBinaryMap.lookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-            unsafeKey.getSizeInBytes)
-          if (!(ignoresDuplicatedKey && loc.isDefined)) {
-            val success = loc.append(
-              unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
-              row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
-            if (!success) {
-              newBinaryMap.free()
-              throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
-            }
-          }
+          mapAppendHelper(unsafeKey, row, newBinaryMap)
         }
       }
       candidate.close()
-      scala.Console.err.print(s"Done compacting binary map at ${System.currentTimeMillis()}\n")
+      logInfo("BytesToBytesMap reordered")
       new UnsafeHashedRelation(key.size, numFields, newBinaryMap)
     } else {
       candidate
@@ -1129,7 +1117,7 @@ private[joins] object LongHashedRelation extends Logging {
     // reorganize the hash map so that nodes of a given linked list are next to each other in memory
     val reorderMap = reorderFactor.exists(_ * map.numUniqueKeys <= map.numTotalValues)
     val mapToUse = if (reorderMap) {
-      logInfo(s"Reordering LongToUnsafeRowMap, uniqueKeys: ${map.numUniqueKeys}, " +
+      logInfo(s"Reordering LongToUnsafeRowMap, numKeys: ${map.numUniqueKeys}, " +
         s"totalValue: ${map.numTotalValues}")
       val resultRow = new UnsafeRow(numFields)
       val compactMap = new LongToUnsafeRowMap(taskMemoryManager, map.numUniqueKeys.toInt)
