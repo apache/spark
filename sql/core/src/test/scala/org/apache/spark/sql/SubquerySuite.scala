@@ -1968,25 +1968,28 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               |  (SELECT avg(key) FROM testData),
               |  (SELECT sum(key) FROM testData),
               |  (SELECT count(distinct key) FROM testData)
-              |FROM testData
-              |LIMIT 1
           """.stripMargin)
 
           checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
 
           val plan = df.queryExecution.executedPlan
-          val countSubqueryExec = collectWithSubqueries(plan) { case _: SubqueryExec => 1 }.sum
-          val countReusedSubqueryExec =
-            collectWithSubqueries(plan) { case _: ReusedSubqueryExec => 1 }.sum
+          val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+          val reusedSubqueryIds = collectWithSubqueries(plan) {
+            case rs: ReusedSubqueryExec => rs.child.id
+          }
 
+          // We expect `ReusedSubqueryExec` wrappers if subquery reuse is enabled
           if (enableReuse) {
-            assert(countSubqueryExec == 1, "Missing or unexpected SubqueryExec in the plan")
-            assert(countReusedSubqueryExec == 2,
+            assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.size == 2,
               "Missing or unexpected reused ReusedSubqueryExec in the plan")
           } else {
-            assert(countSubqueryExec == 3, "Missing or unexpected SubqueryExec in the plan")
-            assert(countReusedSubqueryExec == 0, "Unexpected reused ReusedSubqueryExec in the plan")
+            assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
+            assert(reusedSubqueryIds.size == 0, "Unexpected reused ReusedSubqueryExec in the plan")
           }
+
+          // But, even if subquery reuse is not enabled, all subqueries should be the same instance
+          assert((subqueryIds ++ reusedSubqueryIds).toSet.size == 1, "Subqueries are not merged")
         }
       }
     }
