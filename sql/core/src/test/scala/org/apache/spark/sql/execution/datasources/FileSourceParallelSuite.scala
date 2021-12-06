@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class FileSourceParallelSuite extends QueryTest with SharedSparkSession {
 
-  test("Specify parallel with read option") {
+  test("SPARK-37549 Specify parallel with read option") {
     withSQLConf(SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "10") {
       withTempPath { path =>
         spark.range(1, 1000, 1, 1)
@@ -44,7 +44,7 @@ class FileSourceParallelSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Specify parallel with table option") {
+  test("SPARK-37549: Specify parallel with table option") {
     withSQLConf(SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "10") {
       withTable("t1") {
         spark.range(1, 1000, 1, 1)

@@ -87,6 +87,17 @@ def generic_file_source_options_example(spark):
     # +-------------+
     # $example off:load_with_modified_time_filter$
 
+    # $example on:load_with_parallel$
+    df = spark.read.load("examples/src/main/resources/dir1/dir2",
+                         format="parquet", parallel="100")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file2.parquet|
+    # +-------------+
+    # $example off:load_with_parallel$
+
 
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$

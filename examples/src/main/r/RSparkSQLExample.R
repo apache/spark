@@ -152,6 +152,12 @@ afterDF <- read.df("examples/src/main/resources/dir1", "parquet", modifiedAfter 
 #            file
 # $example off:load_with_modified_time_filter$
 
+# $example on:load_with_parallel$
+beforeDF <- read.df("examples/src/main/resources/dir1/dir2", "parquet", parallel= "100")
+#            file
+# 1 file2.parquet
+# $example off:load_with_parallel$
+
 # $example on:manual_save_options_orc$
 df <- read.df("examples/src/main/resources/users.orc", "orc")
 write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
