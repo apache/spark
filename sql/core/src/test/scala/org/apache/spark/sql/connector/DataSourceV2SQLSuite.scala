@@ -408,24 +408,34 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-37545, SPARK-37546: CreateTableAsSelect/ReplaceTableAsSelect should store" +
-    " location as qualified") {
+  test("SPARK-37545: CreateTableAsSelect should store location as qualified") {
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
     Seq(basicIdentifier, atomicIdentifier).foreach { identifier =>
       withTable(identifier) {
         spark.sql(s"CREATE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
           "AS SELECT id FROM source")
-        val location1 = spark.sql(s"DESCRIBE EXTENDED $identifier")
+        val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head.getString(0)
-        assert(location1 === "file:/tmp/foo")
-        spark.sql(s"REPLACE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+        assert(location === "file:/tmp/foo")
+      }
+    }
+  }
+
+  test("SPARK-37546: ReplaceTableAsSelect should store location as qualified") {
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+    Seq(basicIdentifier, atomicIdentifier).foreach { identifier =>
+      withTable(identifier) {
+        spark.sql(s"CREATE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
           "AS SELECT id, data FROM source")
-        val location2 = spark.sql(s"DESCRIBE EXTENDED $identifier")
+        spark.sql(s"REPLACE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id FROM source")
+        val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
           .filter("col_name = 'Location'")
           .select("data_type").head.getString(0)
-        assert(location2 === "file:/tmp/foo")
+        assert(location === "file:/tmp/foo")
       }
     }
   }
