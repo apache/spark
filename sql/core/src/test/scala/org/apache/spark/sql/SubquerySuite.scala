@@ -1965,13 +1965,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val df = sql(
             """
               |SELECT
-              |  (SELECT avg(key) FROM testData) +
-              |  (SELECT sum(key) FROM testData) +
+              |  (SELECT avg(key) FROM testData),
+              |  (SELECT sum(key) FROM testData),
               |  (SELECT count(distinct key) FROM testData)
               |FROM testData
               |LIMIT 1
           """.stripMargin)
-          df.collect()
+
+          checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
 
           val plan = df.queryExecution.executedPlan
           val countSubqueryExec = collectWithSubqueries(plan) { case _: SubqueryExec => 1 }.sum
