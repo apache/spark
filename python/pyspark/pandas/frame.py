@@ -6081,9 +6081,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             "_".join([i[-1], f"({', '.join(i[:-1])})"]) for i in column_labels
                         ]
                     else:
-                        data_columns = [
-                            "_".join([i[-1], str(i[0])]) for i in column_labels
-                        ]
+                        data_columns = ["_".join([i[-1], str(i[0])]) for i in column_labels]
                     sdf = sdf.select(index_columns + data_columns)
                     column_label_names = (
                         [cast(Optional[Name], None)] * column_labels_level(values)
