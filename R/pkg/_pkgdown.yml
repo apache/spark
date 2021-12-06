@@ -22,6 +22,11 @@ template:
   bootstrap: 5
   params:
     toggle: manual
+  includes:
+    before_title: |
+      <a class="navbar-brand" href="https://spark.apache.org/">
+        <img src="https://spark.apache.org/images/spark-logo-rev.svg" alt="" max-height="100%">
+      </a>
 
 reference:
 

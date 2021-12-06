@@ -37,3 +37,12 @@ aside h2 {
 h3 {
     font-size: 1.75rem !important;
 }
+
+.navbar-brand {
+    padding-top: .3125rem;
+    padding-bottom: .3125rem;
+    margin-right: 1rem;
+    font-size: 1.25rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
