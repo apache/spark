@@ -6055,20 +6055,34 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     # the column list passed to the pivot_table().
                     # E.g. if column is b and values is ['b','e'],
                     # then ['2_b', '2_e', '3_b', '3_e'].
+                    # For MultiIndex if column is b and values is [('x', 'b'),('x', 'e')],
+                    # then ['2_(x, b)', '2_(x, e)', '3_(x, b)', '3_(x, e)'].
 
-                    _columns = [str(i) for i in self[columns].unique().tolist()]
+                    is_multiindex = len(values[0]) > 1
+                    rsplit = lambda i, v: i.rsplit(v, 1)
+                    if is_multiindex:
+                        column_values = [
+                            rsplit(i, f"_({', '.join(v)})") for v in values for i in data_columns
+                        ]
+                        _columns = {j[0] for j in column_values if len(j) > 1}
+                    else:
+                        #
+                        column_values = [
+                            rsplit(i, f"_{v[0]}") for v in values for i in data_columns
+                        ]
+                        _columns = {j[0] for j in column_values if len(j) > 1}
                     column_labels = [
                         tuple(list(i[0]) + [i[1]]) for i in itertools.product(values, _columns)
                     ]
                     column_labels.sort()
                     # We sort the columns of Spark DataFrame by values.
-                    if len(values[0]) > 1:
+                    if is_multiindex:
                         data_columns = [
-                            "_".join([i[-1], str(i[:-1]).replace("'", "")]) for i in column_labels
+                            "_".join([i[-1], f"({', '.join(i[:-1])})"]) for i in column_labels
                         ]
                     else:
                         data_columns = [
-                            "_".join([i[-1], str(i[0]).replace("'", "")]) for i in column_labels
+                            "_".join([i[-1], str(i[0])]) for i in column_labels
                         ]
                     sdf = sdf.select(index_columns + data_columns)
                     column_label_names = (
