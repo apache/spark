@@ -150,7 +150,10 @@ fi
 
 if [ -n "$DOCKER_FILE" ];
 then
-  properties=( ${properties[@]} -Dspark.kubernetes.test.dockerFile=$(realpath $DOCKER_FILE) )
+  properties=(
+    ${properties[@]}
+    -Dspark.kubernetes.test.dockerFile=$(
+      python3 -c "import os.path; print(os.path.realpath(\"$DOCKER_FILE\"))") )
 fi
 
 if [ -n "$NAMESPACE" ];
@@ -190,4 +193,14 @@ properties+=(
   -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
-(cd $TEST_ROOT_DIR; ./build/mvn install -pl resource-managers/kubernetes/integration-tests $BUILD_DEPENDENCIES_MVN_FLAG -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]})
+(
+  cd $TEST_ROOT_DIR;
+  ./build/mvn install \
+    -pl resource-managers/kubernetes/integration-tests \
+    $BUILD_DEPENDENCIES_MVN_FLAG \
+    -Pscala-$SCALA_VERSION \
+    -P$HADOOP_PROFILE \
+    -Pkubernetes \
+    -Pkubernetes-integration-tests \
+    ${properties[@]}
+)
