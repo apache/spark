@@ -23,9 +23,10 @@ import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED}
 import org.apache.spark.memory._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -121,7 +122,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def close(): Unit
 }
 
-private[execution] object HashedRelation {
+private[execution] object HashedRelation extends SQLConfHelper {
 
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
@@ -154,10 +155,11 @@ private[execution] object HashedRelation {
       EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType && !allowsNullKey) {
       // NOTE: LongHashedRelation does not support NULL keys.
-      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware,
+        conf.hashedRelationReorderFactor)
     } else {
       UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, allowsNullKey,
-        ignoresDuplicatedKey)
+        ignoresDuplicatedKey, conf.hashedRelationReorderFactor)
     }
   }
 }
@@ -447,7 +449,7 @@ private[joins] class UnsafeHashedRelation(
   }
 }
 
-private[joins] object UnsafeHashedRelation {
+private[joins] object UnsafeHashedRelation extends Logging {
 
   def apply(
       input: Iterator[InternalRow],
@@ -456,7 +458,8 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
       allowsNullKey: Boolean = false,
-      ignoresDuplicatedKey: Boolean = false): HashedRelation = {
+      ignoresDuplicatedKey: Boolean = false,
+      reorderFactor: Option[Int] = None): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
@@ -496,9 +499,10 @@ private[joins] object UnsafeHashedRelation {
     // given linked list are next to each other in memory. This is simply to test
     // that ensuring such placement of the nodes improves performance
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
-    val sparkConf = SparkEnv.get.conf
-    if (binaryMap.numValues() > binaryMap.numKeys() * 2 &&
-      sparkConf.getOption("spark.sql.enableHashRelationOptimization").exists(_.equals("1"))) {
+    val reorderMap = reorderFactor.exists(_ * binaryMap.numKeys() <= binaryMap.numValues())
+    if (reorderMap) {
+      // TODO: add logging
+      // TODO: handle exception if OOM
      val keys = candidate.keys.map(_.copy()).toArray
       val distinctKeys = keys.distinct
       scala.Console.err.print(s"Number of keys is ${keys.length}; distinct keys is " +
@@ -660,6 +664,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def getTotalMemoryConsumption: Long = array.length * 8L + page.length * 8L
 
   def numUniqueKeys: Long = numKeys
+
+  def numTotalValues: Long = numValues
 
   /**
    * Returns the first slot of array that store the keys (sparse mode).
@@ -1095,13 +1101,14 @@ class LongHashedRelation(
 /**
  * Create hashed relation with key that is long.
  */
-private[joins] object LongHashedRelation {
+private[joins] object LongHashedRelation extends Logging {
   def apply(
       input: Iterator[InternalRow],
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean = false): HashedRelation = {
+      isNullAware: Boolean = false,
+      reorderFactor: Option[Int] = None): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
@@ -1122,9 +1129,10 @@ private[joins] object LongHashedRelation {
     }
     // if needed, compact the nodes of each linked lists such
     // that they are contiguous in memory
-    val sparkConf = SparkEnv.get.conf
-    val mapToUse = if (!map.keyIsUnique &&
-      sparkConf.getOption("spark.sql.enableHashRelationOptimization").exists(_.equals("1"))) {
+    val reorderMap = reorderFactor.exists(_ * map.numUniqueKeys <= map.numTotalValues)
+    val mapToUse = if (reorderMap) {
+      // TODO: add logging stmts
+      // TODO: handle if exception is thrown while acquiring memory
       scala.Console.err.print(s"Compacting long map at ${System.currentTimeMillis()}\n")
       val resultRow = new UnsafeRow(numFields)
       val keyIt = map.keys()

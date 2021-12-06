@@ -3380,6 +3380,17 @@ object SQLConf {
       .checkValue(_ >= 0, "The value must be non-negative.")
       .createWithDefault(8)
 
+  val HASHED_RELATION_REORDER_FACTOR = buildConf("spark.sql.hashedRelationReorderFactor")
+    .doc("The HashedRelation will be reordered if the number of unique keys times this factor is " +
+      "less than equal to the total number of keys in the HashedRelation. " +
+      "The reordering places all rows with the same key adjacent to each other to improve " +
+      "spatial locality. This provides a performance boost while iterating over the rows for a " +
+      "given key due to increased cache hits")
+    .version("3.3.0")
+    .intConf
+    .checkValue(_ > 1, "The value must be greater than 1.")
+    .createOptional
+
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
@@ -3870,6 +3881,8 @@ class SQLConf extends Serializable with Logging {
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+
+  def hashedRelationReorderFactor: Option[Int] = getConf(HASHED_RELATION_REORDER_FACTOR)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
