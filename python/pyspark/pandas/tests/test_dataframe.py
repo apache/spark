@@ -3035,6 +3035,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     def test_pivot_table_underscore_in_column_elements(self):
+        # SPARK-37553: Fix bug with underscore in column name and values
         pdf = pd.DataFrame(
             {
                 "a": ["4_4", "2_2", "3_3", "4_4", "8_8", "6_6"],
@@ -3071,6 +3072,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(repr(ktable.index), repr(ptable.index))
 
     def test_pivot_table_underscore_in_values_column_name(self):
+        # SPARK-37553: Fix bug with underscore in column name and values
         pdf = pd.DataFrame(
             {
                 "a": [4, 2, 3, 4, 8, 6],
