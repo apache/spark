@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedDBObjectName, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, TableSpec}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -326,15 +326,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              val location = Option(dsOptions.get("path")).map(TableCatalog.PROP_LOCATION -> _)
-
+              val tableSpec = TableSpec(
+                bucketSpec = None,
+                properties = Map.empty,
+                provider = Some(source),
+                options = Map.empty,
+                location = extraOptions.get("path"),
+                comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+                serde = None,
+                external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  catalog,
-                  ident,
+                  UnresolvedDBObjectName(
+                    catalog.name +: ident.namespace.toSeq :+ ident.name,
+                    isNamespace = false
+                  ),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
-                  Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
+                  tableSpec,
                   finalOptions,
                   ignoreIfExists = createMode == SaveMode.Ignore)
               }
@@ -607,20 +616,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
-        CreateTableAsSelectStatement(
-          nameParts,
-          df.queryExecution.analyzed,
-          partitioningAsV2,
-          None,
-          Map.empty,
-          Some(source),
-          Map.empty,
-          extraOptions.get("path"),
-          extraOptions.get(TableCatalog.PROP_COMMENT),
-          extraOptions.toMap,
-          None,
-          ifNotExists = other == SaveMode.Ignore,
+        val tableSpec = TableSpec(
+          bucketSpec = None,
+          properties = Map.empty,
+          provider = Some(source),
+          options = Map.empty,
+          location = extraOptions.get("path"),
+          comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          serde = None,
           external = false)
+
+        CreateTableAsSelect(
+          UnresolvedDBObjectName(nameParts, isNamespace = false),
+          partitioningAsV2,
+          df.queryExecution.analyzed,
+          tableSpec,
+          Map.empty,
+          other == SaveMode.Ignore)
     }
 
     runCommand(df.sparkSession) {

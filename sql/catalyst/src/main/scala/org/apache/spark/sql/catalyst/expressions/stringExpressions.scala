@@ -296,7 +296,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -348,11 +348,13 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
+      // scalastyle:on line.size.limit
     } else {
       ""
     }
@@ -467,8 +469,8 @@ abstract class StringPredicate extends BinaryExpression
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns a boolean value if expr2 is found inside expr1.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
     Examples:
@@ -491,9 +493,23 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` starts with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns true if the string `left` starts with the string `right`.
+    Returns NULL if either input expression is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -503,9 +519,23 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` ends with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns true if the string `left` ends with the string `right`.
+    Returns NULL if either input expression is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       true
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

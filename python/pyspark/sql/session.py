@@ -277,8 +277,10 @@ class SparkSession(SparkConversionMixin):
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
-                for key, value in self._options.items():
-                    session._jsparkSession.sessionState().conf().setConfString(key, value)
+                else:
+                    getattr(
+                        getattr(session._jvm, "SparkSession$"), "MODULE$"
+                    ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
     builder = Builder()
@@ -291,7 +293,7 @@ class SparkSession(SparkConversionMixin):
         self,
         sparkContext: SparkContext,
         jsparkSession: Optional[JavaObject] = None,
-        options: Optional[Dict[str, Any]] = {},
+        options: Dict[str, Any] = {},
     ):
         from pyspark.sql.context import SQLContext
 
@@ -304,8 +306,15 @@ class SparkSession(SparkConversionMixin):
                 and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
+                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                    jsparkSession, options
+                )
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
+        else:
+            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                jsparkSession, options
+            )
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)

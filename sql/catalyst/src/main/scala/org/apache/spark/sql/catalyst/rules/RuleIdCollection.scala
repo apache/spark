@@ -135,6 +135,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReassignLambdaVariableID" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveLiteralFromGroupExpressions" ::
+      "org.apache.spark.sql.catalyst.optimizer.GenerateOptimization" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::

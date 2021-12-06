@@ -28,7 +28,6 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Lo
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case UnresolvedDBObjectName(CatalogAndNamespace(catalog, name), isNamespace) if isNamespace =>
@@ -36,29 +35,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case UnresolvedDBObjectName(CatalogAndIdentifier(catalog, identifier), _) =>
       ResolvedDBObjectName(catalog, identifier.namespace :+ identifier.name())
-
-    case c @ CreateTableAsSelectStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      CreateTableAsSelect(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        c.asSelect,
-        convertTableProperties(c),
-        writeOptions = c.writeOptions,
-        ignoreIfExists = c.ifNotExists)
-
-    case c @ ReplaceTableStatement(
-         NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      ReplaceTable(
-        catalog.asTableCatalog,
-        tbl.asIdentifier,
-        c.tableSchema,
-        // convert the bucket spec and add it as a transform
-        c.partitioning ++ c.bucketSpec.map(_.asTransform),
-        convertTableProperties(c),
-        orCreate = c.orCreate)
   }
 
   object NonSessionCatalogAndTable {

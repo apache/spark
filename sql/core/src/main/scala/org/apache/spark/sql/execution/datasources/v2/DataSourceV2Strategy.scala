@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan, GreaterThanOrEqual => V2GreaterThanOrEqual, In => V2In, IsNotNull => V2IsNotNull, IsNull => V2IsNull, LessThan => V2LessThan, LessThanOrEqual => V2LessThanOrEqual, Not => V2Not, Or => V2Or, StringContains => V2StringContains, StringEndsWith => V2StringEndsWith, StringStartsWith => V2StringStartsWith}
@@ -169,34 +169,33 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
         partitioning, tableSpec.copy(location = qualifiedLocation), ifNotExists) :: Nil
 
-    case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
+    case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
+        options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      val tableSpecWithQualifiedLocation = tableSpec.copy(
+        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(staging, ident, parts, query, planLater(query),
-            propsWithOwner, writeOptions, ifNotExists) :: Nil
+          AtomicCreateTableAsSelectExec(staging, ident.asIdentifier, parts, query, planLater(query),
+            tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog, ident, parts, query, planLater(query),
-            propsWithOwner, writeOptions, ifNotExists) :: Nil
+          CreateTableAsSelectExec(catalog.asTableCatalog, ident.asIdentifier, parts, query,
+            planLater(query), tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
-    case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
-      val newProps = props.get(TableCatalog.PROP_LOCATION).map { loc =>
-        props + (TableCatalog.PROP_LOCATION -> makeQualifiedDBObjectPath(loc))
-      }.getOrElse(props)
-      val propsWithOwner = CatalogV2Util.withDefaultOwnership(newProps)
+    case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
+      val qualifiedLocation = tableSpec.location.map(makeQualifiedDBObjectPath(_))
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(
-            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate,
-            invalidateCache) :: Nil
+          AtomicReplaceTableExec(staging, ident.asIdentifier, schema, parts,
+            tableSpec.copy(location = qualifiedLocation),
+            orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
-          ReplaceTableExec(
-            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate,
+          ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, schema, parts,
+            tableSpec.copy(location = qualifiedLocation), orCreate = orCreate,
             invalidateCache) :: Nil
       }
 
