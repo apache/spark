@@ -99,6 +99,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       location, session.sharedState.hadoopConf)
   }
 
+  private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
+    tableSpec.copy(
+      location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
       _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
@@ -165,45 +170,37 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      val tableSpecWithQualifiedLocation = tableSpec.copy(
-        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
-        partitioning, tableSpecWithQualifiedLocation, ifNotExists) :: Nil
+        partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
         options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
-      val tableSpecWithQualifiedLocation = tableSpec.copy(
-        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident.asIdentifier, parts, query, planLater(query),
-            tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(catalog.asTableCatalog, ident.asIdentifier, parts, query,
-            planLater(query), tableSpecWithQualifiedLocation, writeOptions, ifNotExists) :: Nil
+            planLater(query), qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
-      val tableSpecWithQualifiedLocation = tableSpec.copy(
-        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident.asIdentifier, schema, parts,
-            tableSpecWithQualifiedLocation, orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, schema, parts,
-            tableSpecWithQualifiedLocation, orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedDBObjectName(catalog, ident),
         parts, query, tableSpec, options, orCreate) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
-      val tableSpecWithQualifiedLocation = tableSpec.copy(
-        location = tableSpec.location.map(makeQualifiedDBObjectPath(_)))
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -212,7 +209,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            tableSpecWithQualifiedLocation,
+            qualifyLocInTableSpec(tableSpec),
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
@@ -223,7 +220,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             parts,
             query,
             planLater(query),
-            tableSpecWithQualifiedLocation,
+            qualifyLocInTableSpec(tableSpec),
             writeOptions,
             orCreate = orCreate,
             invalidateCache) :: Nil
