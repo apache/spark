@@ -243,6 +243,35 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
+  test("Merging subqueries with nondeterministic elements") {
+    val subquery1 = ScalarSubquery(testRelation.select(('a + rand(0)).as("rand_a")))
+    val subquery2 = ScalarSubquery(testRelation.select(('b + rand(0)).as("rand_b")))
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+
+    val subquery3 = ScalarSubquery(testRelation.where('a > rand(0)).select('a))
+    val subquery4 = ScalarSubquery(testRelation.where('a > rand(0)).select('b))
+    val originalQuery2 = testRelation
+      .select(
+        subquery3,
+        subquery4)
+
+    comparePlans(Optimize.execute(originalQuery2.analyze), originalQuery2.analyze)
+
+    val subquery5 = ScalarSubquery(testRelation.groupBy()((max('a) + rand(0)).as("max_a")))
+    val subquery6 = ScalarSubquery(testRelation.groupBy()((max('b) + rand(0)).as("max_b")))
+    val originalQuery3 = testRelation
+      .select(
+        subquery5,
+        subquery6)
+
+    comparePlans(Optimize.execute(originalQuery3.analyze), originalQuery3.analyze)
+  }
+
   test("Do not merge different aggregate implementations") {
     // supports HashAggregate
     val subquery1 = ScalarSubquery(testRelation.groupBy('b)(max('a).as("max_a")))

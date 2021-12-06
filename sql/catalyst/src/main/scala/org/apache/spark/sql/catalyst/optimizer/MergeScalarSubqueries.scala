@@ -184,6 +184,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       cachedPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
     checkIdenticalPlans(newPlan, cachedPlan).map(cachedPlan -> _).orElse(
       (newPlan, cachedPlan) match {
+        case (np, cp) if !np.deterministic || !cp.deterministic => None
         case (np: Project, cp: Project) =>
           tryMergePlans(np.child, cp.child).map { case (mergedChild, outputMap) =>
             val (mergedProjectList, newOutputMap) =
