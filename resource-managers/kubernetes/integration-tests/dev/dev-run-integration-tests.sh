@@ -19,6 +19,8 @@
 set -exo errexit
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
+. $TEST_ROOT_DIR/build/util.sh
+
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
@@ -150,10 +152,7 @@ fi
 
 if [ -n "$DOCKER_FILE" ];
 then
-  properties=(
-    ${properties[@]}
-    -Dspark.kubernetes.test.dockerFile=$(
-      python3 -c "import os.path; print(os.path.realpath(\"$DOCKER_FILE\"))") )
+  properties=( ${properties[@]} -Dspark.kubernetes.test.dockerFile=$(realpath $DOCKER_FILE) )
 fi
 
 if [ -n "$NAMESPACE" ];
