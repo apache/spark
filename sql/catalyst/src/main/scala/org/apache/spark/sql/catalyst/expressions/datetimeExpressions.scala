@@ -3005,6 +3005,23 @@ object SubtractDates {
   def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  arguments = """
+    Arguments:
+      * sourceTz - the time zone for the input timestamp
+      * targetTz - the time zone to which the input timestamp should be converted
+      * sourceTs - a timestamp without time zone
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+       2021-12-05 15:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
 case class ConvertTimezone(
     sourceTz: Expression,
     targetTz: Expression,
