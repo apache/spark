@@ -380,7 +380,7 @@ trait ShuffleSpec {
   /**
    * Whether this shuffle spec can be used to create partitionings for the other children.
    */
-  def canCreatePartitioning: Boolean
+  def canCreatePartitioning: Boolean = false
 
   /**
    * Creates a partitioning that can be used to re-partitioned the other side with the given
@@ -390,7 +390,9 @@ trait ShuffleSpec {
    *  - [[canCreatePartitioning]] returns true.
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
-  def createPartitioning(clustering: Seq[Expression]): Partitioning
+  def createPartitioning(clustering: Seq[Expression]): Partitioning =
+    throw new UnsupportedOperationException("Operation unsupported for " +
+        s"${getClass.getCanonicalName}")
 }
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {
@@ -415,23 +417,18 @@ case class RangeShuffleSpec(
     case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
     case _ => false
   }
-
-  override def canCreatePartitioning: Boolean = false
-
-  override def createPartitioning(clustering: Seq[Expression]): Partitioning =
-    HashPartitioning(clustering, numPartitions)
 }
 
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
-  private lazy val hashKeyPositions =
+  lazy val hashKeyPositions =
     createHashKeyPositions(distribution.clustering, partitioning.expressions)
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>
       partitioning.numPartitions == 1
-    case HashShuffleSpec(otherPartitioning, otherDistribution) =>
+    case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution) =>
       // we need to check:
       //  1. both partitioning have the same number of partitions
       //  2. both partitioning have the same number of expressions
@@ -439,8 +436,7 @@ case class HashShuffleSpec(
       //     corresponding distributions.
       partitioning.numPartitions == otherPartitioning.numPartitions &&
       partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = createHashKeyPositions(
-          otherDistribution.clustering, otherPartitioning.expressions)
+        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
         hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
           left.intersect(right).nonEmpty
         }

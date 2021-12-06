@@ -68,25 +68,20 @@ case class EnsureRequirements(
     // Get the indexes of children which have specified distribution requirements and need to have
     // same number of partitions.
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
-      case (UnspecifiedDistribution, _) => false
-      case (_: BroadcastDistribution, _) => false
-      case (AllTuples, _) => false
-      case _ => true
+      case (_: ClusteredDistribution, _) => true
+      case _ => false
     }.map(_._2)
 
     // If there are more than one children, we'll need to check partitioning & distribution of them
     // and see if extra shuffles are necessary.
     if (childrenIndexes.length > 1) {
-      childrenIndexes.map(requiredChildDistributions(_)).foreach { d =>
-        if (!d.isInstanceOf[ClusteredDistribution]) {
-          throw new IllegalStateException(s"Expected ClusteredDistribution but found " +
-              s"${d.getClass.getSimpleName}")
-        }
-      }
-      val specs = childrenIndexes.map(i =>
+      val specs = childrenIndexes.map(i => {
+        val requiredDist = requiredChildDistributions(i)
+        assert(requiredDist.isInstanceOf[ClusteredDistribution],
+          s"Expected ClusteredDistribution but found ${requiredDist.getClass.getSimpleName}")
         i -> children(i).outputPartitioning.createShuffleSpec(
-          requiredChildDistributions(i).asInstanceOf[ClusteredDistribution])
-      ).toMap
+          requiredDist.asInstanceOf[ClusteredDistribution])
+      }).toMap
 
       // Find out the shuffle spec that gives better parallelism.
       //
@@ -129,13 +124,13 @@ case class EnsureRequirements(
         val candidateSpecsWithoutShuffle = candidateSpecs.filter { case (k, _) =>
           !children(k).isInstanceOf[ShuffleExchangeExec]
         }
-        val specs = if (candidateSpecsWithoutShuffle.nonEmpty) {
+        val finalCandidateSpecs = if (candidateSpecsWithoutShuffle.nonEmpty) {
           candidateSpecsWithoutShuffle
         } else {
           candidateSpecs
         }
         // Pick the spec with the best parallelism
-        Some(specs.values.maxBy(_.numPartitions))
+        Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
