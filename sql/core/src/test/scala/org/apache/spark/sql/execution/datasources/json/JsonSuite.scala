@@ -2748,7 +2748,10 @@ abstract class JsonSuite
 
   test("SPARK-37360: Write and infer TIMESTAMP_NTZ values with a non-default pattern") {
     withTempPath { path =>
-      val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+      val exp = spark.sql("""
+        select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ntz'2020-12-12 12:12:12.123456' as col0
+        """)
       exp.write
         .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
@@ -2767,7 +2770,10 @@ abstract class JsonSuite
 
   test("SPARK-37360: Write and infer TIMESTAMP_LTZ values with a non-default pattern") {
     withTempPath { path =>
-      val exp = spark.sql("select timestamp_ltz'2020-12-12 12:12:12' as col0")
+      val exp = spark.sql("""
+        select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ltz'2020-12-12 12:12:12.123456' as col0
+        """)
       exp.write
         .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
         .json(path.getAbsolutePath)
