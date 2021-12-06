@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, AnyOrSome, Corr, Count, CountStar, CovarPop, CovarSamp, Every, Max, Min, StddevPop, StddevSamp, Sum, VarPop, VarSamp}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Corr, Count, CountStar, CovarPop, CovarSamp, Max, Min, StddevPop, StddevSamp, Sum, VarPop, VarSamp}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
