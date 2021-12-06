@@ -495,9 +495,7 @@ private[joins] object UnsafeHashedRelation extends Logging {
       }
     }
 
-    // the following is a hack to reorganize the hash map so that nodes of a
-    // given linked list are next to each other in memory. This is simply to test
-    // that ensuring such placement of the nodes improves performance
+    // reorganize the hash map so that nodes of a given linked list are next to each other in memory
     val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
     val reorderMap = reorderFactor.exists(_ * binaryMap.numKeys() <= binaryMap.numValues())
     if (reorderMap) {
@@ -1127,26 +1125,22 @@ private[joins] object LongHashedRelation extends Logging {
         return HashedRelationWithAllNullKeys
       }
     }
-    // if needed, compact the nodes of each linked lists such
-    // that they are contiguous in memory
+
+    // reorganize the hash map so that nodes of a given linked list are next to each other in memory
     val reorderMap = reorderFactor.exists(_ * map.numUniqueKeys <= map.numTotalValues)
     val mapToUse = if (reorderMap) {
-      // TODO: add logging stmts
-      // TODO: handle if exception is thrown while acquiring memory
-      scala.Console.err.print(s"Compacting long map at ${System.currentTimeMillis()}\n")
+      logInfo(s"Reordering LongToUnsafeRowMap, uniqueKeys: ${map.numUniqueKeys}, " +
+        s"totalValue: ${map.numTotalValues}")
       val resultRow = new UnsafeRow(numFields)
-      val keyIt = map.keys()
       val compactMap = new LongToUnsafeRowMap(taskMemoryManager, map.numUniqueKeys.toInt)
-      while (keyIt.hasNext) {
-        val key = keyIt.next.getLong(0);
-        val valueIt = map.get(key, resultRow)
-        while (valueIt.hasNext) {
-          val value = valueIt.next()
-          compactMap.append(key, value);
+      map.keys().foreach { rowKey =>
+        val key = rowKey.getLong(0)
+        map.get(key, resultRow).foreach { row =>
+          compactMap.append(key, row)
         }
       }
       map.free()
-      scala.Console.err.print(s"Done compacting long map at ${System.currentTimeMillis()}\n")
+      logInfo("LongToUnsafeRowMap reordered")
       compactMap
     } else {
       map
