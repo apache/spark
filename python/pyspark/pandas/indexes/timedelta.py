@@ -10,7 +10,7 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either F.express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
@@ -22,9 +22,13 @@ from pandas.api.types import is_hashable
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
+from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
+from pyspark.pandas.internal import SPARK_DEFAULT_INDEX_NAME
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
-from pyspark.pandas.series import Series
+from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.utils import scol_for, verify_temp_column_name
+from pyspark.sql import functions as F
 
 
 class TimedeltaIndex(Index):
@@ -111,3 +115,66 @@ class TimedeltaIndex(Index):
                 return partial(property_or_func, self)
 
         raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
+
+    @property
+    def days(self) -> Index:
+        """
+        Number of days for each element.
+        """
+        sdf = self._internal.spark_frame.select(
+            F.expr("date_part('DAY', %s)" % SPARK_DEFAULT_INDEX_NAME)
+        )
+        return Index(first_series(DataFrame(sdf)).rename(self.name))
+
+    @property
+    def seconds(self) -> Index:
+        """
+        Number of seconds (>= 0 and less than 1 day) for each element.
+        """
+        sdf = self._internal.spark_frame
+        hour_scol_name = verify_temp_column_name(sdf, "__hour_column__")
+        minute_scol_name = verify_temp_column_name(sdf, "__minute_column__")
+        second_scol_name = verify_temp_column_name(sdf, "__second_column__")
+
+        # Extract the hours part, minutes part, seconds part and its fractional part with microseconds
+        sdf = sdf.select(
+            F.expr("date_part('HOUR', %s)" % SPARK_DEFAULT_INDEX_NAME),
+            F.expr("date_part('MINUTE', %s)" % SPARK_DEFAULT_INDEX_NAME),
+            F.expr("date_part('SECOND', %s)" % SPARK_DEFAULT_INDEX_NAME),
+        ).toDF(hour_scol_name, minute_scol_name, second_scol_name)
+
+        # Transfer to microseconds
+        sdf = sdf.select(
+            scol_for(sdf, hour_scol_name) * 3600
+            + scol_for(sdf, minute_scol_name) * 60
+            + scol_for(sdf, second_scol_name)
+        )
+
+        return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
+
+    @property
+    def microseconds(self) -> Index:
+        """
+        Number of microseconds (>= 0 and less than 1 second) for each element.
+        """
+        sdf = self._internal.spark_frame
+        second_scol_name = verify_temp_column_name(sdf, "__second_column__")
+        less_than_second_scol_name = verify_temp_column_name(sdf, "__less_than_second_column__")
+
+        # Extract the seconds part and its fractional part with microseconds per element
+        sdf = sdf.select(F.expr("date_part('SECOND', %s)" % SPARK_DEFAULT_INDEX_NAME)).toDF(
+            second_scol_name
+        )
+
+        # Add a column to keep elements >= 0 and less than 1 second only
+        sdf = sdf.withColumn(
+            less_than_second_scol_name,
+            F.when(scol_for(sdf, second_scol_name) <= 1, scol_for(sdf, second_scol_name)).otherwise(
+                0
+            ),
+        )
+
+        # Transfer the seconds to microseconds
+        sdf = sdf.select(scol_for(sdf, less_than_second_scol_name) * 1000000)
+
+        return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
