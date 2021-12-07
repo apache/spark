@@ -55,47 +55,6 @@ You may run `./bin/spark-sql --help` for a complete list of all available option
 
 The Spark SQL CLI when invoked without the `-i` option will attempt to load `$HIVE_HOME/bin/.hiverc` and `$HOME/.hiverc` as initialization files.
 
-## Spark SQL CLI Interactive Shell Commands
-
-When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
-Use `;` (semicolon) to terminate commands. Notice:
-
-    1. CLI use `;` to terminate commands only when it's at the end of line and it's not escaped by `\\;`.
-    2. `;` is the only way to terminate commands, if user type `SELECT 1` and press enter, console will just wait for input.
-    3. If user type multiple commands in one line like `SELECT 1; SELECT 2;`, commands `SELECT 1` and `SELECT 2` will be executed separatly.
-    4. If `;` in a simple comment `-- This is a comment;`, this line will just be ignored. If `;` in a bracketed command and not at the end of line
-           /* This is a comment contains ';'. */
-           SELECT 1;
-       It won't terminate commands. If `;` in a bracketed command and in the end of line, 
-           /* This is a comment contains ;
-           */ SELECT 1;
-       It will terminate commands into  `/* This is a comment contains ` and `*/ SELECT 1`.
-
-
-<table class="table">
-<tr><th>Command</th><th>Description</th></tr>
-<tr>
-  <td><code>quit</code> <code>exit</code></td>
-  <td>Use <code>quit</code> or <code>exit</code> to leave the interactive shell.</td>
-</tr>
-<tr>
-  <td><code>!&lt;command&gt;</code></td>
-  <td>Executes a shell command from the Spark SQL CLI shell.</td>
-</tr>
-<tr>
-  <td><code>dfs &lt;dfs command&gt;</code></td>
-  <td>Executes a <a href="https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html#dfs">dfs command</a> from the Hive shell.</td>
-</tr>
-<tr>
-  <td><code>&lt;query string&gt;</code></td>
-  <td>Executes a Spark SQL query and prints results to standard output.</td>
-</tr>
-<tr>
-  <td><code>source &lt;filepath&gt;</code></td>
-  <td>Executes a script file inside the CLI.</td>
-</tr>
-</table>
-
 ## Supported comment types
 
 <table class="table">
@@ -129,6 +88,55 @@ Use `;` (semicolon) to terminate commands. Notice:
         SELECT 1;
     </code>
   </td>
+</tr>
+</table>
+
+## Spark SQL CLI Interactive Shell Commands
+
+When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
+Use `;` (semicolon) to terminate commands. Notice:
+1. CLI use `;` to terminate commands only when it's at the end of line and it's not escaped by `\\;`.
+2. `;` is the only way to terminate commands, if user type `SELECT 1` and press enter, console will just wait for input.
+3. If user type multiple commands in one line like `SELECT 1; SELECT 2;`, commands `SELECT 1` and `SELECT 2` will be executed separatly.
+4. If `;` in a simple comment 
+   ```sql
+   -- This is a comment;
+   SELECT 1;
+   ```
+   This comment line will just be ignored. If `;` in a bracketed command and not at the end of line,
+    ```sql
+    /* This is a comment contains ';'. */
+    SELECT 1;
+    ```
+  it will not terminate commands. If `;` in a bracketed command and in the end of line, 
+     ```sql
+     /* This is a comment contains ;
+     */ SELECT 1;
+     ```
+  it will terminate commands into  `/* This is a comment contains ` and `*/ SELECT 1`.
+
+
+<table class="table">
+<tr><th>Command</th><th>Description</th></tr>
+<tr>
+  <td><code>quit</code> <code>exit</code></td>
+  <td>Use <code>quit</code> or <code>exit</code> to leave the interactive shell.</td>
+</tr>
+<tr>
+  <td><code>!&lt;command&gt;</code></td>
+  <td>Executes a shell command from the Spark SQL CLI shell.</td>
+</tr>
+<tr>
+  <td><code>dfs &lt;dfs command&gt;</code></td>
+  <td>Executes a <a href="https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html#dfs">dfs command</a> from the Hive shell.</td>
+</tr>
+<tr>
+  <td><code>&lt;query string&gt;</code></td>
+  <td>Executes a Spark SQL query and prints results to standard output.</td>
+</tr>
+<tr>
+  <td><code>source &lt;filepath&gt;</code></td>
+  <td>Executes a script file inside the CLI.</td>
 </tr>
 </table>
 
