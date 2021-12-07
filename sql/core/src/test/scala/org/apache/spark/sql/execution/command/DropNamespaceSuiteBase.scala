@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -36,41 +36,64 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
   protected def isCasePreserving: Boolean = true
+  protected def assertDropFails
 
-  protected def checkNamespace(sqlText: String, expected: Seq[String]) = {
-    val df = spark.sql(sqlText)
+  protected def checkNamespace(expected: Seq[String]) = {
+    val df = spark.sql(s"SHOW NAMESPACES IN $catalog")
     assert(df.schema === new StructType().add("namespace", StringType, false))
     checkAnswer(df, expected.map(Row(_)))
   }
 
   test("basic tests") {
     sql(s"CREATE NAMESPACE $catalog.ns")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", Seq("ns") ++ builtinTopNamespaces)
+    checkNamespace(Seq("ns") ++ builtinTopNamespaces)
 
     sql(s"DROP NAMESPACE $catalog.ns")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
+    checkNamespace(builtinTopNamespaces)
   }
 
   test("DropNamespace: test handling of 'IF EXISTS'") {
     // It must not throw any exceptions
     sql(s"DROP NAMESPACE IF EXISTS $catalog.unknown")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
+    checkNamespace(builtinTopNamespaces)
+  }
+
+  test("DropNamespace: Namespace does not exist") {
+    // Namespace $catalog.unknown does not exist.
+    val message = intercept[AnalysisException] {
+      sql(s"DROP DATABASE $catalog.unknown")
+    }.getMessage
+    assert(message.contains(s"'unknown' not found"))
+  }
+
+  test("DropNamespace: drop non-empty namespace with a non-cascading mode") {
+    sql(s"CREATE NAMESPACE $catalog.ns")
+    sql(s"CREATE TABLE $catalog.ns.table (id bigint) $defaultUsing")
+    checkNamespace(Seq("ns") ++ builtinTopNamespaces)
+
+    // $catalog.ns.table is present, thus $catalog.ns cannot be dropped.
+    assertDropFails
+    sql(s"DROP TABLE $catalog.ns.table")
+
+    // Now that $catalog.ns is empty, it can be dropped.
+    sql(s"DROP NAMESPACE $catalog.ns")
+    checkNamespace(builtinTopNamespaces)
   }
 
   test("DropNamespace: drop non-empty namespace with a cascade mode") {
     sql(s"CREATE NAMESPACE $catalog.ns")
     sql(s"CREATE TABLE $catalog.ns.table (id bigint) $defaultUsing")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", Seq("ns") ++ builtinTopNamespaces)
+    checkNamespace(Seq("ns") ++ builtinTopNamespaces)
 
     sql(s"DROP NAMESPACE $catalog.ns CASCADE")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
+    checkNamespace(builtinTopNamespaces)
   }
 
   test("DropNamespace: drop current namespace") {
     sql(s"CREATE NAMESPACE $catalog.ns")
     sql(s"USE $catalog.ns")
     sql(s"DROP NAMESPACE $catalog.ns")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
+    checkNamespace(builtinTopNamespaces)
   }
 
   test("DropNamespace: drop namespace with case sensitivity") {
@@ -84,7 +107,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
         sql(s"DROP NAMESPACE $catalog.$expected")
         sql(s"DROP NAMESPACE $catalog.bbb")
-        checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
+        checkNamespace(builtinTopNamespaces)
       }
     }
   }

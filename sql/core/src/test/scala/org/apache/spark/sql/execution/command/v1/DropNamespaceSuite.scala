@@ -31,40 +31,18 @@ import org.apache.spark.sql.execution.command
 trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
+  override protected def assertDropFails(): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"DROP NAMESPACE $catalog.ns")
+    }
+    assert(e.getMessage.contains("Database ns is not empty. One or more tables exist"))
+  }
+
   test("DropNamespace: drop default namespace") {
     val message = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE default")
     }.getMessage
     assert(message.contains("Can not drop default database"))
-  }
-
-  test("DropNamespace: drop non-empty namespace with a non-cascading mode") {
-    sql(s"CREATE NAMESPACE $catalog.ns")
-    sql(s"CREATE TABLE $catalog.ns.table (id bigint) $defaultUsing")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", Seq("ns") ++ builtinTopNamespaces)
-
-    def assertDropFails(): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(s"DROP NAMESPACE $catalog.ns")
-      }
-      assert(e.getMessage.contains("Database ns is not empty. One or more tables exist"))
-    }
-
-    // $catalog.ns.table is present, thus $catalog.ns cannot be dropped.
-    assertDropFails()
-    sql(s"DROP TABLE $catalog.ns.table")
-
-    // Now that $catalog.ns is empty, it can be dropped.
-    sql(s"DROP NAMESPACE $catalog.ns")
-    checkNamespace(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
-  }
-
-  test("DropNamespace: Namespace does not exist") {
-    // Namespace $catalog.unknown does not exist.
-    val message = intercept[AnalysisException] {
-      sql(s"DROP DATABASE $catalog.unknown")
-    }.getMessage
-    assert(message.contains(s"Database 'unknown' not found"))
   }
 }
 
