@@ -109,7 +109,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       canReuse: Boolean): LogicalPlan = {
     val index = joinKeys.indexOf(filteringKey)
     lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
-    if (canReuse || hasBenefit) {
+    // Avoid to insert an unnecessary dynamic partition pruning predicate
+    if (canReuse || (!conf.dynamicPartitionPruningReuseBroadcastOnly && hasBenefit)) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
         DynamicPruningSubquery(
