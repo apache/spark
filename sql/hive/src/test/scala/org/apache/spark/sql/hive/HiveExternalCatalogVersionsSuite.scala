@@ -103,6 +103,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         case Some((3, minor, _)) if minor >= 3 => s"spark-$version-bin-hadoop3.tgz"
         case Some((3, minor, _)) if minor < 3 => s"spark-$version-bin-hadoop3.2.tgz"
         case Some((_, _, _)) => s"spark-$version-bin-hadoop2.7.tgz"
+        case None => s"spark-$version-bin-hadoop2.7.tgz"
       }
       val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
