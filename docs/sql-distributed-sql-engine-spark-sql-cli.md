@@ -57,7 +57,7 @@ The Spark SQL CLI when invoked without the `-i` option will attempt to load `$HI
 
 ## Spark SQL CLI Interactive Shell Commands
 
-When `$SPARK__HOME/bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
+When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
 Use `;` (semicolon) to terminate commands, but user can escape `;` by `\\;`. Comments in scripts can be specified using the `--` prefix.
 
 <table class="table">
@@ -72,7 +72,7 @@ Use `;` (semicolon) to terminate commands, but user can escape `;` by `\\;`. Com
 </tr>
 <tr>
   <td><code>dfs &lt;dfs command&gt;</code></td>
-  <td>Executes a dfs command from the Hive shell.</td>
+  <td>Executes a <a href="https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html#dfs">dfs command</a> from the Hive shell.</td>
 </tr>
 <tr>
   <td><code>&lt;query string&gt;</code></td>
@@ -146,7 +146,7 @@ Example of running a script non-interactively from a Hadoop supported filesystem
 Example of running an initialization script before entering interactive mode
 
     ./bin/spark-sql -i /path/to/spark-sql-init.sql
-    
+
 Example of entering interactive mode
 
     ./bin/spark-sql
@@ -155,7 +155,7 @@ Example of entering interactive mode
     spark-sql> -- This is a simple comment.
     spark-sql> SELECT 1;
     1
-    
+
 Example of entering interactive mode with escape `;` in comment
 
     ./bin/spark-sql
@@ -163,4 +163,3 @@ Example of entering interactive mode with escape `;` in comment
              > It won't be terminaled by \\; */
              > SELECT 1;
     1
-
