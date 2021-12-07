@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Types}
 import java.util.Locale
 
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, CovarPop, CovarSamp, StddevPop, StddevSamp, VarPop, VarSamp}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Corr, CovarPop, CovarSamp, StddevPop, StddevSamp, VarPop, VarSamp}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -156,29 +156,11 @@ private object PostgresDialect extends JdbcDialect {
           if (stddevSamp.column.fieldNames.length != 1) return None
           Some(s"STDDEV_SAMP(${quoteIdentifier(stddevSamp.column.fieldNames.head)})")
         case covarPop: CovarPop =>
-          if (covarPop.left.fieldNames.length != 1 &&
-            covarPop.right.fieldNames.length != 1) {
-            return None
-          }
-          val compiledValue =
-            s"""
-               |COVAR_POP(
-               |${quoteIdentifier(covarPop.left.fieldNames.head)},
-               |${quoteIdentifier(covarPop.right.fieldNames.head)})
-               |""".stripMargin.replaceAll("\n", "")
-          Some(compiledValue)
+          compileLeftRight(covarPop.left, covarPop.right, "COVAR_POP")
         case covarSamp: CovarSamp =>
-          if (covarSamp.left.fieldNames.length != 1 &&
-            covarSamp.right.fieldNames.length != 1) {
-            return None
-          }
-          val compiledValue =
-            s"""
-               |COVAR_SAMP(
-               |${quoteIdentifier(covarSamp.left.fieldNames.head)},
-               |${quoteIdentifier(covarSamp.right.fieldNames.head)})
-               |""".stripMargin.replaceAll("\n", "")
-          Some(compiledValue)
+          compileLeftRight(covarSamp.left, covarSamp.right, "COVAR_SAMP")
+        case corr: Corr =>
+          compileLeftRight(corr.left, corr.right, "CORR")
         case _ => None
       }
     )

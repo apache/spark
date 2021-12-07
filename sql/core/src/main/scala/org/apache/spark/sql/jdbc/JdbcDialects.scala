@@ -227,6 +227,20 @@ abstract class JdbcDialect extends Serializable with Logging{
     }
   }
 
+  protected def compileLeftRight(
+      left: NamedReference, right: NamedReference, funcName: String): Option[String] = {
+    if (left.fieldNames.length != 1 && right.fieldNames.length != 1) {
+      return None
+    }
+    val compiledValue =
+      s"""
+         |$funcName(
+         |${quoteIdentifier(left.fieldNames.head)},
+         |${quoteIdentifier(right.fieldNames.head)})
+         |""".stripMargin.replaceAll("\n", "")
+    Some(compiledValue)
+  }
+
   /**
    * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
    * Some[true] : TRUNCATE TABLE causes cascading.

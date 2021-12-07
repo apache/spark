@@ -181,7 +181,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                         case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
                         case _: aggregate.VariancePop | _: aggregate.VarianceSamp |
                              _: aggregate.StddevPop | _: aggregate.StddevSamp |
-                             _: aggregate.CovPopulation | _: aggregate.CovSample =>
+                             _: aggregate.CovPopulation | _: aggregate.CovSample |
+                             _: aggregate.Corr =>
                           aggregate.First(aggOutput(ordinal), true)
                         case other => other
                       }
