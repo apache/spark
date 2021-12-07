@@ -96,7 +96,7 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
   test("SPARK-36123: reading from unaligned pages - test filters with nulls") {
     // insert 50 null values in [400, 450) to verify that they are skipped during processing row
     // range [500, 1000) against the second page of col_2 [400, 800)
-    var df = spark.range(0, 2000).map { i =>
+    val df = spark.range(0, 2000).map { i =>
       val strVal = if (i >= 400 && i < 450) null else i + ":" + "o" * (i / 100).toInt
       (i, strVal)
     }.toDF()

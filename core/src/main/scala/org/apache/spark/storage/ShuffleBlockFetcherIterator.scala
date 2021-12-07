@@ -798,7 +798,7 @@ final class ShuffleBlockFetcherIterator(
           }
 
           val in = try {
-            var bufIn = buf.createInputStream()
+            val bufIn = buf.createInputStream()
             if (checksumEnabled) {
               val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
               checkedIn = new CheckedInputStream(bufIn, checksum)

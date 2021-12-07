@@ -544,7 +544,7 @@ object DateTimeUtils {
   def stringToDate(s: UTF8String): Option[Int] = {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
-      var maxDigitsYear = 7
+      val maxDigitsYear = 7
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
