@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.Decimal.{ROUND_CEILING, ROUND_FLOOR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1322,14 +1323,29 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   override def foldable: Boolean = child.foldable
 
-  override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-    case t => t
-  }
+  override lazy val dataType: DataType =
+    if (Seq(ROUND_CEILING, ROUND_FLOOR).contains(mode) && _scale == 0) {
+      child.dataType match {
+        case dt@DecimalType.Fixed(_, 0) => dt
+        case DecimalType.Fixed(precision, scale) =>
+          DecimalType.bounded(precision - scale + 1, 0)
+        case _ => LongType
+      }
+    } else {
+      child.dataType match {
+        // if the new scale is bigger which means we are scaling up,
+        // keep the original scale as `Decimal` does
+        case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+        case t => t
+      }
+    }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    if (Seq(ROUND_CEILING, ROUND_FLOOR).contains(mode) && _scale == 0) {
+      Seq(TypeCollection(DoubleType, DecimalType, LongType))
+    } else {
+      Seq(NumericType, IntegerType)
+    }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
@@ -1357,9 +1373,25 @@ abstract class RoundBase(child: Expression, scale: Expression,
       if (evalE == null) {
         null
       } else {
-        nullSafeEval(evalE)
+        (mode, _scale) match {
+          case (ROUND_CEILING, 0) => nullSafeEvalCeil(evalE)
+          case (ROUND_FLOOR, 0) => nullSafeEvalFloor(evalE)
+          case _ => nullSafeEval(evalE)
+        }
       }
     }
+  }
+
+  private def nullSafeEvalCeil(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
+    case DoubleType => math.ceil(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
+  }
+
+  private def nullSafeEvalFloor(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
+    case DoubleType => math.floor(input.asInstanceOf[Double]).toLong
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
   // not overriding since _scale is a constant int at runtime
@@ -1394,7 +1426,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = (mode, _scale) match {
+    case (ROUND_CEILING, 0) => doGenCodeCeil(ctx, ev)
+    case (ROUND_FLOOR, 0) => doGenCodeFloor(ctx, ev)
+    case _ => doGenCodeDefault(ctx, ev)
+  }
+
+  def doGenCodeDefault(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
     val evaluationCode = dataType match {
@@ -1467,6 +1505,59 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (!${ev.isNull}) {
           $evaluationCode
         }""")
+    }
+  }
+
+  private def doGenCodeCeil(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(_, _) =>
+        defineCodeGenUnaryExpression(ctx, ev, c => s"$c.ceil()")
+      case LongType => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
+      case _ => defineCodeGenUnaryExpression(ctx, ev, c =>
+        s"(long)(java.lang.Math.ceil($c))")
+    }
+  }
+
+  private def doGenCodeFloor(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.dataType match {
+      case DecimalType.Fixed(_, 0) => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
+      case DecimalType.Fixed(_, _) =>
+        defineCodeGenUnaryExpression(ctx, ev, c => s"$c.floor()")
+      case LongType => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
+      case _ => defineCodeGenUnaryExpression(ctx, ev, c => s"(long)(java.lang.Math.floor($c))")
+    }
+  }
+
+  protected def defineCodeGenUnaryExpression(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: String => String): ExprCode = {
+    nullSafeCodeGenUnaryExpression(ctx, ev, eval => {
+      s"${ev.value} = ${f(eval)};"
+    })
+  }
+
+  protected def nullSafeCodeGenUnaryExpression(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: String => String): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val resultCode = f(childGen.value)
+
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        ${childGen.code}
+        boolean ${ev.isNull} = ${childGen.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
+    } else {
+      ev.copy(code = code"""
+        ${childGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
