@@ -41,7 +41,7 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def psidx(self):
-        return ps.from_pandas(pidx)
+        return ps.from_pandas(self.pidx)
 
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
