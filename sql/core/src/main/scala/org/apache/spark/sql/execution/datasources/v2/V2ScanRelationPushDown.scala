@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -176,7 +176,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                         case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
                         case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
                         case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
+                        case avg: aggregate.Average =>
+                          aggregate.First(Cast(aggOutput(ordinal), avg.dataType), true)
                         case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
+                        case _: aggregate.VariancePop | _: aggregate.VarianceSamp |
+                             _: aggregate.StddevPop | _: aggregate.StddevSamp |
+                             _: aggregate.CovPopulation | _: aggregate.CovSample =>
+                          aggregate.First(aggOutput(ordinal), true)
                         case other => other
                       }
                     agg.copy(aggregateFunction = aggFunction)

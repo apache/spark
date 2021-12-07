@@ -316,6 +316,60 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
+  test("scan with aggregate push-down: AVG with filter and group by") {
+    val df = sql("select AVG(SaLaRY) FROM h2.test.employee where dept > 0" +
+      " group by DePt")
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [AVG(SALARY)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(9500), Row(11000), Row(12000)))
+  }
+
+  test("scan with aggregate push-down: VAR_POP VAR_SAMP with filter and group by") {
+    val df = sql("select VAR_POP(bonus), VAR_SAMP(bonus) FROM h2.test.employee where dept > 0" +
+      " group by DePt")
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [VAR_POP(BONUS), VAR_SAMP(BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+  }
+
+  test("scan with aggregate push-down: STDDEV_POP STDDEV_SAMP with filter and group by") {
+    val df = sql("select STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM h2.test.employee" +
+      " where dept > 0 group by DePt")
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [STDDEV_POP(BONUS), STDDEV_SAMP(BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(100d, 141.4213562373095d), Row(50d, 70.71067811865476d), Row(0d, null)))
+  }
+
   test("scan with aggregate push-down: MAX MIN with filter and group by") {
     val df = sql("select MAX(SaLaRY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DePt")

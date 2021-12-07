@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Average, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -208,6 +208,9 @@ abstract class JdbcDialect extends Serializable with Logging{
       case max: Max =>
         if (max.column.fieldNames.length != 1) return None
         Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+      case avg: Average =>
+        if (avg.column.fieldNames.length != 1) return None
+        Some(s"AVG(${quoteIdentifier(avg.column.fieldNames.head)})")
       case count: Count =>
         if (count.column.fieldNames.length != 1) return None
         val distinct = if (count.isDistinct) "DISTINCT " else ""
