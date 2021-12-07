@@ -515,7 +515,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     try {
       val lines = readLines(logData)
       val logStart = SparkListenerLogStart(SPARK_VERSION)
-      assert(lines.size === 23)
+      assert(lines.size === 25)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
@@ -526,13 +526,13 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
             if metricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER =>
           case stageCompleted: SparkListenerStageCompleted =>
             val execIds = Set[String]()
-            (1 to 2).foreach { _ =>
+            (1 to 3).foreach { _ =>
               val execId = checkStageExecutorMetrics(lines(logIdx),
                 stageCompleted.stageInfo.stageId, expectedMetricsEvents)
               execIds += execId
               logIdx += 1
             }
-            assert(execIds.size == 2) // check that executor was logged/driver no need to be logged
+            assert(execIds.size == 3) // check that each executor/driver was logged
             checkEvent(lines(logIdx), event)
             logIdx += 1
           case _ =>
