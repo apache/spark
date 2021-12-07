@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -75,69 +73,52 @@ class InferFiltersFromGenerateSuite extends PlanTest {
       comparePlans(optimized, originalQuery)
     }
 
-    val fromJson = f(JsonToStructs(ArrayType(new StructType().add("s", "string")), Map.empty, 'c1))
-    test("SPARK-37392: Don't infer filters from " + fromJson) {
-      val originalQuery = testRelation.generate(fromJson).analyze
+    val generatorWithFromJson = f(JsonToStructs(
+      ArrayType(new StructType().add("s", "string")),
+      Map.empty,
+      'c1))
+    test("SPARK-37392: Don't infer filters from " + generatorWithFromJson) {
+      val originalQuery = testRelation.generate(generatorWithFromJson).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+
+    val returnSchema = ArrayType(StructType(Seq(
+      StructField("x", IntegerType),
+      StructField("y", StringType)
+    )))
+    val fakeUDF = ScalaUDF(
+      (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
+      returnSchema, 'c3 :: Nil, Nil)
+    val generatorWithUDF = f(fakeUDF)
+    test("SPARK-36715: Don't infer filters from " + generatorWithUDF) {
+      val originalQuery = testRelation.generate(generatorWithUDF).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
   }
 
-  // setup rules to test inferFilters with ConstantFolding to make sure
-  // the Filter rule added in inferFilters is removed again when doing
-  // explode with CreateArray/CreateMap
-  object OptimizeInferAndConstantFold extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("AnalysisNodes", Once,
-        EliminateSubqueryAliases) ::
-      Batch("Infer Filters", Once, InferFiltersFromGenerate) ::
-      Batch("ConstantFolding after", FixedPoint(4),
-        ConstantFolding,
-        NullPropagation,
-        PruneFilters) :: Nil
-  }
-
   Seq(Explode(_), PosExplode(_)).foreach { f =>
     val createArrayExplode = f(CreateArray(Seq('c1)))
-    test("SPARK-33544: Don't infer filters from CreateArray " + createArrayExplode) {
+    test("SPARK-33544: Don't infer filters from " + createArrayExplode) {
       val originalQuery = testRelation.generate(createArrayExplode).analyze
-      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+      val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
     val createMapExplode = f(CreateMap(Seq('c1, 'c2)))
-    test("SPARK-33544: Don't infer filters from CreateMap " + createMapExplode) {
+    test("SPARK-33544: Don't infer filters from " + createMapExplode) {
       val originalQuery = testRelation.generate(createMapExplode).analyze
-      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+      val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
   }
 
   Seq(Inline(_)).foreach { f =>
     val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
-    test("SPARK-33544: Don't infer filters from CreateArray " + createArrayStructExplode) {
+    test("SPARK-33544: Don't infer filters from " + createArrayStructExplode) {
       val originalQuery = testRelation.generate(createArrayStructExplode).analyze
-      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+      val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
-    }
-  }
-
-  test("SPARK-36715: Don't infer filters from udf") {
-    Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
-      val returnSchema = ArrayType(StructType(Seq(
-        StructField("x", IntegerType),
-        StructField("y", StringType)
-      )))
-      val fakeUDF = ScalaUDF(
-        (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
-        returnSchema, Literal(8) :: Nil,
-        Option(ExpressionEncoder[Int]().resolveAndBind()) :: Nil)
-      val generator = f(fakeUDF)
-      val originalQuery = OneRowRelation().generate(generator).analyze
-      val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
-      val correctAnswer = OneRowRelation()
-        .generate(generator)
-        .analyze
-      comparePlans(optimized, correctAnswer)
     }
   }
 }
