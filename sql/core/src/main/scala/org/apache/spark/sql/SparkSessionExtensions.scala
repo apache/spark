@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
  * <li>Pre CBO Rules.</li>
+ * <li>Early Scan Push-Down</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -236,6 +237,9 @@ class SparkSessionExtensions {
    * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
    * The injected rules will be executed once after the operator optimization batch and
    * after any push down optimization rules.
+   * 'Pre CBO Rules' and 'Early Scan Push-Down' are executed before and after
+   * `V2ScanRelationPushDown`. So the user can apply the custom rules related to pushdown
+   * after `V2ScanRelationPushDown` fails.
    */
   def injectEarlyScanPushDownRule(builder: RuleBuilder): Unit = {
     earlyScanPushDownRules += builder
