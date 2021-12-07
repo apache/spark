@@ -1200,7 +1200,7 @@ class DataStreamWriter(object):
         """
 
         from pyspark.rdd import _wrap_function  # type: ignore[attr-defined]
-        from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -1268,7 +1268,7 @@ class DataStreamWriter(object):
 
             func = func_with_open_process_close  # type: ignore[assignment]
 
-        serializer = AutoBatchedSerializer(PickleSerializer())
+        serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         jForeachWriter = self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(  # type: ignore[attr-defined]
             wrapped_func, self._df._jdf.schema()

@@ -43,6 +43,7 @@
     <spark.kubernetes.test.master></spark.kubernetes.test.master>
     <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
     <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+    <spark.kubernetes.test.dockerFile>N/A</spark.kubernetes.test.dockerFile>
 
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
@@ -111,6 +112,9 @@
 
                 <argument>--spark-tgz</argument>
                 <argument>${spark.kubernetes.test.sparkTgz}</argument>
+
+                <argument>--docker-file</argument>
+                <argument>${spark.kubernetes.test.dockerFile}</argument>
 
                 <argument>--test-exclude-tags</argument>
                 <argument>"${test.exclude.tags}"</argument>
