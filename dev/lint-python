@@ -20,8 +20,6 @@ FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
 MINIMUM_MYPY="0.910"
 MYPY_BUILD="mypy"
-PYCODESTYLE_BUILD="pycodestyle"
-MINIMUM_PYCODESTYLE="2.7.0"
 PYTEST_BUILD="pytest"
 
 PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
@@ -60,66 +58,6 @@ function compile_python_test {
         exit "$COMPILE_STATUS"
     else
         echo "python compilation succeeded."
-        echo
-    fi
-}
-
-function pycodestyle_test {
-    local PYCODESTYLE_STATUS=
-    local PYCODESTYLE_REPORT=
-    local RUN_LOCAL_PYCODESTYLE=
-    local PYCODESTYLE_VERSION=
-    local EXPECTED_PYCODESTYLE=
-    local PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$MINIMUM_PYCODESTYLE.py"
-    local PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$MINIMUM_PYCODESTYLE/pycodestyle.py"
-
-    if [[ ! "$1" ]]; then
-        echo "No python files found!  Something is very wrong -- exiting."
-        exit 1;
-    fi
-
-    # check for locally installed pycodestyle & version
-    RUN_LOCAL_PYCODESTYLE="False"
-    if hash "$PYCODESTYLE_BUILD" 2> /dev/null; then
-        PYCODESTYLE_VERSION="$($PYCODESTYLE_BUILD --version)"
-        EXPECTED_PYCODESTYLE="$(satisfies_min_version $PYCODESTYLE_VERSION $MINIMUM_PYCODESTYLE)"
-        if [ "$EXPECTED_PYCODESTYLE" == "True" ]; then
-            RUN_LOCAL_PYCODESTYLE="True"
-        fi
-    fi
-
-    # download the right version or run locally
-    if [ $RUN_LOCAL_PYCODESTYLE == "False" ]; then
-        # Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
-        # See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
-        # Updated to the latest official version of pep8. pep8 is formally renamed to pycodestyle.
-        echo "downloading pycodestyle from $PYCODESTYLE_SCRIPT_REMOTE_PATH..."
-        if [ ! -e "$PYCODESTYLE_SCRIPT_PATH" ]; then
-            curl --silent -o "$PYCODESTYLE_SCRIPT_PATH" "$PYCODESTYLE_SCRIPT_REMOTE_PATH"
-            local curl_status="$?"
-
-            if [ "$curl_status" -ne 0 ]; then
-                echo "Failed to download pycodestyle.py from $PYCODESTYLE_SCRIPT_REMOTE_PATH"
-                exit "$curl_status"
-            fi
-        fi
-
-        echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( ("$PYTHON_EXECUTABLE" "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $1) 2>&1)
-        PYCODESTYLE_STATUS=$?
-    else
-        # we have the right version installed, so run locally
-        echo "starting pycodestyle test..."
-        PYCODESTYLE_REPORT=$( ($PYCODESTYLE_BUILD --config=dev/tox.ini $1) 2>&1)
-        PYCODESTYLE_STATUS=$?
-    fi
-
-    if [ $PYCODESTYLE_STATUS -ne 0 ]; then
-        echo "pycodestyle checks failed:"
-        echo "$PYCODESTYLE_REPORT"
-        exit "$PYCODESTYLE_STATUS"
-    else
-        echo "pycodestyle checks passed."
         echo
     fi
 }
@@ -292,12 +230,10 @@ SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-# skipping local ruby bundle directory from the search
-PYTHON_SOURCE="$(find . -path ./docs/.local_ruby_bundle -prune -false -o -name "*.py")"
+PYTHON_SOURCE="$(git ls-files '*.py')"
 
 compile_python_test "$PYTHON_SOURCE"
 black_test
-pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
 mypy_test
 

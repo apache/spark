@@ -150,6 +150,16 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("varchar(3)"))
+      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("char(5)"))
+    }
+  }
 }
 
 class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with SharedSparkSession {

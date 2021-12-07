@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -51,7 +52,7 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
         Row("user", user))
 
       assert(properties.schema === schema)
-      checkAnswer(properties.sort("key"), expected)
+      checkAnswer(properties, expected)
     }
   }
 
@@ -85,6 +86,27 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(res.length == 1)
       assert(res.head.getString(0) == nonExistingKey)
       assert(res.head.getString(1).contains(s"does not have property: $nonExistingKey"))
+    }
+  }
+
+  test("KEEP THE LEGACY OUTPUT SCHEMA") {
+    Seq(true, false).foreach { keepLegacySchema =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
+        withNamespaceAndTable("ns1", "tbl") { tbl =>
+          spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+            "TBLPROPERTIES ('user'='spark', 'status'='new')")
+
+          val properties = sql(s"SHOW TBLPROPERTIES $tbl ('status')")
+          val schema = properties.schema.fieldNames.toSeq
+          if (keepLegacySchema) {
+            assert(schema === Seq("value"))
+            checkAnswer(properties, Seq(Row("new")))
+          } else {
+            assert(schema === Seq("key", "value"))
+            checkAnswer(properties, Seq(Row("status", "new")))
+          }
+        }
+      }
     }
   }
 }

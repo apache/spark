@@ -101,16 +101,6 @@ trait NamedExpression extends Expression {
 
   /** Returns a copy of this expression with a new `exprId`. */
   def newInstance(): NamedExpression
-
-  protected def typeSuffix =
-    if (resolved) {
-      dataType match {
-        case LongType => "L"
-        case _ => ""
-      }
-    } else {
-      ""
-    }
 }
 
 abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {

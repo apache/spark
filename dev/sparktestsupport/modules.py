@@ -464,6 +464,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_streaming",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_utils",
     ]
 )
@@ -606,6 +607,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.namespace",
         "pyspark.pandas.numpy_compat",
         "pyspark.pandas.sql_processor",
+        "pyspark.pandas.sql_formatter",
         "pyspark.pandas.strings",
         "pyspark.pandas.utils",
         "pyspark.pandas.window",

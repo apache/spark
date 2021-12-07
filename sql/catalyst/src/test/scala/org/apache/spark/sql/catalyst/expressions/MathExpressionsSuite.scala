@@ -760,4 +760,32 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
     }
   }
+
+  test("SPARK-37388: width_bucket") {
+    val nullDouble = Literal.create(null, DoubleType)
+    val nullLong = Literal.create(null, LongType)
+
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, 5L), 3L)
+    checkEvaluation(WidthBucket(-2.1, 1.3, 3.4, 3L), 0L)
+    checkEvaluation(WidthBucket(8.1, 0.0, 5.7, 4L), 5L)
+    checkEvaluation(WidthBucket(-0.9, 5.2, 0.5, 2L), 3L)
+    checkEvaluation(WidthBucket(nullDouble, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, nullLong), null)
+    checkEvaluation(WidthBucket(nullDouble, nullDouble, nullDouble, nullLong), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, -5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, Long.MaxValue), null)
+    checkEvaluation(WidthBucket(Double.NaN, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(Double.NegativeInfinity, 0.024, 10.06, 5L), 0L)
+    checkEvaluation(WidthBucket(Double.PositiveInfinity, 0.024, 10.06, 5L), 6L)
+    checkEvaluation(WidthBucket(5.35, 0.024, 0.024, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NaN, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NegativeInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.PositiveInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
+  }
 }

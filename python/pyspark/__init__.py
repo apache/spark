@@ -57,7 +57,7 @@ from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
-from pyspark.serializers import MarshalSerializer, PickleSerializer
+from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
@@ -136,7 +136,7 @@ __all__ = [
     "Accumulator",
     "AccumulatorParam",
     "MarshalSerializer",
-    "PickleSerializer",
+    "CPickleSerializer",
     "StatusTracker",
     "SparkJobInfo",
     "SparkStageInfo",
