@@ -103,7 +103,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val df = sql("select VAR_POP(bonus), VAR_SAMP(bonus) FROM postgresql.test.employee" +
       " where dept > 0 group by DePt order by dept")
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, output) =>
+      case DataSourceV2ScanRelation(_, scan, _) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)
@@ -127,7 +127,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val df = sql("select STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM postgresql.test.employee" +
       " where dept > 0 group by DePt order by dept")
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, output) =>
+      case DataSourceV2ScanRelation(_, scan, _) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)
@@ -151,7 +151,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val df = sql("select COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus) FROM" +
       " postgresql.test.employee where dept > 0 group by DePt order by dept")
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, output) =>
+      case DataSourceV2ScanRelation(_, scan, _) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)
@@ -175,7 +175,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val df = sql("select CORR(bonus, bonus) FROM postgresql.test.employee where dept > 0" +
       " group by DePt order by dept")
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, output) =>
+      case DataSourceV2ScanRelation(_, scan, _) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)
