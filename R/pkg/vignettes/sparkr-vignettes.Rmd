@@ -28,7 +28,7 @@ vignette: >
 -->
 
 ```{r dynamic-chunk-options, include=FALSE}
-# In GitHub lint job, we don't have full JVm build
+# In GitHub lint job, we don't have full JVM build
 # SparkR vignette fails to evaluate
 GITHUB_ACTIONS <- tolower(Sys.getenv("GITHUB_ACTIONS")) == "true"
 EVAL_CHUNK <- !GITHUB_ACTIONS
