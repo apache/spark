@@ -101,7 +101,13 @@ private[spark] class HiveDelegationTokenProvider
       doAsRealUser {
         val hive = conf match {
           case hiveConf: HiveConf =>
-            Hive.getWithoutRegisterFns(hiveConf)
+            try {
+              classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
+                .invoke(null, conf).asInstanceOf[Hive]
+            } catch {
+              case _: NoSuchMethodException =>
+                Hive.get(hiveConf)
+            }
           case _ =>
             Hive.get(conf, classOf[HiveConf])
         }
