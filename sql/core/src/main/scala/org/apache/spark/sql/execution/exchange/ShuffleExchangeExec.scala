@@ -165,12 +165,15 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    // As the Partitioner may do a sampling job in the input RDD, we clone the child to make sure
+    // the `inputRDDForSampling` has different metrics id with `inputRDD`.
     val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
       child.output,
       outputPartitioning,
       serializer,
-      writeMetrics)
+      writeMetrics,
+      Option(child.clone().execute()))
     metrics("numPartitions").set(dep.partitioner.numPartitions)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(
@@ -263,7 +266,8 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
+      writeMetrics: Map[String, SQLMetric],
+      inputRDDForSampling: Option[RDD[InternalRow]] = None)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -277,7 +281,7 @@ object ShuffleExchangeExec {
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
-        val rddForSampling = rdd.mapPartitionsInternal { iter =>
+        val rddForSampling = inputRDDForSampling.getOrElse(rdd).mapPartitionsInternal { iter =>
           val projection =
             UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
           val mutablePair = new MutablePair[InternalRow, Null]()

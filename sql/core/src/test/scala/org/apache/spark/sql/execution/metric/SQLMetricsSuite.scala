@@ -828,6 +828,21 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }
   }
+
+  test("SPARK-37566: sampling job of RangePartitioner should not increase output rows number") {
+    val df = spark.range(0, 10)
+      .repartitionByRange(10, col("id"))
+      .toDF
+
+    Seq((false, "Range"), (true, "WholeStageCodegen (1)")).foreach {
+      case (enableWholeStage, nodeName) =>
+        testSparkPlanMetrics(df, 2, Map(
+          1L -> ((nodeName, Map(
+            "number of output rows" -> 10L)))),
+          enableWholeStage
+        )
+    }
+  }
 }
 
 case class CustomFileCommitProtocol(
