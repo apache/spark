@@ -490,8 +490,8 @@ jobs:
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_git('https://github.com/r-lib/pkgdown.git')"
-        Rscript -e "devtools::install_git('https://github.com/amirmasoudabdol/preferably.git')"
+        Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         gem install bundler
         cd docs
         bundle install
