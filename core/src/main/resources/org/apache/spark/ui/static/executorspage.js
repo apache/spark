@@ -88,19 +88,10 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
-var shouldBlockUI = true;
-
-$(document).ajaxStop(function () {
-  if (shouldBlockUI) {
-    $.unblockUI();
-    shouldBlockUI = false;
-  }
-});
+$(document).ajaxStop($.unblockUI);
 
 $(document).ajaxStart(function () {
-  if (shouldBlockUI) {
-    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
-  }
+  $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
 
 function logsExist(execs) {
@@ -252,7 +243,6 @@ function createRowMetadataForColumn(colKey, data, checkboxId) {
 
 function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
   var str;
-  console.log(row)
   switch(row.columnKey) {
     case 'MinorGCCount':
       return row.data[columnIndex];
@@ -333,8 +323,6 @@ function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTab
       }
     };
     executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
-    console.log("bind data....")
-    console.log(executorSummaryConf)
   }
   executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
@@ -958,11 +946,6 @@ $(document).ready(function () {
     $.getJSON(createRESTEndPointForExecutorsPeakMetricsSummariesPage(appId) + "?activeOnly=true&quantiles=" + quantiles,
       function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
         var taskMetricKeys = Object.keys(executorMetricsResponse);
-        var output;
-        for (property in executorMetricsResponse) {
-            output += property + ': ' + executorMetricsResponse[property]+'; \n';
-        }
-        console.log(output);
         taskMetricKeys.forEach(function (columnKey) {
           var row;
           switch(columnKey) {
@@ -1094,9 +1077,8 @@ $(document).ready(function () {
        for (property in executorSummaryMetricsTableArray) {
          output2 += property + '; \n';
        }
-       console.log(output);
-        var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
-        executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
+       var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
+       executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
       });
   });
 });
