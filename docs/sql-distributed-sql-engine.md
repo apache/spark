@@ -92,6 +92,6 @@ See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-
 
 To use the Spark SQL command line interface (CLI) from the shell:
 
-    ./bin/hive
+    ./bin/spark-sql
     
-Details please refer to [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html)
+For details, please refer to [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html)

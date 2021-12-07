@@ -84,7 +84,7 @@ Use `;` (semicolon) to terminate commands, but user can escape `;` by `\\;`. Com
 </tr>
 </table>
 
-## Supported comment type
+## Supported comment types
 
 <table class="table">
 <tr><th>Comment</th><th>Example</th></tr>
@@ -121,9 +121,6 @@ Use `;` (semicolon) to terminate commands, but user can escape `;` by `\\;`. Com
 </table>
 
 ## Examples
-
-See Variable Substitution for examples of using the hiveconf option.
-
 
 Example of running a query from the command line
 
