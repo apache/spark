@@ -1323,21 +1323,19 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   override def foldable: Boolean = child.foldable
 
+  def CeilFloorModeWithScale0: Boolean =
+    Seq(ROUND_CEILING, ROUND_FLOOR).contains(mode) && _scale == 0
+
   override lazy val dataType: DataType =
-    if (Seq(ROUND_CEILING, ROUND_FLOOR).contains(mode) && _scale == 0) {
-      child.dataType match {
-        case dt@DecimalType.Fixed(_, 0) => dt
-        case DecimalType.Fixed(precision, scale) =>
-          DecimalType.bounded(precision - scale + 1, 0)
-        case _ => LongType
-      }
-    } else {
-      child.dataType match {
-        // if the new scale is bigger which means we are scaling up,
-        // keep the original scale as `Decimal` does
-        case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-        case t => t
-      }
+    (child.dataType, CeilFloorModeWithScale0) match {
+      case (dt@DecimalType.Fixed(_, 0), true) => dt
+      case (DecimalType.Fixed(precision, scale), true) =>
+        DecimalType.bounded(precision - scale + 1, 0)
+      case (_, true) => LongType
+      // if the new scale is bigger which means we are scaling up,
+      // keep the original scale as `Decimal` does
+      case (DecimalType.Fixed(p, s), false) => DecimalType(p, if (_scale > s) s else _scale)
+      case (t, false) => t
     }
 
   override def inputTypes: Seq[AbstractDataType] =
