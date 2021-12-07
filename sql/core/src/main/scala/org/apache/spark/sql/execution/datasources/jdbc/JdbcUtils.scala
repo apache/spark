@@ -40,8 +40,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
-import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -1118,7 +1117,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
               s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
           }
         } else {
-          indexPropertyList.append(convertPropertyPairToString(catalogName, k, v))
+          indexPropertyList.append(s"$k = $v")
         }
       }
     }
@@ -1140,14 +1139,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case "mysql" => Array("BTREE", "HASH")
       case "postgresql" => Array("BTREE", "HASH", "BRIN")
       case _ => Array.empty
-    }
-  }
-
-  def convertPropertyPairToString(catalogName: String, key: String, value: String): String = {
-    catalogName match {
-      case "mysql" => s"$key $value"
-      case "postgresql" => s"$key = $value"
-      case _ => ""
     }
   }
 

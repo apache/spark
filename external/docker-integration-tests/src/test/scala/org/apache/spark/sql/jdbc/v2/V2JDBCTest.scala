@@ -71,14 +71,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
 
-  def indexOptions(catalogName: String): String = {
-    catalogName match {
-      case "mysql" => "KEY_BLOCK_SIZE=10"
-      case "postgresql" => "FILLFACTOR=70"
-      case _ => ""
-    }
-  }
-
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
@@ -199,6 +191,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsIndex: Boolean = false
 
+  def indexOptions: String = ""
+
   test("SPARK-36895: Test INDEX Using SQL") {
     if (supportsIndex) {
       withTable(s"$catalogName.new_table") {
@@ -220,7 +214,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
-          s" OPTIONS (${indexOptions(catalogName)})")
+          s" OPTIONS ($indexOptions)")
 
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)
