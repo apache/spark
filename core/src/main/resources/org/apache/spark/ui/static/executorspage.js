@@ -343,8 +343,6 @@ $(document).ready(function () {
   setDataTableDefaults();
 
   var executorsSummary = $("#active-executors");
-  var executorSummaryMetricsTitle = $('#executorSummaryMetricsTitle')
-  var executorsTitle = $('#executorsTitle');
 
   getStandAloneAppId(function (appId) {
 
@@ -572,7 +570,6 @@ $(document).ready(function () {
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
         executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
-
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
@@ -1098,9 +1095,7 @@ $(document).ready(function () {
          output2 += property + '; \n';
        }
        console.log(output);
-        var executorSummaryMetricsTableFilteredArray =
-          executorSummaryMetricsTableArray
-//          .filter(row => row.checkboxId < 11);
+        var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
         executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
       });
   });
