@@ -250,6 +250,30 @@ function createRowMetadataForColumn(colKey, data, checkboxId) {
   return row;
 }
 
+function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
+  var str;
+  console.log(row)
+  switch(row.columnKey) {
+    case 'MinorGCCount':
+      return row.data[columnIndex];
+
+    case 'MinorGCTime':
+      str = formatDuration(row.data[columnIndex]);
+      return str;
+
+    case 'MajorGCCount':
+      return row.data[columnIndex];
+
+    case 'MajorGCTime':
+      str = formatDuration(row.data[columnIndex]);
+      return str;
+
+    default:
+      str = formatBytes(row.data[columnIndex], type);
+      return str;
+  }
+}
+
 function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTable) {
   var executorMetricsTable = "#summary-executor-metrics-table";
   if ($.fn.dataTable.isDataTable(executorMetricsTable)) {
@@ -309,6 +333,8 @@ function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTab
       }
     };
     executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
+    console.log("bind data....")
+    console.log(executorSummaryConf)
   }
   executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
@@ -317,6 +343,8 @@ $(document).ready(function () {
   setDataTableDefaults();
 
   var executorsSummary = $("#active-executors");
+  var executorSummaryMetricsTitle = $('#executorSummaryMetricsTitle')
+  var executorsTitle = $('#executorsTitle');
 
   getStandAloneAppId(function (appId) {
 
@@ -540,14 +568,11 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      // title number and toggle list
-      $('#executorSummaryMetricsTitle').html("Summary Metrics for " + "<a href='#executorsTitle'>" + allExecCnt + " Executors" + "</a>");
-      $('#executorsTitle').html("Executors (" + allExecCnt + ")");
-
       var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
         executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
@@ -882,6 +907,10 @@ $(document).ready(function () {
           "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
           "</div>");
 
+        $('#executorSummaryMetricsTitle').append("Summary Metrics for " + "<a href='#executorsTitle'>" + allExecCnt + " Executors" + "</a>");
+        $('#executorsTitle').html("Executors (" + allExecCnt + ")");
+        createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableCurrentStateArray);
+
         reselectCheckboxesBasedOnTaskTableState();
 
         $("#additionalMetrics").click(function() {
@@ -1073,7 +1102,6 @@ $(document).ready(function () {
           executorSummaryMetricsTableArray
 //          .filter(row => row.checkboxId < 11);
         executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
-        createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableCurrentStateArray);
       });
   });
 });
