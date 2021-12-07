@@ -37,7 +37,13 @@ from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
+from pyspark.sql.types import (
+    DayTimeIntervalType,
+    FractionalType,
+    IntegralType,
+    TimestampType,
+    TimestampNTZType,
+)
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -178,6 +184,7 @@ class Index(IndexOpsMixin):
         from pyspark.pandas.indexes.datetimes import DatetimeIndex
         from pyspark.pandas.indexes.multi import MultiIndex
         from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
+        from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 
         instance: Index
         if anchor._internal.index_level > 1:
@@ -197,6 +204,11 @@ class Index(IndexOpsMixin):
             (TimestampType, TimestampNTZType),
         ):
             instance = object.__new__(DatetimeIndex)
+        elif isinstance(
+            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
+            DayTimeIntervalType,
+        ):
+            instance = object.__new__(TimedeltaIndex)
         else:
             instance = object.__new__(Index)
 

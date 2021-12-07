@@ -485,12 +485,10 @@ abstract class OrcSuite
   }
 
   test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
-          Row(java.sql.Date.valueOf("1200-01-01")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+        Row(java.sql.Date.valueOf("1200-01-01")))
     }
   }
 
@@ -502,23 +500,19 @@ abstract class OrcSuite
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
-        }
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
       }
     }
   }
 
   test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
-          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
     }
   }
 
@@ -530,14 +524,12 @@ abstract class OrcSuite
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(
-              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
-              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
-        }
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+            Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
       }
     }
   }
@@ -809,11 +801,12 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
-  Seq(true, false).foreach { vecReaderEnabled =>
+  withAllNativeOrcReaders {
     Seq(true, false).foreach { vecReaderNestedColEnabled =>
+      val vecReaderEnabled = SQLConf.get.orcVectorizedReaderEnabled
       test("SPARK-36931: Support reading and writing ANSI intervals (" +
-      s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
-      s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
+        s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
+        s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
 
         withSQLConf(
           SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->

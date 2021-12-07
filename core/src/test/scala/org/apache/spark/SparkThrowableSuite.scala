@@ -69,7 +69,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .setSerializationInclusion(Include.NON_ABSENT)
       .writeValueAsString(errorClassToInfoMap)
-    assert(rewrittenString == errorClassFileContents)
+    assert(rewrittenString.trim == errorClassFileContents.trim)
   }
 
   test("SQLSTATE invariants") {

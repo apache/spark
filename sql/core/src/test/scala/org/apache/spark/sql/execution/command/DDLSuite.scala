@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -375,6 +375,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val path = new Path(tmpDir.getCanonicalPath).toUri
       databaseNames.foreach { dbName =>
         try {
+          val e = intercept[IllegalArgumentException] {
+            sql(s"CREATE DATABASE $dbName Location ''")
+          }
+          assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
@@ -776,29 +781,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-
-        withTempDir { tmpDir =>
-          if (isUsingHiveMetastore) {
-            val e1 = intercept[AnalysisException] {
-              sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            }
-            assert(e1.getMessage.contains("does not support altering database location"))
-          } else {
-            sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            val uriInCatalog = catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri
-            assert("file" === uriInCatalog.getScheme)
-            assert(new Path(tmpDir.getPath).toUri.getPath === uriInCatalog.getPath)
-          }
-
-          intercept[NoSuchDatabaseException] {
-            sql(s"ALTER DATABASE `db-not-exist` SET LOCATION '${tmpDir.toURI}'")
-          }
-
-          val e3 = intercept[IllegalArgumentException] {
-            sql(s"ALTER DATABASE $dbName SET LOCATION ''")
-          }
-          assert(e3.getMessage.contains("Can not create a Path from an empty string"))
-        }
       } finally {
         catalog.reset()
       }

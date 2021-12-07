@@ -28,7 +28,7 @@ import sys
 import heapq
 from pyspark.serializers import (
     BatchedSerializer,
-    PickleSerializer,
+    CPickleSerializer,
     FlattenedValuesSerializer,
     CompressedSerializer,
     AutoBatchedSerializer,
@@ -140,8 +140,8 @@ class Merger(object):
 
 
 def _compressed_serializer(self, serializer=None):
-    # always use PickleSerializer to simplify implementation
-    ser = PickleSerializer()
+    # always use CPickleSerializer to simplify implementation
+    ser = CPickleSerializer()
     return AutoBatchedSerializer(CompressedSerializer(ser))
 
 
@@ -609,7 +609,7 @@ class ExternalList(object):
             os.makedirs(d)
         p = os.path.join(d, str(id(self)))
         self._file = open(p, "w+b", 65536)
-        self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
+        self._ser = BatchedSerializer(CompressedSerializer(CPickleSerializer()), 1024)
         os.unlink(p)
 
     def __del__(self):
