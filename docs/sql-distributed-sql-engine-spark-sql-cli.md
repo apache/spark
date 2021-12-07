@@ -58,7 +58,19 @@ The Spark SQL CLI when invoked without the `-i` option will attempt to load `$HI
 ## Spark SQL CLI Interactive Shell Commands
 
 When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
-Use `;` (semicolon) to terminate commands, but user can escape `;` by `\\;`. Comments in scripts can be specified using the `--` prefix.
+Use `;` (semicolon) to terminate commands. Notice:
+
+    1. CLI use `;` to terminate commands only when it's at the end of line and it's not escaped by `\\;`.
+    2. `;` is the only way to terminate commands, if user type `SELECT 1` and press enter, console will just wait for input.
+    3. If user type multiple commands in one line like `SELECT 1; SELECT 2;`, commands `SELECT 1` and `SELECT 2` will be executed separatly.
+    4. If `;` in a simple comment `-- This is a comment;`, this line will just be ignored. If `;` in a bracketed command and not at the end of line
+           /* This is a comment contains ';'. */
+           SELECT 1;
+       It won't terminate commands. If `;` in a bracketed command and in the end of line, 
+           /* This is a comment contains ;
+           */ SELECT 1;
+       It will terminate commands into  `/* This is a comment contains ` and `*/ SELECT 1`.
+
 
 <table class="table">
 <tr><th>Command</th><th>Description</th></tr>
