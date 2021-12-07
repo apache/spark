@@ -1153,15 +1153,6 @@ case class HashAggregateExec(
     }
   }
 
-  /**
-   * The corresponding [[SortAggregateExec]] to get same result as this node.
-   */
-  def toSortAggregate: SortAggregateExec = {
-    SortAggregateExec(
-      requiredChildDistributionExpressions, groupingExpressions, aggregateExpressions,
-      aggregateAttributes, initialInputBufferOffset, resultExpressions, child)
-  }
-
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
 }
