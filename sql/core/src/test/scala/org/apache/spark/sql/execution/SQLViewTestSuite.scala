@@ -385,12 +385,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       val e1 = intercept[AnalysisException](
         sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
       )
-      assert(e1.message.contains(s"$viewName is a view which does not support time travel"))
+      assert(e1.message.contains("Cannot time travel views"))
 
       val e2 = intercept[AnalysisException](
         sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
       )
-      assert(e2.message.contains(s"$viewName is a view which does not support time travel"))
+      assert(e2.message.contains("Cannot time travel views"))
     }
   }
 }

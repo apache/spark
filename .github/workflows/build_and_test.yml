@@ -354,7 +354,9 @@ jobs:
 
   sparkr:
     needs: configure-jobs
-    if: needs.configure-jobs.outputs.type == 'regular'
+    if: >-
+      needs.configure-jobs.outputs.type == 'regular'
+      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
@@ -399,6 +401,10 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
+    - name: Install Java ${{ needs.configure-jobs.outputs.java }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ needs.configure-jobs.outputs.java }}
     - name: Run tests
       run: |
         # The followings are also used by `r-lib/actions/setup-r` to avoid
