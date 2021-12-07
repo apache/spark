@@ -36,7 +36,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
   protected def isCasePreserving: Boolean = true
-  protected def assertDropFails
+  protected def assertDropFails(): Unit
 
   protected def checkNamespace(expected: Seq[String]) = {
     val df = spark.sql(s"SHOW NAMESPACES IN $catalog")
@@ -52,27 +52,27 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkNamespace(builtinTopNamespaces)
   }
 
-  test("DropNamespace: test handling of 'IF EXISTS'") {
+  test("test handling of 'IF EXISTS'") {
     // It must not throw any exceptions
     sql(s"DROP NAMESPACE IF EXISTS $catalog.unknown")
     checkNamespace(builtinTopNamespaces)
   }
 
-  test("DropNamespace: Namespace does not exist") {
+  test("namespace does not exist") {
     // Namespace $catalog.unknown does not exist.
     val message = intercept[AnalysisException] {
-      sql(s"DROP DATABASE $catalog.unknown")
+      sql(s"DROP NAMESPACE $catalog.unknown")
     }.getMessage
     assert(message.contains(s"'unknown' not found"))
   }
 
-  test("DropNamespace: drop non-empty namespace with a non-cascading mode") {
+  test("drop non-empty namespace with a non-cascading mode") {
     sql(s"CREATE NAMESPACE $catalog.ns")
     sql(s"CREATE TABLE $catalog.ns.table (id bigint) $defaultUsing")
     checkNamespace(Seq("ns") ++ builtinTopNamespaces)
 
     // $catalog.ns.table is present, thus $catalog.ns cannot be dropped.
-    assertDropFails
+    assertDropFails()
     sql(s"DROP TABLE $catalog.ns.table")
 
     // Now that $catalog.ns is empty, it can be dropped.
@@ -80,7 +80,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkNamespace(builtinTopNamespaces)
   }
 
-  test("DropNamespace: drop non-empty namespace with a cascade mode") {
+  test("drop non-empty namespace with a cascade mode") {
     sql(s"CREATE NAMESPACE $catalog.ns")
     sql(s"CREATE TABLE $catalog.ns.table (id bigint) $defaultUsing")
     checkNamespace(Seq("ns") ++ builtinTopNamespaces)
@@ -89,14 +89,14 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkNamespace(builtinTopNamespaces)
   }
 
-  test("DropNamespace: drop current namespace") {
+  test("drop current namespace") {
     sql(s"CREATE NAMESPACE $catalog.ns")
     sql(s"USE $catalog.ns")
     sql(s"DROP NAMESPACE $catalog.ns")
     checkNamespace(builtinTopNamespaces)
   }
 
-  test("DropNamespace: drop namespace with case sensitivity") {
+  test("drop namespace with case sensitivity") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         sql(s"CREATE NAMESPACE $catalog.AAA")

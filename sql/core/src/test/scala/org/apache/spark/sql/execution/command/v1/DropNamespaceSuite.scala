@@ -38,7 +38,7 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase {
     assert(e.getMessage.contains("Database ns is not empty. One or more tables exist"))
   }
 
-  test("DropNamespace: drop default namespace") {
+  test("drop default namespace") {
     val message = intercept[AnalysisException] {
       sql(s"DROP NAMESPACE default")
     }.getMessage
