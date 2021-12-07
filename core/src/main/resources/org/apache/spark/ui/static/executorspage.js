@@ -89,7 +89,6 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
 });
 
 $(document).ajaxStop($.unblockUI);
-
 $(document).ajaxStart(function () {
   $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
