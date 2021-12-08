@@ -72,6 +72,7 @@ private[python] class WritableToJavaConverter(
       case iw: IntWritable => iw.get()
       case dw: DoubleWritable => dw.get()
       case lw: LongWritable => lw.get()
+      case sw: ShortWritable => sw.get()
       case fw: FloatWritable => fw.get()
       case t: Text => t.toString
       case bw: BooleanWritable => bw.get()
