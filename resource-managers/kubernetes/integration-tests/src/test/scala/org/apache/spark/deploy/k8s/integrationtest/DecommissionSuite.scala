@@ -178,7 +178,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       decommissioningTest = true)
   }
 
-  test("Rolling decommissioning", k8sTestTag) {
+  test("SPARK-37576: Rolling decommissioning", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
       .set(config.DECOMMISSION_ENABLED.key, "true")
