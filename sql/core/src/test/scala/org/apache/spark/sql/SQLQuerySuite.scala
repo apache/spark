@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
+import org.apache.spark.sql.execution.{CommandResultExec, ExpandExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -4237,6 +4237,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       checkAnswer(df3, df4)
     }
+  }
+
+  test("SPARK-37538: No expand needed for single distinct aggregation with filter") {
+    val df = sql("SELECT count(DISTINCT value % 5) FILTER (WHERE value < 50) FROM testData")
+
+    assert(collect(df.queryExecution.executedPlan) {
+      case e: ExpandExec => e
+    }.isEmpty)
+
+    checkAnswer(df, Row(5))
+  }
+
+  test("SPARK-37538: No expand needed for single grouping set") {
+    val df = sql("SELECT count(*) FROM testData GROUP BY GROUPING SETS ((value % 2))")
+
+    assert(collect(df.queryExecution.executedPlan) {
+      case e: ExpandExec => e
+    }.isEmpty)
+
+    checkAnswer(df, Seq(Row(50), Row(50)))
   }
 }
 
