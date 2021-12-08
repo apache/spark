@@ -44,6 +44,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
@@ -276,9 +277,11 @@ class SparkSession(SparkConversionMixin):
                         sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
-                    session = SparkSession(sc)
-                for key, value in self._options.items():
-                    session._jsparkSession.sessionState().conf().setConfString(key, value)
+                    session = SparkSession(sc, options=self._options)
+                else:
+                    getattr(
+                        getattr(session._jvm, "SparkSession$"), "MODULE$"
+                    ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
     builder = Builder()
@@ -287,7 +290,12 @@ class SparkSession(SparkConversionMixin):
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
 
-    def __init__(self, sparkContext: SparkContext, jsparkSession: Optional[JavaObject] = None):
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        jsparkSession: Optional[JavaObject] = None,
+        options: Dict[str, Any] = {},
+    ):
         from pyspark.sql.context import SQLContext
 
         self._sc = sparkContext
@@ -299,8 +307,15 @@ class SparkSession(SparkConversionMixin):
                 and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped()
             ):
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
+                getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                    jsparkSession, options
+                )
             else:
-                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc(), options)
+        else:
+            getattr(getattr(self._jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                jsparkSession, options
+            )
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
@@ -776,9 +791,7 @@ class SparkSession(SparkConversionMixin):
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
-            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
-            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+            omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
         verifySchema : bool, optional
@@ -912,10 +925,23 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str) -> DataFrame:
+    def sql(self, sqlQuery: str, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
+        When ``kwargs`` is specified, this method formats the given string by using the Python
+        standard formatter.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        sqlQuery : str
+            SQL query string.
+        kwargs : dict
+            Other variables that the user wants to set that can be referenced in the query
+
+            .. versionchanged:: 3.3.0
+               Added optional argument ``kwargs`` to specify the mapping of variables in the query.
+               This feature is experimental and unstable.
 
         Returns
         -------
@@ -923,12 +949,76 @@ class SparkSession(SparkConversionMixin):
 
         Examples
         --------
-        >>> df.createOrReplaceTempView("table1")
-        >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> df2.collect()
-        [Row(f1=1, f2='row1'), Row(f1=2, f2='row2'), Row(f1=3, f2='row3')]
+        Executing a SQL query.
+
+        >>> spark.sql("SELECT * FROM range(10) where id > 7").show()
+        +---+
+        | id|
+        +---+
+        |  8|
+        |  9|
+        +---+
+
+        Executing a SQL query with variables as Python formatter standard.
+
+        >>> spark.sql(
+        ...     "SELECT * FROM range(10) WHERE id > {bound1} AND id < {bound2}", bound1=7, bound2=9
+        ... ).show()
+        +---+
+        | id|
+        +---+
+        |  8|
+        +---+
+
+        >>> mydf = spark.range(10)
+        >>> spark.sql(
+        ...     "SELECT {col} FROM {mydf} WHERE id IN {x}",
+        ...     col=mydf.id, mydf=mydf, x=tuple(range(4))).show()
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        +---+
+
+        >>> spark.sql('''
+        ...   SELECT m1.a, m2.b
+        ...   FROM {table1} m1 INNER JOIN {table2} m2
+        ...   ON m1.key = m2.key
+        ...   ORDER BY m1.a, m2.b''',
+        ...   table1=spark.createDataFrame([(1, "a"), (2, "b")], ["a", "key"]),
+        ...   table2=spark.createDataFrame([(3, "a"), (4, "b"), (5, "b")], ["b", "key"])).show()
+        +---+---+
+        |  a|  b|
+        +---+---+
+        |  1|  3|
+        |  2|  4|
+        |  2|  5|
+        +---+---+
+
+        Also, it is possible to query using class:`Column` from :class:`DataFrame`.
+
+        >>> mydf = spark.createDataFrame([(1, 4), (2, 4), (3, 6)], ["A", "B"])
+        >>> spark.sql("SELECT {df.A}, {df[B]} FROM {df}", df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  1|  4|
+        |  2|  4|
+        |  3|  6|
+        +---+---+
         """
-        return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
+
+        formatter = SQLStringFormatter(self)
+        if len(kwargs) > 0:
+            sqlQuery = formatter.format(sqlQuery, **kwargs)
+        try:
+            return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
+        finally:
+            if len(kwargs) > 0:
+                formatter.clear()
 
     def table(self, tableName: str) -> DataFrame:
         """Returns the specified table as a :class:`DataFrame`.

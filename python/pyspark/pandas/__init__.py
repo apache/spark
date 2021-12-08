@@ -61,6 +61,7 @@ from pyspark.pandas.indexes.category import CategoricalIndex
 from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
+from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 from pyspark.pandas.series import Series
 from pyspark.pandas.groupby import NamedAgg
 
@@ -79,6 +80,7 @@ __all__ = [  # noqa: F405
     "Float64Index",
     "CategoricalIndex",
     "DatetimeIndex",
+    "TimedeltaIndex",
     "sql",
     "range",
     "concat",
@@ -144,4 +146,4 @@ _auto_patch_pandas()
 # Import after the usage logger is attached.
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # F405
-from pyspark.pandas.sql_processor import sql
+from pyspark.pandas.sql_formatter import sql

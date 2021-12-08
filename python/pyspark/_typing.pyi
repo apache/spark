@@ -20,7 +20,7 @@ from typing import Callable, Iterable, Sized, TypeVar, Union
 from typing_extensions import Protocol
 
 F = TypeVar("F", bound=Callable)
-T = TypeVar("T", covariant=True)
+T_co = TypeVar("T_co", covariant=True)
 
 PrimitiveType = Union[bool, float, int, str]
 
@@ -30,4 +30,4 @@ class SupportsIAdd(Protocol):
 class SupportsOrdering(Protocol):
     def __le__(self, other: SupportsOrdering) -> bool: ...
 
-class SizedIterable(Protocol, Sized, Iterable[T]): ...
+class SizedIterable(Protocol, Sized, Iterable[T_co]): ...

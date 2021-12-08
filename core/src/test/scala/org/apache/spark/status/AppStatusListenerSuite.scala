@@ -36,9 +36,11 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
+@ExtendedLevelDBTest
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf()
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)

@@ -18,10 +18,10 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -147,6 +147,10 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  def getApplicationId(): ApplicationId = {
+    appId
+  }
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -166,10 +170,9 @@ private[spark] class Client(
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def submitApplication(): Unit = {
     ResourceRequestHelper.validateResources(sparkConf)
 
-    var appId: ApplicationId = null
     try {
       launcherBackend.connect()
       yarnClient.init(hadoopConf)
@@ -181,7 +184,7 @@ private[spark] class Client(
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
-      appId = newAppResponse.getApplicationId()
+      this.appId = newAppResponse.getApplicationId()
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
@@ -199,7 +202,7 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
-      val containerContext = createContainerLaunchContext(newAppResponse)
+      val containerContext = createContainerLaunchContext()
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
@@ -207,8 +210,6 @@ private[spark] class Client(
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-
-      appId
     } catch {
       case e: Throwable =>
         if (stagingDirPath != null) {
@@ -341,7 +342,7 @@ private[spark] class Client(
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
-  def getApplicationReport(appId: ApplicationId): ApplicationReport =
+  def getApplicationReport(): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 
   /**
@@ -901,8 +902,8 @@ private[spark] class Client(
       sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     }
 
-    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
-      env(ENV_DIST_CLASSPATH) = dcp
+    Seq(ENV_DIST_CLASSPATH, SPARK_TESTING).foreach { envVar =>
+      sys.env.get(envVar).foreach(value => env(envVar) = value)
     }
 
     env
@@ -912,10 +913,8 @@ private[spark] class Client(
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
-    : ContainerLaunchContext = {
+  private def createContainerLaunchContext(): ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
-    val appId = newAppResponse.getApplicationId
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
         findPySparkArchives()
@@ -971,7 +970,7 @@ private[spark] class Client(
     if (isClusterMode) {
       sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
         javaOpts ++= Utils.splitCommandString(opts)
-          .map(Utils.substituteAppId(_, appId.toString))
+          .map(Utils.substituteAppId(_, this.appId.toString))
           .map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
@@ -996,7 +995,7 @@ private[spark] class Client(
           throw new SparkException(msg)
         }
         javaOpts ++= Utils.splitCommandString(opts)
-          .map(Utils.substituteAppId(_, appId.toString))
+          .map(Utils.substituteAppId(_, this.appId.toString))
           .map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
@@ -1099,7 +1098,6 @@ private[spark] class Client(
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
-      appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
       interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
@@ -1108,7 +1106,7 @@ private[spark] class Client(
       Thread.sleep(interval)
       val report: ApplicationReport =
         try {
-          getApplicationReport(appId)
+          getApplicationReport
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
@@ -1269,9 +1267,9 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    this.appId = submitApplication()
+    submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
-      val report = getApplicationReport(appId)
+      val report = getApplicationReport
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report, getDriverLogsLink(report)))
@@ -1279,7 +1277,7 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
+      val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
           logError(s"Application diagnostics message: $err")
@@ -1312,7 +1310,7 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private[spark] object Client extends Logging {
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1352,6 +1350,8 @@ private object Client extends Logging {
 
   // Subdirectory where Spark libraries will be placed.
   val LOCALIZED_LIB_DIR = "__spark_libs__"
+
+  val SPARK_TESTING = "SPARK_TESTING"
 
   /**
    * Return the path to the given application's staging directory.
@@ -1472,6 +1472,34 @@ private object Client extends Logging {
     val mainUri = getMainJarUri(conf.get(APP_JAR))
     val secondaryUris = getSecondaryJarUris(conf.get(SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
+  }
+
+  /**
+   * Returns a list of local, absolute file URLs representing the user classpath. Note that this
+   * must be executed on the same host which will access the URLs, as it will resolve relative
+   * paths based on the current working directory, as well as environment variables.
+   * See SPARK-35672 for discussion of why it is necessary to do environment variable substitution.
+   *
+   * @param conf Spark configuration.
+   * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
+   *                       `local` scheme. This should be used when running on the cluster, but
+   *                       not when running on the gateway (i.e. for the driver in `client` mode).
+   * @return Array of local URLs ready to be passed to a [[java.net.URLClassLoader]].
+   */
+  def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
+    Client.getUserClasspath(conf).map { uri =>
+      val inputPath = uri.getPath
+      val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
+        Client.getClusterPath(conf, inputPath)
+      } else {
+        // Any other URI schemes should have been resolved by this point
+        assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
+          "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
+        inputPath
+      }
+      val envVarResolvedFilePath = YarnSparkHadoopUtil.replaceEnvVars(replacedFilePath, sys.env)
+      Paths.get(envVarResolvedFilePath).toAbsolutePath.toUri.toURL
+    }
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {

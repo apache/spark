@@ -1585,6 +1585,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas Series is expected to be small."
         )
+        return self._to_pandas()
+
+    def _to_pandas(self) -> pd.Series:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
         return self._to_internal_pandas().copy()
 
     def to_list(self) -> List:
@@ -5154,7 +5160,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If there is no good value, NaN is returned.
 
         .. note:: This API is dependent on :meth:`Index.is_monotonic_increasing`
-            which can be expensive.
+            which is expensive.
 
         Parameters
         ----------
@@ -5173,7 +5179,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Notes
         -----
-        Indices are assumed to be sorted. Raises if this is not the case.
+        Indices are assumed to be sorted. Raises if this is not the case and config
+        'compute.eager_check' is True. If 'compute.eager_check' is False pandas-on-Spark just
+        proceeds and performs by ignoring the indeces's order
 
         Examples
         --------
@@ -5204,13 +5212,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s.asof(30)
         2.0
+
+        >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
+        >>> with ps.option_context("compute.eager_check", False):
+        ...     s.asof(20)
+        ...
+        1.0
         """
         should_return_series = True
         if isinstance(self.index, ps.MultiIndex):
             raise ValueError("asof is not supported for a MultiIndex")
         if isinstance(where, (ps.Index, ps.Series, DataFrame)):
             raise ValueError("where cannot be an Index, Series or a DataFrame")
-        if not self.index.is_monotonic_increasing:
+        if get_option("compute.eager_check") and not self.index.is_monotonic_increasing:
             raise ValueError("asof requires a sorted index")
         if not is_list_like(where):
             should_return_series = False
@@ -5767,6 +5781,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare to another Series and show the differences.
 
+        .. note:: This API is slightly different from pandas when indexes from both Series
+            are not identical and config 'compute.eager_check' is False. pandas raises an exception;
+            however, pandas-on-Spark just proceeds and performs by ignoring mismatches.
+
+            >>> psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
+            >>> psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
+            >>> psser1.compare(psser2)  # doctest: +SKIP
+            ...
+            ValueError: Can only compare identically-labeled Series objects
+
+            >>> with ps.option_context("compute.eager_check", False):
+            ...     psser1.compare(psser2)  # doctest: +SKIP
+            ...
+               self  other
+            3   3.0    4.0
+            4   4.0    3.0
+            5   5.0    NaN
+            6   NaN    5.0
+
         Parameters
         ----------
         other : Series
@@ -5833,7 +5866,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
             )
         else:
-            if not self.index.equals(other.index):
+            if get_option("compute.eager_check") and not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")
 
             combined = combine_frames(self.to_frame(), other.to_frame())

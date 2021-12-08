@@ -248,10 +248,6 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
-    new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
-  }
-
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved table property, $msg.", ctx)
@@ -328,7 +324,7 @@ object QueryParsingErrors {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -338,13 +334,13 @@ object QueryParsingErrors {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$keyCandidate' is an invalid property key, please " +
       s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$valueCandidate' is an invalid property value, please " +
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
@@ -424,5 +420,13 @@ object QueryParsingErrors {
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
       s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+  }
+
+  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
+    new ParseException(Some(command), "Unclosed bracketed comment", position, position)
+  }
+
+  def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid time travel spec: $reason.", ctx)
   }
 }

@@ -50,13 +50,19 @@ object UnionEstimation {
     case TimestampType => (a: Any, b: Any) =>
       TimestampType.ordering.lt(a.asInstanceOf[TimestampType.InternalType],
         b.asInstanceOf[TimestampType.InternalType])
+    case TimestampNTZType => (a: Any, b: Any) =>
+      TimestampNTZType.ordering.lt(a.asInstanceOf[TimestampNTZType.InternalType],
+        b.asInstanceOf[TimestampNTZType.InternalType])
+    case i: AnsiIntervalType => (a: Any, b: Any) =>
+      i.ordering.lt(a.asInstanceOf[i.InternalType], b.asInstanceOf[i.InternalType])
     case _ =>
       throw new IllegalStateException(s"Unsupported data type: ${dt.catalogString}")
   }
 
   private def isTypeSupported(dt: DataType): Boolean = dt match {
     case ByteType | IntegerType | ShortType | FloatType | LongType |
-         DoubleType | DateType | _: DecimalType | TimestampType => true
+         DoubleType | DateType | _: DecimalType | TimestampType | TimestampNTZType |
+         _: AnsiIntervalType => true
     case _ => false
   }
 

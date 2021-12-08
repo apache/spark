@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.time.{Duration, Period}
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -62,6 +65,29 @@ abstract class ParquetFileFormatSuite
       testReadFooters(false)
     }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
+  }
+
+  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        Seq(
+          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+        ).foreach { case (it, f) =>
+          val data = (1 to 10).map(i => Row(i, f(i)))
+          val schema = StructType(Array(StructField("d", IntegerType, false),
+            StructField("i", it, false)))
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val df2 = spark.read.parquet(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
+      }
+    }
   }
 }
 

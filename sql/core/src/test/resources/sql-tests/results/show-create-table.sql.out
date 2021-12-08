@@ -50,7 +50,7 @@ CREATE TABLE `default`.`tbl` (
   `c` INT)
 USING parquet
 OPTIONS (
-  `a` '1')
+  'a' = '1')
 
 
 -- !query

@@ -528,7 +528,7 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
-        categories = set(self._data.drop_duplicates().to_pandas())
+        categories = set(self._data.drop_duplicates()._to_pandas())
         removals = [cat for cat in self.categories if cat not in categories]
         return self.remove_categories(removals=removals, inplace=inplace)
 

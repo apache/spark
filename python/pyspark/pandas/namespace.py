@@ -35,7 +35,6 @@ from typing import (
 from collections import OrderedDict
 from collections.abc import Iterable
 from datetime import tzinfo
-from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
@@ -224,6 +223,7 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
+    encoding: Optional[str] = None,
     **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
@@ -276,6 +276,8 @@ def read_csv(
         One-character string used to escape delimiter
     comment: str, optional
         Indicates the line should not be parsed.
+    encoding: str, optional
+        Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
 
@@ -291,6 +293,9 @@ def read_csv(
     --------
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
+    # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
+    encoding_mapping = {"latin-1": "iso-8859-1"}
+
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -327,6 +332,9 @@ def read_csv(
             reader.option("comment", comment)
 
         reader.options(**options)
+
+        if encoding is not None:
+            reader.option("encoding", encoding_mapping.get(encoding, encoding))
 
         column_labels: Dict[Any, str]
         if isinstance(names, str):
@@ -2431,13 +2439,9 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-                # Always sort when multi-index columns, and if there are Series, never sort.
-                sort = len(merged_columns[0]) > 1 or (num_series == 0 and sort)
-            else:
-                # Always sort when multi-index columns or there are more than two Series,
-                # and if there is only one Series, never sort.
-                sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
+            # Always sort when multi-index columns or there are more than two Series,
+            # and if there is only one Series, never sort.
+            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
 
             if sort:
                 # FIXME: better ordering

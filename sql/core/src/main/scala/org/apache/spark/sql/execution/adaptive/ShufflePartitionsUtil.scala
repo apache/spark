@@ -316,7 +316,10 @@ object ShufflePartitionsUtil extends Logging {
    * start of a partition.
    */
   // Visible for testing
-  private[sql] def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+  private[sql] def splitSizeListByTargetSize(
+      sizes: Seq[Long],
+      targetSize: Long,
+      smallPartitionFactor: Double): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
@@ -329,8 +332,8 @@ object ShufflePartitionsUtil extends Logging {
       // the previous partition.
       val shouldMergePartitions = lastPartitionSize > -1 &&
         ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
-        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
-          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
+        (currentPartitionSize < targetSize * smallPartitionFactor ||
+          lastPartitionSize < targetSize * smallPartitionFactor))
       if (shouldMergePartitions) {
         // We decide to merge the current partition into the previous one, so the start index of
         // the current partition should be removed.
@@ -371,15 +374,18 @@ object ShufflePartitionsUtil extends Logging {
 
   /**
    * Splits the skewed partition based on the map size and the target partition size
-   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
+   * after split, and create a list of `PartialReducerPartitionSpec`. Returns None if can't split.
    */
   def createSkewPartitionSpecs(
       shuffleId: Int,
       reducerId: Int,
-      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+      targetSize: Long,
+      smallPartitionFactor: Double = SMALL_PARTITION_FACTOR)
+  : Option[Seq[PartialReducerPartitionSpec]] = {
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
     if (mapPartitionSizes.exists(_ < 0)) return None
-    val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
+    val mapStartIndices = splitSizeListByTargetSize(
+      mapPartitionSizes, targetSize, smallPartitionFactor)
     if (mapStartIndices.length > 1) {
       Some(mapStartIndices.indices.map { i =>
         val startMapIndex = mapStartIndices(i)

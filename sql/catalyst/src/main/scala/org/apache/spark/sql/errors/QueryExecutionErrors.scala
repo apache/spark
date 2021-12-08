@@ -168,6 +168,11 @@ object QueryExecutionErrors {
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
+  def invalidInputIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_INPUT_INDEX",
+      messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
+  }
+
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
       messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
@@ -948,7 +953,7 @@ object QueryExecutionErrors {
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
       leftScale: Int, rightScale: Int): Throwable = {
     new SparkException("Failed to merge decimal types with incompatible " +
-      s"scala $leftScale and $rightScale")
+      s"scale $leftScale and $rightScale")
   }
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
@@ -1032,6 +1037,13 @@ object QueryExecutionErrors {
       s"Cannot parse field name ${parser.getCurrentName}, " +
         s"field value ${parser.getText}, " +
         s"[$token] as target spark data type [$dataType].")
+  }
+
+  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
+  : Throwable = {
+    new RuntimeException(
+      s"Cannot parse field value ${value} for pattern ${pattern} " +
+        s"as target spark data type [$dataType].")
   }
 
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
@@ -1889,5 +1901,8 @@ object QueryExecutionErrors {
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
     new UnsupportedOperationException(s"Hive table $tableName with ANSI intervals is not supported")
   }
-}
 
+  def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
+    new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+  }
+}
