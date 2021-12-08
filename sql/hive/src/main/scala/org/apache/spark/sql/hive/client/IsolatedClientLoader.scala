@@ -29,7 +29,6 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
@@ -68,7 +67,11 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = VersionInfo.getVersion
+            val fallbackVersion = VersionUtils.majorMinorPatchVersion(hadoopVersion) match {
+              case Some((3, _, _)) => "3.3.1"
+              case Some((2, _, _)) => "2.7.4"
+              case None => throw QueryExecutionErrors.unsupportedHadoopVersionError(hadoopVersion)
+            }
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
               "again. It is recommended to set jars used by Hive metastore client through " +
