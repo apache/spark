@@ -48,7 +48,7 @@ class ReceivedBlockTrackerSuite
   val hadoopConf = new Configuration()
   val streamId = 1
 
-  var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
+  val allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
   var checkpointDirectory: File = null
   var conf: SparkConf = null
 
@@ -378,7 +378,7 @@ class ReceivedBlockTrackerSuite
       recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    var tracker = new ReceivedBlockTracker(
+    val tracker = new ReceivedBlockTracker(
       conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker

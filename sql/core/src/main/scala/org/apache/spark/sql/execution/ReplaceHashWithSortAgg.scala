@@ -20,17 +20,18 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Replace [[HashAggregateExec]] with [[SortAggregateExec]] in the spark plan if:
+ * Replace hash-based aggregate with sort aggregate in the spark plan if:
  *
- * 1. The plan is a pair of partial and final [[HashAggregateExec]], and the child of partial
- *    aggregate satisfies the sort order of corresponding [[SortAggregateExec]].
+ * 1. The plan is a pair of partial and final [[HashAggregateExec]] or [[ObjectHashAggregateExec]],
+ *    and the child of partial aggregate satisfies the sort order of corresponding
+ *    [[SortAggregateExec]].
  * or
- * 2. The plan is a [[HashAggregateExec]], and the child satisfies the sort order of
- *    corresponding [[SortAggregateExec]].
+ * 2. The plan is a [[HashAggregateExec]] or [[ObjectHashAggregateExec]], and the child satisfies
+ *    the sort order of corresponding [[SortAggregateExec]].
  *
  * Examples:
  * 1. aggregate after join:
@@ -47,9 +48,9 @@ import org.apache.spark.sql.internal.SQLConf
  *               |                     =>                  |
  *           Sort(t1.i)                                Sort(t1.i)
  *
- * [[HashAggregateExec]] can be replaced when its child satisfies the sort order of
- * corresponding [[SortAggregateExec]]. [[SortAggregateExec]] is faster in the sense that
- * it does not have hashing overhead of [[HashAggregateExec]].
+ * Hash-based aggregate can be replaced when its child satisfies the sort order of
+ * corresponding sort aggregate. Sort aggregate is faster in the sense that
+ * it does not have hashing overhead of hash aggregate.
  */
 object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
@@ -61,14 +62,15 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   }
 
   /**
-   * Replace [[HashAggregateExec]] with [[SortAggregateExec]].
+   * Replace [[HashAggregateExec]] and [[ObjectHashAggregateExec]] with [[SortAggregateExec]].
    */
   private def replaceHashAgg(plan: SparkPlan): SparkPlan = {
     plan.transformDown {
-      case hashAgg: HashAggregateExec if hashAgg.groupingExpressions.nonEmpty =>
+      case hashAgg: BaseAggregateExec if isHashBasedAggWithKeys(hashAgg) =>
         val sortAgg = hashAgg.toSortAggregate
         hashAgg.child match {
-          case partialAgg: HashAggregateExec if isPartialAgg(partialAgg, hashAgg) =>
+          case partialAgg: BaseAggregateExec
+            if isHashBasedAggWithKeys(partialAgg) && isPartialAgg(partialAgg, hashAgg) =>
             if (SortOrder.orderingSatisfies(
                 partialAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
               sortAgg.copy(
@@ -92,7 +94,7 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   /**
    * Check if `partialAgg` to be partial aggregate of `finalAgg`.
    */
-  private def isPartialAgg(partialAgg: HashAggregateExec, finalAgg: HashAggregateExec): Boolean = {
+  private def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
     if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
         finalAgg.aggregateExpressions.forall(_.mode == Final)) {
       (finalAgg.logicalLink, partialAgg.logicalLink) match {
@@ -102,5 +104,17 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
     } else {
       false
     }
+  }
+
+  /**
+   * Check if `agg` is [[HashAggregateExec]] or [[ObjectHashAggregateExec]],
+   * and has grouping keys.
+   */
+  private def isHashBasedAggWithKeys(agg: BaseAggregateExec): Boolean = {
+    val isHashBasedAgg = agg match {
+      case _: HashAggregateExec | _: ObjectHashAggregateExec => true
+      case _ => false
+    }
+    isHashBasedAgg && agg.groupingExpressions.nonEmpty
   }
 }

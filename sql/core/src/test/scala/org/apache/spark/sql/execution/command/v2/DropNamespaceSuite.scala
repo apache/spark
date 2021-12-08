@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+package org.apache.spark.sql.execution.command.v2
+
+import org.apache.spark.SparkException
+import org.apache.spark.sql.execution.command
 
 /**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
+ * The class contains tests for the `DROP NAMESPACE` command to check V2 table catalogs.
  */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_FETCH_WAIT_TIME = "fetch_wait_time"
-  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
-  val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
+class DropNamespaceSuite extends command.DropNamespaceSuiteBase with CommandSuiteBase {
+  // TODO: Unify the error that throws from v1 and v2 test suite into `AnalysisException`
+  override protected def assertDropFails(): Unit = {
+    val e = intercept[SparkException] {
+      sql(s"DROP NAMESPACE $catalog.ns")
+    }
+    assert(e.getMessage.contains("Cannot drop a non-empty namespace: ns"))
+  }
 }

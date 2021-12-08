@@ -787,62 +787,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Drop/Alter Database - database does not exists") {
+  test("Alter Database - database does not exists") {
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
       val dbNameWithoutBackTicks = cleanIdentifier(dbName)
       assert(!spark.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
 
-      var message = intercept[AnalysisException] {
-        sql(s"DROP DATABASE $dbName")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      message = intercept[AnalysisException] {
+      val message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
       assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
     }
-  }
-
-  test("drop non-empty database in restrict mode") {
-    val catalog = spark.sessionState.catalog
-    val dbName = "db1"
-    sql(s"CREATE DATABASE $dbName")
-
-    // create a table in database
-    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
-    createTable(catalog, tableIdent1)
-
-    // drop a non-empty database in Restrict mode
-    val message = intercept[AnalysisException] {
-      sql(s"DROP DATABASE $dbName RESTRICT")
-    }.getMessage
-    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
-
-
-    catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
-
-    assert(catalog.listDatabases().contains(dbName))
-    sql(s"DROP DATABASE $dbName RESTRICT")
-    assert(!catalog.listDatabases().contains(dbName))
-  }
-
-  test("drop non-empty database in cascade mode") {
-    val catalog = spark.sessionState.catalog
-    val dbName = "db1"
-    sql(s"CREATE DATABASE $dbName")
-
-    // create a table in database
-    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
-    createTable(catalog, tableIdent1)
-
-    // drop a non-empty database in CASCADE mode
-    assert(catalog.listTables(dbName).contains(tableIdent1))
-    assert(catalog.listDatabases().contains(dbName))
-    sql(s"DROP DATABASE $dbName CASCADE")
-    assert(!catalog.listDatabases().contains(dbName))
   }
 
   test("create table in default db") {
@@ -1538,39 +1494,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
       checkAnswer(spark.table("t2"), spark.table("t1"))
-    }
-  }
-
-  test("drop current database") {
-    withDatabase("temp") {
-      sql("CREATE DATABASE temp")
-      sql("USE temp")
-      sql("DROP DATABASE temp")
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT) USING parquet")
-      }.getMessage
-      assert(e.contains("Database 'temp' not found"))
-    }
-  }
-
-  test("drop default database") {
-    val caseSensitiveOptions = if (isUsingHiveMetastore) Seq("false") else Seq("true", "false")
-    caseSensitiveOptions.foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        var message = intercept[AnalysisException] {
-          sql("DROP DATABASE default")
-        }.getMessage
-        assert(message.contains("Can not drop default database"))
-
-        message = intercept[AnalysisException] {
-          sql("DROP DATABASE DeFault")
-        }.getMessage
-        if (caseSensitive == "true") {
-          assert(message.contains("Database 'DeFault' not found"))
-        } else {
-          assert(message.contains("Can not drop default database"))
-        }
-      }
     }
   }
 
