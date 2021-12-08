@@ -94,18 +94,18 @@ case class EnsureRequirements(
       // always have exactly 2 children.
 
       // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
-      // during the shuffle. To achieve a good trade-off between parallelism and shuffle cost, we
-      // only consider the minimum parallelism if:
-      //   1. Some child can't create partitioning, i.e., it needs to be shuffled.
-      //   2. Some child already needs to be shuffled with `ShuffleExchangeExec` being present.
-      // In either of the above cases, we'll apply `spark.sql.shuffle.partitions` in case there
-      // is not enough parallelism.
+      // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
+      // consider the minimum parallelism iff ALL children need to be re-shuffled.
       //
-      // On the other hand, if we have:
+      // A child is considered to be re-shuffled iff:
+      //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false.
+      //   2. It already has `ShuffleExchangeExec`.
+      //
+      // On the other hand, in scenarios such as:
       //   HashPartitioning(5) <-> HashPartitioning(6)
       // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
       // HashPartitioning(6).
-      val canIgnoreMinPartitions = specs.forall(p =>
+      val canIgnoreMinPartitions = specs.exists(p =>
         p._2.canCreatePartitioning && !children(p._1).isInstanceOf[ShuffleExchangeExec]
       )
       // Choose all the specs that can be used to shuffle other children
