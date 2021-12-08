@@ -1279,23 +1279,24 @@ private[hive] object HiveClientImpl extends Logging {
 
   /**
    * Initialize Hive through Configuration.
-   * first try to use getWithoutRegisterFns to initialize to avoid loading all functions,
+   * First try to use getWithoutRegisterFns to initialize to avoid loading all functions,
    * if there is no such method, fallback to Hive.get.
    */
   def getHive(conf: Configuration): Hive = {
-    conf match {
+    val hiveConf = conf match {
       case hiveConf: HiveConf =>
-        try {
-          classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
-            .invoke(null, conf).asInstanceOf[Hive]
-        } catch {
-          // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
-          // 2.3.8 don't), therefore here we fallback when encountering the exception.
-          case _: NoSuchMethodException =>
-            Hive.get(hiveConf)
-        }
+        hiveConf
       case _ =>
-        Hive.get(conf, classOf[HiveConf])
+        new HiveConf(conf, classOf[HiveConf])
+    }
+    try {
+      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
+        .invoke(null, hiveConf).asInstanceOf[Hive]
+    } catch {
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
+      case _: NoSuchMethodException =>
+        Hive.get(hiveConf)
     }
   }
 }
