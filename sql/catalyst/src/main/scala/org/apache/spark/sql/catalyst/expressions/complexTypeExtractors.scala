@@ -337,17 +337,14 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  // todo: current search is O(n), improve it.
-  def getValueEval(
+  def indexOfKey(
       value: Any,
       ordinal: Any,
       keyType: DataType,
-      ordering: Ordering[Any],
-      failOnError: Boolean): Any = {
+      ordering: Ordering[Any]): Option[Int] = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
-    val values = map.valueArray()
 
     var i = 0
     var found = false
@@ -358,17 +355,42 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         i += 1
       }
     }
+    if (found) {
+      Some(i)
+    } else {
+      None
+    }
+  }
 
-    if (!found) {
+  def containsKey(
+      value: Any,
+      ordinal: Any,
+      keyType: DataType,
+      ordering: Ordering[Any]): Boolean = {
+    indexOfKey(value: Any, ordinal, keyType, ordering).isDefined
+  }
+
+  // todo: current search is O(n), improve it.
+  def getValueEval(
+      value: Any,
+      ordinal: Any,
+      keyType: DataType,
+      ordering: Ordering[Any],
+      failOnError: Boolean): Any = {
+
+    val index = indexOfKey(value, ordinal, keyType, ordering)
+    val values = value.asInstanceOf[MapData].valueArray()
+
+    if (index.isEmpty) {
       if (failOnError) {
         throw QueryExecutionErrors.mapKeyNotExistError(ordinal)
       } else {
         null
       }
-    } else if (values.isNullAt(i)) {
+    } else if (values.isNullAt(index.get)) {
       null
     } else {
-      values.get(i, dataType)
+      values.get(index.get, dataType)
     }
   }
 
@@ -376,6 +398,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       ctx: CodegenContext,
       ev: ExprCode,
       mapType: MapType,
+      checkExistenceOnly: Boolean,
       failOnError: Boolean): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
@@ -384,7 +407,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
     val keyType = mapType.keyType
-    val nullCheck = if (mapType.valueContainsNull) {
+    val nullCheck = if (!checkExistenceOnly && mapType.valueContainsNull) {
       s"""else if ($values.isNullAt($index)) {
             ${ev.isNull} = true;
           }
@@ -399,6 +422,18 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
         s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
       } else {
         s"${ev.isNull} = true;"
+      }
+
+      val resultCode = if (checkExistenceOnly) {
+        s"${ev.value} = $found;"
+      } else {
+        s"""
+          if (!$found) {
+            $keyNotFoundBranch
+          } $nullCheck else {
+            ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
+          }
+        """
       }
 
       s"""
@@ -417,11 +452,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
           }
         }
 
-        if (!$found) {
-          $keyNotFoundBranch
-        } $nullCheck else {
-          ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
-        }
+        $resultCode
       """
     })
   }
@@ -478,7 +509,8 @@ case class GetMapValue(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType],
+      checkExistenceOnly = false, failOnError)
   }
 
   override protected def withNewChildrenInternal(

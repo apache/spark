@@ -167,6 +167,71 @@ case class MapKeys(child: Expression)
     copy(child = newChild)
 }
 
+
+/**
+ * Returns an unordered array containing the keys of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map) - Returns true if the map contains the key.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
+       true
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 3);
+       false
+  """,
+  group = "map_funcs",
+  since = "3.3.0")
+case class MapContainsKey(left: Expression, right: Expression)
+    extends GetMapValueUtil with NullIntolerant {
+  @transient private lazy val ordering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(right.dataType)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (MapType(keyType, valueType, hasNull), inputType) =>
+        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo(keyType, inputType) match {
+          case Some(dt) =>
+            Seq(MapType(dt, valueType, hasNull), dt)
+          case _ =>
+            Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (MapType(e1, _, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${MapType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
+  }
+
+  override def nullable: Boolean = {
+    left.nullable || right.nullable
+  }
+
+  override def nullSafeEval(map: Any, value: Any): Any = {
+    containsKey(map, value, right.dataType, ordering)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType],
+      checkExistenceOnly = true, failOnError = false)
+
+  override def dataType: DataType = BooleanType
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = copy(newLeft, newRight)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(a1, a2, ...) - Returns a merged array of structs in which the N-th struct contains all
@@ -2162,7 +2227,8 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], failOnError)
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType],
+          checkExistenceOnly = false, failOnError)
     }
   }
 
