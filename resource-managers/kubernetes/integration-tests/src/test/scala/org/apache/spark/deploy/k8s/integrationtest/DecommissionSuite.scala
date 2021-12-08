@@ -186,7 +186,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.executor.rollInterval", "30s")
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_PI,
+      appResource = PythonTestsSuite.PYSPARK_PI,
       mainClass = "",
       expectedDriverLogOnCompletion = Seq(
         "Initialized driver component for plugin " +
