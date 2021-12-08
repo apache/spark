@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -68,7 +68,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation, _) =>
+      case InMemoryTableScanExec(_, _, relation) =>
         relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
@@ -107,7 +107,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     collect(plan) {
-      case inMemoryTable @ InMemoryTableScanExec(_, _, relation, _) =>
+      case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
         getNumInMemoryTablesRecursively(relation.cachedPlan) +
           getNumInMemoryTablesInSubquery(inMemoryTable) + 1
       case p =>
@@ -898,13 +898,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val cache = spark.range(10).cache()
         val df = cache.filter($"id" > 0)
-        df.queryExecution.executedPlan.foreach {
-          case i: InMemoryTableScanExec =>
-            // No matter if vectorized cache reader is enabled or not, the in-memory relation
-            // scan is row-based because its parent node cannot take columnar input.
-            assert(i.supportsColumnar == false)
-          case _ =>
+        val columnarToRow = df.queryExecution.executedPlan.collect {
+          case c: ColumnarToRowExec => c
         }
+        assert(columnarToRow.isEmpty)
       }
     }
   }

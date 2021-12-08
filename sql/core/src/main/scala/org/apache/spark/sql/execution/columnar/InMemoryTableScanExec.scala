@@ -30,8 +30,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
-    @transient relation: InMemoryRelation,
-    outputColumnar: Boolean = true)
+    @transient relation: InMemoryRelation)
   extends LeafExecNode {
 
   override lazy val metrics = Map(
@@ -56,12 +55,14 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
 
+  override def supportsRowBased: Boolean = true
+
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
    * If false, get data from UnsafeRow build from CachedBatch
    */
   override val supportsColumnar: Boolean = {
-    conf.cacheVectorizedReaderEnabled  && outputColumnar &&
+    conf.cacheVectorizedReaderEnabled  &&
         !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
         relation.cacheBuilder.serializer.supportsColumnarOutput(relation.schema)
   }

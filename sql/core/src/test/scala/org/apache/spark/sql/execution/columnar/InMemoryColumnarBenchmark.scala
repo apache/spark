@@ -40,8 +40,8 @@ object InMemoryColumnarBenchmark extends SqlBasedBenchmark {
       case m: InMemoryTableScanExec => m
     }
 
-    val columnarScan = ColumnarToRowExec(inMemoryScan(0).copy(outputColumnar = true))
-    val rowScan = inMemoryScan(0).copy(outputColumnar = false)
+    val columnarScan = ColumnarToRowExec(inMemoryScan(0))
+    val rowScan = inMemoryScan(0)
 
     assert(inMemoryScan.size == 1)
 

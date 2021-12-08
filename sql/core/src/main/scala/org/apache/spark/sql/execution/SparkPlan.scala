@@ -72,6 +72,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   val id: Int = SparkPlan.newPlanId()
 
   /**
+   * Return true if this stage of the plan supports row-based execution.
+   */
+  def supportsRowBased: Boolean = !supportsColumnar
+
+  /**
    * Return true if this stage of the plan supports columnar execution.
    */
   def supportsColumnar: Boolean = false

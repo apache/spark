@@ -137,7 +137,7 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
 
     val output = captured.toString().replaceAll("#\\d+", "#x")
     assert(output.contains(
-      """== InMemoryTableScan [id#xL], true ==
+      """== InMemoryTableScan [id#xL] ==
         |Tuples output: 0
         | id LongType: {}
         |""".stripMargin))

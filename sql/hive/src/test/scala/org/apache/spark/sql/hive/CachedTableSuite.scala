@@ -37,7 +37,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   def rddIdOf(tableName: String): Int = {
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation, _) =>
+      case InMemoryTableScanExec(_, _, relation) =>
         relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)

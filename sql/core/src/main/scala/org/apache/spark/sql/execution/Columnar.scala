@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -536,17 +535,10 @@ case class ApplyColumnarRulesAndInsertTransitions(
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
       insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar) {
-      plan match {
-        case m: InMemoryTableScanExec =>
-          // Although the `InMemoryTableScanExec` supports columnar output, but we don't
-          // want columnar output from it. Simply ask it to output row output.
-          m.copy(outputColumnar = false)
-        case _ =>
-          // `outputsColumnar` is false but the plan outputs columnar format, so add a
-          // to-row transition here.
-          ColumnarToRowExec(insertRowToColumnar(plan))
-      }
+    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
+      // to-row transition here.
+      ColumnarToRowExec(insertRowToColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
       plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
     } else {
