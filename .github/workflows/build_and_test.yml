@@ -57,13 +57,13 @@ jobs:
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{}'
-          echo '::set-output name=hadoop::hadoop2.7'
+          echo '::set-output name=hadoop::hadoop2'
         elif [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3.2'
+          echo '::set-output name=hadoop::hadoop3'
         elif [ "${{ github.event.schedule }}" = "0 7 * * *" ]; then
           echo '::set-output name=java::8'
           echo '::set-output name=branch::branch-3.2'
@@ -75,25 +75,25 @@ jobs:
           echo '::set-output name=branch::master'
           echo '::set-output name=type::pyspark-coverage-scheduled'
           echo '::set-output name=envs::{"PYSPARK_CODECOV": "true"}'
-          echo '::set-output name=hadoop::hadoop3.2'
+          echo '::set-output name=hadoop::hadoop3'
         elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then
           echo '::set-output name=java::11'
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
-          echo '::set-output name=hadoop::hadoop3.2'
+          echo '::set-output name=hadoop::hadoop3'
         elif [ "${{ github.event.schedule }}" = "0 16 * * *" ]; then
           echo '::set-output name=java::17'
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
-          echo '::set-output name=hadoop::hadoop3.2'
+          echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
           echo '::set-output name=envs::{}'
-          echo '::set-output name=hadoop::hadoop3.2'
+          echo '::set-output name=hadoop::hadoop3'
         fi
 
   # Build: build Spark and run the tests for specified modules.
