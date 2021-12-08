@@ -24,9 +24,9 @@ Dockerfile.java17 is an example of custom Dockerfile, and you can specify it to 
 
     ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile.java17
 
-To run tests with Hadoop 2.7 instead of Hadoop 3.2, use `--hadoop-profile`.
+To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
 
-    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2.7
+    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
 
 The minimum tested version of Minikube is 1.7.3. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
@@ -134,7 +134,7 @@ properties to Maven.  For example:
 
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
                             -Pkubernetes -Pkubernetes-integration-tests \
-                            -Phadoop-2.7 -Dhadoop.version=2.7.4 \
+                            -Phadoop-2 -Dhadoop.version=2.7.4 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \

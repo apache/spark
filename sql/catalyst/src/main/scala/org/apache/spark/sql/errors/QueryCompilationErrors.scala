@@ -2387,8 +2387,8 @@ object QueryCompilationErrors {
     new AnalysisException(s"${expr.sql} is not a valid timestamp expression for time travel.")
   }
 
-  def viewNotSupportTimeTravelError(viewName: Seq[String]): Throwable = {
-    new AnalysisException(viewName.quoted + " is a view which does not support time travel.")
+  def timeTravelUnsupportedError(target: String): Throwable = {
+    new AnalysisException(s"Cannot time travel $target.")
   }
 
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {

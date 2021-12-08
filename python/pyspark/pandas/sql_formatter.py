@@ -163,7 +163,7 @@ def sql(
         return sql_processor.sql(query, index_col=index_col, **kwargs)
 
     session = default_session()
-    formatter = SQLStringFormatter(session)
+    formatter = PandasSQLStringFormatter(session)
     try:
         sdf = session.sql(formatter.format(query, **kwargs))
     finally:
@@ -178,7 +178,7 @@ def sql(
     )
 
 
-class SQLStringFormatter(string.Formatter):
+class PandasSQLStringFormatter(string.Formatter):
     """
     A standard ``string.Formatter`` in Python that can understand pandas-on-Spark instances
     with basic Python objects. This object has to be clear after the use for single SQL
@@ -191,7 +191,7 @@ class SQLStringFormatter(string.Formatter):
         self._ref_sers: List[Tuple[Series, str]] = []
 
     def vformat(self, format_string: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> str:
-        ret = super(SQLStringFormatter, self).vformat(format_string, args, kwargs)
+        ret = super(PandasSQLStringFormatter, self).vformat(format_string, args, kwargs)
 
         for ref, n in self._ref_sers:
             if not any((ref is v for v in df._pssers.values()) for df, _ in self._temp_views):
@@ -200,7 +200,7 @@ class SQLStringFormatter(string.Formatter):
         return ret
 
     def get_field(self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> Any:
-        obj, first = super(SQLStringFormatter, self).get_field(field_name, args, kwargs)
+        obj, first = super(PandasSQLStringFormatter, self).get_field(field_name, args, kwargs)
         return self._convert_value(obj, field_name), first
 
     def _convert_value(self, val: Any, name: str) -> Optional[str]:
@@ -256,7 +256,7 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
-        .appName("pyspark.pandas.sql_processor tests")
+        .appName("pyspark.pandas.sql_formatter tests")
         .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(

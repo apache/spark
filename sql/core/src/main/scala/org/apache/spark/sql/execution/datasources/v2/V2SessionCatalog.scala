@@ -83,8 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     t match {
       case V1Table(catalogTable) =>
         if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.viewNotSupportTimeTravelError(
-            ident.namespace() :+ ident.name())
+          throw QueryCompilationErrors.timeTravelUnsupportedError("views")
         } else {
           throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
         }
