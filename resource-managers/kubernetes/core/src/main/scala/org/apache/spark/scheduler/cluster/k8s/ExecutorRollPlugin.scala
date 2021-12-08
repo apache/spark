@@ -79,7 +79,8 @@ class ExecutorRollPlugin extends SparkPlugin with Logging {
                       logInfo("There is nothing to roll.")
                   }
                 case _ =>
-                  logWarning("This plugin expects KubernetesClusterSchedulerBackend.")
+                  logWarning("This plugin expects " +
+                    s"${classOf[KubernetesClusterSchedulerBackend].getSimpleName}.")
               }
             } catch {
               case e: Exception => logError("Error in rolling thread", e)
