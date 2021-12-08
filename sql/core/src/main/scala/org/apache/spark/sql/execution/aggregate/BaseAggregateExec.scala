@@ -30,6 +30,7 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
   def groupingExpressions: Seq[NamedExpression]
   def aggregateExpressions: Seq[AggregateExpression]
   def aggregateAttributes: Seq[Attribute]
+  def initialInputBufferOffset: Int
   def resultExpressions: Seq[NamedExpression]
 
   override def verboseStringWithOperatorId(): String = {
@@ -94,5 +95,14 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
       case Some(exprs) => ClusteredDistribution(exprs) :: Nil
       case None => UnspecifiedDistribution :: Nil
     }
+  }
+
+  /**
+   * The corresponding [[SortAggregateExec]] to get same result as this node.
+   */
+  def toSortAggregate: SortAggregateExec = {
+    SortAggregateExec(
+      requiredChildDistributionExpressions, groupingExpressions, aggregateExpressions,
+      aggregateAttributes, initialInputBufferOffset, resultExpressions, child)
   }
 }

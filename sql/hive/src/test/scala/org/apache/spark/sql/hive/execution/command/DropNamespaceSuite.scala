@@ -15,21 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+package org.apache.spark.sql.hive.execution.command
+
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
+ * The class contains tests for the `DROP NAMESPACE` command to check V1 Hive external
+ * table catalog.
  */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_FETCH_WAIT_TIME = "fetch_wait_time"
-  val SHUFFLE_READ_REMOTE_SIZE = "shuffle_read_remote"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
-  val PEAK_EXECUTION_MEMORY = "peak_execution_memory"
+class DropNamespaceSuite extends v1.DropNamespaceSuiteBase with CommandSuiteBase {
+  override def isCasePreserving: Boolean = false
 }

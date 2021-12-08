@@ -613,7 +613,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       isStatement = statementInProgress(index)
     }
-    if (isStatement) {
+    if (beginIndex < line.length()) {
       ret.add(line.substring(beginIndex))
     }
     ret
