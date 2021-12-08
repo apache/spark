@@ -69,7 +69,7 @@ jobs:
           echo '::set-output name=branch::branch-3.2'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
-          echo '::set-output name=hadoop::hadoop3'
+          echo '::set-output name=hadoop::hadoop3.2'
         elif [ "${{ github.event.schedule }}" = "0 10 * * *" ]; then
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master'
