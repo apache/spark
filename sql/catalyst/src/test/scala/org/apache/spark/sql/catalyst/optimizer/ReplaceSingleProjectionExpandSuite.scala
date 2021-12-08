@@ -31,7 +31,7 @@ class ReplaceSingleProjectionExpandSuite extends PlanTest {
         ReplaceSingleProjectionExpand) :: Nil
   }
 
-  test("Replace single projection expand with project") {
+  test("SPARK-37538: Replace single projection expand with project") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = Expand(
         Seq(Seq('a, 'b, Literal(4))),
@@ -45,7 +45,7 @@ class ReplaceSingleProjectionExpandSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Do not change expand with multiple projections") {
+  test("SPARK-37538: Do not change expand with multiple projections") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = Expand(
       Seq(
