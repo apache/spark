@@ -2245,7 +2245,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.size == 1)
   }
 
-  test("task failed reach max failure threshold should check if another attempt " +
+  test("SPARK-37580 task failed reach max failure threshold should check if another attempt " +
     "succeeded before abort the stage") {
     sc = new SparkContext("local", "test")
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
