@@ -180,12 +180,13 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   test("Rolling decommissioning") {
     sparkAppConf
+      .set("spark.kubernetes.container.image", pyImage)
       .set(config.DECOMMISSION_ENABLED.key, "true")
       .set(PLUGINS.key, "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin")
       .set("spark.kubernetes.executor.rollInterval", "30s")
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_DECOMISSIONING,
+      appResource = PYSPARK_PI,
       mainClass = "",
       expectedDriverLogOnCompletion = Seq(
         "Initialized driver component for plugin " +
@@ -195,9 +196,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         "Going to request 1 executors",
         "Ask to decommission executor 2",
         "Removed 2 successfully in removeExecutor",
-        "Going to request 1 executors",
-        "Final accumulator value is: 100"),
-      appArgs = Array.empty[String],
+        "Going to request 1 executors"),
+      appArgs = Array("10000"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
       isJVM = false,
