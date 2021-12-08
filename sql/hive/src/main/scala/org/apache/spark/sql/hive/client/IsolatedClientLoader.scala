@@ -70,7 +70,7 @@ private[hive] object IsolatedClientLoader extends Logging {
             val fallbackVersion = VersionUtils.majorMinorPatchVersion(hadoopVersion) match {
               case Some((3, _, _)) => "3.3.1"
               case Some((2, _, _)) => "2.7.4"
-              case None => throw QueryExecutionErrors.unsupportedHadoopVersionError(hadoopVersion)
+              case _ => throw QueryExecutionErrors.unsupportedHadoopVersionError(hadoopVersion)
             }
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
