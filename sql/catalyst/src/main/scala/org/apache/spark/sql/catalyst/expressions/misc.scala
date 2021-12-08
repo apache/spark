@@ -329,6 +329,8 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
     Examples:
       > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
        4Hv0UKCx6nfUeAoPZo1z+w==
+      > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
+       3lmwu+Mw0H3fi5NDvcu9lg==
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -388,6 +390,8 @@ case class AesEncrypt(
     Examples:
       > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
        Spark
+      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+       Spark SQL
   """,
   since = "3.3.0",
   group = "misc_funcs")
