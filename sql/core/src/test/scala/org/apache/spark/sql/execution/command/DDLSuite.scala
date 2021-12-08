@@ -751,7 +751,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Alter/Describe Database") {
+  test("Describe Database") {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
 
@@ -760,9 +760,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location = getDBPath(dbNameWithoutBackTicks)
 
-        sql(s"CREATE DATABASE $dbName")
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        sql(s"CREATE DATABASE $dbName WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
@@ -771,33 +769,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Namespace Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
       } finally {
         catalog.reset()
       }
-    }
-  }
-
-  test("Alter Database - database does not exists") {
-    val databaseNames = Seq("db1", "`database`")
-
-    databaseNames.foreach { dbName =>
-      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-      assert(!spark.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
-
-      val message = intercept[AnalysisException] {
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
     }
   }
 

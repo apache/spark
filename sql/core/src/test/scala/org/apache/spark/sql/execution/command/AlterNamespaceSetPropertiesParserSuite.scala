@@ -37,4 +37,10 @@ class AlterNamespaceSetPropertiesParserSuite extends AnalysisTest {
       }
     }
   }
+
+  test("property values must be set") {
+    assertUnsupported(
+      sql = "ALTER NAMESPACE my_db SET PROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
 }
