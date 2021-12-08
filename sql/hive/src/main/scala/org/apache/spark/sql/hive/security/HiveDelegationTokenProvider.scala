@@ -35,6 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.KEYTAB
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.util.Utils
 
 private[spark] class HiveDelegationTokenProvider
@@ -99,18 +100,7 @@ private[spark] class HiveDelegationTokenProvider
         s"$principal at $metastoreUri")
 
       doAsRealUser {
-        val hive = conf match {
-          case hiveConf: HiveConf =>
-            try {
-              classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
-                .invoke(null, conf).asInstanceOf[Hive]
-            } catch {
-              case _: NoSuchMethodException =>
-                Hive.get(hiveConf)
-            }
-          case _ =>
-            Hive.get(conf, classOf[HiveConf])
-        }
+        val hive = HiveClientImpl.getHive(conf)
         val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
 
         val hive2Token = new Token[DelegationTokenIdentifier]()
