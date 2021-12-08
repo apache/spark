@@ -132,14 +132,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
             }
           };
-
-      if (maxRetries > 0) {
-        // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
-        // a bug in this code. We should remove the if statement once we're sure of the stability.
-        new RetryingBlockTransferor(transportConf, blockFetchStarter, blockIds, listener).start();
-      } else {
-        blockFetchStarter.createAndStart(blockIds, listener);
-      }
+      new RetryingBlockTransferor(transportConf, blockFetchStarter, blockIds, listener).start();
     } catch (Exception e) {
       logger.error("Exception while beginning fetchBlocks", e);
       for (String blockId : blockIds) {
