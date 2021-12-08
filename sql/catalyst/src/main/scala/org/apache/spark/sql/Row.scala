@@ -603,7 +603,7 @@ trait Row extends Serializable {
 
     // Convert the row fields to json
     var n = 0
-    var elements = new mutable.ListBuffer[JField]
+    val elements = new mutable.ListBuffer[JField]
     val len = length
     while (n < len) {
       val field = schema(n)
