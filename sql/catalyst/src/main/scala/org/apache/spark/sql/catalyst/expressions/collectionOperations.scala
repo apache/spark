@@ -172,7 +172,7 @@ case class MapKeys(child: Expression)
  * Returns an unordered array containing the keys of the map.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(map) - Returns true if the map contains the key.",
+  usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
