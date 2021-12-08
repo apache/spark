@@ -83,7 +83,7 @@ class ExecutorRollPlugin extends SparkPlugin with Logging {
                     s"${classOf[KubernetesClusterSchedulerBackend].getSimpleName}.")
               }
             } catch {
-              case e: Exception => logError("Error in rolling thread", e)
+              case e: Throwable => logError("Error in rolling thread", e)
             }
           }, interval, interval, TimeUnit.SECONDS)
         }
