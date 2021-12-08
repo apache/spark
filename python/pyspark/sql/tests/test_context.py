@@ -30,7 +30,6 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
-
     @classmethod
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
@@ -71,35 +70,49 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         shutil.rmtree(tmpPath)
         df.write.saveAsTable("savedJsonTable", "json", "append", path=tmpPath)
         actual = self.spark.catalog.createTable("externalJsonTable", tmpPath, "json")
-        self.assertEqual(sorted(df.collect()),
-                         sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertEqual(sorted(df.collect()),
-                         sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(
+            sorted(df.collect()), sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect())
+        )
+        self.assertEqual(
+            sorted(df.collect()),
+            sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()),
+        )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.spark.sql("DROP TABLE externalJsonTable")
 
         df.write.saveAsTable("savedJsonTable", "json", "overwrite", path=tmpPath)
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.spark.catalog.createTable("externalJsonTable", source="json",
-                                                schema=schema, path=tmpPath,
-                                                noUse="this options will not be used")
-        self.assertEqual(sorted(df.collect()),
-                         sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertEqual(sorted(df.select("value").collect()),
-                         sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()))
+        actual = self.spark.catalog.createTable(
+            "externalJsonTable",
+            source="json",
+            schema=schema,
+            path=tmpPath,
+            noUse="this options will not be used",
+        )
+        self.assertEqual(
+            sorted(df.collect()), sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect())
+        )
+        self.assertEqual(
+            sorted(df.select("value").collect()),
+            sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()),
+        )
         self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
         self.spark.sql("DROP TABLE savedJsonTable")
         self.spark.sql("DROP TABLE externalJsonTable")
 
-        defaultDataSourceName = self.spark.conf.get("spark.sql.sources.default",
-                                                    "org.apache.spark.sql.parquet")
+        defaultDataSourceName = self.spark.conf.get(
+            "spark.sql.sources.default", "org.apache.spark.sql.parquet"
+        )
         self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
         actual = self.spark.catalog.createTable("externalJsonTable", path=tmpPath)
-        self.assertEqual(sorted(df.collect()),
-                         sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
-        self.assertEqual(sorted(df.collect()),
-                         sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()))
+        self.assertEqual(
+            sorted(df.collect()), sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect())
+        )
+        self.assertEqual(
+            sorted(df.collect()),
+            sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()),
+        )
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.spark.sql("DROP TABLE savedJsonTable")
         self.spark.sql("DROP TABLE externalJsonTable")
@@ -132,14 +145,20 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         df = self.spark.range(0, 3)
 
         def rows_frame_match():
-            return "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" in df.select(
-                F.count("*").over(window.Window.rowsBetween(-sys.maxsize, sys.maxsize))
-            ).columns[0]
+            return (
+                "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
+                in df.select(
+                    F.count("*").over(window.Window.rowsBetween(-sys.maxsize, sys.maxsize))
+                ).columns[0]
+            )
 
         def range_frame_match():
-            return "RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING" in df.select(
-                F.count("*").over(window.Window.rangeBetween(-sys.maxsize, sys.maxsize))
-            ).columns[0]
+            return (
+                "RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
+                in df.select(
+                    F.count("*").over(window.Window.rangeBetween(-sys.maxsize, sys.maxsize))
+                ).columns[0]
+            )
 
         for new_maxsize in [2 ** 31 - 1, 2 ** 63 - 1, 2 ** 127 - 1]:
             old_maxsize = sys.maxsize
@@ -156,14 +175,13 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 class SQLContextTests(unittest.TestCase):
-
     def test_get_or_create(self):
         sc = None
         sql_context = None
         try:
-            sc = SparkContext('local[4]', "SQLContextTests")
+            sc = SparkContext("local[4]", "SQLContextTests")
             sql_context = SQLContext.getOrCreate(sc)
-            assert(isinstance(sql_context, SQLContext))
+            assert isinstance(sql_context, SQLContext)
         finally:
             if sql_context is not None:
                 sql_context.sparkSession.stop()
@@ -176,7 +194,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

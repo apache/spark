@@ -29,7 +29,7 @@ object CustomMetrics {
    * `CustomMetric`.
    */
   def buildV2CustomMetricTypeName(customMetric: CustomMetric): String = {
-    s"${V2_CUSTOM}_${customMetric.getClass.getCanonicalName}"
+    s"${V2_CUSTOM}_${customMetric.getClass.getName}"
   }
 
   /**

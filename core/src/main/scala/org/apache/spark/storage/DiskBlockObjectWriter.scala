@@ -318,7 +318,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   // For testing
-  private[spark] override def flush(): Unit = {
+  override def flush(): Unit = {
     objOut.flush()
     bs.flush()
   }

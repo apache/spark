@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -183,10 +182,10 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
  test("unwrap cast should skip when expression is non-deterministic or foldable") {
-    Seq(positiveInt, negativeInt).foreach(v => {
-      val e = Cast(First(f, ignoreNulls = true), IntegerType) <=> v
+   Seq(positiveLong, negativeLong).foreach (v => {
+     val e = Cast(Rand(0), LongType) <=> v
       assertEquivalent(e, e, evaluate = false)
-      val e2 = Cast(Literal(30.toShort), IntegerType) >= v
+      val e2 = Cast(Literal(30), LongType) >= v
       assertEquivalent(e2, e2, evaluate = false)
     })
   }

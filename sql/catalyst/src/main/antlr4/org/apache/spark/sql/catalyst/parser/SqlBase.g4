@@ -37,6 +37,11 @@ grammar SqlBase;
 
 @lexer::members {
   /**
+   * When true, parser should throw ParseExcetion for unclosed bracketed comment.
+   */
+  public boolean has_unclosed_bracketed_comment = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -73,6 +78,16 @@ grammar SqlBase;
       return false;
     }
   }
+
+  /**
+   * This method will be called when the character stream ends and try to find out the
+   * unclosed bracketed comment.
+   * If the method be called, it means the end of the entire character stream match,
+   * and we set the flag and fail later.
+   */
+  public void markUnclosedComment() {
+    has_unclosed_bracketed_comment = true;
+  }
 }
 
 singleStatement
@@ -107,19 +122,19 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE multipartIdentifier                                          #use
-    | USE NAMESPACE multipartIdentifier                                #useNamespace
+    | USE namespace multipartIdentifier                                #useNamespace
     | SET CATALOG (identifier | STRING)                                #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
          locationSpec |
-         (WITH (DBPROPERTIES | PROPERTIES) tablePropertyList))*        #createNamespace
+         (WITH (DBPROPERTIES | PROPERTIES) propertyList))*             #createNamespace
     | ALTER namespace multipartIdentifier
-        SET (DBPROPERTIES | PROPERTIES) tablePropertyList              #setNamespaceProperties
+        SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
     | ALTER namespace multipartIdentifier
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
-    | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
+    | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
@@ -130,7 +145,7 @@ statement
         rowFormat |
         createFileFormat |
         locationSpec |
-        (TBLPROPERTIES tableProps=tablePropertyList))*                 #createTableLike
+        (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
     | replaceTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
@@ -155,9 +170,9 @@ statement
     | ALTER (TABLE | VIEW) from=multipartIdentifier
         RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
-        SET TBLPROPERTIES tablePropertyList                            #setTableProperties
+        SET TBLPROPERTIES propertyList                                 #setTableProperties
     | ALTER (TABLE | VIEW) multipartIdentifier
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+        UNSET TBLPROPERTIES (IF EXISTS)? propertyList                  #unsetTableProperties
     | ALTER TABLE table=multipartIdentifier
         (ALTER | CHANGE) COLUMN? column=multipartIdentifier
         alterColumnAction?                                             #alterTableAlterColumn
@@ -168,9 +183,9 @@ statement
         REPLACE COLUMNS
         '(' columns=qualifiedColTypeWithPositionList ')'               #hiveReplaceColumns
     | ALTER TABLE multipartIdentifier (partitionSpec)?
-        SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
+        SET SERDE STRING (WITH SERDEPROPERTIES propertyList)?          #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?
-        SET SERDEPROPERTIES tablePropertyList                          #setTableSerDe
+        SET SERDEPROPERTIES propertyList                               #setTableSerDe
     | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
     | ALTER TABLE multipartIdentifier
@@ -187,11 +202,11 @@ statement
         identifierCommentList?
         (commentSpec |
          (PARTITIONED ON identifierList) |
-         (TBLPROPERTIES tablePropertyList))*
+         (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
-        (OPTIONS tablePropertyList)?                                   #createTempViewUsing
+        (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         multipartIdentifier AS className=STRING
@@ -204,7 +219,7 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier
-        ('(' key=tablePropertyKey ')')?                                #showTblProperties
+        ('(' key=propertyKey ')')?                                     #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) multipartIdentifier)?
@@ -213,7 +228,7 @@ statement
     | SHOW identifier? FUNCTIONS
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
-    | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -228,7 +243,7 @@ statement
     | REFRESH FUNCTION multipartIdentifier                             #refreshFunction
     | REFRESH (STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
-        (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
+        (OPTIONS options=propertyList)? (AS? query)?                   #cacheTable
     | UNCACHE TABLE (IF EXISTS)? multipartIdentifier                   #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
@@ -242,11 +257,16 @@ statement
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
     | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ .*?)?                                          #setQuotedConfiguration
+    | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
+    | CREATE INDEX (IF NOT EXISTS)? identifier ON TABLE?
+        multipartIdentifier (USING indexType=identifier)?
+        '(' columns=multipartIdentifierPropertyList ')'
+        (OPTIONS options=propertyList)?                                #createIndex
+    | DROP INDEX (IF EXISTS)? identifier ON TABLE? multipartIdentifier #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -341,7 +361,7 @@ insertInto
     : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
     | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
-    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -360,6 +380,12 @@ namespace
     : NAMESPACE
     | DATABASE
     | SCHEMA
+    ;
+
+namespaces
+    : NAMESPACES
+    | DATABASES
+    | SCHEMAS
     ;
 
 describeFuncName
@@ -387,7 +413,7 @@ tableProvider
     ;
 
 createTableClauses
-    :((OPTIONS options=tablePropertyList) |
+    :((OPTIONS options=propertyList) |
      (PARTITIONED BY partitioning=partitionFieldList) |
      skewSpec |
      bucketSpec |
@@ -395,23 +421,23 @@ createTableClauses
      createFileFormat |
      locationSpec |
      commentSpec |
-     (TBLPROPERTIES tableProps=tablePropertyList))*
+     (TBLPROPERTIES tableProps=propertyList))*
     ;
 
-tablePropertyList
-    : '(' tableProperty (',' tableProperty)* ')'
+propertyList
+    : '(' property (',' property)* ')'
     ;
 
-tableProperty
-    : key=tablePropertyKey (EQ? value=tablePropertyValue)?
+property
+    : key=propertyKey (EQ? value=propertyValue)?
     ;
 
-tablePropertyKey
+propertyKey
     : identifier ('.' identifier)*
     | STRING
     ;
 
-tablePropertyValue
+propertyValue
     : INTEGER_VALUE
     | DECIMAL_VALUE
     | booleanValue
@@ -437,7 +463,7 @@ fileFormat
     ;
 
 storageHandler
-    : STRING (WITH SERDEPROPERTIES tablePropertyList)?
+    : STRING (WITH SERDEPROPERTIES propertyList)?
     ;
 
 resource
@@ -594,6 +620,11 @@ fromClause
     : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
+temporalClause
+    : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | STRING)
+    | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=valueExpression
+    ;
+
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
@@ -670,7 +701,7 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE '(' sampleMethod? ')'
+    : TABLESAMPLE '(' sampleMethod? ')' (REPEATABLE '('seed=INTEGER_VALUE')')?
     ;
 
 sampleMethod
@@ -706,7 +737,8 @@ identifierComment
     ;
 
 relationPrimary
-    : multipartIdentifier sample? tableAlias  #tableName
+    : multipartIdentifier temporalClause?
+      sample? tableAlias                      #tableName
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
@@ -726,7 +758,7 @@ tableAlias
     ;
 
 rowFormat
-    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tablePropertyList)?  #rowFormatSerde
+    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=propertyList)?       #rowFormatSerde
     | ROW FORMAT DELIMITED
       (FIELDS TERMINATED BY fieldsTerminatedBy=STRING (ESCAPED BY escapedBy=STRING)?)?
       (COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy=STRING)?
@@ -741,6 +773,14 @@ multipartIdentifierList
 
 multipartIdentifier
     : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
+    ;
+
+multipartIdentifierPropertyList
+    : multipartIdentifierProperty (',' multipartIdentifierProperty)*
+    ;
+
+multipartIdentifierProperty
+    : multipartIdentifier (OPTIONS options=propertyList)?
     ;
 
 tableIdentifier
@@ -1182,6 +1222,7 @@ ansiNonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEATABLE
     | REPLACE
     | RESET
     | RESPECT
@@ -1195,6 +1236,7 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SCHEMAS
     | SECOND
     | SEMI
     | SEPARATED
@@ -1215,11 +1257,14 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
     | TEMPORARY
     | TERMINATED
+    | TIMESTAMP
     | TOUCH
     | TRANSACTION
     | TRANSACTIONS
@@ -1237,6 +1282,7 @@ ansiNonReserved
     | UPDATE
     | USE
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WINDOW
@@ -1448,6 +1494,7 @@ nonReserved
     | REFRESH
     | RENAME
     | REPAIR
+    | REPEATABLE
     | REPLACE
     | RESET
     | RESPECT
@@ -1461,6 +1508,7 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SCHEMAS
     | SECOND
     | SELECT
     | SEPARATED
@@ -1482,6 +1530,8 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_TIME
+    | SYSTEM_VERSION
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1490,6 +1540,7 @@ nonReserved
     | TERMINATED
     | THEN
     | TIME
+    | TIMESTAMP
     | TO
     | TOUCH
     | TRAILING
@@ -1512,6 +1563,7 @@ nonReserved
     | USE
     | USER
     | VALUES
+    | VERSION
     | VIEW
     | VIEWS
     | WHEN
@@ -1584,7 +1636,7 @@ CURRENT_USER: 'CURRENT_USER';
 DAY: 'DAY';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
-DATABASES: 'DATABASES' | 'SCHEMAS';
+DATABASES: 'DATABASES';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1714,6 +1766,7 @@ REFERENCES: 'REFERENCES';
 REFRESH: 'REFRESH';
 RENAME: 'RENAME';
 REPAIR: 'REPAIR';
+REPEATABLE: 'REPEATABLE';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
 RESPECT: 'RESPECT';
@@ -1729,6 +1782,7 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 SECOND: 'SECOND';
 SCHEMA: 'SCHEMA';
+SCHEMAS: 'SCHEMAS';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -1751,6 +1805,8 @@ STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
+SYSTEM_TIME: 'SYSTEM_TIME';
+SYSTEM_VERSION: 'SYSTEM_VERSION';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -1759,6 +1815,7 @@ TEMPORARY: 'TEMPORARY' | 'TEMP';
 TERMINATED: 'TERMINATED';
 THEN: 'THEN';
 TIME: 'TIME';
+TIMESTAMP: 'TIMESTAMP';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
@@ -1783,6 +1840,7 @@ USE: 'USE';
 USER: 'USER';
 USING: 'USING';
 VALUES: 'VALUES';
+VERSION: 'VERSION';
 VIEW: 'VIEW';
 VIEWS: 'VIEWS';
 WHEN: 'WHEN';
@@ -1893,7 +1951,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
+    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
     ;
 
 WS

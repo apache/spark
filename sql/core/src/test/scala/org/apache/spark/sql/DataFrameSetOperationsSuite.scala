@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
@@ -1354,6 +1356,41 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(unionDf,
       Row(Row(Seq(Seq(Row("bb", null))))) ::
       Row(Row(Seq(Seq(Row(null, "ba"))))) :: Nil)
+  }
+
+  test("SPARK-37371: UnionExec should support columnar if all children support columnar") {
+    def checkIfColumnar(
+        plan: SparkPlan,
+        targetPlan: (SparkPlan) => Boolean,
+        isColumnar: Boolean): Unit = {
+      val target = plan.collect {
+        case p if targetPlan(p) => p
+      }
+      assert(target.nonEmpty)
+      assert(target.forall(_.supportsColumnar == isColumnar))
+    }
+
+    Seq(true, false).foreach { supported =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> supported.toString) {
+        val df1 = Seq(1, 2, 3).toDF("i").cache()
+        val df2 = Seq(4, 5, 6).toDF("j").cache()
+
+        checkIfColumnar(df1.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+        checkIfColumnar(df2.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+
+        val union = df1.union(df2)
+        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
+        checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
+
+        val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
+        checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
+          _.isInstanceOf[UnionExec], false)
+        checkAnswer(nonColumnarUnion,
+          Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
+      }
+    }
   }
 }
 

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 
-import org.apache.parquet.io.ParquetDecodingException
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -85,6 +85,17 @@ class FileScanRDD(
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 
+      private def resetCurrentIterator(): Unit = {
+        currentIterator match {
+          case iter: NextIterator[_] =>
+            iter.closeIfNeeded()
+          case iter: Closeable =>
+            iter.close()
+          case _ => // do nothing
+        }
+        currentIterator = null
+      }
+
       def hasNext: Boolean = {
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
@@ -96,7 +107,6 @@ class FileScanRDD(
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
-        val preNumRecordsRead = inputMetrics.recordsRead
         if (nextElement.isInstanceOf[ColumnarBatch]) {
           incTaskInputMetricsBytesRead()
           inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
@@ -128,15 +138,21 @@ class FileScanRDD(
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
+          resetCurrentIterator()
           if (ignoreMissingFiles || ignoreCorruptFiles) {
             currentIterator = new NextIterator[Object] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
-              // vectorized Parquet reader. Here we use lazy val to delay the creation of
-              // iterator so that we will throw exception in `getNext`.
-              private lazy val internalIter = readCurrentFile()
+              // vectorized Parquet reader. Here we use a lazily initialized variable to delay the
+              // creation of iterator so that we will throw exception in `getNext`.
+              private var internalIter: Iterator[InternalRow] = null
 
               override def getNext(): AnyRef = {
                 try {
+                  // Initialize `internalIter` lazily.
+                  if (internalIter == null) {
+                    internalIter = readCurrentFile()
+                  }
+
                   if (internalIter.hasNext) {
                     internalIter.next()
                   } else {
@@ -158,7 +174,13 @@ class FileScanRDD(
                 }
               }
 
-              override def close(): Unit = {}
+              override def close(): Unit = {
+                internalIter match {
+                  case iter: Closeable =>
+                    iter.close()
+                  case _ => // do nothing
+                }
+              }
             }
           } else {
             currentIterator = readCurrentFile()
@@ -170,13 +192,12 @@ class FileScanRDD(
             case e: SchemaColumnConvertNotSupportedException =>
               throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
                 currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case e: ParquetDecodingException =>
-              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
-                throw e.getCause
-              } else if (e.getMessage.contains("Can not read value at")) {
-                throw QueryExecutionErrors.cannotReadParquetFilesError(e)
+            case sue: SparkUpgradeException => throw sue
+            case NonFatal(e) =>
+              e.getCause match {
+                case sue: SparkUpgradeException => throw sue
+                case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
               }
-              throw e
           }
         } else {
           currentFile = null
@@ -188,6 +209,7 @@ class FileScanRDD(
       override def close(): Unit = {
         incTaskInputMetricsBytesRead()
         InputFileBlockHolder.unset()
+        resetCurrentIterator()
       }
     }
 

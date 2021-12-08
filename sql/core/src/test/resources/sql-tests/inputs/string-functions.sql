@@ -62,6 +62,40 @@ SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'));
 SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
 
+-- lpad for BINARY inputs
+SELECT hex(lpad(unhex(''), 5));
+SELECT hex(lpad(unhex('aabb'), 5));
+SELECT hex(lpad(unhex('aabbcc'), 2));
+SELECT hex(lpad(unhex(''), 5, unhex('1f')));
+SELECT hex(lpad(unhex('aa'), 5, unhex('1f')));
+SELECT hex(lpad(unhex('aa'), 6, unhex('1f')));
+SELECT hex(lpad(unhex(''), 5, unhex('1f2e')));
+SELECT hex(lpad(unhex('aa'), 5, unhex('1f2e')));
+SELECT hex(lpad(unhex('aa'), 6, unhex('1f2e')));
+SELECT hex(lpad(unhex(''), 6, unhex('')));
+SELECT hex(lpad(unhex('aabbcc'), 6, unhex('')));
+SELECT hex(lpad(unhex('aabbcc'), 2, unhex('ff')));
+
+-- rpad for BINARY inputs
+SELECT hex(rpad(unhex(''), 5));
+SELECT hex(rpad(unhex('aabb'), 5));
+SELECT hex(rpad(unhex('aabbcc'), 2));
+SELECT hex(rpad(unhex(''), 5, unhex('1f')));
+SELECT hex(rpad(unhex('aa'), 5, unhex('1f')));
+SELECT hex(rpad(unhex('aa'), 6, unhex('1f')));
+SELECT hex(rpad(unhex(''), 5, unhex('1f2e')));
+SELECT hex(rpad(unhex('aa'), 5, unhex('1f2e')));
+SELECT hex(rpad(unhex('aa'), 6, unhex('1f2e')));
+SELECT hex(rpad(unhex(''), 6, unhex('')));
+SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')));
+SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')));
+
+-- lpad/rpad with mixed STRING and BINARY input
+SELECT lpad('abc', 5, x'57');
+SELECT lpad(x'57', 5, 'abc');
+SELECT rpad('abc', 5, x'57');
+SELECT rpad(x'57', 5, 'abc');
+
 -- decode
 select decode();
 select decode(encode('abc', 'utf-8'));
@@ -71,3 +105,23 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- contains
+SELECT CONTAINS(null, 'Spark');
+SELECT CONTAINS('Spark SQL', null);
+SELECT CONTAINS(null, null);
+SELECT CONTAINS('Spark SQL', 'Spark');
+SELECT CONTAINS('Spark SQL', 'SQL');
+SELECT CONTAINS('Spark SQL', 'SPARK');
+
+SELECT startswith('Spark SQL', 'ark');
+SELECT startswith('Spark SQL', 'Spa');
+SELECT startswith(null, 'Spark');
+SELECT startswith('Spark', null);
+SELECT startswith(null, null);
+
+SELECT endswith('Spark SQL', 'QL');
+SELECT endswith('Spark SQL', 'Spa');
+SELECT endswith(null, 'Spark');
+SELECT endswith('Spark', null);
+SELECT endswith(null, null);

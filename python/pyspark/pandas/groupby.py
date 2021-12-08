@@ -90,6 +90,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.exceptions import DataError
@@ -155,7 +156,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self,
         func_or_funcs: Optional[Union[str, List[str], Dict[Name, Union[str, List[str]]]]] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> DataFrame:
         """Aggregate using one or more operations over the specified axis.
 
@@ -1199,6 +1200,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
+            log_advice(
+                "If the type hints is not specified for `grouby.apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             groupkeys = [
@@ -1275,32 +1280,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
 
-            if not is_series_groupby and LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                # `groupby.apply` in pandas<0.25 runs the functions twice for the first group.
-                # https://github.com/pandas-dev/pandas/pull/24748
-
-                should_skip_first_call = True
-
-                def wrapped_func(
-                    df: Union[pd.DataFrame, pd.Series], *a: Any, **k: Any
-                ) -> Union[pd.DataFrame, pd.Series]:
-                    nonlocal should_skip_first_call
-                    if should_skip_first_call:
-                        should_skip_first_call = False
-                        if should_return_series:
-                            return pd.Series()
-                        else:
-                            return pd.DataFrame()
-                    else:
-                        return pandas_apply(df, *a, **k)
-
-            else:
-                wrapped_func = pandas_apply
-
             if is_series_groupby:
-                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(wrapped_func, *args, **kwargs)
+                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pdf_or_ser = pdf.groupby(groupkey_names).apply(wrapped_func, *args, **kwargs)
+                pdf_or_ser = pdf.groupby(groupkey_names).apply(pandas_apply, *args, **kwargs)
                 if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
                     pdf_or_ser = pdf_or_ser.stack()
 
@@ -2264,6 +2247,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `grouby.transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             pdf = pdf.groupby(groupkey_names).transform(func, *args, **kwargs)
