@@ -90,9 +90,7 @@ class ExecutorRollPlugin extends SparkPlugin with Logging {
         Map.empty[String, String].asJava
       }
 
-      override def shutdown(): Unit = {
-        periodicService.shutdown()
-      }
+      override def shutdown(): Unit = periodicService.shutdown()
     }
   }
 
