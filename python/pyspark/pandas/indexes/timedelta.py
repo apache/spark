@@ -121,10 +121,7 @@ class TimedeltaIndex(Index):
         """
         Number of days for each element.
         """
-        sdf = self._internal.spark_frame.select(
-            F.expr("date_part('DAY', %s)" % SPARK_DEFAULT_INDEX_NAME)
-        )
-        return Index(first_series(DataFrame(sdf)).rename(self.name))
+        return self._with_new_scol(F.expr("date_part('DAY', %s)" % SPARK_DEFAULT_INDEX_NAME))
 
     @property
     def seconds(self) -> Index:
