@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
+/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createRESTEndPointForExecutorsPeakMetricsSummariesPage, */
 /* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
@@ -231,7 +231,7 @@ function getColumnNameForExecutorMetricSummary(columnKey) {
   }
 }
 
-function createRowMetadataForColumn(colKey, data, checkboxId) {
+function createRowMetadataForColumn(colKey, data) {
   var row = {
     "metric": getColumnNameForExecutorMetricSummary(colKey),
     "data": data,
@@ -951,133 +951,129 @@ $(document).ready(function () {
 
             case "JVMHeapMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 1);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "JVMOffHeapMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 12);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "OnHeapExecutionMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 15);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "OnHeapStorageMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 16);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "OffHeapStorageMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 17);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "OnHeapUnifiedMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 1);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "OffHeapUnifiedMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 2);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "DirectPoolMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 4);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "MappedPoolMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreeJVMVMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 6);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreeJVMRSSMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreePythonVMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreePythonRSSMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreeOtherVMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "ProcessTreeOtherRSSMemory":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "MinorGCCount":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "MinorGCTime":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "MajorGCCount":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             case "MajorGCTime":
               row = createRowMetadataForColumn(
-                columnKey, executorMetricsResponse[columnKey], 5);
+                columnKey, executorMetricsResponse[columnKey]);
               executorSummaryMetricsTableArray.push(row);
               break;
 
             default:
               if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
                 row = createRowMetadataForColumn(
-                  columnKey, executorMetricsResponse[columnKey], 0);
+                  columnKey, executorMetricsResponse[columnKey]);
                 executorSummaryMetricsTableArray.push(row);
               }
               break;
           }
         });
-       var output2;
-       for (property in executorSummaryMetricsTableArray) {
-         output2 += property + '; \n';
-       }
-       var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
-       executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
+        var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
+        executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
       });
   });
 });
