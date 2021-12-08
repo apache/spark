@@ -50,7 +50,7 @@ class ExecutorRollPlugin extends SparkPlugin with Logging {
         if (interval <= 0) {
           logWarning(s"Disabled due to invalid interval value, '$interval'")
         } else if (!sc.conf.get(DECOMMISSION_ENABLED)) {
-          logWarning("Disabled because ${DECOMMISSION_ENABLED} is false.")
+          logWarning(s"Disabled because ${DECOMMISSION_ENABLED.key} is false.")
         } else {
           // Scheduler is not created yet
           sparkContext = sc
