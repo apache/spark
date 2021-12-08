@@ -23,7 +23,7 @@ license: |
 {:toc}
 
 
-The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
+The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute SQL
 queries input from the command line. Note that the Spark SQL CLI cannot talk to the Thrift JDBC server.
 
 To start the Spark SQL CLI, run the following in the Spark directory:
@@ -53,7 +53,7 @@ You may run `./bin/spark-sql --help` for a complete list of all available option
 
 ## The hiverc File
 
-The Spark SQL CLI when invoked without the `-i` option will attempt to load `$HIVE_HOME/bin/.hiverc` and `$HOME/.hiverc` as initialization files.
+When invoked without the `-i`, the Spark SQL CLI will attempt to load `$HIVE_HOME/bin/.hiverc` and `$HOME/.hiverc` as initialization files.
 
 ## Supported comment types
 
@@ -95,40 +95,40 @@ The Spark SQL CLI when invoked without the `-i` option will attempt to load `$HI
 
 When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters interactive shell mode.
 Use `;` (semicolon) to terminate commands. Notice:
-1. CLI use `;` to terminate commands only when it's at the end of line and it's not escaped by `\\;`.
-2. `;` is the only way to terminate commands, if user type `SELECT 1` and press enter, console will just wait for input.
-3. If user type multiple commands in one line like `SELECT 1; SELECT 2;`, commands `SELECT 1` and `SELECT 2` will be executed separatly.
-4. If `;` in a simple comment 
+1. The CLI use `;` to terminate commands only when it's at the end of line, and it's not escaped by `\\;`.
+2. `;` is the only way to terminate commands. If the user types `SELECT 1` and presses enter, the console will just wait for input.
+3. If the user types multiple commands in one line like `SELECT 1; SELECT 2;`, the commands `SELECT 1` and `SELECT 2` will be executed separatly.
+4. If `;` appears in a simple comment, as in: 
    ```sql
    -- This is a comment;
    SELECT 1;
    ```
-   This comment line will just be ignored. If `;` in a bracketed command and not at the end of line,
-    ```sql
-    /* This is a comment contains ';'. */
-    SELECT 1;
-    ```
-  it will not terminate commands. If `;` in a bracketed command and in the end of line, 
-     ```sql
-     /* This is a comment contains ;
-     */ SELECT 1;
-     ```
-  it will terminate commands into  `/* This is a comment contains ` and `*/ SELECT 1`.
+   then this comment line will be ignored. If `;` appears in a bracketed comment,
+   ```sql
+   /* This is a comment contains ';'. */
+   SELECT 1;
+   ```
+   then this bracketed comment lines will be ignored. If `;` appears in a bracketed comment and at the end of line, 
+   ```sql
+   /* This is a comment contains ;
+   */ SELECT 1;
+   ```
+   then the whole command will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`.
 
 
 <table class="table">
 <tr><th>Command</th><th>Description</th></tr>
 <tr>
-  <td><code>quit</code> <code>exit</code></td>
-  <td>Use <code>quit</code> or <code>exit</code> to leave the interactive shell.</td>
+  <td><code>quit</code> or <code>exit</code></td>
+  <td>Exits the interactive shell.</td>
 </tr>
 <tr>
   <td><code>!&lt;command&gt;</code></td>
   <td>Executes a shell command from the Spark SQL CLI shell.</td>
 </tr>
 <tr>
-  <td><code>dfs &lt;dfs command&gt;</code></td>
-  <td>Executes a <a href="https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html#dfs">dfs command</a> from the Hive shell.</td>
+  <td><code>dfs &lt;HDFS dfs command&gt;</code></td>
+  <td>Executes a HDFS <a href="https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSCommands.html#dfs">dfs command</a> from the Spark SQL CLI shell.</td>
 </tr>
 <tr>
   <td><code>&lt;query string&gt;</code></td>
@@ -142,32 +142,32 @@ Use `;` (semicolon) to terminate commands. Notice:
 
 ## Examples
 
-Example of running a query from the command line
+Example of running a query from the command line:
 
     ./bin/spark-sql -e 'SELECT COL FROM TBL'
 
-Example of setting Hive configuration variables
+Example of setting Hive configuration variables:
 
     ./bin/spark-sql -e 'SELECT COL FROM TBL' --hiveconf hive.exec.scratchdir=/home/my/hive_scratch  --hiveconf mapred.reduce.tasks=32
 
-Example of dumping data out from a query into a file using silent mode
+Example of dumping data out from a query into a file using silent mode:
 
     ./bin/spark-sql -S -e 'SELECT COL FROM TBL' > result.txt
 
-Example of running a script non-interactively from local disk
+Example of running a script non-interactively from local disk:
 
     ./bin/spark-sql -f /path/to/spark-sql-script.sql
 
-Example of running a script non-interactively from a Hadoop supported filesystem
+Example of running a script non-interactively from a Hadoop supported filesystem:
 
     ./bin/spark-sql -f hdfs://<namenode>:<port>/spark-sql-script.sql
     ./bin/spark-sql -f s3://mys3bucket/spark-sql-script.sql 
 
-Example of running an initialization script before entering interactive mode
+Example of running an initialization script before entering interactive mode:
 
     ./bin/spark-sql -i /path/to/spark-sql-init.sql
 
-Example of entering interactive mode
+Example of entering interactive mode:
 
     ./bin/spark-sql
     spark-sql> SELECT 1;
@@ -176,7 +176,7 @@ Example of entering interactive mode
     spark-sql> SELECT 1;
     1
 
-Example of entering interactive mode with escape `;` in comment
+Example of entering interactive mode with escape `;` in comment:
 
     ./bin/spark-sql
     spark-sql>/* This is a comment contains \\;
