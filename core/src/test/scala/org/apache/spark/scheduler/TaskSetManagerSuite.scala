@@ -2245,8 +2245,8 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.size == 1)
   }
 
-  test("task failed reach max failure threshold should check if another task " +
-    "succeed before abort job") {
+  test("task failed reach max failure threshold should check if another attempt " +
+    "succeeded before abort the stage") {
     sc = new SparkContext("local", "test")
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
@@ -2281,7 +2281,7 @@ class TaskSetManagerSuite
     }
     clock.advance(1)
 
-    // running task with taskId 1 fail 3 times (not enough to abort the stage)
+    // running task with taskId(TID 1) fail 3 times (not enough to abort the stage)
     (0 until 3).foreach { attempt =>
       val task = runningTaskForIndex(1)
       logInfo(s"failing task $task")
