@@ -139,7 +139,7 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
-      .doc("Interval between period executor roll operations. To disable, set 0 (default)")
+      .doc("Interval between executor roll operations. To disable, set 0 (default)")
       .version("3.3.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
