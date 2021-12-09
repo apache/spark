@@ -125,3 +125,10 @@ SELECT endswith('Spark SQL', 'Spa');
 SELECT endswith(null, 'Spark');
 SELECT endswith('Spark', null);
 SELECT endswith(null, null);
+
+SELECT contains(encode('Spark SQL', 'utf-8'), 'Spark');
+SELECT contains(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+SELECT startswith(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+SELECT startswith(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'));
+SELECT endswith(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
+SELECT endsWith(encode('Spark SQL', 'utf-8'), 'Spark');
