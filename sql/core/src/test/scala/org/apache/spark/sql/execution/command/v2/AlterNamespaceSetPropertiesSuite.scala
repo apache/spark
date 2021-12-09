@@ -27,8 +27,4 @@ class AlterNamespaceSetPropertiesSuite extends command.AlterNamespaceSetProperti
     with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
   override def notFoundMsgPrefix: String = "Namespace"
-
-  test("basic test") {
-    runBasicTest()
-  }
 }

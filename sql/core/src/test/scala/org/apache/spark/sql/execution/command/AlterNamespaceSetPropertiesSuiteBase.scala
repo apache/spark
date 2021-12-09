@@ -18,6 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `ALTER NAMESPACE ... SET PROPERTIES` command that
@@ -34,6 +37,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
  *        `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetPropertiesSuite`
  */
 trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
   override val command = "ALTER NAMESPACE ... SET PROPERTIES"
 
   protected def namespace: String
@@ -56,6 +61,49 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       assert(getProperties(ns) === "((a,a), (b,b), (c,c))")
       sql(s"ALTER DATABASE $ns SET PROPERTIES ('d'='d')")
       assert(getProperties(ns) === "((a,a), (b,b), (c,c), (d,d))")
+    }
+  }
+
+  test("test with properties set while creating namespace") {
+    val ns = s"$catalog.$namespace"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $ns WITH PROPERTIES ('a'='a','b'='b','c'='c')")
+      assert(getProperties(ns) === "((a,a), (b,b), (c,c))")
+      sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('a'='b', 'b'='a')")
+      assert(getProperties(ns) === "((a,b), (b,a), (c,c))")
+    }
+  }
+
+  test("test reserved properties") {
+    val ns = s"$catalog.$namespace"
+    import SupportsNamespaces._
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespace(ns) {
+          sql(s"CREATE NAMESPACE $ns")
+          val exception = intercept[ParseException] {
+            sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')")
+          }
+          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+        }
+      }
+    }
+    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+        withNamespace(ns) {
+          sql(s"CREATE NAMESPACE $ns")
+          sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
+          assert(sql(s"DESC NAMESPACE EXTENDED $ns")
+            .toDF("k", "v")
+            .where("k='Properties'")
+            .where("v=''")
+            .count == 1, s"$key is a reserved namespace property and ignored")
+          val meta = spark.sessionState.catalogManager.catalog(catalog)
+              .asNamespaceCatalog.loadNamespaceMetadata(Array(namespace))
+          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+            "reserved properties should not have side effects")
+        }
+      }
     }
   }
 

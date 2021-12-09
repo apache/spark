@@ -42,8 +42,4 @@ trait AlterNamespaceSetPropertiesSuiteBase extends command.AlterNamespaceSetProp
 class AlterNamespaceSetPropertiesSuite extends AlterNamespaceSetPropertiesSuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterNamespaceSetPropertiesSuiteBase].commandVersion
-
-  test("basic test") {
-    runBasicTest()
-  }
 }

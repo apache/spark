@@ -1224,54 +1224,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
-      sql("ALTER NAMESPACE testcat.ns1.ns2 SET PROPERTIES ('a'='b','b'='a')")
-      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
-      assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", "((a,b), (b,a), (c,c))"))
-      )
-    }
-  }
-
-  test("ALTER NAMESPACE .. SET PROPERTIES reserved properties") {
-    import SupportsNamespaces._
-    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
-        withNamespace("testcat.reservedTest") {
-          sql("CREATE NAMESPACE testcat.reservedTest")
-          val exception = intercept[ParseException] {
-            sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='dummyVal')")
-          }
-          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
-        }
-      }
-    }
-    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
-        withNamespace("testcat.reservedTest") {
-          sql(s"CREATE NAMESPACE testcat.reservedTest")
-          sql(s"ALTER NAMESPACE testcat.reservedTest SET PROPERTIES ('$key'='foo')")
-          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
-            .toDF("k", "v")
-            .where("k='Properties'")
-            .where("v=''")
-            .count == 1, s"$key is a reserved namespace property and ignored")
-          val meta =
-            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
-            "reserved properties should not have side effects")
-        }
-      }
-    }
-  }
-
   test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
