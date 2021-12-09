@@ -3042,10 +3042,10 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.dropDuplicates("b.c1"), Row("d1", Row(1, 2)))
 
     // Multiple column in dropDuplicates
-    checkAnswer(df.dropDuplicates(Seq("a","b.c1")), Row("d1", Row(1, 2)))
+    checkAnswer(df.dropDuplicates(Seq("a", "b.c1")), Row("d1", Row(1, 2)))
 
     // multiple struct column in dropDuplicates
-    checkAnswer(df.dropDuplicates(Seq("b.c1","b.c2")), Row("d1", Row(1, 2)))
+    checkAnswer(df.dropDuplicates(Seq("b.c1", "b.c2")), Row("d1", Row(1, 2)))
 
     // Error scenario where struct column does not
     // exist is passed in the dropDuplicate
@@ -3062,7 +3062,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.dropDuplicates(Seq("b.struct2.c1")), Row("d1", Row(Row(4, 3), 2)))
 
     // Nested Struct with multiple columns in dropDuplicate
-    checkAnswer(df.dropDuplicates(Seq("a","b.struct2.c1")), Row("d1", Row(Row(4, 3), 2)))
+    checkAnswer(df.dropDuplicates(Seq("a", "b.struct2.c1")), Row("d1", Row(Row(4, 3), 2)))
   }
 }
 
