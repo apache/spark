@@ -57,6 +57,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
     val ns = s"$catalog.$namespace"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
+      assert(getProperties(ns) === "")
       sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
       assert(getProperties(ns) === "((a,a), (b,b), (c,c))")
       sql(s"ALTER DATABASE $ns SET PROPERTIES ('d'='d')")
@@ -92,14 +93,11 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns")
+          assert(getProperties(ns) === "")
           sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
-          assert(sql(s"DESC NAMESPACE EXTENDED $ns")
-            .toDF("k", "v")
-            .where("k='Properties'")
-            .where("v=''")
-            .count == 1, s"$key is a reserved namespace property and ignored")
+          assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
           val meta = spark.sessionState.catalogManager.catalog(catalog)
-              .asNamespaceCatalog.loadNamespaceMetadata(Array(namespace))
+            .asNamespaceCatalog.loadNamespaceMetadata(Array(namespace))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
