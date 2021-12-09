@@ -2660,19 +2660,38 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
+    // get the struct column from the dropDuplicate colNames
+    val structCol = colNames.filter { x =>
+      !allColumns.exists(i => resolver(i.name, x))
+    }
+    // for struct col to work in the dropDuplicates there is need to
+    // create the select values from struct and make it as new column
+    var (plan: LogicalPlan, updatedAllColumns: Seq[Attribute]) = if (structCol.nonEmpty) {
+      val updatedDF =
+        withColumns(structCol, structCol.map(col(_)))
+      (updatedDF.queryExecution.logical, updatedDF.queryExecution.analyzed.output)
+    } else {
+      (logicalPlan, allColumns)
+    }
     // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
     // (the Streaming's state store depends on the `groupCols` order).
     val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
       // It is possibly there are more than one columns with the same name,
       // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
+      val cols = updatedAllColumns.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
         throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
           colName, schema.fieldNames.mkString(", "))
       }
       cols
     }
-    Deduplicate(groupCols, logicalPlan)
+    plan = Deduplicate(groupCols, plan)
+    if (structCol.nonEmpty) {
+      // drop the extra struct column that is added
+      // for dropDuplicate
+      plan = Project(allColumns, plan)
+    }
+    plan
   }
 
   /**

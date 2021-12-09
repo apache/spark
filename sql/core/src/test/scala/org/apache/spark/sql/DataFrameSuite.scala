@@ -3033,8 +3033,43 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-37596: Struct type column in the DropDuplicate") {
+    var df = Seq(
+      ("d1", StructDropDup(1, 2)),
+      ("d1", StructDropDup(1, 2))
+    ).toDF("a", "b")
+    checkAnswer(df.dropDuplicates("b.c1"), Row("d1", Row(1, 2)))
+
+    // Multiple column in dropDuplicates
+    checkAnswer(df.dropDuplicates(Seq("a","b.c1")), Row("d1", Row(1, 2)))
+
+    // multiple struct column in dropDuplicates
+    checkAnswer(df.dropDuplicates(Seq("b.c1","b.c2")), Row("d1", Row(1, 2)))
+
+    // Error scenario where struct column does not
+    // exist is passed in the dropDuplicate
+    val errMsg = intercept[AnalysisException] {
+      df.dropDuplicates("b.c3")
+    }.getMessage
+    assert(errMsg.contains("No such struct field c3 in c1, c2"))
+
+    // Nested Struct for DropDuplicates
+    df = Seq(
+      ("d1", NestedStructDropDup(StructDropDup(4, 3), 2)),
+      ("d1", NestedStructDropDup(StructDropDup(4, 3), 2))
+    ).toDF("a", "b")
+    checkAnswer(df.dropDuplicates(Seq("b.struct2.c1")), Row("d1", Row(Row(4, 3), 2)))
+
+    // Nested Struct with multiple columns in dropDuplicate
+    checkAnswer(df.dropDuplicates(Seq("a","b.struct2.c1")), Row("d1", Row(Row(4, 3), 2)))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
 
 case class Bar2(s: String)
+
+case class StructDropDup(c1: Int, c2: Int)
+
+case class NestedStructDropDup(struct2: StructDropDup, c2: Int)
