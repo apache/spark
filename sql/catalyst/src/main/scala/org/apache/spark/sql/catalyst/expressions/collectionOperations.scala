@@ -182,54 +182,19 @@ case class MapKeys(child: Expression)
   """,
   group = "map_funcs",
   since = "3.3.0")
-case class MapContainsKey(left: Expression, right: Expression)
-    extends GetMapValueUtil with NullIntolerant {
-  @transient private lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(right.dataType)
+case class MapContainsKey(
+    left: Expression,
+    right: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, ArrayContains(MapKeys(left), right))
 
-  override def inputTypes: Seq[AbstractDataType] = {
-    (left.dataType, right.dataType) match {
-      case (_, NullType) => Seq.empty
-      case (MapType(keyType, valueType, hasNull), inputType) =>
-        TypeCoercion.findWiderTypeWithoutStringPromotionForTwo(keyType, inputType) match {
-          case Some(dt) =>
-            Seq(MapType(dt, valueType, hasNull), dt)
-          case _ =>
-            Seq.empty
-        }
-      case _ => Seq.empty
-    }
-  }
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    (left.dataType, right.dataType) match {
-      case (_, NullType) =>
-        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-      case (MapType(e1, _, _), e2) if e1.sameType(e2) =>
-        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been ${MapType.simpleString} followed by a value with same element type, but it's " +
-        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
-    }
-  }
+  override def prettyName: String = "map_contains_key"
 
-  override def nullable: Boolean = {
-    left.nullable || right.nullable
-  }
-
-  override def nullSafeEval(map: Any, value: Any): Any = {
-    containsKey(map, value, right.dataType, ordering)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType],
-      checkExistenceOnly = true, failOnError = false)
-
-  override def dataType: DataType = BooleanType
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = copy(newLeft, newRight)
+  override protected def withNewChildInternal(newChild: Expression): MapContainsKey =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(

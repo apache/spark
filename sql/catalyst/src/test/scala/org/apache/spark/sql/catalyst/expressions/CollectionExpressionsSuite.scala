@@ -99,10 +99,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   test("MapContainsKey") {
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(null, MapType(StringType, StringType))
-    checkEvaluation(MapContainsKey(m0, Literal("a")), true)
-    checkEvaluation(MapContainsKey(m0, Literal("c")), false)
-    checkEvaluation(MapContainsKey(m0, Literal(null, StringType)), null)
-    checkEvaluation(MapContainsKey(m1, Literal("a")), null)
+    checkEvaluation(ArrayContains(MapKeys(m0), Literal("a")), true)
+    checkEvaluation(ArrayContains(MapKeys(m0), Literal("c")), false)
+    checkEvaluation(ArrayContains(MapKeys(m0), Literal(null, StringType)), null)
+    checkEvaluation(ArrayContains(MapKeys(m1), Literal("a")), null)
   }
 
   test("MapEntries") {

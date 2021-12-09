@@ -4716,7 +4716,7 @@ object functions {
    * @since 3.3.0
    */
   def map_contains_key(column: Column, key: Any): Column = withExpr {
-    MapContainsKey(column.expr, lit(key).expr)
+    ArrayContains(MapKeys(column.expr), lit(key).expr)
   }
 
   /**

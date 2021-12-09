@@ -23,7 +23,7 @@ Key 5 does not exist. To return NULL instead, use 'try_element_at'. If necessary
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<mapcontainskey(map(1, a, 2, b), 5):boolean>
+struct<map_contains_key(map(1, a, 2, b), 5):boolean>
 -- !query output
 false
 
@@ -31,7 +31,7 @@ false
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 1)
 -- !query schema
-struct<mapcontainskey(map(1, a, 2, b), 1):boolean>
+struct<map_contains_key(map(1, a, 2, b), 1):boolean>
 -- !query output
 true
 
@@ -39,7 +39,7 @@ true
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5.0)
 -- !query schema
-struct<mapcontainskey(map(1, a, 2, b), 5.0):boolean>
+struct<map_contains_key(map(1, a, 2, b), 5.0):boolean>
 -- !query output
 false
 
@@ -47,7 +47,7 @@ false
 -- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 1.0)
 -- !query schema
-struct<mapcontainskey(map(1, a, 2, b), 1.0):boolean>
+struct<map_contains_key(map(1, a, 2, b), 1.0):boolean>
 -- !query output
 true
 
@@ -55,7 +55,7 @@ true
 -- !query
 select map_contains_key(map(1.0, 'a', 2, 'b'), 5)
 -- !query schema
-struct<mapcontainskey(map(1.0, a, 2, b), 5):boolean>
+struct<map_contains_key(map(1.0, a, 2, b), 5):boolean>
 -- !query output
 false
 
@@ -63,7 +63,7 @@ false
 -- !query
 select map_contains_key(map(1.0, 'a', 2, 'b'), 1)
 -- !query schema
-struct<mapcontainskey(map(1.0, a, 2, b), 1):boolean>
+struct<map_contains_key(map(1.0, a, 2, b), 1):boolean>
 -- !query output
 true
 
@@ -74,7 +74,7 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'mapcontainskey(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function mapcontainskey should have been map followed by a value with same element type, but it's [map<string,string>, int].; line 1 pos 7
+cannot resolve 'array_contains(map_keys(map('1', 'a', '2', 'b')), 1)' due to data type mismatch: Input to function array_contains should have been array followed by a value with same element type, but it's [array<string>, int].; line 1 pos 7
 
 
 -- !query
@@ -83,4 +83,4 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'mapcontainskey(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function mapcontainskey should have been map followed by a value with same element type, but it's [map<int,string>, string].; line 1 pos 7
+cannot resolve 'array_contains(map_keys(map(1, 'a', 2, 'b')), '1')' due to data type mismatch: Input to function array_contains should have been array followed by a value with same element type, but it's [array<int>, string].; line 1 pos 7
