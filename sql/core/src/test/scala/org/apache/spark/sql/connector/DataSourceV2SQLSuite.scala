@@ -1272,22 +1272,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test_1'")
-      sql("ALTER NAMESPACE testcat.ns1.ns2 SET LOCATION '/tmp/ns_test_2'")
-      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
-      assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test_2"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", ""))
-      )
-    }
-  }
-
   private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {
