@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
   extends QueryTest
@@ -911,5 +911,24 @@ abstract class SchemaPruningSuite
         checkAnswer(query, Row(2) :: Nil)
       }
     }
+  }
+
+  test("SPARK-37577: Fix ClassCastException: ArrayType cannot be cast to StructType") {
+    import testImplicits._
+
+    val schema = StructType(Seq(
+      StructField("o", ArrayType(StructType(
+        Seq(StructField("s", StringType, false),
+          StructField("b", ArrayType(StructType(
+            Seq(StructField("e", StringType, false))), true), false)
+        )), false))
+    ))
+
+    val count = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
+      .select(explode($"o").alias("eo"))
+      .select("eo.*")
+      .select(explode($"b"))
+      .count()
+    assert(count == 0)
   }
 }
