@@ -91,4 +91,58 @@ public class ByteArrayMethods {
     }
     return true;
   }
+
+  public static boolean contains(byte[] array, byte[] target) {
+    if (target.length == 0) {
+      return true;
+    } else if (array.length == 0) {
+      return false;
+    } else if (target.length > array.length) {
+      return false;
+    } else {
+      return indexOf(array, target) >= 0;
+    }
+  }
+
+  public static boolean startsWith(byte[] array, byte[] target) {
+    if (target.length == 0) {
+      return true;
+    } else if (array.length == 0) {
+      return false;
+    } else if (target.length > array.length) {
+      return false;
+    } else {
+      return indexOf(array, target) == 0;
+    }
+  }
+
+  public static boolean endsWith(byte[] array, byte[] target) {
+    if (target.length == 0) {
+      return true;
+    } else if (array.length == 0) {
+      return false;
+    } else if (target.length > array.length) {
+      return false;
+    } else {
+      return indexOf(array, target) == array.length - target.length;
+    }
+  }
+
+  // This code from com.google.common.primitives.Bytes.indexOf
+  public static int indexOf(byte[] array, byte[] target) {
+    if (target.length == 0) {
+      return 0;
+    } else {
+      label28:
+      for (int i = 0; i < array.length - target.length + 1; ++i) {
+        for (int j = 0; j < target.length; ++j) {
+          if (array[i + j] != target[j]) {
+            continue label28;
+          }
+        }
+        return i;
+      }
+      return -1;
+    }
+  }
 }

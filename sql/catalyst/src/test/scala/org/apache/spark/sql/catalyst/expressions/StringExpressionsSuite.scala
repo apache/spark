@@ -1028,4 +1028,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("SQL")), true)
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("k S")), true)
   }
+
+  test("SPARK-37582, SPARK-37583: CONTAINS, STARTSWITH, ENDSWITH should support binary type") {
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("Spark")), true)
+    checkEvaluation(Contains(Literal("Spark SQL".getBytes), Literal("Spark")), true)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("Spark".getBytes)), true)
+    checkEvaluation(Contains(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
+
+    checkEvaluation(StartsWith(Literal("Spark SQL"), Literal("Spark")), true)
+    checkEvaluation(StartsWith(Literal("Spark SQL".getBytes), Literal("Spark")), true)
+    checkEvaluation(StartsWith(Literal("Spark SQL"), Literal("Spark".getBytes)), true)
+    checkEvaluation(StartsWith(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
+
+    checkEvaluation(EndsWith(Literal("Spark SQL"), Literal("SQL")), true)
+    checkEvaluation(EndsWith(Literal("Spark SQL".getBytes), Literal("SQL")), true)
+    checkEvaluation(EndsWith(Literal("Spark SQL"), Literal("SQL".getBytes)), true)
+    checkEvaluation(EndsWith(Literal("Spark SQL".getBytes), Literal("SQL".getBytes)), true)
+  }
 }

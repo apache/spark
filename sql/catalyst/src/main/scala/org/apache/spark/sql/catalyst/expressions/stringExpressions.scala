@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -454,12 +455,28 @@ case class Lower(child: Expression)
 abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
-  def compare(l: UTF8String, r: UTF8String): Boolean
+  def compare(l: Array[Byte], r: Array[Byte]): Boolean
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, BinaryType), TypeCollection(StringType, BinaryType))
+
+  def convertData(dataType: DataType): Any => Array[Byte] = dataType match {
+    case BinaryType => (input: Any) => input.asInstanceOf[Array[Byte]]
+    case StringType => (input: Any) => input.asInstanceOf[UTF8String].getBytes
+    case _ => throw QueryExecutionErrors.typeUnsupportedError(dataType)
+  }
+
+  lazy val convertLeftData = convertData(left.dataType)
+  lazy val convertRightData = convertData(right.dataType)
+
+  def convertDataGenCode(input: String, dataType: DataType): String = dataType match {
+    case BinaryType => input
+    case StringType => s"$input.getBytes()"
+    case _ => throw QueryExecutionErrors.typeUnsupportedError(dataType)
+  }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
-    compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
+    compare(convertLeftData(input1), convertRightData(input2))
 
   override def toString: String = s"$nodeName($left, $right)"
 }
@@ -485,9 +502,12 @@ abstract class StringPredicate extends BinaryExpression
   group = "string_funcs"
 )
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
+  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.contains(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"""org.apache.spark.unsafe.array.ByteArrayMethods
+        .contains(${convertDataGenCode(c1, left.dataType)},
+         ${convertDataGenCode(c2, right.dataType)})""".stripMargin)
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -511,9 +531,12 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   group = "string_funcs"
 )
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
+  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.startsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"""org.apache.spark.unsafe.array.ByteArrayMethods
+        .startsWith(${convertDataGenCode(c1, left.dataType)},
+         ${convertDataGenCode(c2, right.dataType)})""".stripMargin)
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -537,9 +560,12 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   group = "string_funcs"
 )
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
+  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.endsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"""org.apache.spark.unsafe.array.ByteArrayMethods
+        .endsWith(${convertDataGenCode(c1, left.dataType)},
+         ${convertDataGenCode(c2, right.dataType)})""".stripMargin)
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
