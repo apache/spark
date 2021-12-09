@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -37,6 +37,7 @@ class JoinOptimizationSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         BooleanSimplification,
         ReorderJoin,
+        DeduplicateLeftSemiLeftAntiRightSide,
         PushPredicateThroughJoin,
         ColumnPruning,
         RemoveNoopOperators,
@@ -118,6 +119,27 @@ class JoinOptimizationSuite extends PlanTest {
         x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
         x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
           .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+      )
+    )
+
+    queryAnswers foreach { queryAnswerPair =>
+      val optimized = Optimize.execute(queryAnswerPair._1.analyze)
+      comparePlans(optimized, queryAnswerPair._2.analyze)
+    }
+  }
+
+  test("SPARK-37597: Deduplicate the right side of left-semi join and left-anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val queryAnswers = Seq(
+      (
+        x.join(y, LeftSemi, Some('a === 'd)),
+        x.join(Aggregate(y.output, y.output, y), LeftSemi, Some('a === 'd))
+      ),
+      (
+        x.join(y, LeftAnti, Some('a === 'd)),
+        x.join(Aggregate(y.output, y.output, y), LeftAnti, Some('a === 'd))
       )
     )
 

@@ -2155,7 +2155,7 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
 object DeduplicateLeftSemiLeftAntiRightSide extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
-    case join @ Join(_, right, LeftSemiOrAnti(joinType), _, _) if !right.isInstanceOf[Aggregate] =>
+    case join @ Join(_, right, LeftSemiOrAnti(_), _, _) if !right.isInstanceOf[Aggregate] =>
       join.copy(right = Aggregate(right.output, right.output, right))
   }
 }
