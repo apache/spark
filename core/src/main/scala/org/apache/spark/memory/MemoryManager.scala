@@ -19,8 +19,6 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
