@@ -4711,6 +4711,15 @@ object functions {
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
   /**
+   * Returns true if the map contains the key.
+   * @group collection_funcs
+   * @since 3.3.0
+   */
+  def map_contains_key(column: Column, key: Any): Column = withExpr {
+    ArrayContains(MapKeys(column.expr), lit(key).expr)
+  }
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0
