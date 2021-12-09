@@ -3246,10 +3246,16 @@ private[spark] object Utils extends Logging {
    */
   def isHumongousAllocation(sizeInBytes: Long): Boolean = {
     if (isG1GarbageCollector) {
-      val heapRegionSize = ManagementFactory
-        .getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
-        .getVMOption("G1HeapRegionSize").getValue.toLong
-      sizeInBytes > (heapRegionSize / 2)
+      try {
+        val heapRegionSize = ManagementFactory
+          .getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
+          .getVMOption("G1HeapRegionSize").getValue.toLong
+        sizeInBytes > (heapRegionSize / 2)
+      } catch {
+        case t: Throwable =>
+          logWarning("Try to get G1HeapRegionSize failed. ", t)
+          false
+      }
     } else {
       false
     }
