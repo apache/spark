@@ -31,6 +31,17 @@ from pyspark.pandas.utils import scol_for, verify_temp_column_name
 from pyspark.sql import functions as F
 
 
+HOURS_PER_DAY = 24
+MINUTES_PER_HOUR = 60
+SECONDS_PER_MINUTE = 60
+MILLIS_PER_SECOND = 1000
+MICROS_PER_MILLIS = 1000
+
+SECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE
+SECONDS_PER_DAY = HOURS_PER_DAY * SECONDS_PER_HOUR
+MICROS_PER_SECOND = MILLIS_PER_SECOND * MICROS_PER_MILLIS
+
+
 class TimedeltaIndex(Index):
     """
     Immutable ndarray-like of timedelta64 data, represented internally as int64, and
@@ -150,13 +161,16 @@ class TimedeltaIndex(Index):
         sdf = sdf.withColumn(
             sum_scol_name,
             F.when(
-                scol_for(sdf, hour_scol_name) < 0, 86400 + scol_for(sdf, hour_scol_name) * 3600
-            ).otherwise(scol_for(sdf, hour_scol_name) * 3600)
+                scol_for(sdf, hour_scol_name) < 0,
+                SECONDS_PER_DAY + scol_for(sdf, hour_scol_name) * SECONDS_PER_HOUR,
+            ).otherwise(scol_for(sdf, hour_scol_name) * SECONDS_PER_HOUR)
             + F.when(
-                scol_for(sdf, minute_scol_name) < 0, 86400 + scol_for(sdf, minute_scol_name) * 60
-            ).otherwise(scol_for(sdf, minute_scol_name) * 60)
+                scol_for(sdf, minute_scol_name) < 0,
+                SECONDS_PER_DAY + scol_for(sdf, minute_scol_name) * SECONDS_PER_MINUTE,
+            ).otherwise(scol_for(sdf, minute_scol_name) * SECONDS_PER_MINUTE)
             + F.when(
-                scol_for(sdf, second_scol_name) < 0, 86400 + scol_for(sdf, second_scol_name)
+                scol_for(sdf, second_scol_name) < 0,
+                SECONDS_PER_DAY + scol_for(sdf, second_scol_name),
             ).otherwise(scol_for(sdf, second_scol_name)),
         ).select(sum_scol_name)
         return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
@@ -185,7 +199,7 @@ class TimedeltaIndex(Index):
                 .when(scol_for(sdf, second_scol_name) < 0, 1 + scol_for(sdf, second_scol_name))
                 .otherwise(0)
             )
-            * 1000000,
+            * MICROS_PER_SECOND,
         )
 
         return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
