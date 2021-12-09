@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A mix-in interface for {@link Scan}. Data sources can implement this interface to
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down LIMIT. Please note that the combination of LIMIT with other operations
  * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
