@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.execution.command.v1
 
 /**
- * The class contains tests for the `ALTER NAMESPACE ... SET LOCATION` command to check
+ * The class contains tests for the `ALTER NAMESPACE ... SET PROPERTIES` command to check
  * V1 Hive external table catalog.
  */
 class AlterNamespaceSetPropertiesSuite extends v1.AlterNamespaceSetPropertiesSuiteBase

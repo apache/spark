@@ -37,8 +37,6 @@ import org.apache.spark.sql.internal.SQLConf
  *        `org.apache.spark.sql.hive.execution.command.AlterNamespaceSetPropertiesSuite`
  */
 trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
   override val command = "ALTER NAMESPACE ... SET PROPERTIES"
 
   protected def namespace: String
@@ -76,8 +74,9 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
   }
 
   test("test reserved properties") {
-    val ns = s"$catalog.$namespace"
     import SupportsNamespaces._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val ns = s"$catalog.$namespace"
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
@@ -97,7 +96,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
           sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
           assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
           val meta = spark.sessionState.catalogManager.catalog(catalog)
-            .asNamespaceCatalog.loadNamespaceMetadata(Array(namespace))
+            .asNamespaceCatalog.loadNamespaceMetadata(namespace.split('.'))
           assert(meta.get(key) == null || !meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
@@ -106,11 +105,11 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
   }
 
   protected def getProperties(namespace: String): String = {
-    val locationRow = sql(s"DESCRIBE NAMESPACE EXTENDED $namespace")
+    val propsRow = sql(s"DESCRIBE NAMESPACE EXTENDED $namespace")
       .toDF("key", "value")
       .where(s"key like 'Properties%'")
       .collect()
-    assert(locationRow.length == 1)
-    locationRow(0).getString(1)
+    assert(propsRow.length == 1)
+    propsRow(0).getString(1)
   }
 }
