@@ -805,6 +805,21 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-37575: null values should not reflect to any characters by default") {
+    val data = Seq(("Tesla", null.asInstanceOf[String], ""))
+    withTempPath { path =>
+      val csvDir = new File(path, "csv")
+      val cars = data.toDF("make", "comment", "blank")
+      cars.coalesce(1).write.csv(csvDir.getCanonicalPath)
+
+      csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+        val readBack = Files.readAllBytes(csvFile.toPath)
+        val expected = ("Tesla,,\"\"" + Properties.lineSeparator).getBytes()
+        assert(readBack === expected)
+      })
+    }
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
