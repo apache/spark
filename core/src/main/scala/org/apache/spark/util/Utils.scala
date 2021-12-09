@@ -48,6 +48,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import com.sun.management.HotSpotDiagnosticMXBean
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
@@ -3230,6 +3231,27 @@ private[spark] object Utils extends Logging {
       case _ if (len % 2 == 0) =>
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
+    }
+  }
+
+  private def isG1GarbageCollector: Boolean = {
+    val gcs = ManagementFactory.getGarbageCollectorMXBeans.asScala
+    gcs.exists(_.getName.equalsIgnoreCase("G1 Young Generation")) ||
+      gcs.exists(_.getName.equalsIgnoreCase("G1 Old Generation"))
+  }
+
+  /**
+   * Return true if current GC algorithm is G1 GC and the requested sizeInBytes
+   * are larger than 50% of the region size in G1.
+   */
+  def isHumongousAllocation(sizeInBytes: Long): Boolean = {
+    if (isG1GarbageCollector) {
+      val heapRegionSize = ManagementFactory
+        .getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
+        .getVMOption("G1HeapRegionSize").getValue.toLong
+      sizeInBytes > (heapRegionSize / 2)
+    } else {
+      false
     }
   }
 }

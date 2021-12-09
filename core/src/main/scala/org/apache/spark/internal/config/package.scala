@@ -2318,4 +2318,12 @@ package object config {
       .version("3.3.0")
       .intConf
       .createWithDefault(5)
+
+  private[spark] val MEMORY_ONHEAP_PAGESIZE_OPTIMIZE_ENABLED =
+    ConfigBuilder("spark.memory.onHeap.PageSizeOptimize.enabled")
+      .doc("If true, Spark will optimize pageSize value for heap memory allocator to avoid " +
+        "memory waste which may suffer from humongous allocation.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 }

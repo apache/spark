@@ -19,6 +19,8 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -27,6 +29,7 @@ import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
+import org.apache.spark.util.Utils
 
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
@@ -255,7 +258,15 @@ private[spark] abstract class MemoryManager(
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
-    conf.get(BUFFER_PAGESIZE).getOrElse(default)
+    val sizeAsBytes = conf.get(BUFFER_PAGESIZE).getOrElse(default)
+    if (conf.get(MEMORY_ONHEAP_PAGESIZE_OPTIMIZE_ENABLED) &&
+      tungstenMemoryMode == MemoryMode.ON_HEAP &&
+      sizeAsBytes % (1024 * 1024) == 0 &&
+      Utils.isHumongousAllocation(sizeAsBytes)) {
+      sizeAsBytes - Platform.BYTE_ARRAY_OFFSET
+    } else {
+      sizeAsBytes
+    }
   }
 
   /**
