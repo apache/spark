@@ -128,8 +128,6 @@ case class HashAggregateExec(
     }
   }
 
-  override def usedInputs: AttributeSet = inputSet
-
   private val groupingAttributes = groupingExpressions.map(_.toAttribute)
   private val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
   private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
