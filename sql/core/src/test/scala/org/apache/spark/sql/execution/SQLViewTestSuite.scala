@@ -393,6 +393,18 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       assert(e2.message.contains("Cannot time travel views"))
     }
   }
+
+  test("SPARK-37569: view should report correct nullability information for nested fields") {
+    withView("v") {
+      val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+      val df = spark.sql(sql)
+
+      spark.sql(s"CREATE VIEW v AS $sql")
+      val dfFromView = spark.table("v")
+
+      assert(df.schema == dfFromView.schema)
+    }
+  }
 }
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {
