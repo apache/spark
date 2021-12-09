@@ -121,7 +121,12 @@ class TimedeltaIndex(Index):
         """
         Number of days for each element.
         """
-        return self._with_new_scol(F.expr("date_part('DAY', %s)" % SPARK_DEFAULT_INDEX_NAME))
+
+        @no_type_check
+        def pandas_days(x) -> int:
+            return x.days
+
+        return ps.Index(self.to_series().transform(pandas_days))
 
     @property
     def seconds(self) -> Index:
@@ -132,6 +137,7 @@ class TimedeltaIndex(Index):
         hour_scol_name = verify_temp_column_name(sdf, "__hour_column__")
         minute_scol_name = verify_temp_column_name(sdf, "__minute_column__")
         second_scol_name = verify_temp_column_name(sdf, "__second_column__")
+        sum_scol_name = verify_temp_column_name(sdf, "__sum_column__")
 
         # Extract the hours part, minutes part, seconds part and its fractional part with microseconds
         sdf = sdf.select(
@@ -141,12 +147,18 @@ class TimedeltaIndex(Index):
         ).toDF(hour_scol_name, minute_scol_name, second_scol_name)
 
         # Transfer to microseconds
-        sdf = sdf.select(
-            scol_for(sdf, hour_scol_name) * 3600
-            + scol_for(sdf, minute_scol_name) * 60
-            + scol_for(sdf, second_scol_name)
-        )
-
+        sdf = sdf.withColumn(
+            sum_scol_name,
+            F.when(
+                scol_for(sdf, hour_scol_name) < 0, 86400 + scol_for(sdf, hour_scol_name) * 3600
+            ).otherwise(scol_for(sdf, hour_scol_name) * 3600)
+            + F.when(
+                scol_for(sdf, minute_scol_name) < 0, 86400 + scol_for(sdf, minute_scol_name) * 60
+            ).otherwise(scol_for(sdf, minute_scol_name) * 60)
+            + F.when(
+                scol_for(sdf, second_scol_name) < 0, 86400 + scol_for(sdf, second_scol_name)
+            ).otherwise(scol_for(sdf, second_scol_name)),
+        ).select(sum_scol_name)
         return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
 
     @property
@@ -156,22 +168,24 @@ class TimedeltaIndex(Index):
         """
         sdf = self._internal.spark_frame
         second_scol_name = verify_temp_column_name(sdf, "__second_column__")
-        less_than_second_scol_name = verify_temp_column_name(sdf, "__less_than_second_column__")
 
         # Extract the seconds part and its fractional part with microseconds per element
         sdf = sdf.select(F.expr("date_part('SECOND', %s)" % SPARK_DEFAULT_INDEX_NAME)).toDF(
             second_scol_name
         )
 
-        # Add a column to keep elements >= 0 and less than 1 second only
-        sdf = sdf.withColumn(
-            less_than_second_scol_name,
-            F.when(scol_for(sdf, second_scol_name) <= 1, scol_for(sdf, second_scol_name)).otherwise(
-                0
-            ),
-        )
-
         # Transfer the seconds to microseconds
-        sdf = sdf.select(scol_for(sdf, less_than_second_scol_name) * 1000000)
+        sdf = sdf.withColumn(
+            second_scol_name,
+            (
+                F.when(
+                    (scol_for(sdf, second_scol_name) >= 0) & (scol_for(sdf, second_scol_name) < 1),
+                    scol_for(sdf, second_scol_name),
+                )
+                .when(scol_for(sdf, second_scol_name) < 0, 1 + scol_for(sdf, second_scol_name))
+                .otherwise(0)
+            )
+            * 1000000,
+        )
 
         return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)

@@ -28,13 +28,28 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
     def pidx(self):
         return pd.TimedeltaIndex(
             [
-                timedelta(days=10),
-                timedelta(seconds=20),
-                timedelta(microseconds=30),
-                timedelta(milliseconds=40),
-                timedelta(minutes=50),
-                timedelta(hours=60),
-                timedelta(weeks=70),
+                timedelta(days=1),
+                timedelta(seconds=1),
+                timedelta(microseconds=1),
+                timedelta(milliseconds=1),
+                timedelta(minutes=1),
+                timedelta(hours=1),
+                timedelta(weeks=1),
+            ],
+            name="x",
+        )
+
+    @property
+    def neg_pidx(self):
+        return pd.TimedeltaIndex(
+            [
+                timedelta(days=-1),
+                timedelta(seconds=-1),
+                timedelta(microseconds=-1),
+                timedelta(milliseconds=-1),
+                timedelta(minutes=-1),
+                timedelta(hours=-1),
+                timedelta(weeks=-1),
             ],
             name="x",
         )
@@ -43,10 +58,17 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
     def psidx(self):
         return ps.from_pandas(self.pidx)
 
+    @property
+    def neg_psidx(self):
+        return ps.from_pandas(self.neg_pidx)
+
     def test_properties(self):
         self.assert_eq(self.psidx.days, self.pidx.days)
         self.assert_eq(self.psidx.seconds, self.pidx.seconds)
         self.assert_eq(self.psidx.microseconds, self.pidx.microseconds)
+        self.assert_eq(self.neg_psidx.days, self.neg_pidx.days)
+        self.assert_eq(self.neg_psidx.seconds, self.neg_pidx.seconds)
+        self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
 
 
 if __name__ == "__main__":
