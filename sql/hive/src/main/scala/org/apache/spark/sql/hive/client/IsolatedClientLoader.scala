@@ -55,7 +55,8 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will use Hadoop 2.7 if we cannot resolve the Hadoop artifact.
+    // We will use hadoop-3.3.1 if we can't resolve the hadoop artifact
+    // when builtin hadoop is Hadoop 3. Otherwise we will use hadoop-2.4.7.
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
@@ -67,10 +68,10 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = VersionUtils.majorMinorPatchVersion(hadoopVersion) match {
-              case Some((3, _, _)) => "3.3.1"
-              case Some((2, _, _)) => "2.7.4"
-              case _ => throw QueryExecutionErrors.unsupportedHadoopVersionError(hadoopVersion)
+            val fallbackVersion = if (VersionUtils.isHadoop3) {
+              "3.3.1"
+            } else {
+              "2.7.4"
             }
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +

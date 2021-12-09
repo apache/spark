@@ -1411,11 +1411,6 @@ object QueryExecutionErrors {
       s"Please set $key with a valid version.")
   }
 
-  def unsupportedHadoopVersionError(version: String): Throwable = {
-    new UnsupportedOperationException(s"Unsupported Hadoop version ($version). " +
-      s"Please set a valid builtin Hadoop version.")
-  }
-
   def loadHiveClientCausesNoClassDefFoundError(
       cnf: NoClassDefFoundError,
       execJars: Seq[URL],
