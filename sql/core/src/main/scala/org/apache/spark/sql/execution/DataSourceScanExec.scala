@@ -142,25 +142,25 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
-    val optionOutputMap =
+    val topNOrLimitInfo =
       if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
         val pushedTopN =
           s"""
              |ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}
              |LIMIT ${pushedDownOperators.limit.get}
-             |""".stripMargin
-        Map("pushedTopN" -> pushedTopN)
+             |""".stripMargin.replaceAll("\n", " ")
+        Some("pushedTopN" -> pushedTopN)
     } else {
-        pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
-          Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
-            "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
-          pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
-      optionOutputMap ++
+      pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
+      topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
