@@ -390,7 +390,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
       val (ym, dt) = (java.time.Period.ofMonths(10), java.time.Duration.ofDays(1))
       val df = Seq((ym, dt)).toDF("ym", "dt")
       df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         checkAnswer(sql(s"select * from $tableName"), Row(ym, dt))
       }
     }

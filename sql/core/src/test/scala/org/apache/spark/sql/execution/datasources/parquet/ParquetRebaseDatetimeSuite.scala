@@ -171,7 +171,7 @@ abstract class ParquetRebaseDatetimeSuite
       // contain Spark version.
       "2_4_5" -> failInRead _,
       "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         checkReadMixedFiles(
           s"before_1582_date_v$version.snappy.parquet",
           "date",
@@ -196,7 +196,7 @@ abstract class ParquetRebaseDatetimeSuite
     Seq(
       "2_4_5" -> failInRead _,
       "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         Seq("plain", "dict").foreach { enc =>
           checkReadMixedFiles(
             s"before_1582_timestamp_int96_${enc}_v$version.snappy.parquet",
@@ -249,7 +249,7 @@ abstract class ParquetRebaseDatetimeSuite
                   .parquet(path)
               }
 
-              withAllParquetReaders {
+              withAllNativeParquetReaders {
                 // The file metadata indicates if it needs rebase or not, so we can always get the
                 // correct result regardless of the "rebase mode" config.
                 runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
@@ -287,7 +287,7 @@ abstract class ParquetRebaseDatetimeSuite
             .parquet(path)
         }
 
-        withAllParquetReaders {
+        withAllNativeParquetReaders {
           // The file metadata indicates if it needs rebase or not, so we can always get the
           // correct result regardless of the "rebase mode" config.
           runInMode(

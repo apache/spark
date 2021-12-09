@@ -890,7 +890,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("Filter applied on merged Parquet schema with new column should work") {
     import testImplicits._
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
         SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
         withTempPath { dir =>
@@ -1326,7 +1326,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("SPARK-17213: Broken Parquet filter push-down for string columns") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       withTempPath { dir =>
         import testImplicits._
 
@@ -1349,7 +1349,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("SPARK-31026: Parquet predicate pushdown for fields having dots in the names") {
     import testImplicits._
 
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       withSQLConf(
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString,
           SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {

@@ -171,7 +171,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (null),
         ("1965-01-01 10:11:12.123456"))
         .toDS().select($"value".cast("timestamp_ntz"))
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         checkAnswer(sql("select * from ts"), expected)
       }
     }
@@ -193,7 +193,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           withTempPath { file =>
             val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
             df.write.parquet(file.getCanonicalPath)
-            withAllParquetReaders {
+            withAllNativeParquetReaders {
               val msg = intercept[SparkException] {
                 spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
               }.getMessage
@@ -223,7 +223,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.parquet(file.getCanonicalPath)
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         Seq(true, false).foreach { dictionaryEnabled =>
           withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
             checkAnswer(spark.read.schema(providedSchema).parquet(file.getCanonicalPath), answer)
@@ -245,7 +245,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withTempPath { file =>
         val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
         df.write.parquet(file.getCanonicalPath)
-        withAllParquetReaders {
+        withAllNativeParquetReaders {
           val df2 = spark.read.parquet(file.getCanonicalPath)
           checkAnswer(df2, df.collect().toSeq)
         }
@@ -866,7 +866,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       withTempPath { path =>
         // Repeated values for dictionary encoding.
         Seq(Some("A"), Some("A"), None).toDF.repartition(1)
@@ -894,7 +894,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
           write(df2.write.mode(SaveMode.Append))
         }
-        withAllParquetReaders {
+        withAllNativeParquetReaders {
           checkAnswer(readback, df1.unionAll(df2))
         }
       }
@@ -928,7 +928,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
       df.write.parquet(path.toString)
 
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         // We can read the decimal parquet field with a larger precision, if scale is the same.
         val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
         checkAnswer(readParquet(schema, path), df)
@@ -992,7 +992,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       spark.createDataFrame(sparkContext.parallelize(data2, 1), schema2)
         .write.mode("append").parquet(path.toString)
 
-      withAllParquetReaders {
+      withAllNativeParquetReaders {
         val res = spark.read.option("mergeSchema", "true").parquet(path.toString)
         assert(res.schema("col").dataType == DecimalType(17, 2))
         checkAnswer(res, data1 ++ data2)

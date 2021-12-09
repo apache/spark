@@ -161,7 +161,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
   }
 
-  def withAllParquetReaders(code: => Unit): Unit = {
+  def withAllNativeParquetReaders(code: => Unit): Unit = {
     // test the row-based reader
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
     // test the vectorized reader

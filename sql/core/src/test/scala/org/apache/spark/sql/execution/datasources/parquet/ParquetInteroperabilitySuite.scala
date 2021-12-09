@@ -135,7 +135,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
           // Reading of data should succeed and should not fail with
           // java.lang.ClassCastException: optional int32 col-0 is not a group
-          withAllParquetReaders {
+          withAllNativeParquetReaders {
             checkAnswer(
               spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
               Seq(
@@ -176,7 +176,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
-        withAllParquetReaders {
+        withAllNativeParquetReaders {
           withSQLConf(
               (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
                 SQLConf.ParquetOutputTimestampType.INT96.toString),

@@ -122,7 +122,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-36182: TimestampNTZ") {
     val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
       .map(ts => Tuple1(LocalDateTime.parse(ts)))
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       checkParquetFile(data)
     }
   }
@@ -155,7 +155,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         }
         writer.close
 
-        withAllParquetReaders {
+        withAllNativeParquetReaders {
           val df = spark.read.parquet(tablePath.toString)
           assertResult(df.schema) {
             StructType(
@@ -859,7 +859,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("read dictionary encoded decimals written as INT32") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i32.parquet"),
@@ -868,7 +868,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("read dictionary encoded decimals written as INT64") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i64.parquet"),
@@ -877,7 +877,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
@@ -886,7 +886,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("read dictionary and plain encoded timestamp_millis written as INT64") {
-    withAllParquetReaders {
+    withAllNativeParquetReaders {
       checkAnswer(
         // timestamp column in this file is encoded using combination of plain
         // and dictionary encodings.

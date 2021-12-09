@@ -80,7 +80,7 @@ abstract class ParquetFileFormatSuite
           withTempPath { file =>
             val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
             df.write.parquet(file.getCanonicalPath)
-            withAllParquetReaders {
+            withAllNativeParquetReaders {
               val df2 = spark.read.parquet(file.getCanonicalPath)
               checkAnswer(df2, df.collect().toSeq)
             }
