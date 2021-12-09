@@ -662,6 +662,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
+
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
@@ -1503,6 +1512,13 @@ object SQLConf {
     .version("2.4.8")
     .booleanConf
     .createWithDefault(true)
+
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")

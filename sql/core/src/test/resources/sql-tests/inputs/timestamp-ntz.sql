@@ -15,3 +15,5 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678);
 -- make_timestamp_ntz should not accept time zone input
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007);
+
+SELECT convert_timezone('Europe/Moscow', 'America/Los_Angeles', timestamp_ntz'2022-01-01 00:00:00');

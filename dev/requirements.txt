@@ -19,7 +19,8 @@ coverage
 
 # Linter
 mypy
-flake8
+git+https://github.com/typeddjango/pytest-mypy-plugins.git@b0020061f48e85743ee3335bd62a3a608d17c6bd
+flake8==3.9.0
 
 # Documentation (SQL)
 mkdocs

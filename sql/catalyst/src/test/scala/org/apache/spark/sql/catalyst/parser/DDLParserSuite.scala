@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import java.time.DateTimeException
-import java.util
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
@@ -27,10 +25,9 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, TimeTravelSpec, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -720,12 +717,12 @@ class DDLParserSuite extends AnalysisTest {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {
-      case create: CreateTableStatement if newTableToken == "CREATE" =>
-        assert(create.ifNotExists == expectedIfNotExists)
-      case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
-        assert(ctas.ifNotExists == expectedIfNotExists)
-      case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
-      case replace: ReplaceTableAsSelectStatement if newTableToken == "REPLACE" =>
+      case create: CreateTable if newTableToken == "CREATE" =>
+        assert(create.ignoreIfExists == expectedIfNotExists)
+      case ctas: CreateTableAsSelect if newTableToken == "CREATE" =>
+        assert(ctas.ignoreIfExists == expectedIfNotExists)
+      case replace: ReplaceTable if newTableToken == "REPLACE" =>
+      case replace: ReplaceTableAsSelect if newTableToken == "REPLACE" =>
       case other =>
         fail("First token in statement does not match the expected parsed plan; CREATE TABLE" +
           " should create a CreateTableStatement, and REPLACE TABLE should create a" +
@@ -1773,33 +1770,6 @@ class DDLParserSuite extends AnalysisTest {
           "location" -> "/home/user/db")))
   }
 
-  test("drop namespace") {
-    comparePlans(
-      parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
-  }
-
   test("set namespace properties") {
     comparePlans(
       parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
@@ -1830,23 +1800,6 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
       SetNamespaceProperties(
         UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-  }
-
-  test("set namespace location") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
   test("analyze table statistics") {
@@ -2305,56 +2258,56 @@ class DDLParserSuite extends AnalysisTest {
   private object TableSpec {
     def apply(plan: LogicalPlan): TableSpec = {
       plan match {
-        case create: CreateTableStatement =>
+        case create: CreateTable =>
           TableSpec(
-            create.tableName,
+            create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(create.tableSchema),
             create.partitioning,
-            create.bucketSpec,
-            create.properties,
-            create.provider,
-            create.options,
-            create.location,
-            create.comment,
-            create.serde,
-            create.external)
-        case replace: ReplaceTableStatement =>
+            create.tableSpec.bucketSpec,
+            create.tableSpec.properties,
+            create.tableSpec.provider,
+            create.tableSpec.options,
+            create.tableSpec.location,
+            create.tableSpec.comment,
+            create.tableSpec.serde,
+            create.tableSpec.external)
+        case replace: ReplaceTable =>
           TableSpec(
-            replace.tableName,
+            replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
-            replace.bucketSpec,
-            replace.properties,
-            replace.provider,
-            replace.options,
-            replace.location,
-            replace.comment,
-            replace.serde)
-        case ctas: CreateTableAsSelectStatement =>
+            replace.tableSpec.bucketSpec,
+            replace.tableSpec.properties,
+            replace.tableSpec.provider,
+            replace.tableSpec.options,
+            replace.tableSpec.location,
+            replace.tableSpec.comment,
+            replace.tableSpec.serde)
+        case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.tableName,
-            Some(ctas.asSelect).filter(_.resolved).map(_.schema),
+            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
-            ctas.bucketSpec,
-            ctas.properties,
-            ctas.provider,
-            ctas.options,
-            ctas.location,
-            ctas.comment,
-            ctas.serde,
-            ctas.external)
-        case rtas: ReplaceTableAsSelectStatement =>
+            ctas.tableSpec.bucketSpec,
+            ctas.tableSpec.properties,
+            ctas.tableSpec.provider,
+            ctas.tableSpec.options,
+            ctas.tableSpec.location,
+            ctas.tableSpec.comment,
+            ctas.tableSpec.serde,
+            ctas.tableSpec.external)
+        case rtas: ReplaceTableAsSelect =>
           TableSpec(
-            rtas.tableName,
-            Some(rtas.asSelect).filter(_.resolved).map(_.schema),
+            rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
-            rtas.bucketSpec,
-            rtas.properties,
-            rtas.provider,
-            rtas.options,
-            rtas.location,
-            rtas.comment,
-            rtas.serde)
+            rtas.tableSpec.bucketSpec,
+            rtas.tableSpec.properties,
+            rtas.tableSpec.provider,
+            rtas.tableSpec.options,
+            rtas.tableSpec.location,
+            rtas.tableSpec.comment,
+            rtas.tableSpec.serde)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")
@@ -2427,118 +2380,5 @@ class DDLParserSuite extends AnalysisTest {
       insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
-  }
-
-  test("as of syntax") {
-    val properties = new util.HashMap[String, String]
-    var timeTravel = TimeTravelSpec.create(None, Some("Snapshot123456789"))
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c VERSION AS OF 'Snapshot123456789'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR VERSION AS OF 'Snapshot123456789'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    timeTravel = TimeTravelSpec.create(None, Some("123456789"))
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_VERSION AS OF 123456789"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_VERSION AS OF 123456789"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    timeTravel = TimeTravelSpec.create(Some("2019-01-29 00:37:58"), None)
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29 00:37:58'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR TIMESTAMP AS OF '2019-01-29 00:37:58'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29 00:37:58'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    timeTravel = TimeTravelSpec.create(Some("2019-01-29"), None)
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-29'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR TIMESTAMP AS OF '2019-01-29'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c FOR SYSTEM_TIME AS OF '2019-01-29'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    comparePlans(
-      parsePlan("SELECT * FROM a.b.c SYSTEM_TIME AS OF '2019-01-29'"),
-      Project(Seq(UnresolvedStar(None)),
-        UnresolvedRelation(
-          Seq("a", "b", "c"),
-          new CaseInsensitiveStringMap(properties),
-          timeTravelSpec = timeTravel)))
-
-    val e1 = intercept[DateTimeException] {
-      parsePlan("SELECT * FROM a.b.c TIMESTAMP AS OF '2019-01-11111'")
-    }.getMessage
-    assert(e1.contains("Cannot cast 2019-01-11111 to TimestampType."))
-
-    val e2 = intercept[AnalysisException] {
-      timeTravel = TimeTravelSpec.create(Some("2019-01-29 00:37:58"), Some("123456789"))
-    }.getMessage
-    assert(e2.contains("Cannot specify both version and timestamp when scanning the table."))
   }
 }

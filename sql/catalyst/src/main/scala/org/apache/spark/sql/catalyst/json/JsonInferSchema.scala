@@ -46,6 +46,12 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
 
   private def handleJsonErrorsByParseMode(parseMode: ParseMode,
       columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
@@ -144,6 +150,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
+        } else if (options.inferTimestamp &&
+            (allCatch opt timestampNTZFormatter.parseWithoutTimeZone(field, false)).isDefined) {
+          SQLConf.get.timestampType
         } else if (options.inferTimestamp &&
             (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
@@ -392,6 +401,9 @@ object JsonInferSchema {
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
           compatibleType(t1, DecimalType.forType(t2))
+
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         // strings and every string is a Json object.
         case (_, _) => StringType
