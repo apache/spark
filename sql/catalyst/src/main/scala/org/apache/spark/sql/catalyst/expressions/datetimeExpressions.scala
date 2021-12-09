@@ -3028,6 +3028,17 @@ case class ConvertTimezone(
     sourceTs: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  def this(targetTz: Expression, sourceTs: Expression) = {
+    this(
+      if (sourceTs.dataType == TimestampNTZType) Literal(SQLConf.get.sessionLocalTimeZone)
+      else DateFormatClass(sourceTs, Literal("VV")),
+      // else Literal(SQLConf.get.sessionLocalTimeZone),
+      targetTz,
+      if (sourceTs.dataType == TimestampNTZType) sourceTs
+      else ParseToTimestampNTZ(sourceTs, None, Cast(sourceTs, TimestampNTZType))
+    )
+  }
+
   override def first: Expression = sourceTz
   override def second: Expression = targetTz
   override def third: Expression = sourceTs

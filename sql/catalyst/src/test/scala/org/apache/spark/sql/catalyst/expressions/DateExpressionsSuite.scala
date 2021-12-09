@@ -1885,4 +1885,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-37568: ") {
+    checkEvaluation(
+      new ConvertTimezone(
+        Literal("UTC"),
+        Literal.create(null, TimestampNTZType)),
+      null)
+    checkEvaluation(
+      new ConvertTimezone(
+        Literal.create(null, StringType),
+        Literal.create(-1L, TimestampNTZType)),
+      null)
+    checkEvaluation(
+      new ConvertTimezone(
+        Literal("Europe/Moscow"),
+        ParseToTimestampLTZ(
+          Literal("2022/02/27 07:00:00[Europe/London]"),
+          None,
+          Cast(Literal("2022/02/27 07:00:00[Europe/London]"), TimestampType))),
+      LocalDateTime.of(2022, 3, 27, 4, 0, 0))
+
+    outstandingTimezonesIds.foreach { targetTz =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (_: Expression, _: Expression, sourceTs: Expression) =>
+          new ConvertTimezone(
+            Literal(targetTz),
+            sourceTs),
+        StringType, StringType, TimestampNTZType)
+    }
+  }
 }
