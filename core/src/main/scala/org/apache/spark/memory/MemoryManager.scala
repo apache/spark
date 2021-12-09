@@ -261,7 +261,7 @@ private[spark] abstract class MemoryManager(
       tungstenMemoryMode == MemoryMode.ON_HEAP &&
       sizeAsBytes % (1024 * 1024) == 0 &&
       Utils.isHumongousAllocation(sizeAsBytes)) {
-      sizeAsBytes - Platform.BYTE_ARRAY_OFFSET
+      sizeAsBytes - Platform.LONG_ARRAY_OFFSET
     } else {
       sizeAsBytes
     }
