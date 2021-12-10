@@ -55,8 +55,8 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will use hadoop-3.3.1 if we can't resolve the hadoop artifact
-    // when builtin hadoop is Hadoop 3. Otherwise we will use hadoop-2.4.7.
+    // We will use Hadoop 3.x if we can't resolve the hadoop artifact
+    // when builtin hadoop is Hadoop 3. Otherwise we will use Hadoop 2.x.
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
