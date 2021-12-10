@@ -395,13 +395,11 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-37569: view should report correct nullability information for nested fields") {
-    withView("v") {
-      val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+    val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+    val viewName = createView("testView", sql)
+    withView(viewName) {
       val df = spark.sql(sql)
-
-      spark.sql(s"CREATE VIEW v AS $sql")
-      val dfFromView = spark.table("v")
-
+      val dfFromView = spark.table(viewName)
       assert(df.schema == dfFromView.schema)
     }
   }
