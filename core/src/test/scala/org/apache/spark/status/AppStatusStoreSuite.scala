@@ -146,17 +146,19 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
   test("SPARK-36038: speculation summary") {
     val store = new InMemoryStore()
-    store.write(newSpeculationSummaryData(stageId, attemptId))
+    val expectedSpeculationSummary = newSpeculationSummaryData(stageId, attemptId)
+    store.write(expectedSpeculationSummary)
 
     val appStore = new AppStatusStore(store)
     val info = appStore.speculationSummary(stageId, attemptId)
     assert(info.isDefined)
+    val expectedSpeculationSummaryInfo = expectedSpeculationSummary.info
     info.foreach { metric =>
-      assert(metric.numTasks == 10)
-      assert(metric.numActiveTasks == 2)
-      assert(metric.numCompletedTasks == 5)
-      assert(metric.numFailedTasks == 1)
-      assert(metric.numKilledTasks == 2)
+      assert(metric.numTasks == expectedSpeculationSummaryInfo.numTasks)
+      assert(metric.numActiveTasks == expectedSpeculationSummaryInfo.numActiveTasks)
+      assert(metric.numCompletedTasks == expectedSpeculationSummaryInfo.numCompletedTasks)
+      assert(metric.numFailedTasks == expectedSpeculationSummaryInfo.numFailedTasks)
+      assert(metric.numKilledTasks == expectedSpeculationSummaryInfo.numKilledTasks)
     }
   }
 

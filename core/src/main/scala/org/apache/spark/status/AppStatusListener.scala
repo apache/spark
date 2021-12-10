@@ -601,14 +601,9 @@ private[spark] class AppStatusListener(
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       if (event.taskInfo.speculative) {
-        stage.speculationStageSummary = Some(stage.speculationStageSummary
-          .getOrElse(new LiveSpeculationStageSummary(event.stageId, event.stageAttemptId)))
-        val speculationSummary = stage.speculationStageSummary.get
-        speculationSummary.numActiveTasks += 1
-        speculationSummary.numTasks += 1
-      }
-      if(stage.speculationStageSummary.isDefined) {
-        maybeUpdate(stage.speculationStageSummary.get, now)
+        stage.speculationStageSummary.numActiveTasks += 1
+        stage.speculationStageSummary.numTasks += 1
+        update(stage.speculationStageSummary, now)
       }
 
       stage.activeTasks += 1
@@ -759,21 +754,11 @@ private[spark] class AppStatusListener(
       }
 
       if (event.taskInfo.speculative) {
-        stage.speculationStageSummary = Some(stage.speculationStageSummary.getOrElse(
-            new LiveSpeculationStageSummary(event.stageId, event.stageAttemptId)))
-        val speculationStageSummary = stage.speculationStageSummary.get
-        speculationStageSummary.numActiveTasks -= 1
-        speculationStageSummary.numCompletedTasks += completedDelta
-        speculationStageSummary.numFailedTasks += failedDelta
-        speculationStageSummary.numKilledTasks += killedDelta
-      }
-
-      if(stage.speculationStageSummary.isDefined) {
-        if (isLastTask) {
-          update(stage.speculationStageSummary.get, now)
-        } else {
-          maybeUpdate(stage.speculationStageSummary.get, now)
-        }
+        stage.speculationStageSummary.numActiveTasks -= 1
+        stage.speculationStageSummary.numCompletedTasks += completedDelta
+        stage.speculationStageSummary.numFailedTasks += failedDelta
+        stage.speculationStageSummary.numKilledTasks += killedDelta
+        update(stage.speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
