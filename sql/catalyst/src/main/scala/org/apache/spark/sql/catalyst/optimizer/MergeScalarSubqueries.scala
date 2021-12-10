@@ -125,7 +125,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
-      case s: ScalarSubquery if !s.isCorrelated =>
+      case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
         val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
         ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
     }
@@ -184,7 +184,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       cachedPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
     checkIdenticalPlans(newPlan, cachedPlan).map(cachedPlan -> _).orElse(
       (newPlan, cachedPlan) match {
-        case (np, cp) if !np.deterministic || !cp.deterministic => None
         case (np: Project, cp: Project) =>
           tryMergePlans(np.child, cp.child).map { case (mergedChild, outputMap) =>
             val (mergedProjectList, newOutputMap) =
