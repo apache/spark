@@ -1907,9 +1907,9 @@ object QueryExecutionErrors {
   }
 
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
-    numWrittenParts: Int,
-    maxDynamicPartitions: Int,
-    maxDynamicPartitionsKey: String): Throwable = {
+      numWrittenParts: Int,
+      maxDynamicPartitions: Int,
+      maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
       s"Number of dynamic partitions created is $numWrittenParts" +
         s", which is more than $maxDynamicPartitions" +
