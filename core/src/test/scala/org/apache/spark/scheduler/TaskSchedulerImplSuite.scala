@@ -40,8 +40,6 @@ import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
-
-
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
   def stop(): Unit = {}
@@ -2074,9 +2072,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       "heartbeat timed out"))
 
     // Wait busyTask begin running
-    while (!busyTask.running.get()) {
-      Thread.sleep(100)
+    eventually(timeout(500.milliseconds)) {
+      assert(busyTask.running.get())
     }
+
     busyTask.markTaskDone
 
     // Wait until all events are processed
