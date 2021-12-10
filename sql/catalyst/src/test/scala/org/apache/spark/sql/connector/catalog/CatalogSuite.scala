@@ -858,16 +858,16 @@ class CatalogSuite extends SparkFunSuite {
 
     catalog.alterNamespace(testNs, NamespaceChange.setProperty("property2", "value2"))
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map(
-      "property" -> "value", "property2" -> "value2"))
+      "property2" -> "value2"))
 
     catalog.alterNamespace(testNs,
       NamespaceChange.removeProperty("property2"),
       NamespaceChange.setProperty("property3", "value3"))
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map(
-      "property" -> "value", "property3" -> "value3"))
+      "property3" -> "value3"))
 
     catalog.alterNamespace(testNs, NamespaceChange.removeProperty("property3"))
-    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
+    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map())
   }
 
   test("alterNamespace: create metadata if missing and table exists") {

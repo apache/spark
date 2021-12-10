@@ -209,7 +209,11 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   override def alterNamespace(
       namespace: Array[String],
       changes: NamespaceChange*): Unit = {
-    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(changes))
+    if (namespaceExists(namespace)) {
+      namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(changes))
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
