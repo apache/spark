@@ -150,7 +150,19 @@ Example of running a query from the command line:
 
 Example of setting Hive configuration variables:
 
-    ./bin/spark-sql -e 'SELECT COL FROM TBL' --hiveconf hive.exec.scratchdir=/home/my/hive_scratch  --hiveconf mapred.reduce.tasks=32
+    ./bin/spark-sql -e 'SELECT COL FROM TBL' --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
+    
+Example of setting Hive configuration variables:
+
+    ./bin/spark-sql -e 'SELECT ${hiveconf:aaa}' --hiveconf aaa=bbb --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
+    spark-sql> SELECT ${aaa};
+    bbb
+    
+Example of setting Hive variables substitution:
+    
+    ./bin/spark-sql --hivevar aaa=bbb --define ccc=ddd
+    spark-sql> SELECT ${aaa}, ${ccc};
+    bbb ddd
 
 Example of dumping data out from a query into a file using silent mode:
 
