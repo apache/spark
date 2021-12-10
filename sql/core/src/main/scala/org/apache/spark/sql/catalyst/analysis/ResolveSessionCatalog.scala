@@ -150,7 +150,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        ConstructTableV1Cmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
+        constructTableV1Cmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
@@ -163,7 +163,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = true)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        ConstructTableV1Cmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
+        constructTableV1Cmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
