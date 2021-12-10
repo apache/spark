@@ -3398,6 +3398,13 @@
     </profile>
 
     <profile>
+      <id>external-shuffle-storage</id>
+      <modules>
+        <module>external-shuffle-storage</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
