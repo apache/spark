@@ -15,14 +15,12 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 import unittest
 import glob
 import os
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -56,31 +54,17 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 1
             ).write.parquet(tmp, mode="overwrite")
 
-            def check(columns, expected):
-                if LooseVersion("0.21.1") <= LooseVersion(pd.__version__):
-                    expected = pd.read_parquet(tmp, columns=columns)
+            def check(columns):
+                expected = pd.read_parquet(tmp, columns=columns)
                 actual = ps.read_parquet(tmp, columns=columns)
                 self.assertPandasEqual(expected, actual.to_pandas())
 
-            check(None, data)
-            check(["i32", "i64"], data[["i32", "i64"]])
-            check(["i64", "i32"], data[["i64", "i32"]])
-
-            if LooseVersion(pa.__version__) < LooseVersion("1.0.0"):
-                # TODO: `pd.read_parquet()` changed the behavior due to PyArrow 1.0.0.
-                #       We might want to adjust the behavior. Let's see how pandas handles it.
-                check(("i32", "i64"), data[["i32", "i64"]])
-                check(["a", "b", "i32", "i64"], data[["i32", "i64"]])
-                check([], pd.DataFrame([]))
-                check(["a"], pd.DataFrame([]))
-                check("i32", pd.DataFrame([]))
-                check("float", data[["f"]])
+            check(None)
+            check(["i32", "i64"])
+            check(["i64", "i32"])
 
             # check with pyspark patch.
-            if LooseVersion("0.21.1") <= LooseVersion(pd.__version__):
-                expected = pd.read_parquet(tmp)
-            else:
-                expected = data
+            expected = pd.read_parquet(tmp)
             actual = ps.read_parquet(tmp)
             self.assertPandasEqual(expected, actual.to_pandas())
 

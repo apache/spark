@@ -54,4 +54,6 @@ case class LogicalQueryStage(
     }
     physicalStats.getOrElse(logicalPlan.stats)
   }
+
+  override def maxRows: Option[Long] = stats.rowCount.map(_.min(Long.MaxValue).toLong)
 }

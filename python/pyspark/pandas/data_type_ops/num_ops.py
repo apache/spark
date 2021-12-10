@@ -24,6 +24,7 @@ from pandas.api.types import is_bool_dtype, is_integer_dtype, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
+from pyspark.pandas.config import get_option
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     is_valid_operand_for_numeric_arithmetic,
@@ -33,6 +34,8 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
     _sanitize_list_like,
+    _is_valid_for_logical_operator,
+    _is_boolean_type,
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
@@ -53,7 +56,7 @@ def _non_fractional_astype(
     elif isinstance(spark_type, BooleanType):
         return _as_bool_type(index_ops, dtype)
     elif isinstance(spark_type, StringType):
-        return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+        return _as_string_type(index_ops, dtype, null_str="NaN")
     else:
         return _as_other_type(index_ops, dtype, spark_type)
 
@@ -180,6 +183,30 @@ class IntegralOps(NumericOps):
     The class for binary operations of pandas-on-Spark objects with spark types:
     LongType, IntegerType, ByteType and ShortType.
     """
+
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+
+        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+            return right ^ left
+        elif _is_valid_for_logical_operator(right):
+            right_is_boolean = _is_boolean_type(right)
+
+            def xor_func(left: Column, right: Any) -> Column:
+                if not isinstance(right, Column):
+                    if pd.isna(right):
+                        right = SF.lit(None)
+                    else:
+                        right = SF.lit(right)
+                return (
+                    left.bitwiseXOR(right.cast("integer")).cast("boolean")
+                    if right_is_boolean
+                    else left.bitwiseXOR(right)
+                )
+
+            return column_op(xor_func)(left, right)
+        else:
+            raise TypeError("XOR can not be applied to given types.")
 
     @property
     def pretty_name(self) -> str:
@@ -362,7 +389,7 @@ class FractionalOps(NumericOps):
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
+            if get_option("compute.eager_check") and index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
@@ -421,9 +448,28 @@ class DecimalOps(FractionalOps):
         return index_ops.copy()
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
-        # TODO(SPARK-36230): check index_ops.hasnans after fixing SPARK-36230
         dtype, spark_type = pandas_on_spark_type(dtype)
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if get_option("compute.eager_check") and index_ops.hasnans:
+                raise ValueError(
+                    "Cannot convert %s with missing values to integer" % self.pretty_name
+                )
         return _non_fractional_astype(index_ops, dtype, spark_type)
+
+    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if not isinstance(right, numbers.Number):
+            raise TypeError("Exponentiation can not be applied to given types.")
+
+        def rpow_func(left: Column, right: Any) -> Column:
+            return (
+                F.when(left.isNull(), np.nan)
+                .when(SF.lit(right == 1), right)
+                .otherwise(Column.__rpow__(left, right))
+            )
+
+        right = transform_boolean_operand_to_numeric(right)
+        return column_op(rpow_func)(left, right)
 
 
 class IntegralExtensionOps(IntegralOps):
@@ -435,21 +481,27 @@ class IntegralExtensionOps(IntegralOps):
         Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
     """
 
+    def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        raise TypeError("XOR can not be applied to given types.")
+
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError(
-                    "Cannot convert %s with missing values to integer" % self.pretty_name
-                )
-        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+        if get_option("compute.eager_check"):
+            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to integer" % self.pretty_name
+                    )
+            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to bool" % self.pretty_name
+                    )
         return _non_fractional_astype(index_ops, dtype, spark_type)
 
 
@@ -468,15 +520,17 @@ class FractionalExtensionOps(FractionalOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError(
-                    "Cannot convert %s with missing values to integer" % self.pretty_name
-                )
-        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-            if index_ops.hasnans:
-                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+        if get_option("compute.eager_check"):
+            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to integer" % self.pretty_name
+                    )
+            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if index_ops.hasnans:
+                    raise ValueError(
+                        "Cannot convert %s with missing values to bool" % self.pretty_name
+                    )
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)

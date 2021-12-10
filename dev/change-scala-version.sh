@@ -54,11 +54,15 @@ sed_i() {
   sed -e "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
 }
 
-export -f sed_i
-
 BASEDIR=$(dirname $0)/..
-find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
-  -exec bash -c "sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}" \;
+for f in $(find "$BASEDIR" -name 'pom.xml' -not -path '*target*'); do
+  echo $f
+  sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' $f
+  sed_i 's/^\([[:space:]]*<!-- #if scala-'$TO_VERSION' -->\)<!--/\1/' $f
+  sed_i 's/^\([[:space:]]*\)-->\(<!-- #endif scala-'$TO_VERSION' -->\)/\1\2/' $f
+  sed_i 's/^\([[:space:]]*<!-- #if scala-'$FROM_VERSION' -->\)$/\1<!--/' $f
+  sed_i 's/^\([[:space:]]*\)\(<!-- #endif scala-'$FROM_VERSION' -->\)/\1-->\2/' $f
+done
 
 # dependency:get is workaround for SPARK-34762 to download the JAR file of commons-cli.
 # Without this, build with Scala 2.13 using SBT will fail because the help plugin used below downloads only the POM file.
@@ -84,3 +88,13 @@ else
   sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
 fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+
+echo "$BASEDIR/dev/mima"
+if [ $TO_VERSION = "2.13" ]; then
+  sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/dev/mima"
+  sed_i '/\-Pscala-'$TO_VERSION'/!s;SPARK_PROFILES=\${1:\-";SPARK_PROFILES=\${1:\-"\-Pscala\-'$TO_VERSION' ;' \
+    "$BASEDIR/dev/mima"
+else
+  sed_i 's/\-Pscala\-'$FROM_VERSION' //' "$BASEDIR/dev/mima"
+fi
+chmod 775 "$BASEDIR/dev/mima"

@@ -73,7 +73,7 @@ See also https://issues.apache.org/jira/browse/SPARK-35375.
 -->
 
 ```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
+$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc sphinx-plotly-directive 'jinja2<3.0.0'
 ```
 
 ## Generating the Documentation HTML

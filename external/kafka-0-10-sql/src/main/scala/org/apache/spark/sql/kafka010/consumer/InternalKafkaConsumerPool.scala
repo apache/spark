@@ -18,10 +18,11 @@
 package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.commons.pool2.{BaseKeyedPooledObjectFactory, PooledObject, SwallowedExceptionListener}
-import org.apache.commons.pool2.impl.{DefaultEvictionPolicy, DefaultPooledObject, GenericKeyedObjectPool, GenericKeyedObjectPoolConfig}
+import org.apache.commons.pool2.impl.{BaseObjectPoolConfig, DefaultEvictionPolicy, DefaultPooledObject, GenericKeyedObjectPool, GenericKeyedObjectPoolConfig}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -182,11 +183,11 @@ private[consumer] object InternalKafkaConsumerPool {
       setMaxTotal(-1)
 
       // Set minimum evictable idle time which will be referred from evictor thread
-      setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis)
-      setSoftMinEvictableIdleTimeMillis(-1)
+      setMinEvictableIdleTime(Duration.ofMillis(minEvictableIdleTimeMillis))
+      setSoftMinEvictableIdleTime(BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_DURATION)
 
       // evictor thread will run test with ten idle objects
-      setTimeBetweenEvictionRunsMillis(evictorThreadRunIntervalMillis)
+      setTimeBetweenEvictionRuns(Duration.ofMillis(evictorThreadRunIntervalMillis))
       setNumTestsPerEvictionRun(10)
       setEvictionPolicy(new DefaultEvictionPolicy[InternalKafkaConsumer]())
 

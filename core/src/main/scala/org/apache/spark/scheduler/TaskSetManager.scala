@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
@@ -522,7 +523,7 @@ private[spark] class TaskSetManager(
         val msg = s"Failed to serialize task $taskId, not attempting to retry it."
         logError(msg, e)
         abort(s"$msg Exception during serialization: $e")
-        throw new TaskNotSerializableException(e)
+        throw SparkCoreErrors.failToSerializeTaskError(e)
     }
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
       !emittedTaskSizeWarning) {

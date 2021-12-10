@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
-import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -93,6 +93,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   @Mock
   private var pollEvents: ExecutorPodsPollingSnapshotSource = _
 
+  @Mock
+  private var context: RpcCallContext = _
+
   private var driverEndpoint: ArgumentCaptor[RpcEndpoint] = _
   private var schedulerBackendUnderTest: KubernetesClusterSchedulerBackend = _
 
@@ -149,7 +152,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
-    verify(labeledPods).delete()
+    verify(podAllocator).stop(TEST_SPARK_APP_ID)
     verify(labledConfigMaps).delete()
     verify(kubernetesClient).close()
   }
@@ -249,5 +252,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val endpoint = schedulerBackendUnderTest.createDriverEndpoint()
     endpoint.receiveAndReply(null).apply(
       RegisterExecutor("1", null, "host1", 1, Map.empty, Map.empty, Map.empty, 0))
+  }
+
+  test("Dynamically fetch an executor ID") {
+    val endpoint = schedulerBackendUnderTest.createDriverEndpoint()
+    endpoint.receiveAndReply(context).apply(GenerateExecID("cheeseBurger"))
+    verify(context).reply("1")
   }
 }

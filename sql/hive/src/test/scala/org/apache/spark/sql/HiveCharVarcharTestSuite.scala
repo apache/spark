@@ -59,6 +59,20 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       checkAnswer(sql("SELECT v from t where c = 'Spark' and v = 'kyuubi'"), Row("kyuubi"))
     }
   }
+
+  test("SPARK-36552: Fix different behavior of writing char/varchar to hive and datasource table") {
+    Seq("true", "false").foreach { v =>
+      withSQLConf(
+        "spark.sql.hive.convertMetastoreParquet" -> v,
+        "spark.sql.legacy.charVarcharAsString" -> "true") {
+        withTable("t") {
+          sql(s"CREATE TABLE t (c varchar(2)) USING $format")
+          sql("INSERT INTO t SELECT 'kyuubi'")
+          checkAnswer(sql("SELECT c from t"), Row("kyuubi"))
+        }
+      }
+    }
+  }
 }
 
 class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {

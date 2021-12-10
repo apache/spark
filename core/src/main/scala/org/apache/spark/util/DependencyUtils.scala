@@ -29,7 +29,7 @@ import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-case class IvyProperties(
+private[spark] case class IvyProperties(
     packagesExclusions: String,
     packages: String,
     repositories: String,

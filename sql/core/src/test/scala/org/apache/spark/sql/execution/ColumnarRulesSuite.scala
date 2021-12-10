@@ -27,7 +27,7 @@ class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
 
   test("Idempotency of columnar rules - RowToColumnar/ColumnarToRow") {
     val rules = ApplyColumnarRulesAndInsertTransitions(
-      spark.sessionState.columnarRules)
+      spark.sessionState.columnarRules, false)
 
     val plan = UnaryOp(UnaryOp(LeafOp(false), true), false)
     val expected =
@@ -40,7 +40,7 @@ class ColumnarRulesSuite extends PlanTest with SharedSparkSession {
 
   test("Idempotency of columnar rules - ColumnarToRow/RowToColumnar") {
     val rules = ApplyColumnarRulesAndInsertTransitions(
-      spark.sessionState.columnarRules)
+      spark.sessionState.columnarRules, false)
 
     val plan = UnaryOp(UnaryOp(LeafOp(true), false), true)
     val expected = ColumnarToRowExec(

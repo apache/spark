@@ -25,7 +25,12 @@ class HasMaxIter(Params):
     Mixin for param maxIter: max number of iterations (>= 0).
     """
 
-    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).", typeConverter=TypeConverters.toInt)
+    maxIter = Param(
+        Params._dummy(),
+        "maxIter",
+        "max number of iterations (>= 0).",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
@@ -42,7 +47,12 @@ class HasRegParam(Params):
     Mixin for param regParam: regularization parameter (>= 0).
     """
 
-    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).", typeConverter=TypeConverters.toFloat)
+    regParam = Param(
+        Params._dummy(),
+        "regParam",
+        "regularization parameter (>= 0).",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasRegParam, self).__init__()
@@ -59,11 +69,16 @@ class HasFeaturesCol(Params):
     Mixin for param featuresCol: features column name.
     """
 
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", typeConverter=TypeConverters.toString)
+    featuresCol = Param(
+        Params._dummy(),
+        "featuresCol",
+        "features column name.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
-        self._setDefault(featuresCol='features')
+        self._setDefault(featuresCol="features")
 
     def getFeaturesCol(self):
         """
@@ -77,11 +92,13 @@ class HasLabelCol(Params):
     Mixin for param labelCol: label column name.
     """
 
-    labelCol = Param(Params._dummy(), "labelCol", "label column name.", typeConverter=TypeConverters.toString)
+    labelCol = Param(
+        Params._dummy(), "labelCol", "label column name.", typeConverter=TypeConverters.toString
+    )
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
-        self._setDefault(labelCol='label')
+        self._setDefault(labelCol="label")
 
     def getLabelCol(self):
         """
@@ -95,11 +112,16 @@ class HasPredictionCol(Params):
     Mixin for param predictionCol: prediction column name.
     """
 
-    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.", typeConverter=TypeConverters.toString)
+    predictionCol = Param(
+        Params._dummy(),
+        "predictionCol",
+        "prediction column name.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
-        self._setDefault(predictionCol='prediction')
+        self._setDefault(predictionCol="prediction")
 
     def getPredictionCol(self):
         """
@@ -113,11 +135,16 @@ class HasProbabilityCol(Params):
     Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
     """
 
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.", typeConverter=TypeConverters.toString)
+    probabilityCol = Param(
+        Params._dummy(),
+        "probabilityCol",
+        "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
-        self._setDefault(probabilityCol='probability')
+        self._setDefault(probabilityCol="probability")
 
     def getProbabilityCol(self):
         """
@@ -131,11 +158,16 @@ class HasRawPredictionCol(Params):
     Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.
     """
 
-    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", typeConverter=TypeConverters.toString)
+    rawPredictionCol = Param(
+        Params._dummy(),
+        "rawPredictionCol",
+        "raw prediction (a.k.a. confidence) column name.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
-        self._setDefault(rawPredictionCol='rawPrediction')
+        self._setDefault(rawPredictionCol="rawPrediction")
 
     def getRawPredictionCol(self):
         """
@@ -149,7 +181,9 @@ class HasInputCol(Params):
     Mixin for param inputCol: input column name.
     """
 
-    inputCol = Param(Params._dummy(), "inputCol", "input column name.", typeConverter=TypeConverters.toString)
+    inputCol = Param(
+        Params._dummy(), "inputCol", "input column name.", typeConverter=TypeConverters.toString
+    )
 
     def __init__(self):
         super(HasInputCol, self).__init__()
@@ -166,7 +200,12 @@ class HasInputCols(Params):
     Mixin for param inputCols: input column names.
     """
 
-    inputCols = Param(Params._dummy(), "inputCols", "input column names.", typeConverter=TypeConverters.toListString)
+    inputCols = Param(
+        Params._dummy(),
+        "inputCols",
+        "input column names.",
+        typeConverter=TypeConverters.toListString,
+    )
 
     def __init__(self):
         super(HasInputCols, self).__init__()
@@ -183,11 +222,13 @@ class HasOutputCol(Params):
     Mixin for param outputCol: output column name.
     """
 
-    outputCol = Param(Params._dummy(), "outputCol", "output column name.", typeConverter=TypeConverters.toString)
+    outputCol = Param(
+        Params._dummy(), "outputCol", "output column name.", typeConverter=TypeConverters.toString
+    )
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
-        self._setDefault(outputCol=self.uid + '__output')
+        self._setDefault(outputCol=self.uid + "__output")
 
     def getOutputCol(self):
         """
@@ -201,7 +242,12 @@ class HasOutputCols(Params):
     Mixin for param outputCols: output column names.
     """
 
-    outputCols = Param(Params._dummy(), "outputCols", "output column names.", typeConverter=TypeConverters.toListString)
+    outputCols = Param(
+        Params._dummy(),
+        "outputCols",
+        "output column names.",
+        typeConverter=TypeConverters.toListString,
+    )
 
     def __init__(self):
         super(HasOutputCols, self).__init__()
@@ -218,7 +264,12 @@ class HasNumFeatures(Params):
     Mixin for param numFeatures: Number of features. Should be greater than 0.
     """
 
-    numFeatures = Param(Params._dummy(), "numFeatures", "Number of features. Should be greater than 0.", typeConverter=TypeConverters.toInt)
+    numFeatures = Param(
+        Params._dummy(),
+        "numFeatures",
+        "Number of features. Should be greater than 0.",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
@@ -236,7 +287,12 @@ class HasCheckpointInterval(Params):
     Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.", typeConverter=TypeConverters.toInt)
+    checkpointInterval = Param(
+        Params._dummy(),
+        "checkpointInterval",
+        "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -271,7 +327,12 @@ class HasTol(Params):
     Mixin for param tol: the convergence tolerance for iterative algorithms (>= 0).
     """
 
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms (>= 0).", typeConverter=TypeConverters.toFloat)
+    tol = Param(
+        Params._dummy(),
+        "tol",
+        "the convergence tolerance for iterative algorithms (>= 0).",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -288,7 +349,12 @@ class HasRelativeError(Params):
     Mixin for param relativeError: the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]
     """
 
-    relativeError = Param(Params._dummy(), "relativeError", "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]", typeConverter=TypeConverters.toFloat)
+    relativeError = Param(
+        Params._dummy(),
+        "relativeError",
+        "the relative target precision for the approximate quantile algorithm. Must be in the range [0, 1]",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasRelativeError, self).__init__()
@@ -306,7 +372,12 @@ class HasStepSize(Params):
     Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).
     """
 
-    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization (>= 0).", typeConverter=TypeConverters.toFloat)
+    stepSize = Param(
+        Params._dummy(),
+        "stepSize",
+        "Step size to be used for each iteration of optimization (>= 0).",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasStepSize, self).__init__()
@@ -323,7 +394,12 @@ class HasHandleInvalid(Params):
     Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
     """
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.", typeConverter=TypeConverters.toString)
+    handleInvalid = Param(
+        Params._dummy(),
+        "handleInvalid",
+        "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
@@ -340,7 +416,12 @@ class HasElasticNetParam(Params):
     Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
     """
 
-    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", typeConverter=TypeConverters.toFloat)
+    elasticNetParam = Param(
+        Params._dummy(),
+        "elasticNetParam",
+        "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
@@ -358,7 +439,12 @@ class HasFitIntercept(Params):
     Mixin for param fitIntercept: whether to fit an intercept term.
     """
 
-    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.", typeConverter=TypeConverters.toBoolean)
+    fitIntercept = Param(
+        Params._dummy(),
+        "fitIntercept",
+        "whether to fit an intercept term.",
+        typeConverter=TypeConverters.toBoolean,
+    )
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
@@ -376,7 +462,12 @@ class HasStandardization(Params):
     Mixin for param standardization: whether to standardize the training features before fitting the model.
     """
 
-    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.", typeConverter=TypeConverters.toBoolean)
+    standardization = Param(
+        Params._dummy(),
+        "standardization",
+        "whether to standardize the training features before fitting the model.",
+        typeConverter=TypeConverters.toBoolean,
+    )
 
     def __init__(self):
         super(HasStandardization, self).__init__()
@@ -394,7 +485,12 @@ class HasThresholds(Params):
     Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
     """
 
-    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.", typeConverter=TypeConverters.toListFloat)
+    thresholds = Param(
+        Params._dummy(),
+        "thresholds",
+        "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.",
+        typeConverter=TypeConverters.toListFloat,
+    )
 
     def __init__(self):
         super(HasThresholds, self).__init__()
@@ -411,7 +507,12 @@ class HasThreshold(Params):
     Mixin for param threshold: threshold in binary classification prediction, in range [0, 1]
     """
 
-    threshold = Param(Params._dummy(), "threshold", "threshold in binary classification prediction, in range [0, 1]", typeConverter=TypeConverters.toFloat)
+    threshold = Param(
+        Params._dummy(),
+        "threshold",
+        "threshold in binary classification prediction, in range [0, 1]",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasThreshold, self).__init__()
@@ -429,7 +530,12 @@ class HasWeightCol(Params):
     Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
     """
 
-    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.", typeConverter=TypeConverters.toString)
+    weightCol = Param(
+        Params._dummy(),
+        "weightCol",
+        "weight column name. If this is not set or empty, we treat all instance weights as 1.0.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
@@ -446,11 +552,16 @@ class HasSolver(Params):
     Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
     """
 
-    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.", typeConverter=TypeConverters.toString)
+    solver = Param(
+        Params._dummy(),
+        "solver",
+        "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasSolver, self).__init__()
-        self._setDefault(solver='auto')
+        self._setDefault(solver="auto")
 
     def getSolver(self):
         """
@@ -464,7 +575,12 @@ class HasVarianceCol(Params):
     Mixin for param varianceCol: column name for the biased sample variance of prediction.
     """
 
-    varianceCol = Param(Params._dummy(), "varianceCol", "column name for the biased sample variance of prediction.", typeConverter=TypeConverters.toString)
+    varianceCol = Param(
+        Params._dummy(),
+        "varianceCol",
+        "column name for the biased sample variance of prediction.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasVarianceCol, self).__init__()
@@ -481,7 +597,12 @@ class HasAggregationDepth(Params):
     Mixin for param aggregationDepth: suggested depth for treeAggregate (>= 2).
     """
 
-    aggregationDepth = Param(Params._dummy(), "aggregationDepth", "suggested depth for treeAggregate (>= 2).", typeConverter=TypeConverters.toInt)
+    aggregationDepth = Param(
+        Params._dummy(),
+        "aggregationDepth",
+        "suggested depth for treeAggregate (>= 2).",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasAggregationDepth, self).__init__()
@@ -499,7 +620,12 @@ class HasParallelism(Params):
     Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
     """
 
-    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
+    parallelism = Param(
+        Params._dummy(),
+        "parallelism",
+        "the number of threads to use when running parallel algorithms (>= 1).",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasParallelism, self).__init__()
@@ -517,7 +643,12 @@ class HasCollectSubModels(Params):
     Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
     """
 
-    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
+    collectSubModels = Param(
+        Params._dummy(),
+        "collectSubModels",
+        "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.",
+        typeConverter=TypeConverters.toBoolean,
+    )
 
     def __init__(self):
         super(HasCollectSubModels, self).__init__()
@@ -535,7 +666,12 @@ class HasLoss(Params):
     Mixin for param loss: the loss function to be optimized.
     """
 
-    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+    loss = Param(
+        Params._dummy(),
+        "loss",
+        "the loss function to be optimized.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasLoss, self).__init__()
@@ -552,11 +688,16 @@ class HasDistanceMeasure(Params):
     Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
     """
 
-    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+    distanceMeasure = Param(
+        Params._dummy(),
+        "distanceMeasure",
+        "the distance measure. Supported options: 'euclidean' and 'cosine'.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasDistanceMeasure, self).__init__()
-        self._setDefault(distanceMeasure='euclidean')
+        self._setDefault(distanceMeasure="euclidean")
 
     def getDistanceMeasure(self):
         """
@@ -570,7 +711,12 @@ class HasValidationIndicatorCol(Params):
     Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
     """
 
-    validationIndicatorCol = Param(Params._dummy(), "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.", typeConverter=TypeConverters.toString)
+    validationIndicatorCol = Param(
+        Params._dummy(),
+        "validationIndicatorCol",
+        "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self):
         super(HasValidationIndicatorCol, self).__init__()
@@ -587,7 +733,12 @@ class HasBlockSize(Params):
     Mixin for param blockSize: block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.
     """
 
-    blockSize = Param(Params._dummy(), "blockSize", "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.", typeConverter=TypeConverters.toInt)
+    blockSize = Param(
+        Params._dummy(),
+        "blockSize",
+        "block size for stacking input data in matrices. Data is stacked within partitions. If block size is more than remaining data in a partition then it is adjusted to the size of this data.",
+        typeConverter=TypeConverters.toInt,
+    )
 
     def __init__(self):
         super(HasBlockSize, self).__init__()
@@ -604,7 +755,12 @@ class HasMaxBlockSizeInMB(Params):
     Mixin for param maxBlockSizeInMB: maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.
     """
 
-    maxBlockSizeInMB = Param(Params._dummy(), "maxBlockSizeInMB", "maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.", typeConverter=TypeConverters.toFloat)
+    maxBlockSizeInMB = Param(
+        Params._dummy(),
+        "maxBlockSizeInMB",
+        "maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self):
         super(HasMaxBlockSizeInMB, self).__init__()

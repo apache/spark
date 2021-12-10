@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Optional, TypeVar, Union
 
 from pyspark.accumulators import (  # noqa: F401
     Accumulator as Accumulator,
@@ -38,7 +38,7 @@ from pyspark.profiler import (  # noqa: F401
 from pyspark.rdd import RDD as RDD, RDDBarrier as RDDBarrier  # noqa: F401
 from pyspark.serializers import (  # noqa: F401
     MarshalSerializer as MarshalSerializer,
-    PickleSerializer as PickleSerializer,
+    CPickleSerializer as CPickleSerializer,
 )
 from pyspark.status import (  # noqa: F401
     SparkJobInfo as SparkJobInfo,
@@ -67,11 +67,11 @@ from pyspark.sql import (  # noqa: F401
 T = TypeVar("T")
 F = TypeVar("F", bound=Callable)
 
-def since(version: str) -> Callable[[T], T]: ...
+def since(version: Union[str, float]) -> Callable[[T], T]: ...
 def copy_func(
     f: F,
     name: Optional[str] = ...,
-    sinceversion: Optional[str] = ...,
+    sinceversion: Optional[Union[str, float]] = ...,
     doc: Optional[str] = ...,
 ) -> F: ...
 def keyword_only(func: F) -> F: ...

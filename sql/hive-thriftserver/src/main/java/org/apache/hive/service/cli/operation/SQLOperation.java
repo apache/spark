@@ -191,45 +191,39 @@ public class SQLOperation extends ExecuteStatementOperation {
       final UserGroupInformation currentUGI = getCurrentUGI(opConfig);
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
-      Runnable backgroundOperation = new Runnable() {
-        @Override
-        public void run() {
-          PrivilegedExceptionAction<Object> doAsAction = new PrivilegedExceptionAction<Object>() {
-            @Override
-            public Object run() throws HiveSQLException {
-              Hive.set(parentHive);
-              SessionState.setCurrentSessionState(parentSessionState);
-              // Set current OperationLog in this async thread for keeping on saving query log.
-              registerCurrentOperationLog();
-              try {
-                runQuery(opConfig);
-              } catch (HiveSQLException e) {
-                setOperationException(e);
-                LOG.error("Error running hive query: ", e);
-              } finally {
-                unregisterOperationLog();
-              }
-              return null;
-            }
-          };
-
+      Runnable backgroundOperation = () -> {
+        PrivilegedExceptionAction<Object> doAsAction = () -> {
+          Hive.set(parentHive);
+          SessionState.setCurrentSessionState(parentSessionState);
+          // Set current OperationLog in this async thread for keeping on saving query log.
+          registerCurrentOperationLog();
           try {
-            currentUGI.doAs(doAsAction);
-          } catch (Exception e) {
-            setOperationException(new HiveSQLException(e));
-            LOG.error("Error running hive query as user : " + currentUGI.getShortUserName(), e);
+            runQuery(opConfig);
+          } catch (HiveSQLException e) {
+            setOperationException(e);
+            LOG.error("Error running hive query: ", e);
+          } finally {
+            unregisterOperationLog();
           }
-          finally {
-            /**
-             * We'll cache the ThreadLocal RawStore object for this background thread for an orderly cleanup
-             * when this thread is garbage collected later.
-             * @see org.apache.hive.service.server.ThreadWithGarbageCleanup#finalize()
-             */
-            if (ThreadWithGarbageCleanup.currentThread() instanceof ThreadWithGarbageCleanup) {
-              ThreadWithGarbageCleanup currentThread =
-                  (ThreadWithGarbageCleanup) ThreadWithGarbageCleanup.currentThread();
-              currentThread.cacheThreadLocalRawStore();
-            }
+          return null;
+        };
+
+        try {
+          currentUGI.doAs(doAsAction);
+        } catch (Exception e) {
+          setOperationException(new HiveSQLException(e));
+          LOG.error("Error running hive query as user : " + currentUGI.getShortUserName(), e);
+        }
+        finally {
+          /**
+           * We'll cache the ThreadLocal RawStore object for this background thread for an orderly cleanup
+           * when this thread is garbage collected later.
+           * @see ThreadWithGarbageCleanup#finalize()
+           */
+          if (ThreadWithGarbageCleanup.currentThread() instanceof ThreadWithGarbageCleanup) {
+            ThreadWithGarbageCleanup currentThread =
+                (ThreadWithGarbageCleanup) ThreadWithGarbageCleanup.currentThread();
+            currentThread.cacheThreadLocalRawStore();
           }
         }
       };

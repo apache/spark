@@ -110,22 +110,22 @@ public class TestTimSort {
    * @param X The sum of the sequence that should be added to runs.
    */
   private static void generateJDKWrongElem(List<Long> runs, int minRun, long X) {
-    for (long newTotal; X >= 2 * minRun + 1; X = newTotal) {
+    for (long newTotal; X >= 2L * minRun + 1; X = newTotal) {
       //Default strategy
       newTotal = X / 2 + 1;
       //Specialized strategies
-      if (3 * minRun + 3 <= X && X <= 4 * minRun + 1) {
+      if (3L * minRun + 3 <= X && X <= 4L * minRun + 1) {
         // add x_1=MIN+1, x_2=MIN, x_3=X-newTotal  to runs
-        newTotal = 2 * minRun + 1;
-      } else if (5 * minRun + 5 <= X && X <= 6 * minRun + 5) {
+        newTotal = 2L * minRun + 1;
+      } else if (5L * minRun + 5 <= X && X <= 6L * minRun + 5) {
         // add x_1=MIN+1, x_2=MIN, x_3=MIN+2, x_4=X-newTotal  to runs
-        newTotal = 3 * minRun + 3;
-      } else if (8 * minRun + 9 <= X && X <= 10 * minRun + 9) {
+        newTotal = 3L * minRun + 3;
+      } else if (8L * minRun + 9 <= X && X <= 10L * minRun + 9) {
         // add x_1=MIN+1, x_2=MIN, x_3=MIN+2, x_4=2MIN+2, x_5=X-newTotal  to runs
-        newTotal = 5 * minRun + 5;
-      } else if (13 * minRun + 15 <= X && X <= 16 * minRun + 17) {
+        newTotal = 5L * minRun + 5;
+      } else if (13L * minRun + 15 <= X && X <= 16L * minRun + 17) {
         // add x_1=MIN+1, x_2=MIN, x_3=MIN+2, x_4=2MIN+2, x_5=3MIN+4, x_6=X-newTotal to runs
-        newTotal = 8 * minRun + 9;
+        newTotal = 8L * minRun + 9;
       }
       runs.add(0, X - newTotal);
     }

@@ -1,11 +1,42 @@
--- TRY_ADD
+-- Numeric + Numeric
 SELECT try_add(1, 1);
 SELECT try_add(2147483647, 1);
 SELECT try_add(-2147483648, -1);
 SELECT try_add(9223372036854775807L, 1);
 SELECT try_add(-9223372036854775808L, -1);
 
--- TRY_DIVIDE
+-- Date + Integer
+SELECT try_add(date'2021-01-01', 1);
+SELECT try_add(1, date'2021-01-01');
+
+-- Date + Interval
+SELECT try_add(date'2021-01-01', interval 2 year);
+SELECT try_add(date'2021-01-01', interval 2 second);
+SELECT try_add(interval 2 year, date'2021-01-01');
+SELECT try_add(interval 2 second, date'2021-01-01');
+
+-- Timestamp + Interval
+SELECT try_add(timestamp_ltz'2021-01-01 00:00:00', interval 2 year);
+SELECT try_add(timestamp_ntz'2021-01-01 00:00:00', interval 2 second);
+SELECT try_add(interval 2 year, timestamp_ltz'2021-01-01 00:00:00');
+SELECT try_add(interval 2 second, timestamp_ntz'2021-01-01 00:00:00');
+
+-- Interval + Interval
+SELECT try_add(interval 2 year, interval 2 year);
+SELECT try_add(interval 2 second, interval 2 second);
+SELECT try_add(interval 2 year, interval 2 second);
+SELECT try_add(interval 2147483647 month, interval 2 month);
+SELECT try_add(interval 106751991 day, interval 3 day);
+
+-- Numeric / Numeric
 SELECT try_divide(1, 0.5);
 SELECT try_divide(1, 0);
 SELECT try_divide(0, 0);
+
+-- Interval / Numeric
+SELECT try_divide(interval 2 year, 2);
+SELECT try_divide(interval 2 second, 2);
+SELECT try_divide(interval 2 year, 0);
+SELECT try_divide(interval 2 second, 0);
+SELECT try_divide(interval 2147483647 month, 0.5);
+SELECT try_divide(interval 106751991 day, 0.5);

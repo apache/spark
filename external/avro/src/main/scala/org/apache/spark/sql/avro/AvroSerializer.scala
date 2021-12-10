@@ -240,6 +240,12 @@ private[sql] class AvroSerializer(
           }
           result
 
+      case (_: YearMonthIntervalType, INT) =>
+        (getter, ordinal) => getter.getInt(ordinal)
+
+      case (_: DayTimeIntervalType, LONG) =>
+        (getter, ordinal) => getter.getLong(ordinal)
+
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
           s"schema is incompatible (sqlType = ${catalystType.sql}, avroType = $avroType)")

@@ -42,18 +42,16 @@ public class TSubjectAssumingTransport extends TFilterTransport {
     try {
       AccessControlContext context = AccessController.getContext();
       Subject subject = Subject.getSubject(context);
-      Subject.doAs(subject, new PrivilegedExceptionAction<Void>() {
-        public Void run() {
-          try {
-            wrapped.open();
-          } catch (TTransportException tte) {
-            // Wrap the transport exception in an RTE, since Subject.doAs() then goes
-            // and unwraps this for us out of the doAs block. We then unwrap one
-            // more time in our catch clause to get back the TTE. (ugh)
-            throw new RuntimeException(tte);
-          }
-          return null;
+      Subject.doAs(subject, (PrivilegedExceptionAction<Void>) () -> {
+        try {
+          wrapped.open();
+        } catch (TTransportException tte) {
+          // Wrap the transport exception in an RTE, since Subject.doAs() then goes
+          // and unwraps this for us out of the doAs block. We then unwrap one
+          // more time in our catch clause to get back the TTE. (ugh)
+          throw new RuntimeException(tte);
         }
+        return null;
       });
     } catch (PrivilegedActionException ioe) {
       throw new RuntimeException("Received an ioe we never threw!", ioe);

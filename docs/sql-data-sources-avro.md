@@ -271,7 +271,7 @@ Data source options of Avro can be set via:
     <td><code>compression</code></td>
     <td>snappy</td>
     <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
-  Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code> and <code>xz</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
+  Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code>, <code>xz</code> and <code>zstandard</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
     <td>write</td>
     <td>2.4.0</td>
   </tr>

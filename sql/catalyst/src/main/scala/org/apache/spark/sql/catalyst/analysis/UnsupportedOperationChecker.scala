@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -167,6 +167,21 @@ object UnsupportedOperationChecker extends Logging {
           throwError(
             s"$outputMode output mode not supported when there are streaming aggregations on " +
                 s"streaming DataFrames/DataSets without watermark")(plan)
+        }
+
+      case InternalOutputModes.Update if aggregates.nonEmpty =>
+        val aggregate = aggregates.head
+
+        val existingSessionWindow = aggregate.groupingExpressions.exists {
+          case attr: AttributeReference
+            if attr.metadata.contains(SessionWindow.marker) &&
+               attr.metadata.getBoolean(SessionWindow.marker) => true
+          case _ => false
+        }
+
+        if (existingSessionWindow) {
+          throwError(s"$outputMode output mode not supported for session window on " +
+            "streaming DataFrames/DataSets")(plan)
         }
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>

@@ -72,6 +72,7 @@ case class ParquetWrite(
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
+    ParquetSchemaConverter.checkFieldNames(dataSchema)
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
 

@@ -180,69 +180,69 @@ Output [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum#30]
 Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum#30]
 Keys [5]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29]
 Functions [1]: [sum(UnscaledValue(cs_sales_price#31))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#31))#32]
-Results [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, MakeDecimal(sum(UnscaledValue(cs_sales_price#31))#32,17,2) AS sum_sales#33]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#31))#19]
+Results [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, MakeDecimal(sum(UnscaledValue(cs_sales_price#31))#19,17,2) AS sum_sales#20]
 
 (31) Exchange
-Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#33]
-Arguments: hashpartitioning(i_category#25, i_brand#26, cc_name#27, 5), ENSURE_REQUIREMENTS, [id=#34]
+Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#20]
+Arguments: hashpartitioning(i_category#25, i_brand#26, cc_name#27, 5), ENSURE_REQUIREMENTS, [id=#32]
 
 (32) Sort [codegen id : 13]
-Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#33]
+Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#20]
 Arguments: [i_category#25 ASC NULLS FIRST, i_brand#26 ASC NULLS FIRST, cc_name#27 ASC NULLS FIRST, d_year#28 ASC NULLS FIRST, d_moy#29 ASC NULLS FIRST], false, 0
 
 (33) Window
-Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#33]
-Arguments: [rank(d_year#28, d_moy#29) windowspecdefinition(i_category#25, i_brand#26, cc_name#27, d_year#28 ASC NULLS FIRST, d_moy#29 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#35], [i_category#25, i_brand#26, cc_name#27], [d_year#28 ASC NULLS FIRST, d_moy#29 ASC NULLS FIRST]
+Input [6]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#20]
+Arguments: [rank(d_year#28, d_moy#29) windowspecdefinition(i_category#25, i_brand#26, cc_name#27, d_year#28 ASC NULLS FIRST, d_moy#29 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#33], [i_category#25, i_brand#26, cc_name#27], [d_year#28 ASC NULLS FIRST, d_moy#29 ASC NULLS FIRST]
 
 (34) Project [codegen id : 14]
-Output [5]: [i_category#25, i_brand#26, cc_name#27, sum_sales#33, rn#35]
-Input [7]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#33, rn#35]
+Output [5]: [i_category#25, i_brand#26, cc_name#27, sum_sales#20 AS sum_sales#34, rn#33]
+Input [7]: [i_category#25, i_brand#26, cc_name#27, d_year#28, d_moy#29, sum_sales#20, rn#33]
 
 (35) BroadcastExchange
-Input [5]: [i_category#25, i_brand#26, cc_name#27, sum_sales#33, rn#35]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true], input[1, string, true], input[2, string, true], (input[4, int, false] + 1)),false), [id=#36]
+Input [5]: [i_category#25, i_brand#26, cc_name#27, sum_sales#34, rn#33]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true], input[1, string, true], input[2, string, true], (input[4, int, false] + 1)),false), [id=#35]
 
 (36) BroadcastHashJoin [codegen id : 22]
 Left keys [4]: [i_category#3, i_brand#2, cc_name#14, rn#23]
-Right keys [4]: [i_category#25, i_brand#26, cc_name#27, (rn#35 + 1)]
+Right keys [4]: [i_category#25, i_brand#26, cc_name#27, (rn#33 + 1)]
 Join condition: None
 
 (37) Project [codegen id : 22]
-Output [9]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, sum_sales#33]
-Input [13]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, i_category#25, i_brand#26, cc_name#27, sum_sales#33, rn#35]
+Output [9]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, sum_sales#34]
+Input [13]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, i_category#25, i_brand#26, cc_name#27, sum_sales#34, rn#33]
 
 (38) ReusedExchange [Reuses operator id: 31]
-Output [6]: [i_category#37, i_brand#38, cc_name#39, d_year#40, d_moy#41, sum_sales#42]
+Output [6]: [i_category#36, i_brand#37, cc_name#38, d_year#39, d_moy#40, sum_sales#20]
 
 (39) Sort [codegen id : 20]
-Input [6]: [i_category#37, i_brand#38, cc_name#39, d_year#40, d_moy#41, sum_sales#42]
-Arguments: [i_category#37 ASC NULLS FIRST, i_brand#38 ASC NULLS FIRST, cc_name#39 ASC NULLS FIRST, d_year#40 ASC NULLS FIRST, d_moy#41 ASC NULLS FIRST], false, 0
+Input [6]: [i_category#36, i_brand#37, cc_name#38, d_year#39, d_moy#40, sum_sales#20]
+Arguments: [i_category#36 ASC NULLS FIRST, i_brand#37 ASC NULLS FIRST, cc_name#38 ASC NULLS FIRST, d_year#39 ASC NULLS FIRST, d_moy#40 ASC NULLS FIRST], false, 0
 
 (40) Window
-Input [6]: [i_category#37, i_brand#38, cc_name#39, d_year#40, d_moy#41, sum_sales#42]
-Arguments: [rank(d_year#40, d_moy#41) windowspecdefinition(i_category#37, i_brand#38, cc_name#39, d_year#40 ASC NULLS FIRST, d_moy#41 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#43], [i_category#37, i_brand#38, cc_name#39], [d_year#40 ASC NULLS FIRST, d_moy#41 ASC NULLS FIRST]
+Input [6]: [i_category#36, i_brand#37, cc_name#38, d_year#39, d_moy#40, sum_sales#20]
+Arguments: [rank(d_year#39, d_moy#40) windowspecdefinition(i_category#36, i_brand#37, cc_name#38, d_year#39 ASC NULLS FIRST, d_moy#40 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#41], [i_category#36, i_brand#37, cc_name#38], [d_year#39 ASC NULLS FIRST, d_moy#40 ASC NULLS FIRST]
 
 (41) Project [codegen id : 21]
-Output [5]: [i_category#37, i_brand#38, cc_name#39, sum_sales#42, rn#43]
-Input [7]: [i_category#37, i_brand#38, cc_name#39, d_year#40, d_moy#41, sum_sales#42, rn#43]
+Output [5]: [i_category#36, i_brand#37, cc_name#38, sum_sales#20 AS sum_sales#42, rn#41]
+Input [7]: [i_category#36, i_brand#37, cc_name#38, d_year#39, d_moy#40, sum_sales#20, rn#41]
 
 (42) BroadcastExchange
-Input [5]: [i_category#37, i_brand#38, cc_name#39, sum_sales#42, rn#43]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true], input[1, string, true], input[2, string, true], (input[4, int, false] - 1)),false), [id=#44]
+Input [5]: [i_category#36, i_brand#37, cc_name#38, sum_sales#42, rn#41]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true], input[1, string, true], input[2, string, true], (input[4, int, false] - 1)),false), [id=#43]
 
 (43) BroadcastHashJoin [codegen id : 22]
 Left keys [4]: [i_category#3, i_brand#2, cc_name#14, rn#23]
-Right keys [4]: [i_category#37, i_brand#38, cc_name#39, (rn#43 - 1)]
+Right keys [4]: [i_category#36, i_brand#37, cc_name#38, (rn#41 - 1)]
 Join condition: None
 
 (44) Project [codegen id : 22]
-Output [8]: [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, sum_sales#33 AS psum#45, sum_sales#42 AS nsum#46]
-Input [14]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, sum_sales#33, i_category#37, i_brand#38, cc_name#39, sum_sales#42, rn#43]
+Output [8]: [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, sum_sales#34 AS psum#44, sum_sales#42 AS nsum#45]
+Input [14]: [i_category#3, i_brand#2, cc_name#14, d_year#11, d_moy#12, sum_sales#20, avg_monthly_sales#24, rn#23, sum_sales#34, i_category#36, i_brand#37, cc_name#38, sum_sales#42, rn#41]
 
 (45) TakeOrderedAndProject
-Input [8]: [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, psum#45, nsum#46]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#20 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, d_year#11 ASC NULLS FIRST], [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, psum#45, nsum#46]
+Input [8]: [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, psum#44, nsum#45]
+Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#20 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, d_year#11 ASC NULLS FIRST], [i_category#3, i_brand#2, d_year#11, d_moy#12, avg_monthly_sales#24, sum_sales#20, psum#44, nsum#45]
 
 ===== Subqueries =====
 
@@ -269,6 +269,6 @@ Condition : ((((d_year#11 = 1999) OR ((d_year#11 = 1998) AND (d_moy#12 = 12))) O
 
 (49) BroadcastExchange
 Input [3]: [d_date_sk#10, d_year#11, d_moy#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#47]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#46]
 
 

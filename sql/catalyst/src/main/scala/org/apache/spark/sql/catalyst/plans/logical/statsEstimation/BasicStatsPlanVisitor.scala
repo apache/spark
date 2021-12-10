@@ -105,4 +105,6 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitTail(p: Tail): Statistics = {
     fallback(p)
   }
+
+  override def visitWithCTE(p: WithCTE): Statistics = fallback(p)
 }

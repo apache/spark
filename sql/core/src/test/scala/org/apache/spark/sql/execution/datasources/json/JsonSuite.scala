@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.ZoneId
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -2453,6 +2453,41 @@ abstract class JsonSuite
     checkAnswer(
       spark.read.option("mode", "PERMISSIVE").option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))
+    checkAnswer(
+      // encoding auto detection should also be possible with json schema infer
+      spark.read.option("mode", "PERMISSIVE").json(Seq(badJson).toDS()),
+      Row(badJson))
+  }
+
+  test("SPARK-37176: inferring should be possible when parse mode is permissive") {
+    withTempPath { tempDir =>
+      val path = tempDir.getAbsolutePath
+      // normal input to let spark correctly infer schema
+      val record = """{"a":1}"""
+      Seq(record, badJson + record).toDS().write.text(path)
+      val expected = s"""${badJson}{"a":1}"""
+      val df = spark.read.format("json")
+        .option("mode", "PERMISSIVE")
+        .load(path)
+      checkAnswer(df, Seq(Row(null, 1), Row(expected, null)))
+    }
+  }
+
+  test("SPARK-31716: inferring should handle malformed input") {
+    val schema = new StructType().add("a", IntegerType)
+    val dfWithSchema = spark.read.format("json")
+      .option("mode", "DROPMALFORMED")
+      .option("encoding", "utf-8")
+      .schema(schema)
+      .load(testFile("test-data/malformed_utf8.json"))
+    checkAnswer(dfWithSchema, Seq(Row(1), Row(1)))
+
+    val df = spark.read.format("json")
+      .option("mode", "DROPMALFORMED")
+      .option("encoding", "utf-8")
+      .load(testFile("test-data/malformed_utf8.json"))
+
+    checkAnswer(df, Seq(Row(1), Row(1)))
   }
 
   test("SPARK-23772 ignore column of all null values or empty array during schema inference") {
@@ -2692,7 +2727,7 @@ abstract class JsonSuite
   }
 
   test("exception mode for parsing date/timestamp string") {
-    val ds = Seq("{'t': '2020-01-27T20:06:11.847-0800'}").toDS()
+    val ds = Seq("{'t': '2020-01-27T20:06:11.847-08000'}").toDS()
     val json = spark.read
       .schema("t timestamp")
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
@@ -2708,6 +2743,188 @@ abstract class JsonSuite
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
       checkAnswer(json, Row(null))
+    }
+  }
+
+  test("SPARK-37360: Write and infer TIMESTAMP_NTZ values with a non-default pattern") {
+    withTempPath { path =>
+      val exp = spark.sql("""
+        select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ntz'2020-12-12 12:12:12.123456' as col0
+        """)
+      exp.write
+        .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .json(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        val res = spark.read
+          .option("timestampNTZFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+          .option("inferTimestamp", "true")
+          .json(path.getAbsolutePath)
+
+        assert(res.dtypes === exp.dtypes)
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("SPARK-37360: Write and infer TIMESTAMP_LTZ values with a non-default pattern") {
+    withTempPath { path =>
+      val exp = spark.sql("""
+        select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ltz'2020-12-12 12:12:12.123456' as col0
+        """)
+      exp.write
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+        .json(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        val res = spark.read
+          .option("timestampFormat", "yyyy-MM-dd HH:mm:ss.SSSSSS")
+          .option("inferTimestamp", "true")
+          .json(path.getAbsolutePath)
+
+        assert(res.dtypes === exp.dtypes)
+        checkAnswer(res, exp)
+      }
+    }
+  }
+
+  test("SPARK-37360: Roundtrip in reading and writing TIMESTAMP_NTZ values with custom schema") {
+    withTempPath { path =>
+      val exp = spark.sql("""
+        select
+          timestamp_ntz'2020-12-12 12:12:12' as col1,
+          timestamp_ltz'2020-12-12 12:12:12' as col2
+        """)
+
+      exp.write.json(path.getAbsolutePath)
+
+      val res = spark.read
+        .schema("col1 TIMESTAMP_NTZ, col2 TIMESTAMP_LTZ")
+        .json(path.getAbsolutePath)
+
+      checkAnswer(res, exp)
+    }
+  }
+
+  test("SPARK-37360: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
+    withTempPath { path =>
+      val exp = spark.sql("""
+        select timestamp_ntz'2020-12-12 12:12:12' as col0 union all
+        select timestamp_ntz'2020-12-12 12:12:12' as col0
+        """)
+
+      exp.write.json(path.getAbsolutePath)
+
+      val timestampTypes = Seq(
+        SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+        SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+      for (timestampType <- timestampTypes) {
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+          val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
+
+          if (timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+            checkAnswer(res, exp)
+          } else {
+            checkAnswer(
+              res,
+              spark.sql("""
+                select timestamp_ltz'2020-12-12 12:12:12' as col0 union all
+                select timestamp_ltz'2020-12-12 12:12:12' as col0
+                """)
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37360: Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
+    withTempPath { path =>
+      Seq(
+        """{"col0":"2020-12-12T12:12:12.000"}""",
+        """{"col0":"2020-12-12T17:12:12.000Z"}""",
+        """{"col0":"2020-12-12T17:12:12.000+05:00"}""",
+        """{"col0":"2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path.getAbsolutePath)
+
+      for (policy <- Seq("exception", "corrected", "legacy")) {
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+          val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
+
+          // NOTE:
+          // Every value is tested for all types in JSON schema inference so the sequence of
+          // ["timestamp_ntz", "timestamp_ltz", "timestamp_ntz"] results in "timestamp_ltz".
+          // This is different from CSV where inference starts from the last inferred type.
+          //
+          // This is why the similar test in CSV has a different result in "legacy" mode.
+
+          val exp = spark.sql("""
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000Z' as col0 union all
+            select timestamp_ltz'2020-12-12T17:12:12.000+05:00' as col0 union all
+            select timestamp_ltz'2020-12-12T12:12:12.000' as col0
+            """)
+          checkAnswer(res, exp)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37360: Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
+    withTempPath { path =>
+      Seq(
+        """{"col0": "2020-12-12T12:12:12.000"}""",
+        """{"col0": "2020-12-12T12:12:12.000Z"}""",
+        """{"col0": "2020-12-12T12:12:12.000+05:00"}""",
+        """{"col0": "2020-12-12T12:12:12.000"}"""
+      ).toDF("data")
+        .coalesce(1)
+        .write.text(path.getAbsolutePath)
+
+      for (timestampNTZFormat <- Seq(None, Some("yyyy-MM-dd'T'HH:mm:ss[.SSS]"))) {
+        val reader = spark.read.schema("col0 TIMESTAMP_NTZ")
+        val res = timestampNTZFormat match {
+          case Some(format) =>
+            reader.option("timestampNTZFormat", format).json(path.getAbsolutePath)
+          case None =>
+            reader.json(path.getAbsolutePath)
+        }
+
+        checkAnswer(
+          res,
+          Seq(
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12)),
+            Row(null),
+            Row(null),
+            Row(LocalDateTime.of(2020, 12, 12, 12, 12, 12))
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-37360: Fail to write TIMESTAMP_NTZ if timestampNTZFormat contains zone offset") {
+    val patterns = Seq(
+      "yyyy-MM-dd HH:mm:ss XXX",
+      "yyyy-MM-dd HH:mm:ss Z",
+      "yyyy-MM-dd HH:mm:ss z")
+
+    val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
+    for (pattern <- patterns) {
+      withTempPath { path =>
+        val err = intercept[SparkException] {
+          exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
+        }
+        assert(
+          err.getCause.getMessage.contains("Unsupported field: OffsetSeconds") ||
+          err.getCause.getMessage.contains("Unable to extract value") ||
+          err.getCause.getMessage.contains("Unable to extract ZoneId"))
+      }
     }
   }
 
@@ -2811,10 +3028,11 @@ abstract class JsonSuite
             val readback = spark.read.schema("aaa integer, BBB integer")
               .json(path.getCanonicalPath)
             checkAnswer(readback, Seq(Row(null, null), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
+            val ex = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve 'AAA'"))
+            }
+            assert(ex.getErrorClass == "MISSING_COLUMN")
+            assert(ex.messageParameters.head == "AAA")
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -2958,6 +3176,54 @@ abstract class JsonSuite
         .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
       Row(null) :: Nil)
   }
+
+  test("SPARK-36536: use casting when datetime pattern is not set") {
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.UTC.getId) {
+      withTempPath { path =>
+        Seq(
+          """{"d":"2021","ts_ltz":"2021","ts_ntz": "2021"}""",
+          """{"d":"2021-01","ts_ltz":"2021-01 ","ts_ntz":"2021-01"}""",
+          """{"d":" 2021-2-1","ts_ltz":"2021-3-02","ts_ntz": "2021-10-1"}""",
+          """{"d":"2021-8-18 00:00:00","ts_ltz":"2021-8-18 21:44:30Z"""" +
+          ""","ts_ntz":"2021-8-18T21:44:30.123"}"""
+        ).toDF().repartition(1).write.text(path.getCanonicalPath)
+        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          .json(path.getCanonicalPath)
+        checkAnswer(
+          readback,
+          Seq(
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
+              LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
+              LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
+    }
+  }
+
+  test("SPARK-36830: Support reading and writing ANSI intervals") {
+    Seq(
+      YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+      DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+    ).foreach { case (it, f) =>
+      val data = (1 to 10).map(i => Row(i, f(i)))
+      val schema = StructType(Array(StructField("d", IntegerType, false),
+        StructField("i", it, false)))
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.json(file.getCanonicalPath)
+        val df2 = spark.read.json(file.getCanonicalPath)
+        checkAnswer(df2, df.select($"d".cast(LongType), $"i".cast(StringType)).collect().toSeq)
+        val df3 = spark.read.schema(schema).json(file.getCanonicalPath)
+        checkAnswer(df3, df.collect().toSeq)
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
@@ -2990,16 +3256,14 @@ class JsonV2Suite extends JsonSuite {
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === filters)
+        assert(scanBuilder.pushDataFilters(filters) === filters)
       }
     }
 
     withSQLConf(SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       withTempPath { file =>
         val scanBuilder = getBuilder(file.getCanonicalPath)
-        assert(scanBuilder.pushFilters(filters) === filters)
-        assert(scanBuilder.pushedFilters() === Array.empty[sources.Filter])
+        assert(scanBuilder.pushDataFilters(filters) === Array.empty[sources.Filter])
       }
     }
   }

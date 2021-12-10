@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -85,18 +85,16 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   }
 
   // Cache of preferred locations of checkpointed files.
-  @transient private[spark] lazy val cachedPreferredLocations = {
-    val builder = Caffeine.newBuilder()
-      .expireAfterWrite(
-        SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
-        TimeUnit.MINUTES)
-    val loader = new CacheLoader[Partition, Seq[String]]() {
-      override def load(split: Partition): Seq[String] = {
-        getPartitionBlockLocations(split)
-      }
-    }
-    builder.build[Partition, Seq[String]](loader)
-  }
+  @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
+    .expireAfterWrite(
+      SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
+      TimeUnit.MINUTES)
+    .build(
+      new CacheLoader[Partition, Seq[String]]() {
+        override def load(split: Partition): Seq[String] = {
+          getPartitionBlockLocations(split)
+        }
+      })
 
   // Returns the block locations of given partition on file system.
   private def getPartitionBlockLocations(split: Partition): Seq[String] = {

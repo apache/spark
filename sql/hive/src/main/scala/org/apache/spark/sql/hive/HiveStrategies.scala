@@ -211,13 +211,13 @@ case class RelationConversions(
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             (!r.isPartitioned || conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
             && isConvertible(r) =>
-        InsertIntoStatement(metastoreCatalog.convert(r), partition, cols,
+        InsertIntoStatement(metastoreCatalog.convert(r, isWrite = true), partition, cols,
           query, overwrite, ifPartitionNotExists)
 
       // Read path
       case relation: HiveTableRelation
           if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        metastoreCatalog.convert(relation)
+        metastoreCatalog.convert(relation, isWrite = false)
 
       // CTAS
       case CreateTable(tableDesc, mode, Some(query))
@@ -225,7 +225,7 @@ case class RelationConversions(
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
             conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
-        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
+        DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }

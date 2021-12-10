@@ -24,12 +24,21 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsPollingSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for polling K8s executor pods by ExternalClusterManagers.
+ * @since 3.1.3
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -39,6 +48,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
 
   private var pollingFuture: Future[_] = _
 
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
@@ -46,6 +56,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
       new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
+  @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)
@@ -67,9 +78,9 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
       if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
         val list = pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
         val newResourceVersion = UnsignedLong.valueOf(list.getMetadata.getResourceVersion())
-        // Replace only when we receive a monotonically increased resourceVersion
+        // Replace only when we receive a monotonically increased or equal resourceVersion
         // because some K8s API servers may return old(smaller) cached versions in case of HA setup.
-        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) > 0) {
+        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) >= 0) {
           resourceVersion = newResourceVersion
           snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
         }

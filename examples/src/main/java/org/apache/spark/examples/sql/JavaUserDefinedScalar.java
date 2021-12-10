@@ -49,12 +49,8 @@ public class JavaUserDefinedScalar {
     // +-------+
 
     // Define and register a one-argument UDF
-    spark.udf().register("plusOne", new UDF1<Integer, Integer>() {
-      @Override
-      public Integer call(Integer x) {
-        return x + 1;
-      }
-    }, DataTypes.IntegerType);
+    spark.udf().register("plusOne",
+      (UDF1<Integer, Integer>) x -> x + 1, DataTypes.IntegerType);
     spark.sql("SELECT plusOne(5)").show();
     // +----------+
     // |plusOne(5)|
@@ -75,12 +71,8 @@ public class JavaUserDefinedScalar {
     // +------------+
 
     // UDF in a WHERE clause
-    spark.udf().register("oneArgFilter", new UDF1<Long, Boolean>() {
-      @Override
-      public Boolean call(Long x) {
-        return  x > 5;
-      }
-    }, DataTypes.BooleanType);
+    spark.udf().register("oneArgFilter",
+      (UDF1<Long, Boolean>) x -> x > 5, DataTypes.BooleanType);
     spark.range(1, 10).createOrReplaceTempView("test");
     spark.sql("SELECT * FROM test WHERE oneArgFilter(id)").show();
     // +---+

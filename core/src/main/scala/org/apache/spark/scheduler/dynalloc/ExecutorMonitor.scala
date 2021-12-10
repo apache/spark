@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
@@ -460,7 +461,7 @@ private[spark] class ExecutorMonitor(
 
   // Visible for testing.
   private[dynalloc] def isExecutorIdle(id: String): Boolean = {
-    Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
+    Option(executors.get(id)).map(_.isIdle).getOrElse(throw SparkCoreErrors.noExecutorIdleError(id))
   }
 
   // Visible for testing

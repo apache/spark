@@ -1,0 +1,34 @@
+WholeStageCodegen (4)
+  Sort [cntrycode]
+    InputAdapter
+      Exchange [cntrycode] #1
+        WholeStageCodegen (3)
+          HashAggregate [cntrycode,count,sum,isEmpty] [count(1),sum(c_acctbal),numcust,totacctbal,count,sum,isEmpty]
+            InputAdapter
+              Exchange [cntrycode] #2
+                WholeStageCodegen (2)
+                  HashAggregate [cntrycode,c_acctbal] [count,sum,isEmpty,count,sum,isEmpty]
+                    Project [c_phone,c_acctbal]
+                      BroadcastHashJoin [c_custkey,o_custkey]
+                        Filter [c_acctbal,c_phone]
+                          Subquery #1
+                            WholeStageCodegen (2)
+                              HashAggregate [sum,count] [avg(UnscaledValue(c_acctbal)),avg(c_acctbal),sum,count]
+                                InputAdapter
+                                  Exchange #3
+                                    WholeStageCodegen (1)
+                                      HashAggregate [c_acctbal] [sum,count,sum,count]
+                                        Project [c_acctbal]
+                                          Filter [c_acctbal,c_phone]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.customer [c_phone,c_acctbal]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.customer [c_custkey,c_phone,c_acctbal]
+                        InputAdapter
+                          BroadcastExchange #4
+                            WholeStageCodegen (1)
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.orders [o_custkey]

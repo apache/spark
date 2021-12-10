@@ -147,14 +147,26 @@ class CSVOptions(
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
+  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse("timestampFormat",
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get("timestampFormat")
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse("timestampFormat",
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
+
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
+    s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

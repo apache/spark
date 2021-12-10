@@ -91,30 +91,20 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
         LocationStrategies.PreferConsistent(),
-        ConsumerStrategies.<String, String>Subscribe(Arrays.asList(topic1), kafkaParams)
+        ConsumerStrategies.Subscribe(Arrays.asList(topic1), kafkaParams)
     );
 
     JavaDStream<String> stream1 = istream1.transform(
       // Make sure you can get offset ranges from the rdd
-      new Function<JavaRDD<ConsumerRecord<String, String>>,
-        JavaRDD<ConsumerRecord<String, String>>>() {
-          @Override
-          public JavaRDD<ConsumerRecord<String, String>> call(
-            JavaRDD<ConsumerRecord<String, String>> rdd
-          ) {
-            OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-            offsetRanges.set(offsets);
-            Assert.assertEquals(topic1, offsets[0].topic());
-            return rdd;
-          }
-        }
+      (Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
+        OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+        offsetRanges.set(offsets);
+        Assert.assertEquals(topic1, offsets[0].topic());
+        return rdd;
+      }
     ).map(
-        new Function<ConsumerRecord<String, String>, String>() {
-          @Override
-          public String call(ConsumerRecord<String, String> r) {
-            return r.value();
-          }
-        }
+      (Function<ConsumerRecord<String, String>, String>) ConsumerRecord::value
     );
 
     final Map<String, Object> kafkaParams2 = new HashMap<>(kafkaParams);
@@ -124,41 +114,26 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
         LocationStrategies.PreferConsistent(),
-        ConsumerStrategies.<String, String>Subscribe(Arrays.asList(topic2), kafkaParams2)
+        ConsumerStrategies.Subscribe(Arrays.asList(topic2), kafkaParams2)
     );
 
     JavaDStream<String> stream2 = istream2.transform(
       // Make sure you can get offset ranges from the rdd
-      new Function<JavaRDD<ConsumerRecord<String, String>>,
-        JavaRDD<ConsumerRecord<String, String>>>() {
-          @Override
-          public JavaRDD<ConsumerRecord<String, String>> call(
-            JavaRDD<ConsumerRecord<String, String>> rdd
-          ) {
-            OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-            offsetRanges.set(offsets);
-            Assert.assertEquals(topic2, offsets[0].topic());
-            return rdd;
-          }
-        }
+      (Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
+        OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+        offsetRanges.set(offsets);
+        Assert.assertEquals(topic2, offsets[0].topic());
+        return rdd;
+      }
     ).map(
-        new Function<ConsumerRecord<String, String>, String>() {
-          @Override
-          public String call(ConsumerRecord<String, String> r) {
-            return r.value();
-          }
-        }
+      (Function<ConsumerRecord<String, String>, String>) ConsumerRecord::value
     );
 
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
     final Set<String> result = Collections.synchronizedSet(new HashSet<>());
-    unifiedStream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-          @Override
-          public void call(JavaRDD<String> rdd) {
-            result.addAll(rdd.collect());
-          }
-        }
+    unifiedStream.foreachRDD((VoidFunction<JavaRDD<String>>) rdd -> result.addAll(rdd.collect())
     );
     ssc.start();
     long startTime = System.currentTimeMillis();

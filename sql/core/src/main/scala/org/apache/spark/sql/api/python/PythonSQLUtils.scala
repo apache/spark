@@ -24,9 +24,9 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -77,6 +77,8 @@ private[sql] object PythonSQLUtils extends Logging {
   def explainString(queryExecution: QueryExecution, mode: String): String = {
     queryExecution.explainString(ExplainMode.fromString(mode))
   }
+
+  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 }
 
 /**

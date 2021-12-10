@@ -351,13 +351,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initializationSteps: Int,
       epsilon: Double,
-      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
+      initialModel: java.util.ArrayList[Vector],
+      distanceMeasure: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
+      .setDistanceMeasure(distanceMeasure)
 
     if (seed != null) kMeansAlg.setSeed(seed)
     if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
@@ -398,7 +400,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
       val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
-        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+        case (x, y) => new MultivariateGaussian(x, y)
       }
       val initialModel = new GaussianMixtureModel(
         initialModelWeights.asScala.toArray, gaussians.toArray)

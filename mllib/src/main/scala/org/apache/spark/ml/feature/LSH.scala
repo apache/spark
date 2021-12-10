@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.util.Random
-
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
@@ -280,7 +278,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     val explodedB = if (datasetA != datasetB) {
       processDataset(datasetB, rightColName, explodeCols)
     } else {
-      val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
+      val recreatedB = recreateCol(datasetB, $(inputCol), Identifiable.randomUID(inputCol.name))
       processDataset(recreatedB, rightColName, explodeCols)
     }
 

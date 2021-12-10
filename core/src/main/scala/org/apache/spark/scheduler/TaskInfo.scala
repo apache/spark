@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * :: DeveloperApi ::
@@ -115,7 +116,7 @@ class TaskInfo(
 
   def duration: Long = {
     if (!finished) {
-      throw new UnsupportedOperationException("duration() called on unfinished task")
+      throw SparkCoreErrors.durationCalledOnUnfinishedTaskError()
     } else {
       finishTime - launchTime
     }

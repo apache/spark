@@ -449,7 +449,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
       val label = data.getString(0)
-      val terms = data.getSeq[Seq[String]](1)
+      val terms = data.getSeq[scala.collection.Seq[String]](1).map(_.toSeq)
       val hasIntercept = data.getBoolean(2)
       val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept)
 

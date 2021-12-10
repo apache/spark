@@ -113,7 +113,8 @@ class ResolveHintsSuite extends AnalysisTest {
       ),
       ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
         .select('a).analyze,
-      caseSensitive = false)
+      caseSensitive = false,
+      inlineCTE = true)
   }
 
   test("should not traverse down CTE") {
@@ -125,7 +126,8 @@ class ResolveHintsSuite extends AnalysisTest {
         """.stripMargin
       ),
       testRelation.where('a > 1).select('a).select('a).analyze,
-      caseSensitive = false)
+      caseSensitive = false,
+      inlineCTE = true)
   }
 
   test("coalesce and repartition hint") {

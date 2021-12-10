@@ -188,4 +188,26 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     // SparkUpgradeException here.
     intercept[SparkUpgradeException](formatter.parse("02-29"))
   }
+
+  test("SPARK-36418: default parsing w/o pattern") {
+    val formatter = new DefaultDateFormatter(
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = true)
+    Seq(
+      "-0042-3-4" -> LocalDate.of(-42, 3, 4),
+      "1000" -> LocalDate.of(1000, 1, 1),
+      "1582-10-4" -> LocalDate.of(1582, 10, 4),
+      "1583-1-1 " -> LocalDate.of(1583, 1, 1),
+      "1970-01-1 00:00" -> LocalDate.of(1970, 1, 1),
+      "2021-8-12T18:31:50" -> LocalDate.of(2021, 8, 12)
+    ).foreach { case (inputStr, ld) =>
+      assert(formatter.parse(inputStr) === ld.toEpochDay)
+    }
+
+    val errMsg = intercept[DateTimeException] {
+      formatter.parse("x123")
+    }.getMessage
+    assert(errMsg.contains("Cannot cast x123 to DateType"))
+  }
 }

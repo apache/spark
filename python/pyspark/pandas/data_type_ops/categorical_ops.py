@@ -57,7 +57,9 @@ class CategoricalOps(DataTypeOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, _ = pandas_on_spark_type(dtype)
 
-        if isinstance(dtype, CategoricalDtype) and cast(CategoricalDtype, dtype).categories is None:
+        if isinstance(dtype, CategoricalDtype) and (
+            (dtype.categories is None) or (index_ops.dtype == dtype)
+        ):
             return index_ops.copy()
 
         return _to_cat(index_ops).astype(dtype)
@@ -92,7 +94,7 @@ def _compare(
     right: Any,
     f: Callable[..., Column],
     *,
-    is_equality_comparison: bool = False
+    is_equality_comparison: bool = False,
 ) -> SeriesOrIndex:
     """
     Compare a Categorical operand `left` to `right` with the given Spark Column function.

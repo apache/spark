@@ -19,8 +19,9 @@ package org.apache.spark.deploy.k8s
 import java.util.{Locale, UUID}
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
+import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -41,6 +42,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretEnvNamesToKeyRefs: Map[String, String]
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
+  def schedulerName: String
 
   def appName: String = get("spark.app.name", "spark")
 
@@ -92,7 +94,9 @@ private[spark] class KubernetesDriverConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_APP_ID_LABEL -> appId,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
@@ -130,6 +134,8 @@ private[spark] class KubernetesDriverConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse("")
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -150,8 +156,10 @@ private[spark] class KubernetesExecutorConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
 
@@ -185,6 +193,8 @@ private[spark] class KubernetesExecutorConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse("")
 
   private def checkExecutorEnvKey(key: String): Boolean = {
     // Pattern for matching an executorEnv key, which meets certain naming rules.
@@ -241,6 +251,21 @@ private[spark] object KubernetesConf {
       .toLowerCase(Locale.ROOT)
       .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
+  }
+
+  def getAppNameLabel(appName: String): String = {
+    // According to https://kubernetes.io/docs/concepts/overview/working-with-objects/labels,
+    // must be 63 characters or less to follow the DNS label standard, so take the 63 characters
+    // of the appName name as the label.
+    StringUtils.abbreviate(
+      s"$appName"
+        .trim
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9\\-]", "-")
+        .replaceAll("-+", "-"),
+      "",
+      KUBERNETES_DNSNAME_MAX_LENGTH
+    )
   }
 
   /**

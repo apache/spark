@@ -71,7 +71,7 @@ case class InsertIntoHiveDirCommand(
       storage = storage,
       schema = outputColumns.toStructType
     )
-    DDLUtils.checkDataColNames(table)
+    DDLUtils.checkTableColumns(table)
 
     val hiveTable = HiveClientImpl.toHiveTable(table)
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,

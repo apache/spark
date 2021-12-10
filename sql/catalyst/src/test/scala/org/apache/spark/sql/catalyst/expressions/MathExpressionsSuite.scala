@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
@@ -187,6 +189,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Sin, DoubleType)
   }
 
+  test("csc") {
+    def f: (Double) => Double = (x: Double) => 1 / math.sin(x)
+    testUnary(Csc, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Csc, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Csc(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(intLit)), 1 / math.sin(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(-intLit)), 1 / math.sin(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Csc(0)), 1 / math.sin(0), EmptyRow)
+  }
+
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
     testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
@@ -213,6 +229,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("cos") {
     testUnary(Cos, math.cos)
     checkConsistencyBetweenInterpretedAndCodegen(Cos, DoubleType)
+  }
+
+  test("sec") {
+    def f: (Double) => Double = (x: Double) => 1 / math.cos(x)
+    testUnary(Sec, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Sec, DoubleType)
+    val nullLit = Literal.create(null, NullType)
+    val intNullLit = Literal.create(null, IntegerType)
+    val intLit = Literal.create(1, IntegerType)
+    checkEvaluation(checkDataTypeAndCast(Sec(nullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intNullLit)), null, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(intLit)), 1 / math.cos(1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(-intLit)), 1 / math.cos(-1), EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Sec(0)), 1 / math.cos(0), EmptyRow)
   }
 
   test("acos") {
@@ -675,5 +705,87 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+  }
+
+  test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
+    checkEvaluation(Signum(Literal(Period.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(10))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofYears(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(-10))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, YearMonthIntervalType())), null)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MaxValue))), 1.0)
+    checkEvaluation(Signum(Literal(Period.ofMonths(Int.MinValue))), -1.0)
+
+    checkEvaluation(Signum(Literal(Duration.ZERO)), 0.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(10))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-10))), -1.0)
+    checkEvaluation(Signum(Literal(Duration.ofDays(-12345))), -1.0)
+    checkEvaluation(Signum(Literal.create(null, DayTimeIntervalType())), null)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))), 1.0)
+    checkEvaluation(Signum(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))), -1.0)
+  }
+
+  test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
+    Seq(
+      (Period.ofMonths(-1), Period.ofYears(0), Period.ofYears(10), 10L) -> 0L,
+      (Period.ofMonths(0), Period.ofYears(0), Period.ofYears(10), 10L) -> 1L,
+      (Period.ofMonths(13), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(10), 10L) -> 2L,
+      (Period.ofYears(1), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(Int.MaxValue), Period.ofYears(0), Period.ofYears(1), 10L) -> 11L,
+      (Period.ofMonths(0), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 6L,
+      (Period.ofMonths(-1), Period.ofMonths(Int.MinValue), Period.ofMonths(Int.MaxValue), 10L) -> 5L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
+
+  test("SPARK-35925: Support DayTimeIntervalType in width-bucket function") {
+    Seq(
+      (Duration.ofDays(-1), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 0L,
+      (Duration.ofHours(0), Duration.ofDays(0), Duration.ofDays(10), 10L) -> 1L,
+      (Duration.ofHours(11), Duration.ofHours(0), Duration.ofHours(10), 10L) -> 11L,
+      (Duration.ofMinutes(1), Duration.ofMinutes(0), Duration.ofMinutes(60), 10L) -> 1L,
+      (Duration.ofSeconds(-30), Duration.ofSeconds(-59), Duration.ofSeconds(60), 10L) -> 3L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 6L,
+      (Duration.ofDays(0), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 11L,
+      (Duration.of(Long.MinValue, ChronoUnit.MICROS), Duration.of(Long.MinValue, ChronoUnit.MICROS),
+        Duration.ofDays(0), 10L) -> 1L,
+      (Duration.ofDays(-1), Duration.ofDays(0),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS), 10L) -> 0L
+    ).foreach { case ((v, s, e, n), expected) =>
+      checkEvaluation(WidthBucket(Literal(v), Literal(s), Literal(e), Literal(n)), expected)
+    }
+  }
+
+  test("SPARK-37388: width_bucket") {
+    val nullDouble = Literal.create(null, DoubleType)
+    val nullLong = Literal.create(null, LongType)
+
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, 5L), 3L)
+    checkEvaluation(WidthBucket(-2.1, 1.3, 3.4, 3L), 0L)
+    checkEvaluation(WidthBucket(8.1, 0.0, 5.7, 4L), 5L)
+    checkEvaluation(WidthBucket(-0.9, 5.2, 0.5, 2L), 3L)
+    checkEvaluation(WidthBucket(nullDouble, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, nullDouble, nullDouble, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, nullLong), null)
+    checkEvaluation(WidthBucket(nullDouble, nullDouble, nullDouble, nullLong), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, -5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, 10.06, Long.MaxValue), null)
+    checkEvaluation(WidthBucket(Double.NaN, 0.024, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(Double.NegativeInfinity, 0.024, 10.06, 5L), 0L)
+    checkEvaluation(WidthBucket(Double.PositiveInfinity, 0.024, 10.06, 5L), 6L)
+    checkEvaluation(WidthBucket(5.35, 0.024, 0.024, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NaN, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.NegativeInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, Double.PositiveInfinity, 10.06, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
+    checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
   }
 }

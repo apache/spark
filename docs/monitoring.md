@@ -477,7 +477,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
       A list of all stages for a given application.
         <br><code>?status=[active|complete|pending|failed]</code> list only stages in the given state.
         <br><code>?details=true</code> lists all stages with the task data.
-        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists stages only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>. This also supports multiple <code>taskStatus</code> such as <code>?details=true&taskStatus=SUCCESS&taskStatus=FAILED</code> which will return all tasks matching any of specified task status.
         <br><code>?withSummaries=true</code> lists stages with task metrics distribution and executor metrics distribution.
         <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
     </td>
@@ -487,7 +487,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>
       A list of all attempts for the given stage.
         <br><code>?details=true</code> lists all attempts with the task data for the given stage.
-        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>. This also supports multiple <code>taskStatus</code> such as <code>?details=true&taskStatus=SUCCESS&taskStatus=FAILED</code> which will return all tasks matching any of specified task status.
         <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution of each attempt.
         <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
       <br>Example:
@@ -502,7 +502,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>
       Details for the given stage attempt.
         <br><code>?details=true</code> lists all task data for the given stage attempt.
-        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>. This also supports multiple <code>taskStatus</code> such as <code>?details=true&taskStatus=SUCCESS&taskStatus=FAILED</code> which will return all tasks matching any of specified task status.
         <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution for the given stage attempt.
         <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
       <br>Example:

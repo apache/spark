@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
@@ -271,6 +272,16 @@ private[spark] object SchemaUtils {
       }
     }
     field._1
+  }
+
+  def restoreOriginalOutputNames(
+      projectList: Seq[NamedExpression],
+      originalNames: Seq[String]): Seq[NamedExpression] = {
+    projectList.zip(originalNames).map {
+      case (attr: Attribute, name) => attr.withName(name)
+      case (alias: Alias, name) => alias.withName(name)
+      case (other, _) => other
+    }
   }
 
   /**

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import scala.language.implicitConversions
 
@@ -102,6 +102,8 @@ package object dsl {
 
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
+    def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
+      new ILike(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
     def likeAll(others: Expression*): Expression =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
@@ -163,8 +165,11 @@ package object dsl {
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
+    implicit def timestampNTZToLiteral(l: LocalDateTime): Literal = Literal(l)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
+    implicit def periodToLiteral(p: Period): Literal = Literal(p)
+    implicit def durationToLiteral(d: Duration): Literal = Literal(d)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
       analysis.UnresolvedAttribute(s.name)
@@ -214,6 +219,11 @@ package object dsl {
       BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
       BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectList(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectList(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectSet(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectSet(e).toAggregateExpression(isDistinct = false, filter = filter)
+
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)

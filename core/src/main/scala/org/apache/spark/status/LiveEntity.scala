@@ -553,7 +553,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
   def toApi(): v1.RDDDataDistribution = {
     if (lastUpdate == null) {
       lastUpdate = new v1.RDDDataDistribution(
-        weakIntern(exec.hostPort),
+        weakIntern(if (exec.hostPort != null) exec.hostPort else exec.host),
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
         diskUsed,
@@ -908,7 +908,6 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
   var isActive = true
   var totalCores = 0
   val addTime = new Date(creationTime)
-  var removeTime: Date = null
   var processLogs = Map[String, String]()
 
   override protected def doUpdate(): Any = {
@@ -919,7 +918,7 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
       isActive,
       totalCores,
       addTime,
-      Option(removeTime),
+      None,
       processLogs)
     new ProcessSummaryWrapper(info)
   }

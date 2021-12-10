@@ -56,13 +56,9 @@ object ShufflePartitionsUtil extends Logging {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.flatMap(_.map(_.bytesByPartitionId.sum)).sum
-    // The max at here is to make sure that when we have an empty table, we only have a single
-    // coalesced partition.
-    // There is no particular reason that we pick 16. We just need a number to prevent
-    // `maxTargetSize` from being set to 0.
-    val maxTargetSize = math.max(
-      math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
+    val maxTargetSize = math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong
+    // It's meaningless to make target size smaller than minPartitionSize.
+    val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
@@ -320,7 +316,10 @@ object ShufflePartitionsUtil extends Logging {
    * start of a partition.
    */
   // Visible for testing
-  private[sql] def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+  private[sql] def splitSizeListByTargetSize(
+      sizes: Seq[Long],
+      targetSize: Long,
+      smallPartitionFactor: Double): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
@@ -333,8 +332,8 @@ object ShufflePartitionsUtil extends Logging {
       // the previous partition.
       val shouldMergePartitions = lastPartitionSize > -1 &&
         ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
-        (currentPartitionSize < targetSize * SMALL_PARTITION_FACTOR ||
-          lastPartitionSize < targetSize * SMALL_PARTITION_FACTOR))
+        (currentPartitionSize < targetSize * smallPartitionFactor ||
+          lastPartitionSize < targetSize * smallPartitionFactor))
       if (shouldMergePartitions) {
         // We decide to merge the current partition into the previous one, so the start index of
         // the current partition should be removed.
@@ -375,15 +374,18 @@ object ShufflePartitionsUtil extends Logging {
 
   /**
    * Splits the skewed partition based on the map size and the target partition size
-   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
+   * after split, and create a list of `PartialReducerPartitionSpec`. Returns None if can't split.
    */
   def createSkewPartitionSpecs(
       shuffleId: Int,
       reducerId: Int,
-      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+      targetSize: Long,
+      smallPartitionFactor: Double = SMALL_PARTITION_FACTOR)
+  : Option[Seq[PartialReducerPartitionSpec]] = {
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
     if (mapPartitionSizes.exists(_ < 0)) return None
-    val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
+    val mapStartIndices = splitSizeListByTargetSize(
+      mapPartitionSizes, targetSize, smallPartitionFactor)
     if (mapStartIndices.length > 1) {
       Some(mapStartIndices.indices.map { i =>
         val startMapIndex = mapStartIndices(i)

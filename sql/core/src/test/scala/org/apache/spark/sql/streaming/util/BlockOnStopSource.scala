@@ -20,8 +20,6 @@ package org.apache.spark.sql.streaming.util
 import java.util
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
-
 import org.apache.zookeeper.KeeperException.UnimplementedException
 
 import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
@@ -97,7 +95,7 @@ class BlockOnStopSourceTable(latch: CountDownLatch) extends Table with SupportsR
 
   override def name(): String = "blockingSource"
 
-  override def capabilities(): util.Set[TableCapability] = Set(CONTINUOUS_READ).asJava
+  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(CONTINUOUS_READ)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ScanBuilder {

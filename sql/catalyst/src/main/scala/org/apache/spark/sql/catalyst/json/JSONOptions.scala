@@ -89,14 +89,26 @@ private[sql] class JSONOptions(
   val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
+  val dateFormatInRead: Option[String] = parameters.get("dateFormat")
+  val dateFormatInWrite: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+  val timestampFormatInRead: Option[String] =
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      Some(parameters.getOrElse("timestampFormat",
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"))
+    } else {
+      parameters.get("timestampFormat")
+    }
+  val timestampFormatInWrite: String = parameters.getOrElse("timestampFormat",
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
+
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String =
+    parameters.getOrElse("timestampNTZFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -130,8 +142,9 @@ private[sql] class JSONOptions(
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Enables inferring of TimestampType from strings matched to the timestamp pattern
-   * defined by the timestampFormat option.
+   * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
+   * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
+   * respectively.
    */
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 

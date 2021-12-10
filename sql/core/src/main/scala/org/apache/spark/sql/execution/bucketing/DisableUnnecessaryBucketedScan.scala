@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.bucketing
 
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashClusteredDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashClusteredDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -120,7 +120,7 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
 
   private def hasInterestingPartition(plan: SparkPlan): Boolean = {
     plan.requiredChildDistribution.exists {
-      case _: ClusteredDistribution | _: HashClusteredDistribution => true
+      case _: ClusteredDistribution | _: HashClusteredDistribution | AllTuples => true
       case _ => false
     }
   }

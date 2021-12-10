@@ -58,6 +58,21 @@ case class MapInPandas(
 }
 
 /**
+ * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
+ * This is used by DataFrame.mapInArrow() in PySpark
+ */
+case class PythonMapInArrow(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+    copy(child = newChild)
+}
+
+/**
  * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
  * This is used by DataFrame.groupby().cogroup().apply().
  */
@@ -113,5 +128,22 @@ case class ArrowEvalPython(
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
+    copy(child = newChild)
+}
+
+/**
+ * A logical plan that adds a new long column with the name `name` that
+ * increases one by one. This is for 'distributed-sequence' default index
+ * in pandas API on Spark.
+ */
+case class AttachDistributedSequence(
+    sequenceAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
+
+  override val output: Seq[Attribute] = sequenceAttr +: child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): AttachDistributedSequence =
     copy(child = newChild)
 }

@@ -378,36 +378,44 @@ public class TransportConf {
    * Class name of the implementation of MergedShuffleFileManager that merges the blocks
    * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
    * a cluster level because this configuration is set to
-   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   * 'org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager'.
    * To turn on push-based shuffle at a cluster level, set the configuration to
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
-    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
-      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
+    return conf.get("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager");
   }
 
   /**
    * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
    * push-based shuffle.
-   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
-   * complete merged shuffle file in a single response increases the memory requirements for the
-   * clients. Instead of serving the entire merged file, the shuffle service serves the
-   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
-   * configuration controls how big a chunk can get. A corresponding index file for each merged
-   * shuffle file will be generated indicating chunk boundaries.
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete
+   * merged shuffle file in a single disk I/O increases the memory requirements for both the
+   * clients and the external shuffle service. Instead, the external shuffle service serves
+   * the merged file in MB-sized chunks. This configuration controls how big a chunk can get.
+   * A corresponding index file for each merged shuffle file will be generated indicating chunk
+   * boundaries.
+   *
+   * Setting this too high would increase the memory requirements on both the clients and the
+   * external shuffle service.
+   *
+   * Setting this too low would increase the overall number of RPC requests to external shuffle
+   * service unnecessarily.
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+      conf.get("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 
   /**
-   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
+   * The maximum size of cache in memory which is used in push-based shuffle for storing merged
+   * index files. This cache is in addition to the one configured via
+   * spark.shuffle.service.index.cache.size.
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+      conf.get("spark.shuffle.push.server.mergedIndexCacheSize", "100m"));
   }
 
   /**
@@ -417,13 +425,6 @@ public class TransportConf {
    * blocks for this shuffle partition.
    */
   public int ioExceptionsThresholdDuringMerge() {
-    return conf.getInt("spark.shuffle.server.ioExceptionsThresholdDuringMerge", 4);
-  }
-
-  /**
-   * The application attemptID assigned from Hadoop YARN.
-   */
-  public int appAttemptId() {
-    return conf.getInt("spark.app.attempt.id", -1);
+    return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
 }

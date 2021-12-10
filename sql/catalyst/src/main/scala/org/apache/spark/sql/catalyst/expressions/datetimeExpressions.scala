@@ -24,6 +24,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.SparkDateTimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -708,6 +709,19 @@ case class UnixSeconds(child: Expression) extends TimestampToLongBase {
     copy(child = newChild)
 }
 
+// Internal expression used to get the raw UTC timestamp in pandas API on Spark.
+// This is to work around casting timestamp_ntz to long disallowed by ANSI.
+case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase {
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampNTZType)
+
+  override def scaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "cast_timestamp_ntz_to_long"
+
+  override protected def withNewChildInternal(newChild: Expression): CastTimestampNTZToLong =
+    copy(child = newChild)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
@@ -1216,12 +1230,13 @@ abstract class ToTimestamp
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
               }
             } catch {
-              case e if isParseError(e) =>
-                if (failOnError) {
-                  throw e
-                } else {
-                  null
-                }
+              case e: DateTimeParseException if failOnError =>
+                throw QueryExecutionErrors.ansiDateTimeParseError(e)
+              case e: DateTimeException if failOnError =>
+                throw QueryExecutionErrors.ansiDateTimeError(e)
+              case e: ParseException if failOnError =>
+                throw QueryExecutionErrors.ansiParseError(e)
+              case e if isParseError(e) => null
             }
           }
       }
@@ -1230,7 +1245,11 @@ abstract class ToTimestamp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
-    val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    def parseErrorBranch(method: String): String = if (failOnError) {
+      s"throw QueryExecutionErrors.$method(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
     val parseMethod = if (forTimestampNTZ) {
       "parseWithoutTimeZone"
     } else {
@@ -1250,12 +1269,12 @@ abstract class ToTimestamp
           s"""
              |try {
              |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
-             |} catch (java.time.DateTimeException e) {
-             |  $parseErrorBranch
              |} catch (java.time.format.DateTimeParseException e) {
-             |  $parseErrorBranch
+             |  ${parseErrorBranch("ansiDateTimeParseError")}
+             |} catch (java.time.DateTimeException e) {
+             |  ${parseErrorBranch("ansiDateTimeError")}
              |} catch (java.text.ParseException e) {
-             |  $parseErrorBranch
+             |  ${parseErrorBranch("ansiParseError")}
              |}
              |""".stripMargin)
       }.getOrElse {
@@ -1273,11 +1292,11 @@ abstract class ToTimestamp
              |try {
              |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
              |} catch (java.time.format.DateTimeParseException e) {
-             |    $parseErrorBranch
+             |    ${parseErrorBranch("ansiDateTimeParseError")}
              |} catch (java.time.DateTimeException e) {
-             |    $parseErrorBranch
+             |    ${parseErrorBranch("ansiDateTimeError")}
              |} catch (java.text.ParseException e) {
-             |    $parseErrorBranch
+             |    ${parseErrorBranch("ansiParseError")}
              |}
              |""".stripMargin)
       }
@@ -1472,7 +1491,12 @@ case class NextDay(
       val sd = start.asInstanceOf[Int]
       DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
     } catch {
-      case _: IllegalArgumentException if !failOnError => null
+      case e: IllegalArgumentException =>
+        if (failOnError) {
+          throw QueryExecutionErrors.ansiIllegalArgumentError(e)
+        } else {
+          null
+        }
     }
   }
 
@@ -1483,21 +1507,19 @@ case class NextDay(
       dayOfWeekTerm: String,
       sd: String,
       dowS: String): String = {
-    if (failOnError) {
-      s"""
-       |int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
-       |${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-       |""".stripMargin
+    val failOnErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiIllegalArgumentError(e);"
     } else {
-      s"""
-       |try {
-       |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
-       |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-       |} catch (IllegalArgumentException e) {
-       |  ${ev.isNull} = true;
-       |}
-       |""".stripMargin
+      s"${ev.isNull} = true;"
     }
+    s"""
+     |try {
+     |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
+     |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
+     |} catch (IllegalArgumentException e) {
+     |  $failOnErrorBranch
+     |}
+     |""".stripMargin
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2333,13 +2355,18 @@ case class MakeDate(
       val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
       localDateToDays(ld)
     } catch {
-      case _: java.time.DateTimeException if !failOnError => null
+      case e: java.time.DateTimeException =>
+        if (failOnError) throw QueryExecutionErrors.ansiDateTimeError(e) else null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    val failOnErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeError(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
     nullSafeCodeGen(ctx, ev, (year, month, day) => {
       s"""
       try {
@@ -2494,8 +2521,9 @@ case class MakeTimestampLTZ(
       * day - the day-of-month to represent, from 1 to 31
       * hour - the hour-of-day to represent, from 0 to 23
       * min - the minute-of-hour to represent, from 0 to 59
-      * sec - the second-of-minute and its micro-fraction to represent, from
-              0 to 60. If the sec argument equals to 60, the seconds field is set
+      * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
+              The value can be either an integer like 13 , or a fraction like 13.123.
+              If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
   """,
@@ -2507,6 +2535,8 @@ case class MakeTimestampLTZ(
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
+       2019-06-30 23:59:01
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
@@ -2554,10 +2584,11 @@ case class MakeTimestamp(
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
-  // them to the fractional part of `sec`.
+  // them to the fractional part of `sec`. For accepts IntegerType as `sec` and integer can be
+  // casted into decimal safely, we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
-    timezone.map(_ => StringType)
+    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(16, 6)) ++
+      timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2575,8 +2606,6 @@ case class MakeTimestamp(
       assert(secAndMicros.scale == 6,
         s"Seconds fraction must have 6 digits for microseconds but got ${secAndMicros.scale}")
       val unscaledSecFrac = secAndMicros.toUnscaledLong
-      assert(secAndMicros.precision <= 8,
-        s"Seconds and fraction cannot have more than 8 digits but got ${secAndMicros.precision}")
       val totalMicros = unscaledSecFrac.toInt // 8 digits cannot overflow Int
       val seconds = Math.floorDiv(totalMicros, MICROS_PER_SECOND.toInt)
       val nanos = Math.floorMod(totalMicros, MICROS_PER_SECOND.toInt) * NANOS_PER_MICROS.toInt
@@ -2585,7 +2614,7 @@ case class MakeTimestamp(
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
           LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1)
         } else {
-          throw QueryExecutionErrors.invalidFractionOfSecondError
+          throw QueryExecutionErrors.invalidFractionOfSecondError()
         }
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
@@ -2596,7 +2625,10 @@ case class MakeTimestamp(
         localDateTimeToMicros(ldt)
       }
     } catch {
-      case _: DateTimeException if !failOnError => null
+      case e: SparkDateTimeException if failOnError => throw e
+      case e: DateTimeException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeError(e)
+      case _: DateTimeException => null
     }
   }
 
@@ -2625,7 +2657,12 @@ case class MakeTimestamp(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
-    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    val failOnErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeError(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
+    val failOnSparkErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       val toMicrosCode = if (dataType == TimestampType) {
@@ -2654,6 +2691,8 @@ case class MakeTimestamp(
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
         }
         $toMicrosCode
+      } catch (org.apache.spark.SparkDateTimeException e) {
+        $failOnSparkErrorBranch
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
@@ -2712,7 +2751,7 @@ object DatePart {
         throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
 
       source.dataType match {
-        case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType =>
+        case _: AnsiIntervalType | CalendarIntervalType =>
           ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
         case _ =>
           DatePart.parseExtractField(fieldStr, source, analysisException)
@@ -2964,4 +3003,57 @@ case class SubtractDates(
 
 object SubtractDates {
   def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  arguments = """
+    Arguments:
+      * sourceTz - the time zone for the input timestamp
+      * targetTz - the time zone to which the input timestamp should be converted
+      * sourceTs - a timestamp without time zone
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+       2021-12-05 15:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class ConvertTimezone(
+    sourceTz: Expression,
+    targetTz: Expression,
+    sourceTs: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def first: Expression = sourceTz
+  override def second: Expression = targetTz
+  override def third: Expression = sourceTs
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
+  override def dataType: DataType = TimestampNTZType
+
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
+    DateTimeUtils.convertTimestampNtzToAnotherTz(
+      srcTz.asInstanceOf[UTF8String].toString,
+      tgtTz.asInstanceOf[UTF8String].toString,
+      micros.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+  }
+
+  override def prettyName: String = "convert_timezone"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ConvertTimezone = {
+    copy(sourceTz = newFirst, targetTz = newSecond, sourceTs = newThird)
+  }
 }

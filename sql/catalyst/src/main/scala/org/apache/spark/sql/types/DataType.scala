@@ -292,7 +292,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -425,6 +425,32 @@ object DataType {
             }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Returns true if the two data types have the same field names in order recursively.
+   */
+  def equalsStructurallyByName(
+      from: DataType,
+      to: DataType,
+      resolver: Resolver): Boolean = {
+    (from, to) match {
+      case (left: ArrayType, right: ArrayType) =>
+        equalsStructurallyByName(left.elementType, right.elementType, resolver)
+
+      case (left: MapType, right: MapType) =>
+        equalsStructurallyByName(left.keyType, right.keyType, resolver) &&
+          equalsStructurallyByName(left.valueType, right.valueType, resolver)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields)
+            .forall { case (l, r) =>
+              resolver(l.name, r.name) && equalsStructurallyByName(l.dataType, r.dataType, resolver)
+            }
+
+      case _ => true
     }
   }
 

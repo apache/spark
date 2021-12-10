@@ -1,0 +1,44 @@
+================================================================================================
+Pseudo random
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+nextInt:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java.util.Random                                   1408           1413           7         71.0          14.1       1.0X
+XORShiftRandom                                      233            235           1        428.7           2.3       6.0X
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+nextLong:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java.util.Random                                   2680           2700          30         37.3          26.8       1.0X
+XORShiftRandom                                      674            680           6        148.4           6.7       4.0X
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+nextDouble:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java.util.Random                                   2731           2745          23         36.6          27.3       1.0X
+XORShiftRandom                                      627            633           7        159.6           6.3       4.4X
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+nextGaussian:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java.util.Random                                   8460           8470          11         11.8          84.6       1.0X
+XORShiftRandom                                     4751           4812          72         21.0          47.5       1.8X
+
+
+================================================================================================
+hash seed
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Hash seed:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+XORShiftRandom.hashSeed                               1              1           0      10814.2           0.1       1.0X
+
+

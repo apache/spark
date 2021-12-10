@@ -495,60 +495,60 @@ Aggregate Attributes [3]: [sum(sales#16)#118, sum(returns#36)#119, sum(profit#37
 Results [5]: [channel#34, id#35, cast(sum(sales#16)#118 as decimal(37,2)) AS sales#121, cast(sum(returns#36)#119 as decimal(37,2)) AS returns#122, cast(sum(profit#37)#120 as decimal(38,2)) AS profit#123]
 
 (84) ReusedExchange [Reuses operator id: 82]
-Output [8]: [channel#34, id#35, sum#124, isEmpty#125, sum#126, isEmpty#127, sum#128, isEmpty#129]
+Output [8]: [channel#34, id#35, sum#111, isEmpty#112, sum#113, isEmpty#114, sum#115, isEmpty#116]
 
 (85) HashAggregate [codegen id : 48]
-Input [8]: [channel#34, id#35, sum#124, isEmpty#125, sum#126, isEmpty#127, sum#128, isEmpty#129]
+Input [8]: [channel#34, id#35, sum#111, isEmpty#112, sum#113, isEmpty#114, sum#115, isEmpty#116]
 Keys [2]: [channel#34, id#35]
 Functions [3]: [sum(sales#16), sum(returns#36), sum(profit#37)]
-Aggregate Attributes [3]: [sum(sales#16)#130, sum(returns#36)#131, sum(profit#37)#132]
-Results [4]: [channel#34, sum(sales#16)#130 AS sales#133, sum(returns#36)#131 AS returns#134, sum(profit#37)#132 AS profit#135]
+Aggregate Attributes [3]: [sum(sales#16)#118, sum(returns#36)#119, sum(profit#37)#120]
+Results [4]: [channel#34, sum(sales#16)#118 AS sales#124, sum(returns#36)#119 AS returns#125, sum(profit#37)#120 AS profit#126]
 
 (86) HashAggregate [codegen id : 48]
-Input [4]: [channel#34, sales#133, returns#134, profit#135]
+Input [4]: [channel#34, sales#124, returns#125, profit#126]
 Keys [1]: [channel#34]
-Functions [3]: [partial_sum(sales#133), partial_sum(returns#134), partial_sum(profit#135)]
-Aggregate Attributes [6]: [sum#136, isEmpty#137, sum#138, isEmpty#139, sum#140, isEmpty#141]
-Results [7]: [channel#34, sum#142, isEmpty#143, sum#144, isEmpty#145, sum#146, isEmpty#147]
+Functions [3]: [partial_sum(sales#124), partial_sum(returns#125), partial_sum(profit#126)]
+Aggregate Attributes [6]: [sum#127, isEmpty#128, sum#129, isEmpty#130, sum#131, isEmpty#132]
+Results [7]: [channel#34, sum#133, isEmpty#134, sum#135, isEmpty#136, sum#137, isEmpty#138]
 
 (87) Exchange
-Input [7]: [channel#34, sum#142, isEmpty#143, sum#144, isEmpty#145, sum#146, isEmpty#147]
-Arguments: hashpartitioning(channel#34, 5), ENSURE_REQUIREMENTS, [id=#148]
+Input [7]: [channel#34, sum#133, isEmpty#134, sum#135, isEmpty#136, sum#137, isEmpty#138]
+Arguments: hashpartitioning(channel#34, 5), ENSURE_REQUIREMENTS, [id=#139]
 
 (88) HashAggregate [codegen id : 49]
-Input [7]: [channel#34, sum#142, isEmpty#143, sum#144, isEmpty#145, sum#146, isEmpty#147]
+Input [7]: [channel#34, sum#133, isEmpty#134, sum#135, isEmpty#136, sum#137, isEmpty#138]
 Keys [1]: [channel#34]
-Functions [3]: [sum(sales#133), sum(returns#134), sum(profit#135)]
-Aggregate Attributes [3]: [sum(sales#133)#149, sum(returns#134)#150, sum(profit#135)#151]
-Results [5]: [channel#34, null AS id#152, sum(sales#133)#149 AS sales#153, sum(returns#134)#150 AS returns#154, sum(profit#135)#151 AS profit#155]
+Functions [3]: [sum(sales#124), sum(returns#125), sum(profit#126)]
+Aggregate Attributes [3]: [sum(sales#124)#140, sum(returns#125)#141, sum(profit#126)#142]
+Results [5]: [channel#34, null AS id#143, sum(sales#124)#140 AS sales#144, sum(returns#125)#141 AS returns#145, sum(profit#126)#142 AS profit#146]
 
 (89) ReusedExchange [Reuses operator id: 82]
-Output [8]: [channel#34, id#35, sum#156, isEmpty#157, sum#158, isEmpty#159, sum#160, isEmpty#161]
+Output [8]: [channel#34, id#35, sum#111, isEmpty#112, sum#113, isEmpty#114, sum#115, isEmpty#116]
 
 (90) HashAggregate [codegen id : 73]
-Input [8]: [channel#34, id#35, sum#156, isEmpty#157, sum#158, isEmpty#159, sum#160, isEmpty#161]
+Input [8]: [channel#34, id#35, sum#111, isEmpty#112, sum#113, isEmpty#114, sum#115, isEmpty#116]
 Keys [2]: [channel#34, id#35]
 Functions [3]: [sum(sales#16), sum(returns#36), sum(profit#37)]
-Aggregate Attributes [3]: [sum(sales#16)#162, sum(returns#36)#163, sum(profit#37)#164]
-Results [3]: [sum(sales#16)#162 AS sales#133, sum(returns#36)#163 AS returns#134, sum(profit#37)#164 AS profit#135]
+Aggregate Attributes [3]: [sum(sales#16)#118, sum(returns#36)#119, sum(profit#37)#120]
+Results [3]: [sum(sales#16)#118 AS sales#124, sum(returns#36)#119 AS returns#125, sum(profit#37)#120 AS profit#126]
 
 (91) HashAggregate [codegen id : 73]
-Input [3]: [sales#133, returns#134, profit#135]
+Input [3]: [sales#124, returns#125, profit#126]
 Keys: []
-Functions [3]: [partial_sum(sales#133), partial_sum(returns#134), partial_sum(profit#135)]
-Aggregate Attributes [6]: [sum#165, isEmpty#166, sum#167, isEmpty#168, sum#169, isEmpty#170]
-Results [6]: [sum#171, isEmpty#172, sum#173, isEmpty#174, sum#175, isEmpty#176]
+Functions [3]: [partial_sum(sales#124), partial_sum(returns#125), partial_sum(profit#126)]
+Aggregate Attributes [6]: [sum#147, isEmpty#148, sum#149, isEmpty#150, sum#151, isEmpty#152]
+Results [6]: [sum#153, isEmpty#154, sum#155, isEmpty#156, sum#157, isEmpty#158]
 
 (92) Exchange
-Input [6]: [sum#171, isEmpty#172, sum#173, isEmpty#174, sum#175, isEmpty#176]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#177]
+Input [6]: [sum#153, isEmpty#154, sum#155, isEmpty#156, sum#157, isEmpty#158]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#159]
 
 (93) HashAggregate [codegen id : 74]
-Input [6]: [sum#171, isEmpty#172, sum#173, isEmpty#174, sum#175, isEmpty#176]
+Input [6]: [sum#153, isEmpty#154, sum#155, isEmpty#156, sum#157, isEmpty#158]
 Keys: []
-Functions [3]: [sum(sales#133), sum(returns#134), sum(profit#135)]
-Aggregate Attributes [3]: [sum(sales#133)#178, sum(returns#134)#179, sum(profit#135)#180]
-Results [5]: [null AS channel#181, null AS id#182, sum(sales#133)#178 AS sales#183, sum(returns#134)#179 AS returns#184, sum(profit#135)#180 AS profit#185]
+Functions [3]: [sum(sales#124), sum(returns#125), sum(profit#126)]
+Aggregate Attributes [3]: [sum(sales#124)#160, sum(returns#125)#161, sum(profit#126)#162]
+Results [5]: [null AS channel#163, null AS id#164, sum(sales#124)#160 AS sales#165, sum(returns#125)#161 AS returns#166, sum(profit#126)#162 AS profit#167]
 
 (94) Union
 
@@ -561,7 +561,7 @@ Results [5]: [channel#34, id#35, sales#121, returns#122, profit#123]
 
 (96) Exchange
 Input [5]: [channel#34, id#35, sales#121, returns#122, profit#123]
-Arguments: hashpartitioning(channel#34, id#35, sales#121, returns#122, profit#123, 5), ENSURE_REQUIREMENTS, [id=#186]
+Arguments: hashpartitioning(channel#34, id#35, sales#121, returns#122, profit#123, 5), ENSURE_REQUIREMENTS, [id=#168]
 
 (97) HashAggregate [codegen id : 76]
 Input [5]: [channel#34, id#35, sales#121, returns#122, profit#123]
@@ -585,26 +585,26 @@ BroadcastExchange (103)
 
 
 (99) Scan parquet default.date_dim
-Output [2]: [d_date_sk#6, d_date#187]
+Output [2]: [d_date_sk#6, d_date#169]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1998-08-04), LessThanOrEqual(d_date,1998-09-03), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (100) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#6, d_date#187]
+Input [2]: [d_date_sk#6, d_date#169]
 
 (101) Filter [codegen id : 1]
-Input [2]: [d_date_sk#6, d_date#187]
-Condition : (((isnotnull(d_date#187) AND (d_date#187 >= 1998-08-04)) AND (d_date#187 <= 1998-09-03)) AND isnotnull(d_date_sk#6))
+Input [2]: [d_date_sk#6, d_date#169]
+Condition : (((isnotnull(d_date#169) AND (d_date#169 >= 1998-08-04)) AND (d_date#169 <= 1998-09-03)) AND isnotnull(d_date_sk#6))
 
 (102) Project [codegen id : 1]
 Output [1]: [d_date_sk#6]
-Input [2]: [d_date_sk#6, d_date#187]
+Input [2]: [d_date_sk#6, d_date#169]
 
 (103) BroadcastExchange
 Input [1]: [d_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#188]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#170]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = sr_returned_date_sk#21 IN dynamicpruning#5
 

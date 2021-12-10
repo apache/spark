@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -149,13 +149,17 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+    val conf = newExecutorConf()
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
       defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
     assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
-    LABELS.foreach { case (k, v) =>
+    val DEFAULT_LABELS = Map(
+      SPARK_APP_NAME_LABEL-> KubernetesConf.getAppNameLabel(conf.appName)
+    )
+    (LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
       assert(executor.pod.getMetadata.getLabels.get(k) === v)
     }
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
@@ -455,9 +459,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_MEMORY -> "1024m",
       ENV_APPLICATION_ID -> KubernetesTestConf.APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null,
       ENV_SPARK_USER -> Utils.getCurrentUserName(),
-      ENV_RESOURCE_PROFILE_ID -> "0")
+      ENV_RESOURCE_PROFILE_ID -> "0",
+      // These are populated by K8s on scheduling
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_POD_NAME -> null)
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
     val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)

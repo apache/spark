@@ -96,7 +96,7 @@ function formatLogsCells(execLogs, type) {
 }
 
 function getStandAloneAppId(cb) {
-  var words = document.baseURI.split('/');
+  var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   var appId;
   if (ind > 0) {
@@ -148,7 +148,7 @@ function ConvertDurationString(data) {
 }
 
 function createTemplateURI(appId, templateName) {
-  var words = document.baseURI.split('/');
+  var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   var baseURI;
   if (ind > 0) {
@@ -183,7 +183,7 @@ function formatDate(date) {
 }
 
 function createRESTEndPointForExecutorsPage(appId) {
-  var words = document.baseURI.split('/');
+  var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   var newBaseURI;
   if (ind > 0) {
@@ -206,7 +206,7 @@ function createRESTEndPointForExecutorsPage(appId) {
 }
 
 function createRESTEndPointForMiscellaneousProcess(appId) {
-  var words = document.baseURI.split('/');
+  var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   var newBaseURI;
   if (ind > 0) {
@@ -226,5 +226,9 @@ function createRESTEndPointForMiscellaneousProcess(appId) {
     }
   }
   return uiRoot + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
+}
+
+function getBaseURI() {
+  return document.baseURI || document.URL;
 }
 /* eslint-enable no-unused-vars */

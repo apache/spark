@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -46,7 +47,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     kubernetesClient: KubernetesClient,
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    podAllocator: ExecutorPodsAllocator,
+    podAllocator: AbstractPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
@@ -97,10 +98,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
+    // Must be called before setting the executors
+    podAllocator.start(applicationId(), this)
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleEventHandler.start(this)
-    podAllocator.start(applicationId(), this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
@@ -144,13 +146,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
     if (shouldDeleteExecutors) {
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
-      }
+
+      podAllocator.stop(applicationId())
+
       if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
         Utils.tryLogNonFatalError {
           kubernetesClient
@@ -278,6 +276,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     new KubernetesDriverEndpoint()
   }
 
+  val execId = new AtomicInteger(0)
+
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
@@ -287,12 +287,33 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+    private def generateExecID(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case x: GenerateExecID =>
+        val newId = execId.incrementAndGet().toString
+        context.reply(newId)
+        // Generally this should complete quickly but safer to not block in-case we're in the
+        // middle of an etcd fail over or otherwise slower writes.
+        val labelTask = new Runnable() {
+          override def run(): Unit = Utils.tryLogNonFatalError {
+            // Label the pod with it's exec ID
+            kubernetesClient.pods()
+              .withName(x.podName)
+              .edit({p: Pod => new PodBuilder(p).editMetadata()
+                .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId.toString)
+                .endMetadata()
+                .build()})
+          }
+        }
+        executorService.execute(labelTask)
+    }
     private def ignoreRegisterExecutorAtStoppedContext: PartialFunction[Any, Unit] = {
       case _: RegisterExecutor if sc.isStopped => // No-op
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] =
-      ignoreRegisterExecutorAtStoppedContext.orElse(super.receiveAndReply(context))
+      generateExecID(context).orElse(
+        ignoreRegisterExecutorAtStoppedContext.orElse(
+          super.receiveAndReply(context)))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to

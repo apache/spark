@@ -66,7 +66,7 @@ The system currently supports several cluster managers:
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications. (Deprecated)
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
+* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2 and 3.
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.
 

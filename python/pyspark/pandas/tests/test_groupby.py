@@ -30,7 +30,7 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
 )
-from pyspark.pandas.groupby import is_multi_agg_with_relabel
+from pyspark.pandas.groupby import is_multi_agg_with_relabel, SeriesGroupBy
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -212,11 +212,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psdf.groupby((10, "a"))[(20, "c")].sum().sort_index(), expected)
 
-        if (
-            LooseVersion(pd.__version__) >= LooseVersion("1.0.4")
-            and LooseVersion(pd.__version__) != LooseVersion("1.1.3")
-            and LooseVersion(pd.__version__) != LooseVersion("1.1.4")
-        ):
+        if LooseVersion(pd.__version__) != LooseVersion("1.1.3") and LooseVersion(
+            pd.__version__
+        ) != LooseVersion("1.1.4"):
             self.assert_eq(
                 psdf[(20, "c")].groupby(psdf[(10, "a")]).sum().sort_index(),
                 pdf[(20, "c")].groupby(pdf[(10, "a")]).sum().sort_index(),
@@ -512,7 +510,6 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             sorted_agg_pdf = pdf.groupby(("X", "A")).agg(aggfunc).sort_index()
             self.assert_eq(sorted_agg_psdf, sorted_agg_pdf)
 
-    @unittest.skipIf(pd.__version__ < "0.25.0", "not supported before pandas 0.25.0")
     def test_aggregate_relabel(self):
         # this is to test named aggregation in groupby
         pdf = pd.DataFrame({"group": ["a", "a", "b", "b"], "A": [0, 1, 2, 3], "B": [5, 6, 7, 8]})
@@ -743,7 +740,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             # 1. Check that non-percentile columns are equal.
             agg_cols = [col.name for col in psdf.groupby("a")._agg_columns]
             self.assert_eq(
-                describe_psdf.drop(list(product(agg_cols, formatted_percentiles))),
+                describe_psdf.drop(columns=list(product(agg_cols, formatted_percentiles))),
                 describe_pdf.drop(columns=formatted_percentiles, level=1),
                 check_exact=False,
             )
@@ -753,7 +750,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             quantile_pdf = pdf.groupby("a").quantile(percentiles, interpolation="nearest")
             quantile_pdf = quantile_pdf.unstack(level=1).astype(float)
             self.assert_eq(
-                describe_psdf.drop(list(product(agg_cols, non_percentile_stats))),
+                describe_psdf.drop(columns=list(product(agg_cols, non_percentile_stats))),
                 quantile_pdf.rename(columns="{:.0%}".format, level=1),
             )
 
@@ -780,7 +777,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         agg_column_labels = [col._column_label for col in psdf.groupby(("x", "a"))._agg_columns]
         self.assert_eq(
             describe_psdf.drop(
-                [
+                columns=[
                     tuple(list(label) + [s])
                     for label, s in product(agg_column_labels, formatted_percentiles)
                 ]
@@ -796,7 +793,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(
             describe_psdf.drop(
-                [
+                columns=[
                     tuple(list(label) + [s])
                     for label, s in product(agg_column_labels, non_percentile_stats)
                 ]
@@ -809,26 +806,16 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         pdf.columns = pd.MultiIndex.from_tuples([("y", "A"), ("y", "B"), ("x", "group")])
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            agg_pdf = pd.DataFrame(
-                {"a_max": [1, 3]}, index=pd.Index(["a", "b"], name=("x", "group"))
-            )
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            agg_pdf = pdf.groupby(("x", "group")).agg(a_max=(("y", "A"), "max")).sort_index()
+        agg_pdf = pdf.groupby(("x", "group")).agg(a_max=(("y", "A"), "max")).sort_index()
         agg_psdf = psdf.groupby(("x", "group")).agg(a_max=(("y", "A"), "max")).sort_index()
         self.assert_eq(agg_pdf, agg_psdf)
 
         # same column, different methods
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            agg_pdf = pd.DataFrame(
-                {"a_max": [1, 3], "a_min": [0, 2]}, index=pd.Index(["a", "b"], name=("x", "group"))
-            )
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            agg_pdf = (
-                pdf.groupby(("x", "group"))
-                .agg(a_max=(("y", "A"), "max"), a_min=(("y", "A"), "min"))
-                .sort_index()
-            )
+        agg_pdf = (
+            pdf.groupby(("x", "group"))
+            .agg(a_max=(("y", "A"), "max"), a_min=(("y", "A"), "min"))
+            .sort_index()
+        )
         agg_psdf = (
             psdf.groupby(("x", "group"))
             .agg(a_max=(("y", "A"), "max"), a_min=(("y", "A"), "min"))
@@ -837,16 +824,11 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(agg_pdf, agg_psdf)
 
         # different column, different methods
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            agg_pdf = pd.DataFrame(
-                {"a_max": [6, 8], "a_min": [0, 2]}, index=pd.Index(["a", "b"], name=("x", "group"))
-            )
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            agg_pdf = (
-                pdf.groupby(("x", "group"))
-                .agg(a_max=(("y", "B"), "max"), a_min=(("y", "A"), "min"))
-                .sort_index()
-            )
+        agg_pdf = (
+            pdf.groupby(("x", "group"))
+            .agg(a_max=(("y", "B"), "max"), a_min=(("y", "A"), "min"))
+            .sort_index()
+        )
         agg_psdf = (
             psdf.groupby(("x", "group"))
             .agg(a_max=(("y", "B"), "max"), a_min=(("y", "A"), "min"))
@@ -1721,23 +1703,13 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) <= LooseVersion("0.24.2"):
-            self.assert_eq(
-                psdf.groupby("A").ffill().sort_index(),
-                pdf.groupby("A").ffill().sort_index().drop("A", 1),
-            )
-            self.assert_eq(
-                psdf.groupby("A")[["B"]].ffill().sort_index(),
-                pdf.groupby("A")[["B"]].ffill().sort_index().drop("A", 1),
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby("A").ffill().sort_index(), pdf.groupby("A").ffill().sort_index()
-            )
-            self.assert_eq(
-                psdf.groupby("A")[["B"]].ffill().sort_index(),
-                pdf.groupby("A")[["B"]].ffill().sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby("A").ffill().sort_index(), pdf.groupby("A").ffill().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby("A")[["B"]].ffill().sort_index(),
+            pdf.groupby("A")[["B"]].ffill().sort_index(),
+        )
         self.assert_eq(
             psdf.groupby("A")["B"].ffill().sort_index(), pdf.groupby("A")["B"].ffill().sort_index()
         )
@@ -1750,16 +1722,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        if LooseVersion(pd.__version__) <= LooseVersion("0.24.2"):
-            self.assert_eq(
-                psdf.groupby(("X", "A")).ffill().sort_index(),
-                pdf.groupby(("X", "A")).ffill().sort_index().drop(("X", "A"), 1),
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby(("X", "A")).ffill().sort_index(),
-                pdf.groupby(("X", "A")).ffill().sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby(("X", "A")).ffill().sort_index(),
+            pdf.groupby(("X", "A")).ffill().sort_index(),
+        )
 
     def test_bfill(self):
         idx = np.random.rand(4 * 3)
@@ -1774,23 +1740,13 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) <= LooseVersion("0.24.2"):
-            self.assert_eq(
-                psdf.groupby("A").bfill().sort_index(),
-                pdf.groupby("A").bfill().sort_index().drop("A", 1),
-            )
-            self.assert_eq(
-                psdf.groupby("A")[["B"]].bfill().sort_index(),
-                pdf.groupby("A")[["B"]].bfill().sort_index().drop("A", 1),
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby("A").bfill().sort_index(), pdf.groupby("A").bfill().sort_index()
-            )
-            self.assert_eq(
-                psdf.groupby("A")[["B"]].bfill().sort_index(),
-                pdf.groupby("A")[["B"]].bfill().sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby("A").bfill().sort_index(), pdf.groupby("A").bfill().sort_index()
+        )
+        self.assert_eq(
+            psdf.groupby("A")[["B"]].bfill().sort_index(),
+            pdf.groupby("A")[["B"]].bfill().sort_index(),
+        )
         self.assert_eq(
             psdf.groupby("A")["B"].bfill().sort_index(),
             pdf.groupby("A")["B"].bfill().sort_index(),
@@ -1804,18 +1760,11 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        if LooseVersion(pd.__version__) <= LooseVersion("0.24.2"):
-            self.assert_eq(
-                psdf.groupby(("X", "A")).bfill().sort_index(),
-                pdf.groupby(("X", "A")).bfill().sort_index().drop(("X", "A"), 1),
-            )
-        else:
-            self.assert_eq(
-                psdf.groupby(("X", "A")).bfill().sort_index(),
-                pdf.groupby(("X", "A")).bfill().sort_index(),
-            )
+        self.assert_eq(
+            psdf.groupby(("X", "A")).bfill().sort_index(),
+            pdf.groupby(("X", "A")).bfill().sort_index(),
+        )
 
-    @unittest.skipIf(pd.__version__ < "0.24.0", "not supported before pandas 0.24.0")
     def test_shift(self):
         pdf = pd.DataFrame(
             {
@@ -1849,13 +1798,6 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby(psdf.b // 5)["a"].shift().sort_index(),
             pdf.groupby(pdf.b // 5)["a"].shift().sort_index(),
         )
-        # TODO: known pandas' bug when fill_value is not None pandas>=1.0.0
-        # https://github.com/pandas-dev/pandas/issues/31971#issue-565171762
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            self.assert_eq(
-                psdf.groupby(["b"])[["a", "c"]].shift(periods=-1, fill_value=0).sort_index(),
-                pdf.groupby(["b"])[["a", "c"]].shift(periods=-1, fill_value=0).sort_index(),
-            )
         self.assert_eq(
             psdf.a.rename().groupby(psdf.b).shift().sort_index(),
             pdf.a.rename().groupby(pdf.b).shift().sort_index(),
@@ -1987,6 +1929,35 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with option_context("compute.shortcut_limit", 0):
             self.test_apply()
 
+    def test_apply_with_type_hint(self):
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def add_max1(x) -> ps.DataFrame[int, int, int]:
+            return x + x.min()
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.groupby("b").apply(add_max1).sort_index()
+        expected = pdf.groupby("b").apply(add_max1).sort_index()
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+        self.assert_eq(sorted(actual["c2"].to_numpy()), sorted(expected["c"].to_numpy()))
+
+        def add_max2(
+            x,
+        ) -> ps.DataFrame[slice("a", int), slice("b", int), slice("c", int)]:  # noqa: F405
+            return x + x.min()
+
+        actual = psdf.groupby("b").apply(add_max2).sort_index()
+        expected = pdf.groupby("b").apply(add_max2).sort_index()
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+        self.assert_eq(sorted(actual["c"].to_numpy()), sorted(expected["c"].to_numpy()))
+
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
             return pd.Series([1])
@@ -2085,6 +2056,58 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         self.assert_eq(acc.value, 4)
 
+    def test_apply_return_series(self):
+        # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
+            columns=["a", "b", "c"],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            psdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby("b").apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
+            pdf.groupby("b").apply(lambda x: x["a"]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby(["b", "c"]).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
+            pdf.groupby(["b", "c"]).apply(lambda x: x["a"]).sort_index(),
+        )
+
+        # multi-index columns
+        columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
+        pdf.columns = columns
+        psdf.columns = columns
+
+        self.assert_eq(
+            psdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby(("x", "b")).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
+            pdf.groupby(("x", "b")).apply(lambda x: x[("x", "a")]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x.iloc[0]).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
+            pdf.groupby([("x", "b"), ("y", "c")]).apply(lambda x: x[("x", "a")]).sort_index(),
+        )
+
+    def test_apply_return_series_without_shortcut(self):
+        # SPARK-36907: Fix DataFrameGroupBy.apply without shortcut.
+        with ps.option_context("compute.shortcut_limit", 2):
+            self.test_apply_return_series()
+
     def test_transform(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1, 1, 2, 3, 5, 8], "c": [1, 4, 9, 16, 25, 36]},
@@ -2135,6 +2158,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.a.rename().groupby(psdf.b.rename()).transform(lambda x: x + x.min()).sort_index(),
             pdf.a.rename().groupby(pdf.b.rename()).transform(lambda x: x + x.min()).sort_index(),
         )
+        with self.assertRaisesRegex(TypeError, "str object is not callable"):
+            psdf.groupby("a").transform("sum")
+
+        def udf(col) -> int:
+            return col + 10
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Expected the return type of this function to be of Series type, "
+            "but found type ScalarType\\[LongType\\]",
+        ):
+            psdf.groupby("a").transform(udf)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c")])
@@ -2853,6 +2888,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
                 check_exact=False,
             )
+
+    def test_getitem(self):
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 1, 1, 1, 2, 2, 2, 3, 3, 3] * 3,
+                "b": [2, 3, 1, 4, 6, 9, 8, 10, 7, 5] * 3,
+                "c": [3, 5, 2, 5, 1, 2, 6, 4, 3, 6] * 3,
+            },
+            index=np.random.rand(10 * 3),
+        )
+
+        self.assertTrue(isinstance(psdf.groupby("a")["b"], SeriesGroupBy))
 
 
 if __name__ == "__main__":

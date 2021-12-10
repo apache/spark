@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
@@ -31,6 +31,7 @@ import org.apache.spark.util.Utils
  * alternative approach to register UDTs for user classes.
  */
 @DeveloperApi
+@Since("3.2.0")
 object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */

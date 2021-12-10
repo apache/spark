@@ -354,11 +354,11 @@ class FileScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
     ("ParquetScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, pf, df),
+        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, None, pf, df),
       Seq.empty),
     ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, f, pf, df),
+        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, None, f, pf, df),
       Seq.empty),
     ("CSVScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => CSVScan(s, fi, ds, rds, rps, o, f, pf, df),
@@ -367,7 +367,7 @@ class FileScanSuite extends FileScanSuiteBase {
       (s, fi, ds, rds, rps, f, o, pf, df) => JsonScan(s, fi, ds, rds, rps, o, f, pf, df),
       Seq.empty),
     ("TextScan",
-      (s, fi, _, rds, rps, _, o, pf, df) => TextScan(s, fi, rds, rps, o, pf, df),
+      (s, fi, ds, rds, rps, _, o, pf, df) => TextScan(s, fi, ds, rds, rps, o, pf, df),
       Seq("dataSchema", "pushedFilters")))
 
   run(scanBuilders)

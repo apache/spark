@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Aggregation;
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to

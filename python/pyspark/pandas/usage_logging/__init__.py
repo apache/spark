@@ -25,7 +25,7 @@ from typing import Union
 
 import pandas as pd
 
-from pyspark.pandas import config, namespace, sql_processor
+from pyspark.pandas import config, namespace, sql_formatter
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.datetimes import DatetimeMethods
@@ -41,7 +41,6 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -114,8 +113,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     except ImportError:
         pass
 
-    sql_processor._CAPTURE_SCOPES = 3  # type: ignore
-    modules.append(sql_processor)  # type: ignore
+    sql_formatter._CAPTURE_SCOPES = 4
+    modules.append(sql_formatter)
 
     # Modules
     for target_module in modules:
@@ -157,7 +156,6 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.Series, MissingPandasLikeSeries),
         (pd.Index, MissingPandasLikeIndex),
         (pd.MultiIndex, MissingPandasLikeMultiIndex),
-        (pd.CategoricalIndex, MissingPandasLikeCategoricalIndex),
         (pd.DatetimeIndex, MissingPandasLikeDatetimeIndex),
         (pd.core.groupby.DataFrameGroupBy, MissingPandasLikeDataFrameGroupBy),
         (pd.core.groupby.SeriesGroupBy, MissingPandasLikeSeriesGroupBy),

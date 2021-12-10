@@ -19,19 +19,14 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
-import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY;
-import static org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS;
-
 /**
- * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
- * supported.
+ * A column vector backed by Apache Arrow.
  */
 public final class ArrowColumnVector extends ColumnVector {
 
@@ -160,6 +155,8 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new DateAccessor((DateDayVector) vector);
     } else if (vector instanceof TimeStampMicroTZVector) {
       accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
+    } else if (vector instanceof TimeStampMicroVector) {
+      accessor = new TimestampNTZAccessor((TimeStampMicroVector) vector);
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new MapAccessor(mapVector);
@@ -178,8 +175,8 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new NullAccessor((NullVector) vector);
     } else if (vector instanceof IntervalYearVector) {
       accessor = new IntervalYearAccessor((IntervalYearVector) vector);
-    } else if (vector instanceof IntervalDayVector) {
-      accessor = new IntervalDayAccessor((IntervalDayVector) vector);
+    } else if (vector instanceof DurationVector) {
+      accessor = new DurationAccessor((DurationVector) vector);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -444,6 +441,21 @@ public final class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  private static class TimestampNTZAccessor extends ArrowVectorAccessor {
+
+    private final TimeStampMicroVector accessor;
+
+    TimestampNTZAccessor(TimeStampMicroVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
   private static class ArrayAccessor extends ArrowVectorAccessor {
 
     private final ListVector accessor;
@@ -532,21 +544,18 @@ public final class ArrowColumnVector extends ColumnVector {
     }
   }
 
-  private static class IntervalDayAccessor extends ArrowVectorAccessor {
+  private static class DurationAccessor extends ArrowVectorAccessor {
 
-    private final IntervalDayVector accessor;
-    private final NullableIntervalDayHolder intervalDayHolder = new NullableIntervalDayHolder();
+    private final DurationVector accessor;
 
-    IntervalDayAccessor(IntervalDayVector vector) {
+    DurationAccessor(DurationVector vector) {
       super(vector);
       this.accessor = vector;
     }
 
     @Override
-    long getLong(int rowId) {
-      accessor.get(rowId, intervalDayHolder);
-      return Math.addExact(Math.multiplyExact(intervalDayHolder.days, MICROS_PER_DAY),
-                           intervalDayHolder.milliseconds * MICROS_PER_MILLIS);
+    final long getLong(int rowId) {
+      return DurationVector.get(accessor.getDataBuffer(), rowId);
     }
   }
 }

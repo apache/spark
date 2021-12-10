@@ -1174,7 +1174,7 @@ object Matrices {
     var hasSparse = false
     var numRows = 0
     matrices.foreach { mat =>
-      require(numCols == mat.numCols, "The number of rows of the matrices in this sequence, " +
+      require(numCols == mat.numCols, "The number of columns of the matrices in this sequence, " +
         "don't match!")
       mat match {
         case sparse: SparseMatrix => hasSparse = true

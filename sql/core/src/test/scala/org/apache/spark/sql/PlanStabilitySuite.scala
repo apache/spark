@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
-import org.apache.spark.sql.internal.SQLConf
 
 // scalastyle:off line.size.limit
 /**
@@ -66,19 +65,7 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 // scalastyle:on line.size.limit
-trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
-
-  private val originalMaxToStringFields = conf.maxToStringFields
-
-  override def beforeAll(): Unit = {
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, originalMaxToStringFields)
-  }
+trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
@@ -262,7 +249,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   }
 }
 
-class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
 
@@ -273,7 +260,7 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -286,7 +273,7 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
 
@@ -297,7 +284,7 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -310,7 +297,7 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
+class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
 
@@ -321,7 +308,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite {
   }
 }
 
-class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
+class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
   override val goldenFilePath: String =
@@ -330,6 +317,17 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q, ".sf100")
+    }
+  }
+}
+
+class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
+  override def goldenFilePath: String = getWorkspaceFilePath(
+    "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
+
+  tpchQueries.foreach { q =>
+    test(s"check simplified (tpch/$q)") {
+      testQuery("tpch", q)
     }
   }
 }

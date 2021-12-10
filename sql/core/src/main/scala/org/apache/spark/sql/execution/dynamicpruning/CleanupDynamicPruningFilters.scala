@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -43,6 +44,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
       case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) => p
+      // pass through anything that is pushed down into PhysicalOperation
+      case p @ PhysicalOperation(_, _, HiveTableRelation(_, _, _, _, _)) => p
       case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) => p
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>

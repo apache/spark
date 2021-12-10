@@ -33,9 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
  *                            (without this rule) r1[m0-b1, m1-b1, m2-b1]
  *                              /                                     \
  *   r0:[m0-b0, m1-b0, m2-b0], r1-0:[m0-b1], r1-1:[m1-b1], r1-2:[m2-b1], r2[m0-b2, m1-b2, m2-b2]
- *
- * Note that, this rule is only applied with the SparkPlan whose top-level node is
- * ShuffleQueryStageExec.
  */
 object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
 
@@ -44,18 +41,20 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
 
   /**
    * Splits the skewed partition based on the map size and the target partition size
-   * after split. Create a list of `PartialMapperPartitionSpec` for skewed partition and
+   * after split. Create a list of `PartialReducerPartitionSpec` for skewed partition and
    * create `CoalescedPartition` for normal partition.
    */
   private def optimizeSkewedPartitions(
       shuffleId: Int,
       bytesByPartitionId: Array[Long],
       targetSize: Long): Seq[ShufflePartitionSpec] = {
+    val smallPartitionFactor =
+      conf.getConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR)
     bytesByPartitionId.indices.flatMap { reduceIndex =>
       val bytes = bytesByPartitionId(reduceIndex)
       if (bytes > targetSize) {
-        val newPartitionSpec =
-          ShufflePartitionsUtil.createSkewPartitionSpecs(shuffleId, reduceIndex, targetSize)
+        val newPartitionSpec = ShufflePartitionsUtil.createSkewPartitionSpecs(
+          shuffleId, reduceIndex, targetSize, smallPartitionFactor)
         if (newPartitionSpec.isEmpty) {
           CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
         } else {
@@ -92,10 +91,9 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
       return plan
     }
 
-    plan match {
+    plan transformUp {
       case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
-      case _ => plan
     }
   }
 }

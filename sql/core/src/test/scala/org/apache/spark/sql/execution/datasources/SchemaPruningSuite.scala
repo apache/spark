@@ -870,4 +870,46 @@ abstract class SchemaPruningSuite
       checkAnswer(query, Row(1) :: Row(2) :: Nil)
     }
   }
+
+  test("SPARK-36352: Spark should check result plan's output schema name") {
+    withMixedCaseData {
+      val query = sql("select cOL1, cOl2.B from mixedcase")
+      assert(query.queryExecution.executedPlan.schema.catalogString ==
+        "struct<cOL1:string,B:int>")
+      checkAnswer(query.orderBy("id"),
+        Row("r0c1", 1) ::
+          Row("r1c1", 2) ::
+          Nil)
+    }
+  }
+
+  test("SPARK-37450: Prunes unnecessary fields from Explode for count aggregation") {
+    import testImplicits._
+
+    withTempView("table") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        val jsonStr =
+          """
+            |{
+            |  "items": [
+            |  {"itemId": 1, "itemData": "a"},
+            |  {"itemId": 2, "itemData": "b"}
+            |]}
+            |""".stripMargin
+        val df = spark.read.json(Seq(jsonStr).toDS)
+        makeDataSourceFile(df, new File(path))
+
+        spark.read.format(dataSourceName).load(path)
+          .createOrReplaceTempView("table")
+
+        val read = spark.table("table")
+        val query = read.select(explode($"items").as('item)).select(count($"*"))
+
+        checkScan(query, "struct<items:array<struct<itemId:long>>>")
+        checkAnswer(query, Row(2) :: Nil)
+      }
+    }
+  }
 }

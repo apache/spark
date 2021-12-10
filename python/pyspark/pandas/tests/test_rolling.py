@@ -112,10 +112,8 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
         psdf = ps.from_pandas(pdf)
 
+        # The behavior of GroupBy.rolling is changed from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
             self.assert_eq(
                 getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
                 getattr(pdf.groupby(pdf.a).rolling(2), f)().sort_index(),
@@ -127,6 +125,19 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
                 getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().sort_index(),
+            )
+        else:
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().drop("a", axis=1).sort_index(),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sum(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().sum().drop("a"),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().drop("a", axis=1).sort_index(),
             )
 
         self.assert_eq(
@@ -147,10 +158,8 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
+        # The behavior of GroupBy.rolling is changed from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
             self.assert_eq(
                 getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
                 getattr(pdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
@@ -159,6 +168,20 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
                 getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+            )
+        else:
+            self.assert_eq(
+                getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(("a", "x")).rolling(2), f)()
+                .drop(("a", "x"), axis=1)
+                .sort_index(),
+            )
+
+            self.assert_eq(
+                getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)()
+                .drop([("a", "x"), ("a", "y")], axis=1)
+                .sort_index(),
             )
 
     def test_groupby_rolling_count(self):

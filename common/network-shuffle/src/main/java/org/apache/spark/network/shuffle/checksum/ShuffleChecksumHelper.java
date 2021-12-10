@@ -81,7 +81,7 @@ public class ShuffleChecksumHelper {
 
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
-      ByteStreams.skipFully(in, reduceId * 8);
+      ByteStreams.skipFully(in, reduceId * 8L);
       return in.readLong();
     }
   }
