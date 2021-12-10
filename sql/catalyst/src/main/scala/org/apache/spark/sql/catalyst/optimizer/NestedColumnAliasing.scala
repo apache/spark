@@ -413,7 +413,7 @@ object GeneratorNestedColumnAliasing {
    * Replace the reference attribute of extractor expression with generator input.
    */
   private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
-    expr.transformDown {
+    expr match {
       case a: Attribute if expr.references.contains(a) =>
         generator.child
       case g: GetStructField =>
@@ -423,6 +423,8 @@ object GeneratorNestedColumnAliasing {
         val fieldName = g.extractFieldName
         val newChild = replaceGenerator(generator, g.child)
         ExtractValue(newChild, Literal(fieldName), SQLConf.get.resolver)
+      case other =>
+        other.mapChildren(replaceGenerator(generator, _))
     }
   }
 
