@@ -100,20 +100,22 @@ Use `;` (semicolon) to terminate commands. Notice:
 3. If the user types multiple commands in one line like `SELECT 1; SELECT 2;`, the commands `SELECT 1` and `SELECT 2` will be executed separatly.
 4. If `;` appears in a simple comment, as in: 
    ```sql
-   -- This is a comment;
-   SELECT 1;
+   -- This is a ';' comment
+   SELECT ';' as a;
    ```
-   then this comment line will be ignored. If `;` appears in a bracketed comment,
+   then this comment line will be ignored. `;` in `SELECT ';' as a` will just be treated as a char of string.
+   If `;` appears in the middle of a bracketed comment,
    ```sql
    /* This is a comment contains ';'. */
    SELECT 1;
    ```
-   then this bracketed comment lines will be ignored. If `;` appears in a bracketed comment and at the end of line, 
+   then this ';' will not terminate the commands. If `;` appears in a bracketed comment and at the end of line, 
    ```sql
    /* This is a comment contains ;
    */ SELECT 1;
    ```
-   then the whole command will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`.
+   then the whole command will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`,
+   Spark will submit these two command and throw parser error.
 
 
 <table class="table">
