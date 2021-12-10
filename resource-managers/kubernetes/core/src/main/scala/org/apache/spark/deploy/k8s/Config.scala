@@ -137,6 +137,14 @@ private[spark] object Config extends Logging {
       .longConf
       .createWithDefault(1572864) // 1.5 MiB
 
+  val EXECUTOR_ROLL_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.rollInterval")
+      .doc("Interval between executor roll operations. To disable, set 0 (default)")
+      .version("3.3.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "Interval should be non-negative")
+      .createWithDefault(0)
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
@@ -100,5 +100,33 @@ class QueryPlanSuite extends SparkFunSuite {
     val t = LocalRelation('a.int, 'b.int)
     val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
     assert(testRule(plan).resolved)
+  }
+
+  test("SPARK-37199: add a deterministic field to QueryPlan") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val aRand: NamedExpression = Alias(a + Rand(1), "aRand")()
+    val deterministicPlan = Project(
+      Seq(a),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(deterministicPlan.deterministic)
+
+    val nonDeterministicPlan = Project(
+      Seq(aRand),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(!nonDeterministicPlan.deterministic)
   }
 }

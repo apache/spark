@@ -58,6 +58,21 @@ case class MapInPandas(
 }
 
 /**
+ * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
+ * This is used by DataFrame.mapInArrow() in PySpark
+ */
+case class PythonMapInArrow(
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+    copy(child = newChild)
+}
+
+/**
  * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
  * This is used by DataFrame.groupby().cogroup().apply().
  */

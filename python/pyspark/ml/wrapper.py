@@ -31,6 +31,7 @@ class JavaWrapper(object):
     """
     Wrapper class for a Java companion object
     """
+
     def __init__(self, java_obj=None):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
@@ -120,6 +121,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
     Utility class to help create wrapper classes from Java/Scala
     implementations of pipeline components.
     """
+
     #: The param values in the Java object should be
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
 
@@ -167,6 +169,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         java_params = list(self._java_obj.params())
         from pyspark.ml.param import Param
+
         for java_param in java_params:
             java_param_name = java_param.name()
             if not hasattr(self, java_param_name):
@@ -234,16 +237,18 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
 
         Meta-algorithms such as Pipeline should override this method as a classmethod.
         """
+
         def __get_class(clazz):
             """
             Loads Python class from its name.
             """
-            parts = clazz.split('.')
+            parts = clazz.split(".")
             module = ".".join(parts[:-1])
             m = __import__(module)
             for comp in parts[1:]:
                 m = getattr(m, comp)
             return m
+
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_type = __get_class(stage_name)
@@ -261,8 +266,9 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         elif hasattr(py_type, "_from_java"):
             py_stage = py_type._from_java(java_stage)
         else:
-            raise NotImplementedError("This Java stage cannot be loaded into Python currently: %r"
-                                      % stage_name)
+            raise NotImplementedError(
+                "This Java stage cannot be loaded into Python currently: %r" % stage_name
+            )
         return py_stage
 
     def copy(self, extra=None):
@@ -391,6 +397,7 @@ class JavaPredictor(Predictor, JavaEstimator, _PredictorParams, metaclass=ABCMet
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
+
     pass
 
 

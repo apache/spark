@@ -68,6 +68,22 @@ class OrcDeserializer(
     resultRow
   }
 
+  def deserializeFromValues(orcValues: Seq[WritableComparable[_]]): InternalRow = {
+    var targetColumnIndex = 0
+    while (targetColumnIndex < fieldWriters.length) {
+      if (fieldWriters(targetColumnIndex) != null) {
+        val value = orcValues(requestedColIds(targetColumnIndex))
+        if (value == null) {
+          resultRow.setNullAt(targetColumnIndex)
+        } else {
+          fieldWriters(targetColumnIndex)(value)
+        }
+      }
+      targetColumnIndex += 1
+    }
+    resultRow
+  }
+
   /**
    * Creates a writer to write ORC values to Catalyst data structure at the given ordinal.
    */
@@ -112,6 +128,9 @@ class OrcDeserializer(
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+
+      case TimestampNTZType => (ordinal, value) =>
+        updater.setLong(ordinal, OrcUtils.fromOrcNTZ(value.asInstanceOf[OrcTimestamp]))
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)

@@ -2732,6 +2732,17 @@ object functions {
   }
 
   /**
+   * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    new BinaryLPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
    * Trim the spaces from left end for the specified string value.
    *
    * @group string_funcs
@@ -2807,6 +2818,17 @@ object functions {
    */
   def rpad(str: Column, len: Int, pad: String): Column = withExpr {
     StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+  }
+
+  /**
+   * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
+   * than len, the return value is shortened to len bytes.
+   *
+   * @group string_funcs
+   * @since 3.3.0
+   */
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
+    new BinaryRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -3212,6 +3234,15 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * @return A date created from year, month and day fields.
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
+    MakeDate(year.expr, month.expr, day.expr)
+  }
 
   /**
    * Returns number of months between dates `start` and `end`.
@@ -4678,6 +4709,15 @@ object functions {
    * @since 2.4.0
    */
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
+
+  /**
+   * Returns true if the map contains the key.
+   * @group collection_funcs
+   * @since 3.3.0
+   */
+  def map_contains_key(column: Column, key: Any): Column = withExpr {
+    ArrayContains(MapKeys(column.expr), lit(key).expr)
+  }
 
   /**
    * Returns an unordered array containing the keys of the map.
