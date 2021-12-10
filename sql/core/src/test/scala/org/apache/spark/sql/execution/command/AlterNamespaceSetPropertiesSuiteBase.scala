@@ -91,13 +91,15 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
-          sql(s"CREATE NAMESPACE $ns")
+          // Set the location explicitly because v2 catalog may not set the default location.
+          // Without this, `meta.get(key)` below may return null.
+          sql(s"CREATE NAMESPACE $ns LOCATION '/tmp'")
           assert(getProperties(ns) === "")
           sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
           assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
           val meta = spark.sessionState.catalogManager.catalog(catalog)
             .asNamespaceCatalog.loadNamespaceMetadata(namespace.split('.'))
-          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
+          assert(!meta.get(key).contains("foo"),
             "reserved properties should not have side effects")
         }
       }
