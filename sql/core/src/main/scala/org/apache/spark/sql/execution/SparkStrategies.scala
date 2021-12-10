@@ -343,10 +343,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
-
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
