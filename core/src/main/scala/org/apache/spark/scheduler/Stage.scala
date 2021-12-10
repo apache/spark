@@ -69,7 +69,7 @@ private[scheduler] abstract class Stage(
   val jobIds = new HashSet[Int]
 
   /** The ID to use for the next new attempt for this stage. */
-  private[scheduler] var nextAttemptId: Int = 0
+  private var nextAttemptId: Int = 0
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
@@ -105,6 +105,13 @@ private[scheduler] abstract class Stage(
       this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
       resourceProfileId = resourceProfileId)
     nextAttemptId += 1
+  }
+
+  /** Forward the nextAttemptId if skipped and get visited for the first time. */
+  def skipIfNecessary(): Unit = {
+    if (nextAttemptId == 0) {
+      nextAttemptId = 1
+    }
   }
 
   /** Returns the StageInfo for the most recent attempt for this stage. */
