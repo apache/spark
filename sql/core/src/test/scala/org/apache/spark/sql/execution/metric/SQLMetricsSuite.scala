@@ -838,14 +838,14 @@ case class CustomFileCommitProtocol(
   extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def commitTask(
       taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
-    Thread.sleep(1000)
+    Thread.sleep(100)
     super.commitTask(taskContext)
   }
 
   override def commitJob(
       jobContext: JobContext,
       taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
-    Thread.sleep(1000)
+    Thread.sleep(100)
     super.commitJob(jobContext, taskCommits)
   }
 }
