@@ -307,6 +307,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_cast`: identical to `CAST`, except that it returns `NULL` result instead of throwing an exception on runtime error.
   - `try_add`: identical to the add operator `+`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
+  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
 
 ### SQL Keywords
 
@@ -528,7 +529,7 @@ Below is a list of all the keywords in Spark SQL.
 |ROW|non-reserved|non-reserved|reserved|
 |ROWS|non-reserved|non-reserved|reserved|
 |SCHEMA|non-reserved|non-reserved|non-reserved|
-|SCHEMAS|non-reserved|non-reserved|not a keyword|
+|SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
 |SELECT|reserved|non-reserved|reserved|
 |SEMI|non-reserved|strict-non-reserved|non-reserved|

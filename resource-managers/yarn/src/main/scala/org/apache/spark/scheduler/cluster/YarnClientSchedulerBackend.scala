@@ -59,7 +59,8 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
     client = new Client(args, conf, sc.env.rpcEnv)
-    bindToYarn(client.submitApplication(), None)
+    client.submitApplication()
+    bindToYarn(client.getApplicationId(), None)
 
     waitForApplication()
 
@@ -78,8 +79,8 @@ private[spark] class YarnClientSchedulerBackend(
     val monitorInterval = conf.get(CLIENT_LAUNCH_MONITOR_INTERVAL)
 
     assert(client != null && appId.isDefined, "Application has not been submitted yet!")
-    val YarnAppReport(state, _, diags) = client.monitorApplication(appId.get,
-      returnOnRunning = true, interval = monitorInterval)
+    val YarnAppReport(state, _, diags) =
+      client.monitorApplication(returnOnRunning = true, interval = monitorInterval)
     if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
@@ -114,7 +115,7 @@ private[spark] class YarnClientSchedulerBackend(
     override def run(): Unit = {
       try {
         val YarnAppReport(_, state, diags) =
-          client.monitorApplication(appId.get, logApplicationReport = false)
+          client.monitorApplication(logApplicationReport = false)
         logError(s"YARN application has exited unexpectedly with state $state! " +
           "Check the YARN application logs for more details.")
         diags.foreach { err =>

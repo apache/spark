@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
 import pandas as pd
 
@@ -65,10 +63,7 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = self.psdf
         pdf = self.pdf
 
-        if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b).rename())
-        else:
-            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b))
+        self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b))
 
         psdf = self.psdf
         pdf = self.pdf
@@ -114,12 +109,7 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
             if np_name not in self.blacklist:
                 try:
                     # binary ufunc
-                    if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                        self.assert_eq(
-                            np_func(pdf.a, pdf.b).rename(), np_func(psdf.a, psdf.b), almost=True
-                        )
-                    else:
-                        self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
+                    self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
                     self.assert_eq(np_func(pdf.a, 1), np_func(psdf.a, 1), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
@@ -132,18 +122,11 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
                 if np_name not in self.blacklist:
                     try:
                         # binary ufunc
-                        if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                            self.assert_eq(
-                                np_func(pdf.a, pdf2.b).sort_index().rename(),
-                                np_func(psdf.a, psdf2.b).sort_index(),
-                                almost=True,
-                            )
-                        else:
-                            self.assert_eq(
-                                np_func(pdf.a, pdf2.b).sort_index(),
-                                np_func(psdf.a, psdf2.b).sort_index(),
-                                almost=True,
-                            )
+                        self.assert_eq(
+                            np_func(pdf.a, pdf2.b).sort_index(),
+                            np_func(psdf.a, psdf2.b).sort_index(),
+                            almost=True,
+                        )
                     except Exception as e:
                         raise AssertionError("Test in '%s' function was failed." % np_name) from e
         finally:

@@ -170,7 +170,7 @@ abstract class TypeCoercionBase {
    * Type coercion rule that combines multiple type coercion rules and applies them in a single tree
    * traversal.
    */
-  case class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
+  class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       val transforms = rules.map(_.transform)
       Function.unlift { e: Expression =>
@@ -795,7 +795,7 @@ object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     WidenSetOperationTypes ::
-    CombinedTypeCoercionRule(
+    new CombinedTypeCoercionRule(
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::

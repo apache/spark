@@ -167,6 +167,36 @@ case class MapKeys(child: Expression)
     copy(child = newChild)
 }
 
+
+/**
+ * Returns an unordered array containing the keys of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
+       true
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 3);
+       false
+  """,
+  group = "map_funcs",
+  since = "3.3.0")
+case class MapContainsKey(
+    left: Expression,
+    right: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, ArrayContains(MapKeys(left), right))
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "map_contains_key"
+
+  override protected def withNewChildInternal(newChild: Expression): MapContainsKey =
+    copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(a1, a2, ...) - Returns a merged array of structs in which the N-th struct contains all
@@ -1996,9 +2026,10 @@ case class ArrayPosition(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. The function returns NULL
-      if the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false.
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If Index is 0,
+      Spark will throw an error. If index < 0, accesses elements from the last to the first.
+      The function returns NULL if the index exceeds the length of the array and
+      `spark.sql.ansi.enabled` is set to false.
       If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
       for invalid indices.
 
@@ -2170,6 +2201,45 @@ case class ElementAt(
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
+ * The function is identical to the function `element_at`, except that it returns `NULL` result
+ * instead of throwing an exception on array's index out of bound or map's key not found when
+ * `spark.sql.ansi.enabled` is true.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If Index is 0,
+      Spark will throw an error. If index < 0, accesses elements from the last to the first.
+      The function always returns NULL if the index exceeds the length of the array.
+
+    _FUNC_(map, key) - Returns value for given key. The function always returns NULL
+      if the key is not contained in the map.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
+       b
+  """,
+  since = "3.3.0",
+  group = "map_funcs")
+case class TryElementAt(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, ElementAt(left, right, failOnError = false))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "try_element_at"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
 }
 
 /**
