@@ -154,16 +154,6 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           }
         }
 
-        sqlBenchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql(s"SELECT $query FROM orcTable").noop()
-        }
-
-        sqlBenchmark.addCase("SQL ORC MR") { _ =>
-          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql(s"SELECT $query FROM orcTable").noop()
-          }
-        }
-
         sqlBenchmark.addCase("SQL Parquet Vectorized (Delta Binary)") { _ =>
           spark.sql("select sum(id) from parquetV2Table").noop()
         }
@@ -171,6 +161,16 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         sqlBenchmark.addCase("SQL Parquet MR (Delta Binary)") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("select sum(id) from parquetV2Table").noop()
+          }
+        }
+
+        sqlBenchmark.addCase("SQL ORC Vectorized") { _ =>
+          spark.sql("SELECT sum(id) FROM orcTable").noop()
+        }
+
+        sqlBenchmark.addCase("SQL ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql("SELECT sum(id) FROM orcTable").noop()
           }
         }
 

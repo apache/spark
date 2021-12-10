@@ -35,9 +35,12 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  * An implementation of the Parquet DELTA_BINARY_PACKED decoder that supports the vectorized
  * interface. DELTA_BINARY_PACKED is a delta encoding for integer and long types that stores values
  * as a delta between consecutive values. Delta values are themselves bit packed. Similar to RLE but
- * is more effective in the case of large variation of values in the encoded column. <br/>
- * DELTA_BINARY_PACKED is the default encoding for integer and long columns in Parquet V2. <br/>
- * Supported Types: INT32, INT64 <br/>
+ * is more effective in the case of large variation of values in the encoded column.
+ * <p>
+ * DELTA_BINARY_PACKED is the default encoding for integer and long columns in Parquet V2.
+ * <p>
+ * Supported Types: INT32, INT64
+ * <p>
  *
  * @see <a href="https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-encoding-delta_binary_packed--5">
  * Parquet format encodings: DELTA_BINARY_PACKED</a>
@@ -58,9 +61,10 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   // variables to keep state of the current block and miniblock
   private long lastValueRead;  // needed to compute the next value
   private long minDeltaInCurrentBlock; // needed to compute the next value
-  private int currentMiniBlock = 0; // keep track of the mini block within the current block that we
+  // currentMiniBlock keeps track of the mini block within the current block that
   // we read and decoded most recently. Only used as an index into
   // bitWidths array
+  private int currentMiniBlock = 0;
   private int[] bitWidths; // bit widths for each miniBlock in the current block
   private int remainingInBlock = 0; // values in current block still to be read
   private int remainingInMiniBlock = 0; // values in current mini block still to be read
@@ -117,7 +121,6 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     return longVal;
   }
 
-
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
     readValues(total, c, rowId, (w, r, v) -> w.putByte(r, (byte) v));
@@ -173,7 +176,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   public final void readLongsWithRebase(
       int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     readValues(total, c, rowId, (w, r, v) -> {
-      if (v < RebaseDateTime.lastSwitchJulianDay()) {
+      if (v < RebaseDateTime.lastSwitchJulianTs()) {
         if (failIfRebase) {
           throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
         } else {
@@ -209,7 +212,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       IntegerOutputWriter outputWriter) {
     if (valuesRead + total > totalValueCount) {
       throw new ParquetDecodingException(
-          "no more values to read, total value count is " + valuesRead);
+          "No more values to read, total value count is " + valuesRead);
     }
     int remaining = total;
     // First value
@@ -251,11 +254,11 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       unpackMiniBlock();
     }
 
-    //read values from miniblock
+    // read values from miniblock
     int valuesRead = 0;
     for (int i = miniBlockSizeInValues - remainingInMiniBlock;
         i < miniBlockSizeInValues && valuesRead < remaining; i++) {
-      //calculate values from deltas unpacked for current block
+      // calculate values from deltas unpacked for current block
       long outValue = lastValueRead + minDeltaInCurrentBlock + unpackedValuesBuffer[i];
       lastValueRead = outValue;
       outputWriter.write(c, rowId + valuesRead, outValue);
@@ -271,7 +274,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     try {
       minDeltaInCurrentBlock = BytesUtils.readZigZagVarLong(in);
     } catch (IOException e) {
-      throw new ParquetDecodingException("can not read min delta in current block", e);
+      throw new ParquetDecodingException("Can not read min delta in current block", e);
     }
     readBitWidthsForMiniBlocks();
     remainingInBlock = blockSizeInValues;
