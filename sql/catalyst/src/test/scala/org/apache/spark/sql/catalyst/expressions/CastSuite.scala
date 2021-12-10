@@ -80,6 +80,14 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
+
+  test("cast from string to int overflow"){
+    val s = "11111111111111111111"
+    checkExceptionInExpression[ArithmeticException](
+      cast(s,IntegerType),expectedErrMsg = s"Casting $s to int causes overflow")
+    checkEvaluation(cast("11111111", IntegerType), 11111111.toInt)
+  }
+
   test("casting to fixed-precision decimals") {
     assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
     assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)

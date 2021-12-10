@@ -652,7 +652,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, UTF8StringUtils.toIntExact)
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
+      buildCast[UTF8String](_, s => {
+        if (s.toInt(result)) {
+          result.value}
+        else {
+          throw new ArithmeticException(s"Casting $s to int causes overflow")
+        }
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
