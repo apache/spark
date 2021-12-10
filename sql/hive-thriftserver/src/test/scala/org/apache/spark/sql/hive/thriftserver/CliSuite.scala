@@ -633,4 +633,19 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
   }
+
+  test("SPARK-36390: Replace SessionState.close with SessionState.detachSession") {
+    val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "cli_tmp_dir")
+    runCliWithin(
+      2.minutes,
+      Seq("--conf",
+        s"spark.driver.defaultJavaOptions=-Djava.io.tmpdir=${tempDir.getCanonicalPath}"))(
+      s"ADD JAR $jarFile;" -> "")
+    assert(tempDir.listFiles(new FilenameFilter {
+      override def accept(dir: File, name: String): Boolean = {
+        name.endsWith("_resources")
+      }
+    }).length == 0)
+  }
 }
