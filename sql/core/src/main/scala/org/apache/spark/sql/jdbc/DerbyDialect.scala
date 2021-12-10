@@ -57,4 +57,8 @@ private object DerbyDialect extends JdbcDialect {
   override def getTableCommentQuery(table: String, comment: String): String = {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
+
+  // ToDo: use fetch first n rows only for limit, e.g.
+  //  select * from employee fetch first 10 rows only;
+  override def supportsLimit(): Boolean = false
 }

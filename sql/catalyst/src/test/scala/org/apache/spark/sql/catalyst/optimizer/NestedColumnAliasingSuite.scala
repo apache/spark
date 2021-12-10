@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.SchemaPruningTest
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -762,6 +763,32 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"_extract_search_params.col1".as("col1"),
         $"_extract_search_params.col2".as("col2")).analyze
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-36677: NestedColumnAliasing should not push down aggregate functions into " +
+    "projections") {
+    val nestedRelation = LocalRelation(
+      'a.struct(
+        'c.struct(
+          'e.string),
+        'd.string),
+      'b.string)
+
+    val plan = nestedRelation
+      .select($"a", $"b")
+      .groupBy($"b")(max($"a").getField("c").getField("e"))
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    // The plan should not contain aggregation functions inside the projection
+    SimpleAnalyzer.checkAnalysis(optimized)
+
+    val expected = nestedRelation
+      .groupBy($"b")(max($"a").getField("c").getField("e"))
+      .analyze
+
+    comparePlans(optimized, expected)
   }
 }
 

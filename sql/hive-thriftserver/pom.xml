@@ -61,6 +61,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
@@ -138,17 +144,6 @@
       <artifactId>commons-cli</artifactId>
     </dependency>
   </dependencies>
-  <profiles>
-    <profile>
-      <id>scala-2.13</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>

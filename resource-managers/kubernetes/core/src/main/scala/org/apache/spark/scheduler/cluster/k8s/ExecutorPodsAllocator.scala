@@ -202,7 +202,7 @@ class ExecutorPodsAllocator(
     var _deletedExecutorIds = deletedExecutorIds
     if (snapshots.nonEmpty) {
       val existingExecs = lastSnapshot.executorPods.keySet
-      _deletedExecutorIds = _deletedExecutorIds.filter(existingExecs.contains)
+      _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
     val notDeletedPods = lastSnapshot.executorPods.filterKeys(!_deletedExecutorIds.contains(_))
@@ -456,11 +456,11 @@ class ExecutorPodsAllocator(
 
   private def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {
     try {
-      val startTime = Instant.parse(state.pod.getStatus.getStartTime).toEpochMilli()
-      currentTime - startTime > executorIdleTimeout
+      val creationTime = Instant.parse(state.pod.getMetadata.getCreationTimestamp).toEpochMilli()
+      currentTime - creationTime > executorIdleTimeout
     } catch {
-      case _: Exception =>
-        logDebug(s"Cannot get startTime of pod ${state.pod}")
+      case e: Exception =>
+        logError(s"Cannot get the creationTimestamp of the pod: ${state.pod}", e)
         true
     }
   }

@@ -23,7 +23,7 @@ from pyspark import since
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
 
-__all__ = ['FPGrowth', 'FPGrowthModel', 'PrefixSpan', 'PrefixSpanModel']
+__all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
 
 
 @inherit_doc
@@ -172,8 +172,9 @@ class PrefixSpan(object):
             another iteration of distributed prefix growth is run.
             (default: 32000000)
         """
-        model = callMLlibFunc("trainPrefixSpanModel",
-                              data, minSupport, maxPatternLength, maxLocalProjDBSize)
+        model = callMLlibFunc(
+            "trainPrefixSpanModel", data, minSupport, maxPatternLength, maxLocalProjDBSize
+        )
         return PrefixSpanModel(model)
 
     class FreqSequence(namedtuple("FreqSequence", ["sequence", "freq"])):
@@ -188,21 +189,20 @@ def _test():
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.mllib.fpm
+
     globs = pyspark.mllib.fpm.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("mllib.fpm tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = SparkSession.builder.master("local[4]").appName("mllib.fpm tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
     import tempfile
 
     temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
+    globs["temp_path"] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree
+
         try:
             rmtree(temp_path)
         except OSError:

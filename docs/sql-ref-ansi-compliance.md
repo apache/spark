@@ -78,7 +78,7 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 * MapType => String
 * StructType => String
 
- The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
+ The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
@@ -156,7 +156,32 @@ SELECT * FROM t;
 ```
 
 ### Store assignment
-As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules. During table insertion, Spark will throw exception on numeric value overflow or the source value can't be stored as the target type. 
+As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
+|:-------------:|:-------:|:------:|:----:|:---------:|:--------:|:-------:|:------:|:-----:|:---:|:------:|
+| Numeric       | Y       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| String        | N       | Y      | N    | N         | N        | N       | N      | N     | N   | N      |
+| Date          | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp     | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval      | N       | Y      | N    | N         | N*        | N       | N      | N     | N   | N      |
+| Boolean       | N       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary        | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array         | N       | N      | N    | N         | N        | N       | N      | Y**     | N   | N      |
+| Map           | N       | N      | N    | N         | N        | N       | N      | N     | Y**   | N      |
+| Struct        | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y**      |
+
+\* Spark doesn't support interval type table column.
+
+\*\* For Array/Map/Struct types, the data type check rule applies recursively to its component elements.
+
+During table insertion, Spark will throw exception on numeric value overflow.
+```sql
+CREATE TABLE test(i INT);
+
+INSERT INTO test VALUES (2147483648L);
+java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+```
 
 ### Type coercion
 #### Type Promotion and Precedence
@@ -196,7 +221,6 @@ This is a graphical depiction of the precedence list as a directed tree:
 The least common type from a set of types is the narrowest type reachable from the precedence list by all elements of the set of types.
 
 The least common type resolution is used to:
-- Decide whether a function expecting a parameter of a type can be invoked using an argument of a narrower type.
 - Derive the argument type for functions which expect a shared argument type for multiple parameters, such as coalesce, least, or greatest.
 - Derive the operand types for operators such as arithmetic operations or comparisons.
 - Derive the result type for expressions such as the case expression.
@@ -221,19 +245,40 @@ DOUBLE
 > SELECT (typeof(coalesce(1BD, 1F)));
 DOUBLE
 
--- The substring function expects arguments of type INT for the start and length parameters.
-> SELECT substring('hello', 1Y, 2);
-he
-> SELECT substring('hello', '1', 2);
-he
-> SELECT substring('hello', 1L, 2);
-Error: Argument 2 requires an INT type.
-> SELECT substring('hello', str, 2) FROM VALUES(CAST('1' AS STRING)) AS T(str);
-Error: Argument 2 requires an INT type.
 ```
 
 ### SQL Functions
+#### Function invocation
+Under ANSI mode(spark.sql.ansi.enabled=true), the function invocation of Spark SQL:
+- In general, it follows the `Store assignment` rules as storing the input values as the declared parameter type of the SQL functions
+- Special rules apply for string literals and untyped NULL. A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
 
+```sql
+> SET spark.sql.ansi.enabled=true;
+-- implicitly cast Int to String type
+> SELECT concat('total number: ', 1);
+total number: 1
+-- implicitly cast Timestamp to Date type
+> select datediff(now(), current_date);
+0
+
+-- specialrule: implicitly cast String literal to Double type
+> SELECT ceil('0.1');
+1
+-- specialrule: implicitly cast NULL to Date type
+> SELECT year(null);
+NULL
+
+> CREATE TABLE t(s string);
+-- Can't store String column as Numeric types.
+> SELECT ceil(s) from t;
+Error in query: cannot resolve 'CEIL(spark_catalog.default.t.s)' due to data type mismatch
+-- Can't store String column as Date type.
+> select year(s) from t;
+Error in query: cannot resolve 'year(spark_catalog.default.t.s)' due to data type mismatch
+```
+
+#### Functions with different behaviors
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `size`: This function returns null for null input.
   - `element_at`:
@@ -262,6 +307,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_cast`: identical to `CAST`, except that it returns `NULL` result instead of throwing an exception on runtime error.
   - `try_add`: identical to the add operator `+`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
+  - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
 
 ### SQL Keywords
 
@@ -274,7 +320,9 @@ When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-By default `spark.sql.ansi.enabled` is false.
+If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
+
+By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -303,6 +351,8 @@ Below is a list of all the keywords in Spark SQL.
 |CASCADE|non-reserved|non-reserved|non-reserved|
 |CASE|reserved|non-reserved|reserved|
 |CAST|reserved|non-reserved|reserved|
+|CATALOG|non-reserved|non-reserved|non-reserved|
+|CATALOGS|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
@@ -402,6 +452,7 @@ Below is a list of all the keywords in Spark SQL.
 |LEADING|reserved|non-reserved|reserved|
 |LEFT|reserved|strict-non-reserved|reserved|
 |LIKE|non-reserved|non-reserved|reserved|
+|ILIKE|non-reserved|non-reserved|non-reserved|
 |LIMIT|non-reserved|non-reserved|non-reserved|
 |LINES|non-reserved|non-reserved|non-reserved|
 |LIST|non-reserved|non-reserved|non-reserved|
@@ -463,6 +514,7 @@ Below is a list of all the keywords in Spark SQL.
 |REGEXP|non-reserved|non-reserved|not a keyword|
 |RENAME|non-reserved|non-reserved|non-reserved|
 |REPAIR|non-reserved|non-reserved|non-reserved|
+|REPEATABLE|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
 |RESPECT|non-reserved|non-reserved|non-reserved|
@@ -477,7 +529,7 @@ Below is a list of all the keywords in Spark SQL.
 |ROW|non-reserved|non-reserved|reserved|
 |ROWS|non-reserved|non-reserved|reserved|
 |SCHEMA|non-reserved|non-reserved|non-reserved|
-|SCHEMAS|non-reserved|non-reserved|not a keyword|
+|SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
 |SELECT|reserved|non-reserved|reserved|
 |SEMI|non-reserved|strict-non-reserved|non-reserved|
@@ -500,6 +552,8 @@ Below is a list of all the keywords in Spark SQL.
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
 |SYNC|non-reserved|non-reserved|non-reserved|
+|SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
+|SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|
 |TABLES|non-reserved|non-reserved|non-reserved|
 |TABLESAMPLE|non-reserved|non-reserved|reserved|
@@ -509,6 +563,7 @@ Below is a list of all the keywords in Spark SQL.
 |TERMINATED|non-reserved|non-reserved|non-reserved|
 |THEN|reserved|non-reserved|reserved|
 |TIME|reserved|non-reserved|reserved|
+|TIMESTAMP|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|
@@ -533,6 +588,7 @@ Below is a list of all the keywords in Spark SQL.
 |USER|reserved|non-reserved|reserved|
 |USING|reserved|strict-non-reserved|reserved|
 |VALUES|non-reserved|non-reserved|reserved|
+|VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|

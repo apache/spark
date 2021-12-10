@@ -318,6 +318,15 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
       }
     }
+
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+      reservedKeywordsInAnsiMode.foreach { keyword =>
+        assert(TableIdentifier(keyword) === parseTableIdentifier(s"$keyword"))
+        assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.$keyword"))
+      }
+    }
   }
 
   test("table identifier - strict keywords") {

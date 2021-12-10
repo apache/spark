@@ -45,30 +45,20 @@ public final class Platform {
 
   private static final boolean unaligned;
 
-  // Access fields and constructors once and store them, for performance:
-
-  private static final Constructor<?> DBB_CONSTRUCTOR;
-  private static final Field DBB_CLEANER_FIELD;
-  static {
-    try {
-      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
-      constructor.setAccessible(true);
-      Field cleanerField = cls.getDeclaredField("cleaner");
-      cleanerField.setAccessible(true);
-      DBB_CONSTRUCTOR = constructor;
-      DBB_CLEANER_FIELD = cleanerField;
-    } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
   // Split java.version on non-digit chars:
   private static final int majorVersion =
     Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
 
+  // Access fields and constructors once and store them, for performance:
+  private static final Constructor<?> DBB_CONSTRUCTOR;
+  private static final Field DBB_CLEANER_FIELD;
   private static final Method CLEANER_CREATE_METHOD;
+
   static {
+    // At the end of this block, CLEANER_CREATE_METHOD should be non-null iff it's possible to use
+    // reflection to invoke it, which is not necessarily possible by default in Java 9+.
+    // Code below can test for null to see whether to use it.
+
     // The implementation of Cleaner changed from JDK 8 to 9
     String cleanerClassName;
     if (majorVersion < 9) {
@@ -77,28 +67,53 @@ public final class Platform {
       cleanerClassName = "jdk.internal.ref.Cleaner";
     }
     try {
-      Class<?> cleanerClass = Class.forName(cleanerClassName);
-      Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
-      // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
-      // unfortunately, unless the user has allowed access with something like
-      // --add-opens java.base/java.lang=ALL-UNNAMED  If not, we can't really use the Cleaner
-      // hack below. It doesn't break, just means the user might run into the default JVM limit
-      // on off-heap memory and increase it or set the flag above. This tests whether it's
-      // available:
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      Field cleanerField = cls.getDeclaredField("cleaner");
       try {
-        createMethod.invoke(null, null, null);
-      } catch (IllegalAccessException e) {
-        // Don't throw an exception, but can't log here?
-        createMethod = null;
-      } catch (InvocationTargetException ite) {
-        // shouldn't happen; report it
-        throw new IllegalStateException(ite);
+        constructor.setAccessible(true);
+        cleanerField.setAccessible(true);
+      } catch (RuntimeException re) {
+        // This is a Java 9+ exception, so needs to be handled without importing it
+        if ("InaccessibleObjectException".equals(re.getClass().getSimpleName())) {
+          // Continue, but the constructor/field are not available
+          // See comment below for more context
+          constructor = null;
+          cleanerField = null;
+        } else {
+          throw re;
+        }
       }
-      CLEANER_CREATE_METHOD = createMethod;
-    } catch (ClassNotFoundException | NoSuchMethodException e) {
-      throw new IllegalStateException(e);
-    }
+      // Have to set these values no matter what:
+      DBB_CONSTRUCTOR = constructor;
+      DBB_CLEANER_FIELD = cleanerField;
 
+      // no point continuing if the above failed:
+      if (DBB_CONSTRUCTOR != null && DBB_CLEANER_FIELD != null) {
+        Class<?> cleanerClass = Class.forName(cleanerClassName);
+        Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
+        // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
+        // unfortunately, unless the user has allowed access with something like
+        // --add-opens java.base/java.lang=ALL-UNNAMED  If not, we can't really use the Cleaner
+        // hack below. It doesn't break, just means the user might run into the default JVM limit
+        // on off-heap memory and increase it or set the flag above. This tests whether it's
+        // available:
+        try {
+          createMethod.invoke(null, null, null);
+        } catch (IllegalAccessException e) {
+          // Don't throw an exception, but can't log here?
+          createMethod = null;
+        }
+        CLEANER_CREATE_METHOD = createMethod;
+      } else {
+        CLEANER_CREATE_METHOD = null;
+      }
+    } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
+      // These are all fatal in any Java version - rethrow (have to wrap as this is a static block)
+      throw new IllegalStateException(e);
+    } catch (InvocationTargetException ite) {
+      throw new IllegalStateException(ite.getCause());
+    }
   }
 
   /**

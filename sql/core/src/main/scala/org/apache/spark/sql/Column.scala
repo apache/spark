@@ -847,6 +847,14 @@ class Column(val expr: Expression) extends Logging {
   def rlike(literal: String): Column = withExpr { RLike(expr, lit(literal).expr) }
 
   /**
+   * SQL ILIKE expression (case insensitive LIKE).
+   *
+   * @group expr_ops
+   * @since 3.3.0
+   */
+  def ilike(literal: String): Column = withExpr { new ILike(expr, lit(literal).expr) }
+
+  /**
    * An expression that gets an item at position `ordinal` out of an array,
    * or gets a value by key `key` in a `MapType`.
    *

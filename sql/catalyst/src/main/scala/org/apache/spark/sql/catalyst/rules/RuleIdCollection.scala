@@ -76,6 +76,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$WindowsSubstitution" ::
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
@@ -115,6 +116,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
+      "org.apache.spark.sql.catalyst.optimizer.NotPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.NullDownPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
@@ -132,6 +135,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReassignLambdaVariableID" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveLiteralFromGroupExpressions" ::
+      "org.apache.spark.sql.catalyst.optimizer.GenerateOptimization" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
@@ -144,6 +148,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
@@ -159,12 +164,13 @@ object RuleIdCollection {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
       "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
-      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
       "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.command.{ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -247,9 +247,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(showTablesQe.commandExecuted.isInstanceOf[CommandResult])
     assert(showTablesQe.executedPlan.isInstanceOf[CommandResultExec])
     val showTablesResultExec = showTablesQe.executedPlan.asInstanceOf[CommandResultExec]
-    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
-    assert(showTablesResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
-      .cmd.isInstanceOf[ShowTablesCommand])
+    assert(showTablesResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
 
     val project = Project(showTables.output, SubqueryAlias("s", showTables))
     val projectQe = qe(project)
@@ -260,8 +258,6 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.commandExecuted.children(0).children(0).isInstanceOf[CommandResult])
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
-    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ExecutedCommandExec])
-    assert(cmdResultExec.commandPhysicalPlan.asInstanceOf[ExecutedCommandExec]
-      .cmd.isInstanceOf[ShowTablesCommand])
+    assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
   }
 }

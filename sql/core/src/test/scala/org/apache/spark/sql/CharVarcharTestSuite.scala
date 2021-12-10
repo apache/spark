@@ -843,17 +843,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  // TODO(SPARK-33875): Move these tests to super after DESCRIBE COLUMN v2 implemented
-  test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
-        Row("varchar(3)"))
-      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
-        Row("char(5)"))
-    }
-  }
-
   // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
   test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
     withTable("t") {

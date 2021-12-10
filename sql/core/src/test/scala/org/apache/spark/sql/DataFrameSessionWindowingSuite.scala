@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDateTime
+
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types._
 
 class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
   with BeforeAndAfterEach {
@@ -376,5 +379,31 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
         Seq(Row("2016-03-27 19:39:27", "2016-03-27 19:39:32", 1))
       )
     }
+  }
+
+  test("SPARK-36724: Support timestamp_ntz as a type of time column for SessionWindow") {
+    val df = Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id")
+    val aggDF =
+      df.groupBy(session_window($"time", "10 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast("string"),
+          $"session_window.end".cast("string"), $"counts")
+
+    val aggregate = aggDF.queryExecution.analyzed.children(0).children(0)
+    assert(aggregate.isInstanceOf[Aggregate])
+
+    val timeWindow = aggregate.asInstanceOf[Aggregate].groupingExpressions(0)
+    assert(timeWindow.isInstanceOf[AttributeReference])
+
+    val attributeReference = timeWindow.asInstanceOf[AttributeReference]
+    assert(attributeReference.name == "session_window")
+
+    val expectedSchema = StructType(
+      Seq(StructField("start", TimestampNTZType), StructField("end", TimestampNTZType)))
+    assert(attributeReference.dataType == expectedSchema)
+
+    checkAnswer(aggDF, Seq(Row("2016-03-27 19:39:25", "2016-03-27 19:39:40", 2)))
   }
 }

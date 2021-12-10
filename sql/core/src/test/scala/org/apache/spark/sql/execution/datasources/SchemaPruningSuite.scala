@@ -882,4 +882,34 @@ abstract class SchemaPruningSuite
           Nil)
     }
   }
+
+  test("SPARK-37450: Prunes unnecessary fields from Explode for count aggregation") {
+    import testImplicits._
+
+    withTempView("table") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        val jsonStr =
+          """
+            |{
+            |  "items": [
+            |  {"itemId": 1, "itemData": "a"},
+            |  {"itemId": 2, "itemData": "b"}
+            |]}
+            |""".stripMargin
+        val df = spark.read.json(Seq(jsonStr).toDS)
+        makeDataSourceFile(df, new File(path))
+
+        spark.read.format(dataSourceName).load(path)
+          .createOrReplaceTempView("table")
+
+        val read = spark.table("table")
+        val query = read.select(explode($"items").as('item)).select(count($"*"))
+
+        checkScan(query, "struct<items:array<struct<itemId:long>>>")
+        checkAnswer(query, Row(2) :: Nil)
+      }
+    }
+  }
 }

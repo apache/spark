@@ -118,7 +118,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
     val exception = intercept[IllegalArgumentException] {
       runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
     }
-    assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
+    assert(exception.getMessage === uniqueExceptionMessage)
     assert(exception.getStackTrace.mkString("\n").contains(
       "... run in separate thread using org.apache.spark.util.ThreadUtils ..."),
       "stack trace does not contain expected place holder"

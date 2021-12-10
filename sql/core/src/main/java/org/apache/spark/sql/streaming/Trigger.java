@@ -19,12 +19,13 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 import scala.concurrent.duration.Duration;
 
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.AvailableNowTrigger$;
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 
 /**
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
@@ -89,13 +90,25 @@ public class Trigger {
   }
 
   /**
-   * A trigger that process only one batch of data in a streaming query then terminates
-   * the query.
+   * A trigger that processes all available data in a single batch then terminates the query.
+   *
+   * For better scalability, AvailableNow can be used alternatively to process the data in
+   * multiple batches.
    *
    * @since 2.2.0
    */
   public static Trigger Once() {
     return OneTimeTrigger$.MODULE$;
+  }
+
+  /**
+   * A trigger that processes all available data at the start of the query in one or multiple
+   * batches, then terminates the query.
+   *
+   * @since 3.3.0
+   */
+  public static Trigger AvailableNow() {
+    return AvailableNowTrigger$.MODULE$;
   }
 
   /**

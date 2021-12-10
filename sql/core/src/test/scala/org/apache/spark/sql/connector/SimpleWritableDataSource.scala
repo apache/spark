@@ -139,7 +139,7 @@ class SimpleWritableDataSource extends TestingV2Source {
     }
 
     override def capabilities(): util.Set[TableCapability] =
-      Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+      util.EnumSet.of(BATCH_READ, BATCH_WRITE, TRUNCATE)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {

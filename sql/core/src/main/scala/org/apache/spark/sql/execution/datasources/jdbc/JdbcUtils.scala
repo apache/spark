@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
+import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -29,7 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
@@ -37,9 +38,10 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -49,7 +51,7 @@ import org.apache.spark.util.NextIterator
 /**
  * Util functions for JDBC tables.
  */
-object JdbcUtils extends Logging {
+object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
@@ -131,18 +133,13 @@ object JdbcUtils extends Logging {
     val columns = if (tableSchema.isEmpty) {
       rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
     } else {
-      val columnNameEquality = if (isCaseSensitive) {
-        org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-      } else {
-        org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-      }
       // The generated insert statement needs to follow rddSchema's column sequence and
       // tableSchema's column names. When appending data into some case-sensitive DBMSs like
       // PostgreSQL/Oracle, we need to respect the existing case-sensitive column names instead of
       // RDD column names for user convenience.
       val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
-        val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
+        val normalizedName = tableColumnNames.find(f => conf.resolver(f, col.name)).getOrElse {
           throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
         dialect.quoteIdentifier(normalizedName)
@@ -475,7 +472,7 @@ object JdbcUtils extends Logging {
           val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
             rawTime.toLocalTime().toNanoOfDay())
           val utcTimeMicro = DateTimeUtils.toUTCTime(
-            localTimeMicro, SQLConf.get.sessionLocalTimeZone)
+            localTimeMicro, conf.sessionLocalTimeZone)
           row.setLong(pos, utcTimeMicro)
         } else {
           row.update(pos, null)
@@ -594,7 +591,7 @@ object JdbcUtils extends Logging {
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
       } else {
@@ -603,7 +600,7 @@ object JdbcUtils extends Logging {
       }
 
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           stmt.setDate(pos + 1, toJavaDate(localDateToDays(row.getAs[LocalDate](pos))))
       } else {
@@ -661,6 +658,11 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect,
       isolationLevel: Int,
       options: JDBCOptions): Unit = {
+
+    if (iterator.isEmpty) {
+      return
+    }
+
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = getConnection()
@@ -812,19 +814,14 @@ object JdbcUtils extends Logging {
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = if (caseSensitive) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-    }
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
+      userSchema.map(_.name), "in the createTableColumnTypes option value", conf.resolver)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      schema.find(f => nameEquality(f.name, col)).getOrElse {
+      schema.find(f => conf.resolver(f.name, col)).getOrElse {
         throw QueryCompilationErrors.createTableColumnTypesOptionColumnNotFoundInSchemaError(
           col, schema)
       }
@@ -1020,6 +1017,57 @@ object JdbcUtils extends Logging {
     executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
   }
 
+  /**
+   * Create an index.
+   */
+  def createIndex(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String],
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options,
+      dialect.createIndex(indexName, tableName, columns, columnsProperties, properties))
+  }
+
+  /**
+   * Check if an index exists
+   */
+  def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.indexExists(conn, indexName, tableName, options)
+  }
+
+  /**
+   * Drop an index.
+   */
+  def dropIndex(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.dropIndex(indexName, tableName))
+  }
+
+  /**
+   * List all the indexes in a table.
+   */
+  def listIndexes(
+      conn: Connection,
+      tableName: String,
+      options: JDBCOptions): Array[TableIndex] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listIndexes(conn, tableName, options)
+  }
+
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
     val statement = conn.createStatement
     try {
@@ -1027,6 +1075,33 @@ object JdbcUtils extends Logging {
       statement.executeUpdate(sql)
     } finally {
       statement.close()
+    }
+  }
+
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeQuery(sql)
+    } finally {
+      statement.close()
+    }
+  }
+
+  def classifyException[T](message: String, dialect: JdbcDialect)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable => throw dialect.classifyException(message, e)
+    }
+  }
+
+  def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
+    val conn = createConnectionFactory(options)()
+    try {
+      f(conn)
+    } finally {
+      conn.close()
     }
   }
 }

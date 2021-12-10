@@ -430,3 +430,13 @@ FROM
     test_ignore_null
 WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY id;
+
+SELECT
+	nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+	basic_pays;
+
+SELECT
+	SUM(salary) OVER w sum_salary
+FROM
+	basic_pays;

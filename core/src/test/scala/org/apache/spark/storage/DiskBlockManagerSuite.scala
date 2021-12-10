@@ -60,7 +60,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     super.beforeEach()
     val conf = testConf.clone
     conf.set("spark.local.dir", rootDirs)
-    diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
   }
 
   override def afterEach(): Unit = {
@@ -105,7 +105,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     testConf.set("spark.local.dir", rootDirs)
     testConf.set("spark.shuffle.push.enabled", "true")
     testConf.set(config.Tests.IS_TESTING, true)
-    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
     assert(Utils.getConfiguredLocalDirs(testConf).map(
       rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
@@ -118,7 +118,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   test("Test dir creation with permission 770") {
     val testDir = new File("target/testDir");
     FileUtils.deleteQuietly(testDir)
-    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
     diskBlockManager.createDirWithPermission770(testDir)
     assert(testDir.exists && testDir.isDirectory)
     val permission = PosixFilePermissions.toString(
@@ -129,7 +129,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   test("Encode merged directory name and attemptId in shuffleManager field") {
     testConf.set(config.APP_ATTEMPT_ID, "1");
-    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
     val mergedShuffleMeta = diskBlockManager.getMergeDirectoryAndAttemptIDJsonString();
     val mapper: ObjectMapper = new ObjectMapper
     val typeRef: TypeReference[HashMap[String, String]] =

@@ -162,7 +162,8 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq(pd.Series(["1", "2", "3"]), psser.astype(str))
+        self.assert_eq(psser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[b"2", b"3", b"1"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))

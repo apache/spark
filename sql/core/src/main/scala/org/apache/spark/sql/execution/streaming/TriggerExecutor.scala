@@ -31,12 +31,22 @@ trait TriggerExecutor {
 /**
  * A trigger executor that runs a single batch only, then terminates.
  */
-case class OneTimeExecutor() extends TriggerExecutor {
+case class SingleBatchExecutor() extends TriggerExecutor {
 
   /**
    * Execute a single batch using `batchRunner`.
    */
   override def execute(batchRunner: () => Boolean): Unit = batchRunner()
+}
+
+/**
+ * A trigger executor that runs multiple batches then terminates.
+ */
+case class MultiBatchExecutor() extends TriggerExecutor {
+  /**
+   * Execute multiple batches using `batchRunner`
+   */
+  override def execute(batchRunner: () => Boolean): Unit = while (batchRunner()) {}
 }
 
 /**

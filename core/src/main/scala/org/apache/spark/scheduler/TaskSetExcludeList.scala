@@ -138,7 +138,7 @@ private[scheduler] class TaskSetExcludelist(
         // This executor has been excluded for this stage.  Let's check if it
         // the whole node should be excluded.
         val excludedExecutorsOnNode =
-          execsWithFailuresOnNode.filter(excludedExecs.contains(_))
+          execsWithFailuresOnNode.intersect(excludedExecs)
         val now = clock.getTimeMillis()
         // SparkListenerExecutorBlacklistedForStage is deprecated but post both events
         // to keep backward compatibility

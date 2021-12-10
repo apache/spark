@@ -28,6 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
@@ -39,7 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
-object DataSourceUtils {
+object DataSourceUtils extends PredicateHelper {
   /**
    * The key to use for storing partitionBy columns as options.
    */
@@ -241,5 +242,23 @@ object DataSourceUtils {
     } else {
       options
     }
+  }
+
+  def getPartitionFiltersAndDataFilters(
+      partitionSchema: StructType,
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    val partitionColumns = normalizedFilters.flatMap { expr =>
+      expr.collect {
+        case attr: AttributeReference if partitionSchema.names.contains(attr.name) =>
+          attr
+      }
+    }
+    val partitionSet = AttributeSet(partitionColumns)
+    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
+      f.references.subsetOf(partitionSet)
+    )
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
   }
 }

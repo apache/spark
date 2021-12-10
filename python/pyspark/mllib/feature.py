@@ -28,15 +28,26 @@ from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
-__all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
-           'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
-           'ChiSqSelector', 'ChiSqSelectorModel', 'ElementwiseProduct']
+__all__ = [
+    "Normalizer",
+    "StandardScalerModel",
+    "StandardScaler",
+    "HashingTF",
+    "IDFModel",
+    "IDF",
+    "Word2Vec",
+    "Word2VecModel",
+    "ChiSqSelector",
+    "ChiSqSelectorModel",
+    "ElementwiseProduct",
+]
 
 
 class VectorTransformer(object):
     """
     Base class for transformation of a vector or RDD of vector
     """
+
     def transform(self, vector):
         """
         Applies transformation on a vector.
@@ -82,6 +93,7 @@ class Normalizer(VectorTransformer):
     >>> nor2.transform(v)
     DenseVector([0.0, 0.5, 1.0])
     """
+
     def __init__(self, p=2.0):
         assert p >= 1.0, "p should be greater than 1.0"
         self.p = float(p)
@@ -170,7 +182,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, vector)
 
-    @since('1.4.0')
+    @since("1.4.0")
     def setWithMean(self, withMean):
         """
         Setter of the boolean which decides
@@ -179,7 +191,7 @@ class StandardScalerModel(JavaVectorTransformer):
         self.call("setWithMean", withMean)
         return self
 
-    @since('1.4.0')
+    @since("1.4.0")
     def setWithStd(self, withStd):
         """
         Setter of the boolean which decides
@@ -189,7 +201,7 @@ class StandardScalerModel(JavaVectorTransformer):
         return self
 
     @property
-    @since('2.0.0')
+    @since("2.0.0")
     def withStd(self):
         """
         Returns if the model scales the data to unit standard deviation.
@@ -197,7 +209,7 @@ class StandardScalerModel(JavaVectorTransformer):
         return self.call("withStd")
 
     @property
-    @since('2.0.0')
+    @since("2.0.0")
     def withMean(self):
         """
         Returns if the model centers the data before scaling.
@@ -205,7 +217,7 @@ class StandardScalerModel(JavaVectorTransformer):
         return self.call("withMean")
 
     @property
-    @since('2.0.0')
+    @since("2.0.0")
     def std(self):
         """
         Return the column standard deviation values.
@@ -213,7 +225,7 @@ class StandardScalerModel(JavaVectorTransformer):
         return self.call("std")
 
     @property
-    @since('2.0.0')
+    @since("2.0.0")
     def mean(self):
         """
         Return the column mean values.
@@ -258,6 +270,7 @@ class StandardScaler(object):
     >>> model.withMean
     True
     """
+
     def __init__(self, withMean=False, withStd=True):
         if not (withMean or withStd):
             warnings.warn("Both withMean and withStd are false. The model does nothing.")
@@ -363,8 +376,16 @@ class ChiSqSelector(object):
     >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
     DenseVector([7.0])
     """
-    def __init__(self, numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                 fdr=0.05, fwe=0.05):
+
+    def __init__(
+        self,
+        numTopFeatures=50,
+        selectorType="numTopFeatures",
+        percentile=0.1,
+        fpr=0.05,
+        fdr=0.05,
+        fwe=0.05,
+    ):
         self.numTopFeatures = numTopFeatures
         self.selectorType = selectorType
         self.percentile = percentile
@@ -372,7 +393,7 @@ class ChiSqSelector(object):
         self.fdr = fdr
         self.fwe = fwe
 
-    @since('2.1.0')
+    @since("2.1.0")
     def setNumTopFeatures(self, numTopFeatures):
         """
         set numTopFeature for feature selection by number of top features.
@@ -381,7 +402,7 @@ class ChiSqSelector(object):
         self.numTopFeatures = int(numTopFeatures)
         return self
 
-    @since('2.1.0')
+    @since("2.1.0")
     def setPercentile(self, percentile):
         """
         set percentile [0.0, 1.0] for feature selection by percentile.
@@ -390,7 +411,7 @@ class ChiSqSelector(object):
         self.percentile = float(percentile)
         return self
 
-    @since('2.1.0')
+    @since("2.1.0")
     def setFpr(self, fpr):
         """
         set FPR [0.0, 1.0] for feature selection by FPR.
@@ -399,7 +420,7 @@ class ChiSqSelector(object):
         self.fpr = float(fpr)
         return self
 
-    @since('2.2.0')
+    @since("2.2.0")
     def setFdr(self, fdr):
         """
         set FDR [0.0, 1.0] for feature selection by FDR.
@@ -408,7 +429,7 @@ class ChiSqSelector(object):
         self.fdr = float(fdr)
         return self
 
-    @since('2.2.0')
+    @since("2.2.0")
     def setFwe(self, fwe):
         """
         set FWE [0.0, 1.0] for feature selection by FWE.
@@ -417,7 +438,7 @@ class ChiSqSelector(object):
         self.fwe = float(fwe)
         return self
 
-    @since('2.1.0')
+    @since("2.1.0")
     def setSelectorType(self, selectorType):
         """
         set the selector type of the ChisqSelector.
@@ -439,8 +460,16 @@ class ChiSqSelector(object):
             Real-valued features will be treated as categorical for each
             distinct value. Apply feature discretizer before using this function.
         """
-        jmodel = callMLlibFunc("fitChiSqSelector", self.selectorType, self.numTopFeatures,
-                               self.percentile, self.fpr, self.fdr, self.fwe, data)
+        jmodel = callMLlibFunc(
+            "fitChiSqSelector",
+            self.selectorType,
+            self.numTopFeatures,
+            self.percentile,
+            self.fpr,
+            self.fdr,
+            self.fwe,
+            data,
+        )
         return ChiSqSelectorModel(jmodel)
 
 
@@ -470,6 +499,7 @@ class PCA(object):
     >>> pcArray[1]
     -4.013...
     """
+
     def __init__(self, k):
         """
         Parameters
@@ -517,6 +547,7 @@ class HashingTF(object):
     >>> htf.transform(doc)
     SparseVector(100, {...})
     """
+
     def __init__(self, numFeatures=1 << 20):
         self.numFeatures = numFeatures
         self.binary = False
@@ -531,12 +562,12 @@ class HashingTF(object):
         self.binary = value
         return self
 
-    @since('1.2.0')
+    @since("1.2.0")
     def indexOf(self, term):
-        """ Returns the index of the input term. """
+        """Returns the index of the input term."""
         return hash(term) % self.numFeatures
 
-    @since('1.2.0')
+    @since("1.2.0")
     def transform(self, document):
         """
         Transforms the input document (list of terms) to term frequency
@@ -589,26 +620,26 @@ class IDFModel(JavaVectorTransformer):
         """
         return JavaVectorTransformer.transform(self, x)
 
-    @since('1.4.0')
+    @since("1.4.0")
     def idf(self):
         """
         Returns the current IDF vector.
         """
-        return self.call('idf')
+        return self.call("idf")
 
-    @since('3.0.0')
+    @since("3.0.0")
     def docFreq(self):
         """
         Returns the document frequency.
         """
-        return self.call('docFreq')
+        return self.call("docFreq")
 
-    @since('3.0.0')
+    @since("3.0.0")
     def numDocs(self):
         """
         Returns number of documents evaluated to compute idf
         """
-        return self.call('numDocs')
+        return self.call("numDocs")
 
 
 class IDF(object):
@@ -652,6 +683,7 @@ class IDF(object):
     >>> model.transform(Vectors.sparse(n, (1, 3), (1.0, 2.0)))
     SparseVector(4, {1: 0.0, 3: 0.5754})
     """
+
     def __init__(self, minDocFreq=0):
         self.minDocFreq = minDocFreq
 
@@ -730,7 +762,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         words, similarity = self.call("findSynonyms", word, num)
         return zip(words, similarity)
 
-    @since('1.4.0')
+    @since("1.4.0")
     def getVectors(self):
         """
         Returns a map of words to their vector representations.
@@ -738,13 +770,12 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         return self.call("getVectors")
 
     @classmethod
-    @since('1.5.0')
+    @since("1.5.0")
     def load(cls, sc, path):
         """
         Load a model from the given path.
         """
-        jmodel = sc._jvm.org.apache.spark.mllib.feature \
-            .Word2VecModel.load(sc._jsc.sc(), path)
+        jmodel = sc._jvm.org.apache.spark.mllib.feature.Word2VecModel.load(sc._jsc.sc(), path)
         model = sc._jvm.org.apache.spark.mllib.api.python.Word2VecModelWrapper(jmodel)
         return Word2VecModel(model)
 
@@ -805,6 +836,7 @@ class Word2Vec(object):
     ... except OSError:
     ...     pass
     """
+
     def __init__(self):
         """
         Construct Word2Vec instance
@@ -817,7 +849,7 @@ class Word2Vec(object):
         self.minCount = 5
         self.windowSize = 5
 
-    @since('1.2.0')
+    @since("1.2.0")
     def setVectorSize(self, vectorSize):
         """
         Sets vector size (default: 100).
@@ -825,7 +857,7 @@ class Word2Vec(object):
         self.vectorSize = vectorSize
         return self
 
-    @since('1.2.0')
+    @since("1.2.0")
     def setLearningRate(self, learningRate):
         """
         Sets initial learning rate (default: 0.025).
@@ -833,7 +865,7 @@ class Word2Vec(object):
         self.learningRate = learningRate
         return self
 
-    @since('1.2.0')
+    @since("1.2.0")
     def setNumPartitions(self, numPartitions):
         """
         Sets number of partitions (default: 1). Use a small number for
@@ -842,7 +874,7 @@ class Word2Vec(object):
         self.numPartitions = numPartitions
         return self
 
-    @since('1.2.0')
+    @since("1.2.0")
     def setNumIterations(self, numIterations):
         """
         Sets number of iterations (default: 1), which should be smaller
@@ -851,7 +883,7 @@ class Word2Vec(object):
         self.numIterations = numIterations
         return self
 
-    @since('1.2.0')
+    @since("1.2.0")
     def setSeed(self, seed):
         """
         Sets random seed.
@@ -859,7 +891,7 @@ class Word2Vec(object):
         self.seed = seed
         return self
 
-    @since('1.4.0')
+    @since("1.4.0")
     def setMinCount(self, minCount):
         """
         Sets minCount, the minimum number of times a token must appear
@@ -868,7 +900,7 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
-    @since('2.0.0')
+    @since("2.0.0")
     def setWindowSize(self, windowSize):
         """
         Sets window size (default: 5).
@@ -893,10 +925,17 @@ class Word2Vec(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
-        jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
-                               float(self.learningRate), int(self.numPartitions),
-                               int(self.numIterations), self.seed,
-                               int(self.minCount), int(self.windowSize))
+        jmodel = callMLlibFunc(
+            "trainWord2VecModel",
+            data,
+            int(self.vectorSize),
+            float(self.learningRate),
+            int(self.numPartitions),
+            int(self.numIterations),
+            self.seed,
+            int(self.minCount),
+            int(self.windowSize),
+        )
         return Word2VecModel(jmodel)
 
 
@@ -919,10 +958,11 @@ class ElementwiseProduct(VectorTransformer):
     >>> eprod.transform(rdd).collect()
     [DenseVector([2.0, 2.0, 9.0]), DenseVector([9.0, 6.0, 12.0])]
     """
+
     def __init__(self, scalingVector):
         self.scalingVector = _convert_to_vector(scalingVector)
 
-    @since('1.5.0')
+    @since("1.5.0")
     def transform(self, vector):
         """
         Computes the Hadamard product of the vector.
@@ -938,16 +978,15 @@ class ElementwiseProduct(VectorTransformer):
 def _test():
     import doctest
     from pyspark.sql import SparkSession
+
     globs = globals().copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("mllib.feature tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = SparkSession.builder.master("local[4]").appName("mllib.feature tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     sys.path.pop(0)

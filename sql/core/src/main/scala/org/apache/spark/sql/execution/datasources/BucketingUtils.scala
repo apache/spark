@@ -33,6 +33,9 @@ object BucketingUtils {
   //   part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
   private val bucketedFileName = """.*_(\d+)(?:\..*)?$""".r
 
+  // The reserved option name for data source to write Hive-compatible bucketed table
+  val optionForHiveCompatibleBucketWrite = "__hive_compatible_bucketed_table_insertion__"
+
   def getBucketId(fileName: String): Option[Int] = fileName match {
     case bucketedFileName(bucketId) => Some(bucketId.toInt)
     case other => None
