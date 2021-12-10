@@ -1906,7 +1906,8 @@ object QueryExecutionErrors {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
 
-  def writePartitionExceedConfigSizeWhenDynamicPartitionError(numWrittenParts: Int,
+  def writePartitionExceedConfigSizeWhenDynamicPartitionError(
+    numWrittenParts: Int,
     maxDynamicPartitions: Int,
     maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
