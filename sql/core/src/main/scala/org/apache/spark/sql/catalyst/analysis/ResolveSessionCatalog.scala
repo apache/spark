@@ -426,7 +426,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
-  private def ConstructTableV1Cmd(
+  private def constructTableV1Cmd(
       query: Option[LogicalPlan],
       tableSpec: TableSpec,
       name: Seq[String],
