@@ -1310,7 +1310,10 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val DEFAULT_LISTENERS = "spark.defaultListeners"
+
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
+    .withPrepended(DEFAULT_LISTENERS, separator = ",")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .version("1.3.0")
     .stringConf

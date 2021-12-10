@@ -332,6 +332,17 @@ of the most common options to set are:
   <td>1.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.defaultListeners</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of classes to prepend to <code>spark.extraListeners</code>.
+    This is intended to be set by administrators. This exists so that it is possible for the default
+    listeners to be placed in the Spark default config file, allowing users to easily add other
+    listeners from the command line without overwriting the config file's list.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.local.dir</code></td>
   <td>/tmp</td>
   <td>
