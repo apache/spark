@@ -255,6 +255,8 @@ class UnivocityParser(
         throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
       null
+    } else if (datum == options.emptyValueInRead) {
+      converter.apply("")
     } else {
       converter.apply(datum)
     }

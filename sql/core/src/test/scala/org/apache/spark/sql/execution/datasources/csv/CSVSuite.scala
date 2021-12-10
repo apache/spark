@@ -757,12 +757,14 @@ abstract class CSVSuite
       .option("emptyValue", "empty")
       .load(testFile(carsEmptyValueFile))
 
-    verifyCars(cars, withHeader = true, checkValues = false)
+    verifyCars(cars, withHeader = true, checkValues = false, numCars = 5)
     val results = cars.collect()
-    assert(results(0).toSeq === Array(2012, "Tesla", "S", "empty", "empty"))
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "", ""))
     assert(results(1).toSeq ===
       Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
-    assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, "empty"))
+    assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, ""))
+    assert(results(3).toSeq === Array(2021, "BMW", "X1", null, ""))
+    assert(results(4).toSeq === Array(2021, "Volvo", "s60", null, "EMPTY"))
   }
 
   test("save csv with empty fields with user defined empty values") {
@@ -796,12 +798,14 @@ abstract class CSVSuite
         .option("header", "true")
         .load(csvDir)
 
-      verifyCars(carsCopy, withHeader = true, checkValues = false)
+      verifyCars(carsCopy, withHeader = true, checkValues = false, numCars = 5)
       val results = carsCopy.collect()
       assert(results(0).toSeq === Array(2012, "Tesla", "S", "empty", "empty"))
       assert(results(1).toSeq ===
         Array(1997, "Ford", "E350", "Go get one now they are going fast", null))
       assert(results(2).toSeq === Array(2015, "Chevy", "Volt", null, "empty"))
+      assert(results(3).toSeq === Array(2021, "BMW", "X1", null, "empty"))
+      assert(results(4).toSeq === Array(2021, "Volvo", "s60", null, "EMPTY"))
     }
   }
 
