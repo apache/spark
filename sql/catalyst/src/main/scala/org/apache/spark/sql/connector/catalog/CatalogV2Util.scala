@@ -63,12 +63,10 @@ private[sql] object CatalogV2Util {
       SupportsNamespaces.PROP_OWNER)
 
   /**
-   * Apply properties changes to a map and return the result.
+   * Apply properties changes and return the result.
    */
-  def applyNamespaceChanges(
-      properties: Map[String, String],
-      changes: Seq[NamespaceChange]): Map[String, String] = {
-    applyNamespaceChanges(properties.asJava, changes).asScala.toMap
+  def applyNamespaceChanges(changes: Seq[NamespaceChange]): Map[String, String] = {
+    applyNamespaceChanges(Map[String, String]().asJava, changes).asScala.toMap
   }
 
   /**

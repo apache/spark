@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespaces}
@@ -29,7 +31,8 @@ case class AlterNamespaceSetPropertiesExec(
     namespace: Seq[String],
     props: Map[String, String]) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    val changes = props.map{ case (k, v) =>
+    val existingProps = catalog.loadNamespaceMetadata(namespace.toArray).asScala.toMap
+    val changes = (existingProps ++ props).map { case (k, v) =>
       NamespaceChange.setProperty(k, v)
     }.toSeq
     catalog.alterNamespace(namespace.toArray, changes: _*)

@@ -209,8 +209,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   override def alterNamespace(
       namespace: Array[String],
       changes: NamespaceChange*): Unit = {
-    val metadata = loadNamespaceMetadata(namespace).asScala.toMap
-    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
+    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(changes))
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
