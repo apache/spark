@@ -803,6 +803,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         val insert = df.queryExecution.executedPlan.collect {
           case CommandResultExec(_, dataWriting: DataWritingCommandExec, _) => dataWriting.cmd
         }
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(insert.size == 1)
         assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.JOB_COMMIT_TIME))
         assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
