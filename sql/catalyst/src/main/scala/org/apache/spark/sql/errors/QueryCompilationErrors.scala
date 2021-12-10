@@ -479,8 +479,8 @@ object QueryCompilationErrors {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def operationOnlySupportedWithV2TableError(message: String): Throwable = {
-    new AnalysisException(s"$message is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
+    new AnalysisException(s"$operation is only supported with v2 tables.")
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {

@@ -150,7 +150,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        constructTableV1Cmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
+        constructV1TableCmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
@@ -163,7 +163,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = true)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        constructTableV1Cmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
+        constructV1TableCmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
@@ -426,7 +426,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
-  private def constructTableV1Cmd(
+  private def constructV1TableCmd(
       query: Option[LogicalPlan],
       tableSpec: TableSpec,
       name: Seq[String],
