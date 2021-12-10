@@ -1138,6 +1138,39 @@ class DataFrameTests(ReusedSQLTestCase):
             [Row(value=None)],
         )
 
+    def test_transform_param(self):
+        def transform_fun(df, m, *, param):
+            return df.filter(col("c1") <= param).withColumn("c1", col("c1") * m)
+
+        def assert_equals(observed):
+            actual = observed.collect()
+            self.assertEqual(
+                [
+                    {
+                        "c1": 3,
+                    },
+                    {
+                        "c1": 6,
+                    },
+                ],
+                [row.asDict() for row in actual],
+            )
+
+        sdf = self.spark.createDataFrame([(1,), (2,), (3,)], ["c1"])
+        assert_equals(sdf.transform(transform_fun, 3, param=2))
+        assert_equals(sdf.transform(lambda df: transform_fun(df, 3, param=2)))
+        from functools import partial
+
+        assert_equals(sdf.transform(partial(transform_fun, m=3, param=2)))
+        with self.assertRaisesRegex(
+            TypeError, r"transform_fun\(\) missing 1 required positional argument: 'm'"
+        ):
+            sdf.transform(transform_fun)
+        with self.assertRaisesRegex(
+            TypeError, r"transform_fun\(\) missing 1 required keyword-only argument: 'param'"
+        ):
+            sdf.transform(transform_fun, 3)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
