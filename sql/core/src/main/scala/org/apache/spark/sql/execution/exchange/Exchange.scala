@@ -113,7 +113,7 @@ object ReuseExchange extends Rule[SparkPlan] {
       case exchange: Exchange =>
         val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
         val samePlan = sameSchema.find { e =>
-          exchange.sameResult(e)
+          exchange.sameResult(e) && exchange.ne(e)
         }
         if (samePlan.isDefined) {
           // Keep the output of this exchange, the following plans require that to resolve
