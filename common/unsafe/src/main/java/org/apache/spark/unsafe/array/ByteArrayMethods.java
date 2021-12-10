@@ -124,7 +124,13 @@ public class ByteArrayMethods {
     } else if (target.length > array.length) {
       return false;
     } else {
-      return indexOf(array, target) == array.length - target.length;
+      int endPos = array.length - target.length;
+      for (int i = 0; i < target.length; ++i) {
+        if (array[endPos + i] != target[i]) {
+          return false;
+        }
+      }
+      return true;
     }
   }
 
