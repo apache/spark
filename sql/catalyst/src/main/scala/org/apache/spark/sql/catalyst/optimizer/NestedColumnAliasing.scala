@@ -410,11 +410,11 @@ object GeneratorNestedColumnAliasing {
   }
 
   /**
-   * Replace the refernece attribute of extractor expression with generator input.
+   * Replace the reference attribute of extractor expression with generator input.
    */
   private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
     expr.transformDown {
-      case _: Attribute =>
+      case a: Attribute if expr.references.contains(a) =>
         generator.child
       case g: GetStructField =>
         // We cannot simply do a transformUp instead because if we replace the attribute

@@ -917,17 +917,17 @@ abstract class SchemaPruningSuite
     import testImplicits._
 
     val schema = StructType(Seq(
-      StructField("o", ArrayType(StructType(
-        Seq(StructField("s", StringType, false),
-          StructField("b", ArrayType(StructType(
-            Seq(StructField("e", StringType, false))), true), false)
+      StructField("array", ArrayType(StructType(
+        Seq(StructField("string", StringType, false),
+          StructField("inner_array", ArrayType(StructType(
+            Seq(StructField("inner_string", StringType, false))), true), false)
         )), false))
     ))
 
     val count = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
-      .select(explode($"o").alias("eo"))
-      .select("eo.*")
-      .select(explode($"b"))
+      .select(explode($"array").alias("element"))
+      .select("element.*")
+      .select(explode($"inner_array"))
       .count()
     assert(count == 0)
   }
