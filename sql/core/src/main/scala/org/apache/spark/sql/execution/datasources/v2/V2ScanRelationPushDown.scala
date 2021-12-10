@@ -247,41 +247,42 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def pushDownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
+    case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limit)
+      if (limitPushed) {
+        sHolder.pushedLimit = Some(limit)
+      }
+      operation
+    case s @ Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+      if filter.isEmpty =>
+      val orders = DataSourceStrategy.translateSortOrders(order)
+      val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
+      if (topNPushed) {
+        sHolder.pushedLimit = Some(limit)
+        sHolder.sortValues = orders
+        operation
+      } else {
+        s
+      }
+    case p: Project =>
+      val newChild = pushDownLimit(p.child, limit)
+      if (newChild == p.child) {
+        p
+      } else {
+        p.copy(child = newChild)
+      }
+    case other => other
+  }
+
   def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      child match {
-        case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
-          val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limitValue)
-          if (limitPushed) {
-            sHolder.pushedLimit = Some(limitValue)
-          }
-          globalLimit
-        case Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
-          if filter.isEmpty =>
-          val orders = DataSourceStrategy.translateSortOrders(order)
-          val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
-          if (topNPushed) {
-            sHolder.pushedLimit = Some(limitValue)
-            sHolder.sortValues = orders
-            val localLimit = globalLimit.child.asInstanceOf[LocalLimit].copy(child = operation)
-            globalLimit.copy(child = localLimit)
-          } else {
-            globalLimit
-          }
-        case project @ Project(_, Sort(order, _,
-          operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))) if filter.isEmpty =>
-          val orders = DataSourceStrategy.translateSortOrders(order)
-          val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limitValue)
-          if (topNPushed) {
-            sHolder.pushedLimit = Some(limitValue)
-            sHolder.sortValues = orders
-            val localLimit = globalLimit.child.asInstanceOf[LocalLimit]
-              .copy(child = project.copy(child = operation))
-            globalLimit.copy(child = localLimit)
-          } else {
-            globalLimit
-          }
-        case _ => globalLimit
+      val newChild = pushDownLimit(child, limitValue)
+      if (newChild == child) {
+        globalLimit
+      } else {
+        val localLimit = globalLimit.child.asInstanceOf[LocalLimit].copy(child = newChild)
+        globalLimit.copy(child = localLimit)
       }
   }
 
