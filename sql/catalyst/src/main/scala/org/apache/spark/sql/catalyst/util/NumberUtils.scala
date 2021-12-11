@@ -125,7 +125,6 @@ object NumberUtils {
     val numberDecimalFormat = numberFormatInstance.asInstanceOf[DecimalFormat]
     numberDecimalFormat.setParseBigDecimal(true)
     numberDecimalFormat.applyPattern(transformedFormat)
-    val parsePosition = new ParsePosition(0)
     val inputStr = input.toString.trim
     val inputSplits = inputStr.split(pointSign)
     if (inputSplits.length == 1) {
@@ -152,9 +151,9 @@ object NumberUtils {
    * 'G':  group separator (uses locale)
    * '$':  specifies that the input value has a leading $ (Dollar) sign.
    *
-   * @param input
-   * @param numberFormat
-   * @return
+   * @param input the decimal to format
+   * @param numberFormat the format string
+   * @return The string after formatting input decimal
    */
   def format(input: Decimal, numberFormat: String): String = {
     val normalizedFormat = normalize(numberFormat)
