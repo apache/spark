@@ -310,33 +310,57 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key) - Returns an encrypted value of `expr` using AES.
+    _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
       Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The binary value to encrypt.
+      * key - The passphrase to use to encrypt the data.
+      * mode - Specifies which block cipher mode should be used to encrypt messages.
+               Supported modes: ECB.
+      * padding - Specifies how to pad messages whose length is not a multiple of the block size.
+                  Valid values: PKCS.
   """,
   examples = """
     Examples:
       > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
        4Hv0UKCx6nfUeAoPZo1z+w==
+      > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
+       3lmwu+Mw0H3fi5NDvcu9lg==
   """,
   since = "3.3.0",
   group = "misc_funcs")
-case class AesEncrypt(input: Expression, key: Expression, child: Expression)
-    extends RuntimeReplaceable {
+case class AesEncrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression,
+    child: Expression)
+  extends RuntimeReplaceable {
 
-  def this(input: Expression, key: Expression) = {
-    this(input,
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) = {
+    this(
+      input,
       key,
+      mode,
+      padding,
       StaticInvoke(
         classOf[ExpressionImplUtils],
         BinaryType,
         "aesEncrypt",
-        Seq(input, key),
-        Seq(BinaryType, BinaryType)))
+        Seq(input, key, mode, padding),
+        Seq(BinaryType, BinaryType, StringType, StringType)))
   }
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("PKCS"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("ECB"))
 
-  def exprsReplaced: Seq[Expression] = Seq(input, key)
+  def exprsReplaced: Seq[Expression] = Seq(input, key, mode, padding)
   protected def withNewChildInternal(newChild: Expression): AesEncrypt =
     copy(child = newChild)
 }
@@ -350,31 +374,55 @@ case class AesEncrypt(input: Expression, key: Expression, child: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key) - Returns a decrepted value of `expr` using AES.
+    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrepted value of `expr` using AES in `mode` with `padding`.
       Key lengths of 16, 24 and 32 bits are supported.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The binary value to decrypt.
+      * key - The passphrase to use to decrypt the data.
+      * mode - Specifies which block cipher mode should be used to decrypt messages.
+               Valid modes: ECB.
+      * padding - Specifies how to pad messages whose length is not a multiple of the block size.
+                  Valid values: PKCS.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
        Spark
+      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+       Spark SQL
   """,
   since = "3.3.0",
   group = "misc_funcs")
-case class AesDecrypt(input: Expression, key: Expression, child: Expression)
-    extends RuntimeReplaceable {
+case class AesDecrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression,
+    child: Expression)
+  extends RuntimeReplaceable {
 
-  def this(input: Expression, key: Expression) = {
-    this(input,
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) = {
+    this(
+      input,
       key,
+      mode,
+      padding,
       StaticInvoke(
         classOf[ExpressionImplUtils],
         BinaryType,
         "aesDecrypt",
-        Seq(input, key),
-        Seq(BinaryType, BinaryType)))
+        Seq(input, key, mode, padding),
+        Seq(BinaryType, BinaryType, StringType, StringType)))
   }
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("PKCS"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("ECB"))
 
   def exprsReplaced: Seq[Expression] = Seq(input, key)
   protected def withNewChildInternal(newChild: Expression): AesDecrypt =
     copy(child = newChild)
 }
+// scalastyle:on line.size.limit

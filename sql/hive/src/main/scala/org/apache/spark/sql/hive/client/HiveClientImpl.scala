@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -198,18 +199,6 @@ private[hive] class HiveClientImpl(
       hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
     }
     hiveConf
-  }
-
-  private def getHive(conf: HiveConf): Hive = {
-    try {
-      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
-        .invoke(null, conf).asInstanceOf[Hive]
-    } catch {
-      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
-      // 2.3.8 don't), therefore here we fallback when encountering the exception.
-      case _: NoSuchMethodException =>
-        Hive.get(conf)
-    }
   }
 
   override val userName = UserGroupInformation.getCurrentUser.getShortUserName
@@ -1286,5 +1275,28 @@ private[hive] object HiveClientImpl extends Logging {
       hiveConf.set("hive.execution.engine", "mr")
     }
     hiveConf
+  }
+
+  /**
+   * Initialize Hive through Configuration.
+   * First try to use getWithoutRegisterFns to initialize to avoid loading all functions,
+   * if there is no such method, fallback to Hive.get.
+   */
+  def getHive(conf: Configuration): Hive = {
+    val hiveConf = conf match {
+      case hiveConf: HiveConf =>
+        hiveConf
+      case _ =>
+        new HiveConf(conf, classOf[HiveConf])
+    }
+    try {
+      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
+        .invoke(null, hiveConf).asInstanceOf[Hive]
+    } catch {
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
+      case _: NoSuchMethodException =>
+        Hive.get(hiveConf)
+    }
   }
 }

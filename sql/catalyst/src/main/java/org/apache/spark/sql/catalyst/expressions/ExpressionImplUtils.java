@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.unsafe.types.UTF8String;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,18 +28,27 @@ import java.security.GeneralSecurityException;
  * An utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
-  public static byte[] aesEncrypt(byte[] input, byte[] key) {
-    return aesInternal(input, key, Cipher.ENCRYPT_MODE);
+  public static byte[] aesEncrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
+    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.ENCRYPT_MODE);
   }
 
-  public static byte[] aesDecrypt(byte[] input, byte[] key) {
-    return aesInternal(input, key, Cipher.DECRYPT_MODE);
+  public static byte[] aesDecrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
+    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.DECRYPT_MODE);
   }
 
-  private static byte[] aesInternal(byte[] input, byte[] key, int mode) {
+  private static byte[] aesInternal(
+      byte[] input,
+      byte[] key,
+      String mode,
+      String padding,
+      int opmode) {
     int inputLength = input.length;
     int keyLength = key.length;
     SecretKeySpec secretKey;
+
+    if (!mode.equalsIgnoreCase("ECB") || !padding.equalsIgnoreCase("PKCS")) {
+      throw QueryExecutionErrors.aesModeUnsupportedError(mode, padding);
+    }
 
     switch (keyLength) {
       case 16:
@@ -51,8 +61,8 @@ public class ExpressionImplUtils {
       }
 
     try {
-      Cipher cipher = Cipher.getInstance("AES");
-      cipher.init(mode, secretKey);
+      Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+      cipher.init(opmode, secretKey);
       return cipher.doFinal(input, 0, inputLength);
     } catch (GeneralSecurityException e) {
         throw new RuntimeException(e);
