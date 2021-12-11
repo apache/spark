@@ -453,6 +453,7 @@ object FunctionRegistry {
     expression[BoolOr]("any", true),
     expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
+    expression[RegrCount]("regr_count"),
 
     // string functions
     expression[Ascii]("ascii"),

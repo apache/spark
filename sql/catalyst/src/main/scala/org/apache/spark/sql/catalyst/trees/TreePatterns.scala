@@ -88,6 +88,7 @@ object TreePattern extends Enumeration  {
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
+  val REGR_COUNT: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value
