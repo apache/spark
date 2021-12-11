@@ -231,6 +231,14 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
 
+-- SPARK-37614: Support ANSI Aggregate Function: regr_avgx
+SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, 2L), (2, 3L), (2, 4L) AS tab(a, b);
+SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (2, 3L), (2, 4L) AS tab(a, b);
+SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS tab(a, b);
+SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;
+
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT
  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
