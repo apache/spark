@@ -136,7 +136,7 @@ object NumberUtils {
       inputSplits(1).filterNot(isSign).length > scale) {
       throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
     }
-    val number = numberDecimalFormat.parse(inputStr, parsePosition)
+    val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
     Decimal(number.asInstanceOf[BigDecimal])
   }
 
