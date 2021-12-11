@@ -244,7 +244,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_udf(ceil(udf(sum(earnings)), 0)):bigint,dotNET_a1:double,Java_udf(ceil(udf(sum(earnings)), 0)):bigint,Java_a1:double>
+struct<year:int,dotNET_udf(CEIL(udf(sum(earnings)))):bigint,dotNET_a1:double,Java_udf(CEIL(udf(sum(earnings)))):bigint,Java_a1:double>
 -- !query output
 2012	15000	7501.0	20000	20001.0
 2013	48000	48001.0	30000	30001.0

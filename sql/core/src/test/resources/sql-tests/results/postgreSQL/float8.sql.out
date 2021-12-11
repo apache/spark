@@ -331,7 +331,7 @@ struct<ceil_f1:bigint>
 -- !query
 select ceiling(f1) as ceiling_f1 from float8_tbl f
 -- !query schema
-struct<ceiling_f1:double>
+struct<ceiling_f1:bigint>
 -- !query output
 -34
 0
