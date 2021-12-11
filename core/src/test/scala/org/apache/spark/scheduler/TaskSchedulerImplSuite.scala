@@ -2072,7 +2072,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       "heartbeat timed out"))
 
     // Wait busyTask begin running
-    eventually(timeout(500.milliseconds)) {
+    eventually(timeout(10.seconds)) {
       assert(busyTask.running.get())
     }
 
