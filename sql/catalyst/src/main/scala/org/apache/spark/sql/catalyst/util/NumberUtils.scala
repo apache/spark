@@ -41,12 +41,12 @@ object NumberUtils {
     val normalizedFormat = format.toUpperCase(Locale.ROOT).map {
       case '9' if notFindDecimalPoint => '#'
       case '9' if !notFindDecimalPoint => '0'
-      case c if c == letterPointSign =>
+      case `letterPointSign` =>
         notFindDecimalPoint = false
         pointSign
-      case c if c == letterCommaSign => commaSign
-      case c if c == letterMinusSign => minusSign
-      case c if c == pointSign =>
+      case `letterCommaSign` => commaSign
+      case `letterMinusSign` => minusSign
+      case `pointSign` =>
         notFindDecimalPoint = false
         pointSign
       case other => other
