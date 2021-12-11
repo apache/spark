@@ -257,8 +257,7 @@ private[spark] abstract class MemoryManager(
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     val sizeAsBytes = conf.get(BUFFER_PAGESIZE).getOrElse(default)
-    if (conf.get(MEMORY_ONHEAP_PAGESIZE_OPTIMIZE_ENABLED) &&
-      tungstenMemoryMode == MemoryMode.ON_HEAP &&
+    if (tungstenMemoryMode == MemoryMode.ON_HEAP &&
       sizeAsBytes % (1024 * 1024) == 0 &&
       Utils.isHumongousAllocation(sizeAsBytes)) {
       sizeAsBytes - Platform.LONG_ARRAY_OFFSET

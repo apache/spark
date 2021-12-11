@@ -3235,9 +3235,11 @@ private[spark] object Utils extends Logging {
   }
 
   private def isG1GarbageCollector: Boolean = {
-    val gcs = ManagementFactory.getGarbageCollectorMXBeans.asScala
-    gcs.exists(_.getName.equalsIgnoreCase("G1 Young Generation")) ||
-      gcs.exists(_.getName.equalsIgnoreCase("G1 Old Generation"))
+    ManagementFactory.getGarbageCollectorMXBeans
+      .asScala
+      .exists(g =>
+        g.getName.equalsIgnoreCase("G1 Young Generation") ||
+          g.getName.equalsIgnoreCase("G1 Old Generation"))
   }
 
   /**
@@ -3250,15 +3252,13 @@ private[spark] object Utils extends Logging {
         val heapRegionSize = ManagementFactory
           .getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
           .getVMOption("G1HeapRegionSize").getValue.toLong
-        sizeInBytes > (heapRegionSize / 2)
+        return sizeInBytes > (heapRegionSize / 2)
       } catch {
         case t: Throwable =>
           logWarning("Try to get G1HeapRegionSize failed. ", t)
-          false
       }
-    } else {
-      false
     }
+    false
   }
 }
 
