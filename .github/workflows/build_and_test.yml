@@ -493,7 +493,8 @@ jobs:
     - name: Install dependencies for documentation generation
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
-        apt-get install -y libcurl4-openssl-dev pandoc
+        apt-get install -y libcurl4-openssl-dev pandoc libfontconfig1-dev libharfbuzz-dev \
+          libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
@@ -503,6 +504,8 @@ jobs:
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
+        Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         gem install bundler
         cd docs
         bundle install
