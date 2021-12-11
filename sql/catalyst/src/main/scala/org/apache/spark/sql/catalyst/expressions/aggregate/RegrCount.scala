@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{REGR_COUNT, TreePattern}
-import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, NumericType}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ImplicitCastInputTypes, RuntimeReplaceable}
+import org.apache.spark.sql.types.{AbstractDataType, NumericType}
 
 @ExpressionDescription(
   usage = """
@@ -37,20 +36,27 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, Numeric
   """,
   group = "agg_funcs",
   since = "3.3.0")
-case class RegrCount(left: Expression, right: Expression)
-  extends UnevaluableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrCount(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  override def prettyName: String = "regr_count"
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = LongType
+  def this(left: Expression, right: Expression) = this(left, right, Count(Seq(left, right)))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(REGR_COUNT)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), inputTypes)
+  }
 
-  override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): RegrCount =
-    copy(left = newLeft, right = newRight)
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "regr_count"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
+}
+
+object RegrCount {
+  def apply(left: Expression, right: Expression): RegrCount = new RegrCount(left, right)
 }
