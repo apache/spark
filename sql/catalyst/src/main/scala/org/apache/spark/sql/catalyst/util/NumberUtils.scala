@@ -57,9 +57,8 @@ object NumberUtils {
     UTF8String.fromString(normalizedFormat).trim(UTF8String.fromString(commaSign.toString)).toString
   }
 
-  private def isSign(c: Char): Boolean = c match {
-    case c if c == pointSign || c == commaSign || c == minusSign || c == dollarSign => true
-    case _ => false
+  private def isSign(c: Char): Boolean = {
+    Set(pointSign, commaSign, minusSign, dollarSign).contains(c)
   }
 
   private def transform(format: String): String = {
