@@ -3,7 +3,7 @@
 +- Exchange (22)
    +- * HashAggregate (21)
       +- * Project (20)
-         +- SortMergeJoin FullOuter (19)
+         +- * SortMergeJoin FullOuter (19)
             :- * Sort (9)
             :  +- * HashAggregate (8)
             :     +- Exchange (7)
@@ -112,7 +112,7 @@ Results [2]: [cs_bill_customer_sk#9 AS customer_sk#14, cs_item_sk#10 AS item_sk#
 Input [2]: [customer_sk#14, item_sk#15]
 Arguments: [customer_sk#14 ASC NULLS FIRST, item_sk#15 ASC NULLS FIRST], false, 0
 
-(19) SortMergeJoin
+(19) SortMergeJoin [codegen id : 7]
 Left keys [2]: [customer_sk#7, item_sk#8]
 Right keys [2]: [customer_sk#14, item_sk#15]
 Join condition: None
@@ -169,7 +169,7 @@ Input [2]: [d_date_sk#5, d_month_seq#29]
 
 (28) BroadcastExchange
 Input [1]: [d_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#30]
 
 Subquery:2 Hosting operator id = 10 Hosting Expression = cs_sold_date_sk#11 IN dynamicpruning#4
 

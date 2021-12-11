@@ -76,7 +76,7 @@ Condition : isnotnull(d_date_sk#5)
 
 (7) BroadcastExchange
 Input [3]: [d_date_sk#5, d_year#6, d_qoy#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#8]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#4]
@@ -103,7 +103,7 @@ Condition : isnotnull(i_item_sk#9)
 
 (13) BroadcastExchange
 Input [2]: [i_item_sk#9, i_category#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
 
 (14) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_item_sk#1]
@@ -131,7 +131,7 @@ Condition : (isnull(ws_ship_customer_sk#16) AND isnotnull(ws_item_sk#15))
 
 (19) BroadcastExchange
 Input [4]: [ws_item_sk#15, ws_ship_customer_sk#16, ws_ext_sales_price#17, ws_sold_date_sk#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false,false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [id=#19]
 
 (20) Scan parquet default.date_dim
 Output [3]: [d_date_sk#20, d_year#21, d_qoy#22]
@@ -158,7 +158,7 @@ Input [7]: [ws_item_sk#15, ws_ship_customer_sk#16, ws_ext_sales_price#17, ws_sol
 
 (25) BroadcastExchange
 Input [5]: [ws_item_sk#15, ws_ship_customer_sk#16, ws_ext_sales_price#17, d_year#21, d_qoy#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#23]
 
 (26) Scan parquet default.item
 Output [2]: [i_item_sk#24, i_category#25]

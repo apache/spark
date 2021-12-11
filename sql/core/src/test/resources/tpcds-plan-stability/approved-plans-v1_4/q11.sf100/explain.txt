@@ -433,7 +433,7 @@ Arguments: [customer_id#88 ASC NULLS FIRST], false, 0
 (78) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#22]
 Right keys [1]: [customer_id#88]
-Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) ELSE null END > CASE WHEN (year_total#23 > 0.00) THEN CheckOverflow((promote_precision(year_total#46) / promote_precision(year_total#23)), DecimalType(38,20), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#68 > 0.00) THEN CheckOverflow((promote_precision(year_total#89) / promote_precision(year_total#68)), DecimalType(38,20), true) END > CASE WHEN (year_total#23 > 0.00) THEN CheckOverflow((promote_precision(year_total#46) / promote_precision(year_total#23)), DecimalType(38,20), true) END)
 
 (79) Project [codegen id : 35]
 Output [1]: [customer_preferred_cust_flag#45]
@@ -468,7 +468,7 @@ Condition : ((isnotnull(d_year#7) AND (d_year#7 = 2001)) AND isnotnull(d_date_sk
 
 (84) BroadcastExchange
 Input [2]: [d_date_sk#6, d_year#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#91]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#91]
 
 Subquery:2 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#28 IN dynamicpruning#29
 BroadcastExchange (88)
@@ -493,7 +493,7 @@ Condition : ((isnotnull(d_year#31) AND (d_year#31 = 2002)) AND isnotnull(d_date_
 
 (88) BroadcastExchange
 Input [2]: [d_date_sk#30, d_year#31]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#92]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#92]
 
 Subquery:3 Hosting operator id = 41 Hosting Expression = ws_sold_date_sk#51 IN dynamicpruning#5
 

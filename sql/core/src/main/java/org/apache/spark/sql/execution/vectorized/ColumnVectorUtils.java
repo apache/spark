@@ -92,9 +92,10 @@ public class ColumnVectorUtils {
         CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
         col.getChild(0).putInts(0, capacity, c.months);
         col.getChild(1).putLongs(0, capacity, c.microseconds);
-      } else if (t instanceof DateType) {
+      } else if (t instanceof DateType || t instanceof YearMonthIntervalType) {
         col.putInts(0, capacity, row.getInt(fieldIdx));
-      } else if (t instanceof TimestampType || t instanceof TimestampNTZType) {
+      } else if (t instanceof TimestampType || t instanceof TimestampNTZType ||
+        t instanceof DayTimeIntervalType) {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +

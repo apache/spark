@@ -86,14 +86,6 @@
           <artifactId>commons-logging</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-core</artifactId>
         </exclusion>
@@ -185,10 +177,6 @@
           <artifactId>hadoop-common</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-core</artifactId>
         </exclusion>
@@ -202,18 +190,18 @@
 
   <profiles>
     <!--
-     hadoop-3.2 profile is activated by default so hadoop-2.7 profile
-     also needs to be declared here for building with -Phadoop-2.7.
+     hadoop-3 profile is activated by default so hadoop-2 profile
+     also needs to be declared here for building with -Phadoop-2.
     -->
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
     </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
@@ -270,10 +258,6 @@
             <exclusion>
               <groupId>org.apache.hadoop</groupId>
               <artifactId>hadoop-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.codehaus.jackson</groupId>
-              <artifactId>jackson-mapper-asl</artifactId>
             </exclusion>
             <exclusion>
               <groupId>com.fasterxml.jackson.core</groupId>

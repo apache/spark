@@ -28,7 +28,7 @@ private[spark] object ToolTips {
     """Time spent deserializing the task closure on the executor, including the time to read the
        broadcasted task."""
 
-  val SHUFFLE_READ_BLOCKED_TIME =
+  val SHUFFLE_READ_FETCH_WAIT_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
   val INPUT = "Bytes read from Hadoop or from Spark storage."

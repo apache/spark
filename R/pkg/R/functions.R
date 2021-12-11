@@ -41,6 +41,8 @@ NULL
 #' @param x Column to compute on. In \code{window}, it must be a time Column of
 #'          \code{TimestampType}. This is not used with \code{current_date} and
 #'          \code{current_timestamp}
+#' @param y Column to compute on.
+#' @param z Column to compute on.
 #' @param format The format for the given dates or timestamps in Column \code{x}. See the
 #'               format used in the following methods:
 #'               \itemize{
@@ -262,18 +264,20 @@ NULL
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
 #'              You can find the JSON-specific options for reading/writing JSON files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'              You can find the CSV-specific options for reading/writing CSV files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -1467,6 +1471,30 @@ setMethod("ltrim",
           })
 
 #' @details
+#' \code{make_date}: Create date from year, month and day fields.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @note make_date since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list(2021, 10, 22), list(2021, 13, 1),
+#'        list(2021, 2, 29), list(2020, 2, 29)),
+#'   list("year", "month", "day")
+#' )
+#' tmp <- head(select(df, make_date(df$year, df$month, df$day)))
+#' head(tmp)}
+setMethod("make_date",
+          signature(x = "Column", y = "Column", z = "Column"),
+          function(x, y, z) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              x@jc, y@jc, z@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1476,6 +1504,29 @@ setMethod("max",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "max", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{max_by}: Returns the value associated with the maximum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases max_by max_by,Column-method
+#' @note max_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "max_by" = max_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("max_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "max_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -1528,6 +1579,29 @@ setMethod("min",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "min", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases min_by min_by,Column-method
+#' @note min_by since 3.3.0
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(
+#'   list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+#'        list("dotNET", 2013, 48000), list("Java", 2013, 30000)),
+#'   list("course", "year", "earnings")
+#' )
+#' tmp <- agg(groupBy(df, df$"course"), "min_by" = min_by(df$"year", df$"earnings"))
+#' head(tmp)}
+setMethod("min_by",
+          signature(x = "Column", y = "Column"),
+          function(x, y) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "min_by", x@jc, y@jc)
             column(jc)
           })
 
@@ -3744,6 +3818,7 @@ setMethod("row_number",
 #'        Column, for example \code{unresolved_named_lambda_var("a", "b", "c")}
 #'        yields unresolved \code{a.b.c}
 #' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
+#' @keywords internal
 unresolved_named_lambda_var <- function(...) {
   jc <- newJObject(
     "org.apache.spark.sql.Column",
@@ -3767,6 +3842,7 @@ unresolved_named_lambda_var <- function(...) {
 #' @param fun R \code{function} (unary, binary or ternary)
 #'        that transforms \code{Columns} into a \code{Column}
 #' @return JVM \code{LambdaFunction} object
+#' @keywords internal
 create_lambda <- function(fun) {
   as_jexpr <- function(x) callJMethod(x@jc, "expr")
 
@@ -3815,6 +3891,7 @@ create_lambda <- function(fun) {
 #' @param cols list of character or Column objects
 #' @param funs list of named list(fun = ..., expected_narg = ...)
 #' @return a \code{Column} representing name applied to cols with funs
+#' @keywords internal
 invoke_higher_order_function <- function(name, cols, funs) {
   as_jexpr <- function(x) {
     if (class(x) == "character") {

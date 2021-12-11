@@ -48,7 +48,7 @@ Condition : isnotnull(p_partkey#5)
 
 (8) BroadcastExchange
 Input [2]: [p_partkey#5, p_type#6]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false,false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#7]
 
 (9) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [l_partkey#1]

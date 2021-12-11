@@ -90,7 +90,7 @@ Input [2]: [wp_web_page_sk#5, wp_char_count#6]
 
 (9) BroadcastExchange
 Input [1]: [wp_web_page_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
@@ -121,7 +121,7 @@ Input [2]: [hd_demo_sk#8, hd_dep_count#9]
 
 (16) BroadcastExchange
 Input [1]: [hd_demo_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
@@ -152,7 +152,7 @@ Input [2]: [t_time_sk#11, t_hour#12]
 
 (23) BroadcastExchange
 Input [1]: [t_time_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -243,7 +243,7 @@ Input [2]: [t_time_sk#25, t_hour#26]
 
 (43) BroadcastExchange
 Input [1]: [t_time_sk#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
 
 (44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_time_sk#19]

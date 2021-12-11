@@ -58,7 +58,7 @@ Input [3]: [p_partkey#4, p_brand#5, p_container#6]
 
 (8) BroadcastExchange
 Input [1]: [p_partkey#4]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#8]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [l_partkey#1]
@@ -107,7 +107,7 @@ Condition : isnotnull((0.2 * avg(l_quantity))#17)
 
 (18) BroadcastExchange
 Input [2]: [(0.2 * avg(l_quantity))#17, l_partkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false,false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#18]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [p_partkey#4]

@@ -66,6 +66,12 @@ object QueryCompilationErrors {
       messageParameters = Array(sizeLimit.toString))
   }
 
+  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
+    new AnalysisException(
+      errorClass = "ILLEGAL_SUBSTRING",
+      messageParameters = Array(subject, illegalContent))
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -419,7 +425,7 @@ object QueryCompilationErrors {
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(s"Invalid arguments for function $name")
     } else {
@@ -429,7 +435,7 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
   }
 
@@ -528,10 +534,6 @@ object QueryCompilationErrors {
   def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
     new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
       "SHOW VIEWS, only SessionCatalog supports this command.")
-  }
-
-  def unsupportedFunctionNameError(quoted: String): Throwable = {
-    new AnalysisException(s"Unsupported function name '$quoted'")
   }
 
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
@@ -861,9 +863,9 @@ object QueryCompilationErrors {
     new TableAlreadyExistsException(ident)
   }
 
-  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
-    new NoSuchTableException(
-      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -1849,19 +1851,6 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempFuncWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
-  }
-
-  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
   def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
     new AnalysisException(
       s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
@@ -2009,19 +1998,6 @@ object QueryCompilationErrors {
       s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
-  }
-
-  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempViewWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
-  }
-
-  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
-    new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -2391,5 +2367,31 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
+  }
+
+  def tableIndexNotSupportedError(errorMessage: String): Throwable = {
+    new AnalysisException(errorMessage)
+  }
+
+  def invalidViewText(viewText: String, tableName: String): Throwable = {
+    new AnalysisException(
+      s"Invalid view text: $viewText. The view $tableName may have been tampered with")
+  }
+
+  def invalidTimeTravelSpecError(): Throwable = {
+    new AnalysisException(
+      "Cannot specify both version and timestamp when time travelling the table.")
+  }
+
+  def invalidTimestampExprForTimeTravel(expr: Expression): Throwable = {
+    new AnalysisException(s"${expr.sql} is not a valid timestamp expression for time travel.")
+  }
+
+  def timeTravelUnsupportedError(target: String): Throwable = {
+    new AnalysisException(s"Cannot time travel $target.")
+  }
+
+  def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
+    new UnsupportedOperationException(s"Table $tableName does not support time travel.")
   }
 }

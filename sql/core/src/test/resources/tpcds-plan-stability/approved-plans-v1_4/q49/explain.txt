@@ -99,7 +99,7 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 
 (5) BroadcastExchange
 Input [5]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#8]
 
 (6) Scan parquet default.web_returns
 Output [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
@@ -207,7 +207,7 @@ Input [6]: [cs_item_sk#39, cs_order_number#40, cs_quantity#41, cs_net_paid#42, c
 
 (29) BroadcastExchange
 Input [5]: [cs_item_sk#39, cs_order_number#40, cs_quantity#41, cs_net_paid#42, cs_sold_date_sk#44]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false,false), [id=#45]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#45]
 
 (30) Scan parquet default.catalog_returns
 Output [5]: [cr_item_sk#46, cr_order_number#47, cr_return_quantity#48, cr_return_amount#49, cr_returned_date_sk#50]
@@ -315,7 +315,7 @@ Input [6]: [ss_item_sk#76, ss_ticket_number#77, ss_quantity#78, ss_net_paid#79, 
 
 (53) BroadcastExchange
 Input [5]: [ss_item_sk#76, ss_ticket_number#77, ss_quantity#78, ss_net_paid#79, ss_sold_date_sk#81]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false,false), [id=#82]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#82]
 
 (54) Scan parquet default.store_returns
 Output [5]: [sr_item_sk#83, sr_ticket_number#84, sr_return_quantity#85, sr_return_amt#86, sr_returned_date_sk#87]
@@ -456,7 +456,7 @@ Input [3]: [d_date_sk#14, d_year#114, d_moy#115]
 
 (82) BroadcastExchange
 Input [1]: [d_date_sk#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#116]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#116]
 
 Subquery:2 Hosting operator id = 25 Hosting Expression = cs_sold_date_sk#44 IN dynamicpruning#7
 

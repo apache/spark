@@ -56,7 +56,7 @@ Condition : isnotnull(w_warehouse_sk#6)
 
 (7) BroadcastExchange
 Input [2]: [w_warehouse_sk#6, w_warehouse_name#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#8]
 
 (8) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_warehouse_sk#2]
@@ -87,7 +87,7 @@ Input [3]: [i_item_sk#9, i_item_id#10, i_current_price#11]
 
 (14) BroadcastExchange
 Input [2]: [i_item_sk#9, i_item_id#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
 
 (15) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
@@ -161,6 +161,6 @@ Condition : (((isnotnull(d_date#14) AND (d_date#14 >= 2000-02-10)) AND (d_date#1
 
 (28) BroadcastExchange
 Input [2]: [d_date_sk#13, d_date#14]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#24]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#24]
 
 

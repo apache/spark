@@ -18,16 +18,11 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
-import java.util
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
-import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.types._
@@ -35,9 +30,9 @@ import org.apache.spark.tags.DockerTest
 
 /**
  *
- * To run this test suite for a specific version (e.g., mysql:5.7.31):
+ * To run this test suite for a specific version (e.g., mysql:5.7.36):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
  *
  * }}}
@@ -47,7 +42,7 @@ import org.apache.spark.tags.DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -121,31 +116,5 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(t.schema === expectedSchema)
   }
 
-  override def testIndex(tbl: String): Unit = {
-    val loaded = Catalogs.load("mysql", conf)
-    val jdbcTable = loaded.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty[String], "new_table"))
-      .asInstanceOf[SupportsIndex]
-    assert(jdbcTable.indexExists("i1") == false)
-    assert(jdbcTable.indexExists("i2") == false)
-
-    val properties = new util.Properties();
-    properties.put("KEY_BLOCK_SIZE", "10")
-    properties.put("COMMENT", "'this is a comment'")
-    jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
-      Array.empty[util.Map[NamedReference, util.Properties]], properties)
-
-    jdbcTable.createIndex("i2", "",
-      Array(FieldReference("col2"), FieldReference("col3"), FieldReference("col5")),
-      Array.empty[util.Map[NamedReference, util.Properties]], new util.Properties)
-
-    assert(jdbcTable.indexExists("i1") == true)
-    assert(jdbcTable.indexExists("i2") == true)
-
-    val m = intercept[IndexAlreadyExistsException] {
-      jdbcTable.createIndex("i1", "", Array(FieldReference("col1")),
-        Array.empty[util.Map[NamedReference, util.Properties]], properties)
-    }.getMessage
-    assert(m.contains("Failed to create index: i1 in new_table"))
-  }
+  override def supportsIndex: Boolean = true
 }

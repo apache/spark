@@ -27,7 +27,7 @@ from pyspark.mllib.regression import LabeledPoint, LinearModel, StreamingLinearA
 from pyspark.mllib.util import Saveable, Loader
 from pyspark.streaming.dstream import DStream
 
-from numpy import float64, ndarray  # type: ignore[import]
+from numpy import float64, ndarray
 
 class LinearClassificationModel(LinearModel):
     def __init__(self, weights: Vector, intercept: float) -> None: ...

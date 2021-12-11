@@ -112,7 +112,7 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
 
   test("SPARK-33323: Add query resolved check before convert hive relation") {
     withTable("t") {
-      val msg = intercept[AnalysisException] {
+      val ex = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TABLE t STORED AS PARQUET AS
@@ -122,8 +122,9 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
              |  )
              |)
           """.stripMargin)
-      }.getMessage
-      assert(msg.contains("cannot resolve 'c3' given input columns"))
+      }
+      assert(ex.getErrorClass == "MISSING_COLUMN")
+      assert(ex.messageParameters.head == "c3")
     }
   }
 
@@ -141,6 +142,30 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
           Period.ofYears(1).plusMonths(1),
           Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)
             .plus(123456, ChronoUnit.MICROS)))
+    }
+  }
+
+  test("SPARK-37098: Alter table properties should invalidate cache") {
+    // specify the compression in case we change it in future
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")
+          // cache table metadata
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t SET TBLPROPERTIES('parquet.compression'='zstd')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files1 = dir.listFiles().filter(_.getName.endsWith("zstd.parquet"))
+          assert(files1.length == 1)
+
+          // cache table metadata again
+          sql("SELECT * FROM t")
+          sql("ALTER TABLE t UNSET TBLPROPERTIES('parquet.compression')")
+          sql("INSERT INTO TABLE t values(1)")
+          val files2 = dir.listFiles().filter(_.getName.endsWith("snappy.parquet"))
+          assert(files2.length == 1)
+        }
+      }
     }
   }
 }

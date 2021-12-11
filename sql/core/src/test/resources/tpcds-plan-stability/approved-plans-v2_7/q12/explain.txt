@@ -52,7 +52,7 @@ Condition : (i_category#10 IN (Sports                                           
 
 (7) BroadcastExchange
 Input [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
 
 (8) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_item_sk#1]
@@ -143,6 +143,6 @@ Input [2]: [d_date_sk#12, d_date#23]
 
 (25) BroadcastExchange
 Input [1]: [d_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#24]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#24]
 
 

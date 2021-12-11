@@ -1,0 +1,26 @@
+================================================================================================
+Add 2 columns and drop 2 columns at 3 different depths of nesting
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Add 2 columns and drop 2 columns at 3 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+To non-nullable StructTypes using performant method                            3              4           2          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                2              2           1          0.0      Infinity       1.3X
+To non-nullable StructTypes using non-performant method                       44             45           1          0.0      Infinity       0.1X
+To nullable StructTypes using non-performant method                         1099           1187         124          0.0      Infinity       0.0X
+
+
+================================================================================================
+Add 50 columns and drop 50 columns at 100 different depths of nesting
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Add 50 columns and drop 50 columns at 100 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+To non-nullable StructTypes using performant method                             3029           3068          56          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                 2820           2859          55          0.0      Infinity       1.1X
+
+

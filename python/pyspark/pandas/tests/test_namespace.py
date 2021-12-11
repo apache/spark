@@ -92,6 +92,98 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
         self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
 
+        # SPARK-36946: Support time for ps.to_datetime
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5], "hour": [2, 3]})
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "year": [2015, 2016],
+                "month": [2, 3],
+                "day": [4, 5],
+                "hour": [2, 3],
+                "minute": [10, 30],
+                "second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
+        pdf = pd.DataFrame(
+            {
+                "Year": [2015, 2016],
+                "Month": [2, 3],
+                "Day": [4, 5],
+                "Hour": [2, 3],
+                "Minute": [10, 30],
+                "Second": [21, 25],
+                "ms": [50, 69],
+                "millisecond": [123, 678],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        dict_from_pdf = pdf.to_dict()
+
+        self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
+        self.assert_eq(pd.to_datetime(dict_from_pdf), ps.to_datetime(dict_from_pdf))
+
     def test_date_range(self):
         self.assert_eq(
             ps.date_range(start="1/1/2018", end="1/08/2018"),

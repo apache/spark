@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +47,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * These rules will be evaluated after our built-in check rules.
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
+
+  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Boolean]("dataTypeMismatchError")
 
   protected def failAnalysis(msg: String): Nothing = {
     throw new AnalysisException(msg)
@@ -165,11 +168,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
         }
 
-        operator transformExpressionsUp {
+        getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
-            val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            // cannot resolve '${a.sql}' given input columns: [$from]
-            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Array(a.sql, from))
+            val missingCol = a.sql
+            val candidates = operator.inputSet.toSeq.map(_.qualifiedName)
+            val orderedCandidates = StringUtils.orderStringsBySimilarity(missingCol, candidates)
+            a.failAnalysis(
+              errorClass = "MISSING_COLUMN",
+              messageParameters = Array(missingCol, orderedCandidates.mkString(", ")))
 
           case s: Star =>
             withPosition(s) {
@@ -179,8 +185,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
                 e.failAnalysis(
-                  s"cannot resolve '${e.sql}' due to data type mismatch: $message")
+                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                    extraHintForAnsiTypeCoercionExpression(operator))
             }
 
           case c: Cast if !c.resolved =>
@@ -206,27 +214,26 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
-          case w @ WindowExpression(e, s) =>
+          case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
-            e match {
+            w.windowFunction match {
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction =>
-                w
-              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
-                w
-              case _ =>
-                failAnalysis(s"Expression '$e' not supported within a window function.")
+                  _: AggregateWindowFunction => // OK
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
+              case other =>
+                failAnalysis(s"Expression '$other' not supported within a window function.")
             }
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
-            s
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
               s"Input argument to ${e.prettyName} must be a constant.")
-        }
+
+          case _ =>
+        })
 
         operator match {
           case etw: EventTimeWatermark =>
@@ -415,27 +422,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
-              val isUnion = operator.isInstanceOf[Union]
-              val dataTypesAreCompatibleFn = if (isUnion) {
-                (dt1: DataType, dt2: DataType) =>
-                  !DataType.equalsStructurally(dt1, dt2, true)
-              } else {
-                // SPARK-18058: we shall not care about the nullability of columns
-                (dt1: DataType, dt2: DataType) =>
-                  TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
-              }
 
+              val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
                 if (dataTypesAreCompatibleFn(dt1, dt2)) {
-                  failAnalysis(
+                  val errorMessage =
                     s"""
                        |${operator.nodeName} can only be performed on tables with the compatible
                        |column types. The ${ordinalNumber(ci)} column of the
                        |${ordinalNumber(ti + 1)} table is ${dt1.catalogString} type which is not
                        |compatible with ${dt2.catalogString} at same column of first table
-                    """.stripMargin.replace("\n", " ").trim())
+                    """.stripMargin.replace("\n", " ").trim()
+                  failAnalysis(errorMessage + extraHintForAnsiTypeCoercionPlan(operator))
                 }
               }
             }
@@ -582,6 +582,86 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     plan.setAnalyzed()
+  }
+
+  private def getAllExpressions(plan: LogicalPlan): Seq[Expression] = {
+    plan match {
+      // `groupingExpressions` may rely on `aggregateExpressions`, due to the GROUP BY alias
+      // feature. We should check errors in `aggregateExpressions` first.
+      case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
+      case _ => plan.expressions
+    }
+  }
+
+  private def getDataTypesAreCompatibleFn(plan: LogicalPlan): (DataType, DataType) => Boolean = {
+    val isUnion = plan.isInstanceOf[Union]
+    if (isUnion) {
+      (dt1: DataType, dt2: DataType) =>
+        !DataType.equalsStructurally(dt1, dt2, true)
+    } else {
+      // SPARK-18058: we shall not care about the nullability of columns
+      (dt1: DataType, dt2: DataType) =>
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+    }
+  }
+
+  private def getDefaultTypeCoercionPlan(plan: LogicalPlan): LogicalPlan =
+    TypeCoercion.typeCoercionRules.foldLeft(plan) { case (p, rule) => rule(p) }
+
+  private def extraHintMessage(issueFixedIfAnsiOff: Boolean): String = {
+    if (issueFixedIfAnsiOff) {
+      "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
+        s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
+    } else {
+      ""
+    }
+  }
+
+  private def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
+    if (!SQLConf.get.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
+      var issueFixedIfAnsiOff = true
+      getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
+        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).contains(true) &&
+            e.checkInputDataTypes().isFailure =>
+          e.checkInputDataTypes() match {
+            case TypeCheckResult.TypeCheckFailure(_) =>
+              issueFixedIfAnsiOff = false
+          }
+
+        case _ =>
+      })
+      extraHintMessage(issueFixedIfAnsiOff)
+    }
+  }
+
+  private def extraHintForAnsiTypeCoercionPlan(plan: LogicalPlan): String = {
+    if (!SQLConf.get.ansiEnabled) {
+      ""
+    } else {
+      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
+      var issueFixedIfAnsiOff = true
+      nonAnsiPlan match {
+        case _: Union | _: SetOperation if nonAnsiPlan.children.length > 1 =>
+          def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+
+          val ref = dataTypes(nonAnsiPlan.children.head)
+          val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
+          nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
+            // Check if the data types match.
+            dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                issueFixedIfAnsiOff = false
+              }
+            }
+          }
+
+        case _ =>
+      }
+      extraHintMessage(issueFixedIfAnsiOff)
+    }
   }
 
   /**

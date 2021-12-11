@@ -1207,8 +1207,8 @@ class JDBCSuite extends QueryTest
         .select("createtab_stmt").collect()
       assert(createTabStmt.length === 1)
       createTabStmt.foreach { r =>
-        assert(r.getString(0).contains(s"`url` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
-        assert(r.getString(0).contains(s"`password` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"'url' = '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"'password' = '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
       }
     }
   }

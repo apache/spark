@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -53,8 +54,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
    *
-   * This methods tries to find either a v1 partitioned scan for a given partition column or
-   * a v2 scan that support runtime filtering on a given attribute.
+   * This methods tries to find either a v1 or Hive serde partitioned scan for a given
+   * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
@@ -70,6 +71,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
               None
             }
           case _ => None
+        }
+      case (resExp, l: HiveTableRelation) =>
+        if (resExp.references.subsetOf(AttributeSet(l.partitionCols))) {
+          return Some(l)
+        } else {
+          None
         }
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)

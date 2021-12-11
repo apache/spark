@@ -44,7 +44,7 @@ The example below shows how data types are casted from PySpark DataFrame to pand
     DataFrame[tinyint: tinyint, decimal: decimal(10,0), float: float, double: double, integer: int, long: bigint, short: smallint, timestamp: timestamp, string: string, boolean: boolean, date: date]
 
     # 3. Convert PySpark DataFrame to pandas-on-Spark DataFrame
-    >>> psdf = sdf.to_pandas_on_spark()
+    >>> psdf = sdf.pandas_api()
 
     # 4. Check the pandas-on-Spark data types
     >>> psdf.dtypes

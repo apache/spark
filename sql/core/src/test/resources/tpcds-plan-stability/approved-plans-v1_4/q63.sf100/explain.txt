@@ -49,7 +49,7 @@ Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manager_id#5]
 
 (5) BroadcastExchange
 Input [2]: [i_item_sk#1, i_manager_id#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
 
 (6) Scan parquet default.store_sales
 Output [4]: [ss_item_sk#11, ss_store_sk#12, ss_sales_price#13, ss_sold_date_sk#14]
@@ -91,7 +91,7 @@ Condition : isnotnull(s_store_sk#16)
 
 (14) BroadcastExchange
 Input [1]: [s_store_sk#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false,false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#17]
 
 (15) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#12]
@@ -186,6 +186,6 @@ Input [3]: [d_date_sk#18, d_month_seq#28, d_moy#19]
 
 (33) BroadcastExchange
 Input [2]: [d_date_sk#18, d_moy#19]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#29]
 
 

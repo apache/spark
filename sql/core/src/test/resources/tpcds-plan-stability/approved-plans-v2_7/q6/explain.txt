@@ -70,7 +70,7 @@ Condition : (isnotnull(c_current_addr_sk#4) AND isnotnull(c_customer_sk#3))
 
 (7) BroadcastExchange
 Input [2]: [c_customer_sk#3, c_current_addr_sk#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false,false), [id=#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [id=#5]
 
 (8) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [ca_address_sk#1]
@@ -98,7 +98,7 @@ Condition : (isnotnull(ss_customer_sk#7) AND isnotnull(ss_item_sk#6))
 
 (13) BroadcastExchange
 Input [3]: [ss_item_sk#6, ss_customer_sk#7, ss_sold_date_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false,false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [id=#10]
 
 (14) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [c_customer_sk#3]
@@ -169,7 +169,7 @@ Results [2]: [cast((avg(UnscaledValue(i_current_price#15))#22 / 100.0) as decima
 
 (28) BroadcastExchange
 Input [2]: [avg(i_current_price)#23, i_category#16]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false,false), [id=#24]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#24]
 
 (29) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_category#14]
@@ -186,7 +186,7 @@ Input [5]: [i_item_sk#12, i_current_price#13, i_category#14, avg(i_current_price
 
 (32) BroadcastExchange
 Input [1]: [i_item_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
 
 (33) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [ss_item_sk#6]
@@ -253,7 +253,7 @@ Input [2]: [d_date_sk#11, d_month_seq#32]
 
 (44) BroadcastExchange
 Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#35]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#35]
 
 Subquery:2 Hosting operator id = 42 Hosting Expression = Subquery scalar-subquery#33, [id=#34]
 * HashAggregate (51)

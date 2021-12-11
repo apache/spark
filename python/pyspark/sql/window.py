@@ -16,10 +16,10 @@
 #
 
 import sys
-from typing import List, Tuple, TYPE_CHECKING, Union
+from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
 from pyspark import since, SparkContext
-from pyspark.sql.column import _to_seq, _to_java_column  # type: ignore[attr-defined]
+from pyspark.sql.column import _to_seq, _to_java_column
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -29,13 +29,11 @@ if TYPE_CHECKING:
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(
-    cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]
-) -> int:
+def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]) -> int:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
-    return _to_seq(sc, cols, _to_java_column)
+    return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
 class Window(object):
@@ -327,11 +325,12 @@ class WindowSpec(object):
 def _test() -> None:
     import doctest
     import pyspark.sql.window
-    SparkContext('local[4]', 'PythonTest')
+
+    SparkContext("local[4]", "PythonTest")
     globs = pyspark.sql.window.__dict__.copy()
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.window, globs=globs,
-        optionflags=doctest.NORMALIZE_WHITESPACE)
+        pyspark.sql.window, globs=globs, optionflags=doctest.NORMALIZE_WHITESPACE
+    )
     if failure_count:
         sys.exit(-1)
 

@@ -129,7 +129,7 @@ private[spark] object TaskIndexNames {
   final val SER_TIME = "rst"
   final val SHUFFLE_LOCAL_BLOCKS = "slbl"
   final val SHUFFLE_READ_RECORDS = "srr"
-  final val SHUFFLE_READ_TIME = "srt"
+  final val SHUFFLE_READ_FETCH_WAIT_TIME = "srt"
   final val SHUFFLE_REMOTE_BLOCKS = "srbl"
   final val SHUFFLE_REMOTE_READS = "srby"
   final val SHUFFLE_REMOTE_READS_TO_DISK = "srbd"
@@ -217,7 +217,8 @@ private[spark] class TaskDataWrapper(
     val shuffleRemoteBlocksFetched: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_LOCAL_BLOCKS, parent = TaskIndexNames.STAGE)
     val shuffleLocalBlocksFetched: Long,
-    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_TIME, parent = TaskIndexNames.STAGE)
+    @KVIndexParam(value = TaskIndexNames.SHUFFLE_READ_FETCH_WAIT_TIME,
+      parent = TaskIndexNames.STAGE)
     val shuffleFetchWaitTime: Long,
     @KVIndexParam(value = TaskIndexNames.SHUFFLE_REMOTE_READS, parent = TaskIndexNames.STAGE)
     val shuffleRemoteBytesRead: Long,
@@ -397,20 +398,6 @@ private[spark] class ExecutorStageSummaryWrapper(
   @JsonIgnore
   def id: Array[Any] = _id
 
-}
-
-private[spark] class SpeculationStageSummaryWrapper(
-    val stageId: Int,
-    val stageAttemptId: Int,
-    val info: SpeculationStageSummary) {
-
-  @JsonIgnore @KVIndex
-  private val _id: Array[Int] = Array(stageId, stageAttemptId)
-
-  @JsonIgnore @KVIndex("stage")
-  private def stage: Array[Int] = Array(stageId, stageAttemptId)
-
-  private[this] val id: Array[Int] = _id
 }
 
 private[spark] class StreamBlockData(

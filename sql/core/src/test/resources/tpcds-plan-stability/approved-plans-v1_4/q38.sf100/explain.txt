@@ -416,7 +416,7 @@ Input [3]: [d_date_sk#4, d_date#5, d_month_seq#41]
 
 (72) BroadcastExchange
 Input [2]: [d_date_sk#4, d_date#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#42]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#42]
 
 Subquery:2 Hosting operator id = 21 Hosting Expression = cs_sold_date_sk#14 IN dynamicpruning#3
 

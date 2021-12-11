@@ -17,29 +17,39 @@
 
 import sys
 
+from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
+
+from py4j.java_gateway import JavaObject  # type: ignore[import]
+
 from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.context import SQLContext
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 
+if TYPE_CHECKING:
+    from pyspark.sql._typing import LiteralType
+
 __all__ = ["GroupedData"]
 
 
-def dfapi(f):
-    def _api(self):
+def dfapi(f: Callable) -> Callable:
+    def _api(self: "GroupedData") -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
+
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
     return _api
 
 
-def df_varargs_api(f):
-    def _api(self, *cols):
+def df_varargs_api(f: Callable) -> Callable:
+    def _api(self: "GroupedData", *cols: str) -> DataFrame:
         name = f.__name__
         jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
+
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
     return _api
@@ -53,12 +63,20 @@ class GroupedData(PandasGroupedOpsMixin):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jgd, df):
+    def __init__(self, jgd: JavaObject, df: DataFrame):
         self._jgd = jgd
         self._df = df
-        self.sql_ctx = df.sql_ctx
+        self.sql_ctx: SQLContext = df.sql_ctx
 
-    def agg(self, *exprs):
+    @overload
+    def agg(self, *exprs: Column) -> DataFrame:
+        ...
+
+    @overload
+    def agg(self, __exprs: Dict[str, str]) -> DataFrame:
+        ...
+
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame:
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
         The available aggregate functions can be:
@@ -115,12 +133,12 @@ class GroupedData(PandasGroupedOpsMixin):
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jgd.agg(exprs[0]._jc,
-                                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
+            exprs = cast(Tuple[Column, ...], exprs)
+            jdf = self._jgd.agg(exprs[0]._jc, _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
-    def count(self):
+    def count(self) -> DataFrame:
         """Counts the number of records for each group.
 
         .. versionadded:: 1.3.0
@@ -132,7 +150,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def mean(self, *cols):
+    def mean(self, *cols: str) -> DataFrame:
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -153,7 +171,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def avg(self, *cols):
+    def avg(self, *cols: str) -> DataFrame:
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -174,7 +192,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def max(self, *cols):
+    def max(self, *cols: str) -> DataFrame:
         """Computes the max value for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -188,7 +206,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def min(self, *cols):
+    def min(self, *cols: str) -> DataFrame:
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
@@ -207,7 +225,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def sum(self, *cols):
+    def sum(self, *cols: str) -> DataFrame:
         """Computes the sum for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -225,7 +243,7 @@ class GroupedData(PandasGroupedOpsMixin):
         [Row(sum(age)=7, sum(height)=165)]
         """
 
-    def pivot(self, pivot_col, values=None):
+    def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
@@ -262,38 +280,46 @@ class GroupedData(PandasGroupedOpsMixin):
         return GroupedData(jgd, self._df)
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
+
     globs = pyspark.sql.group.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.group tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
-                                   Row(name='Bob', age=5, height=85)]).toDF()
-    globs['df4'] = sc.parallelize([Row(course="dotNET", year=2012, earnings=10000),
-                                   Row(course="Java",   year=2012, earnings=20000),
-                                   Row(course="dotNET", year=2012, earnings=5000),
-                                   Row(course="dotNET", year=2013, earnings=48000),
-                                   Row(course="Java",   year=2013, earnings=30000)]).toDF()
-    globs['df5'] = sc.parallelize([
-        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
-        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
-        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
-        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
-        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
+    globs["sc"] = sc
+    globs["spark"] = spark
+    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
+        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
+    )
+    globs["df3"] = sc.parallelize(
+        [Row(name="Alice", age=2, height=80), Row(name="Bob", age=5, height=85)]
+    ).toDF()
+    globs["df4"] = sc.parallelize(
+        [
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+        ]
+    ).toDF()
+    globs["df5"] = sc.parallelize(
+        [
+            Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+            Row(training="junior", sales=Row(course="Java", year=2012, earnings=20000)),
+            Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+            Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+            Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
+        ]
+    ).toDF()
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.group, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

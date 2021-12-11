@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
@@ -43,7 +43,7 @@ class RidgeRegressionModel @Since("1.1.0") (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {
-    weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
+    BLAS.dot(weightMatrix, dataMatrix) + intercept
   }
 
   @Since("1.3.0")

@@ -24,7 +24,7 @@ from itertools import chain
 from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
-import pandas as pd  # noqa: F401
+import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType
@@ -51,10 +51,10 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.data_type_ops.base import DataTypeOps
+    from pyspark.pandas.series import Series
 
 
 def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) -> bool:
@@ -92,7 +92,7 @@ def align_diff_index_ops(
         combined = combine_frames(
             this_index_ops.to_frame(),
             *[cast(Series, col).rename(i) for i, col in enumerate(cols)],
-            how="full"
+            how="full",
         )
 
         return column_op(func)(
@@ -100,7 +100,7 @@ def align_diff_index_ops(
             *[
                 combined["that"]._psser_for(label)
                 for label in combined["that"]._internal.column_labels
-            ]
+            ],
         ).rename(this_index_ops.name)
     else:
         # This could cause as many counts, reset_index calls, joins for combining
@@ -121,7 +121,7 @@ def align_diff_index_ops(
                             if isinstance(arg, Index)
                             else arg
                             for arg in args
-                        ]
+                        ],
                     ).sort_index(),
                     name=this_index_ops.name,
                 )
@@ -145,7 +145,7 @@ def align_diff_index_ops(
                     *[
                         combined["that"]._psser_for(label)
                         for label in combined["that"]._internal.column_labels
-                    ]
+                    ],
                 ).rename(this_index_ops.name)
             else:
                 this = cast(Index, this_index_ops).to_frame().reset_index(drop=True)
@@ -174,7 +174,7 @@ def align_diff_index_ops(
                     *[
                         other._psser_for(label)
                         for label, col in zip(other._internal.column_labels, cols)
-                    ]
+                    ],
                 ).rename(that_series.name)
 
 
@@ -221,7 +221,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             # Same DataFrame anchors
             scol = f(
                 self.spark.column,
-                *[arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args]
+                *[arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args],
             )
 
             field = InternalField.from_struct_field(
@@ -394,7 +394,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return self._dtype_op.eq(self, other)
+        # pandas always returns False for all items with dict and set.
+        if isinstance(other, (dict, set)):
+            return self != self
+        else:
+            return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return self._dtype_op.ne(self, other)
@@ -1142,7 +1146,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         periods: int,
         fill_value: Any,
         *,
-        part_cols: Sequence["ColumnOrName"] = ()
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> IndexOpsLike:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)

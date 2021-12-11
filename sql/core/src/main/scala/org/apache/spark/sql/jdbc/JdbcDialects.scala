@@ -31,9 +31,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -192,6 +195,36 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Converts aggregate function to String representing a SQL expression.
+   * @param aggFunction The aggregate function to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
+      case min: Min =>
+        if (min.column.fieldNames.length != 1) return None
+        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+      case max: Max =>
+        if (max.column.fieldNames.length != 1) return None
+        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+      case count: Count =>
+        if (count.column.fieldNames.length != 1) return None
+        val distinct = if (count.isDistinct) "DISTINCT " else ""
+        val column = quoteIdentifier(count.column.fieldNames.head)
+        Some(s"COUNT($distinct$column)")
+      case sum: Sum =>
+        if (sum.column.fieldNames.length != 1) return None
+        val distinct = if (sum.isDistinct) "DISTINCT " else ""
+        val column = quoteIdentifier(sum.column.fieldNames.head)
+        Some(s"SUM($distinct$column)")
+      case _: CountStar =>
+        Some(s"COUNT(*)")
+      case _ => None
+    }
+  }
+
+  /**
    * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
    * Some[true] : TRUNCATE TABLE causes cascading.
    * Some[false] : TRUNCATE TABLE does not cause cascading.
@@ -290,22 +323,21 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Creates an index.
+   * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
-   * @param indexType         the type of the index to be created
    * @param tableName         the table on which index to be created
    * @param columns           the columns on which index to be created
    * @param columnsProperties the properties of the columns on which index to be created
    * @param properties        the properties of the index to be created
+   * @return                  the SQL statement to use for creating the index.
    */
   def createIndex(
       indexName: String,
-      indexType: String,
       tableName: String,
       columns: Array[NamedReference],
-      columnsProperties: Array[util.Map[NamedReference, util.Properties]],
-      properties: util.Properties): String = {
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
     throw new UnsupportedOperationException("createIndex is not supported")
   }
 
@@ -327,6 +359,27 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Build a drop index SQL statement.
+   *
+   * @param indexName the name of the index to be dropped.
+   * @param tableName the table name on which index to be dropped.
+  * @return the SQL statement to use for dropping the index.
+   */
+  def dropIndex(indexName: String, tableName: String): String = {
+    throw new UnsupportedOperationException("dropIndex is not supported")
+  }
+
+  /**
+   * Lists all the indexes in this table.
+   */
+  def listIndexes(
+      conn: Connection,
+      tableName: String,
+      options: JDBCOptions): Array[TableIndex] = {
+    throw new UnsupportedOperationException("listIndexes is not supported")
+  }
+
+  /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param message The error message to be placed to the returned exception.
    * @param e The dialect specific exception.
@@ -335,6 +388,23 @@ abstract class JdbcDialect extends Serializable with Logging{
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(message, cause = Some(e))
   }
+
+  /**
+   * returns the LIMIT clause for the SELECT statement
+   */
+  def getLimitClause(limit: Integer): String = {
+    if (limit > 0 ) s"LIMIT $limit" else ""
+  }
+
+  /**
+   * returns whether the dialect supports limit or not
+   */
+  def supportsLimit(): Boolean = true
+
+  def supportsTableSample: Boolean = false
+
+  def getTableSample(sample: TableSampleInfo): String =
+    throw new UnsupportedOperationException("TableSample is not supported by this data source")
 }
 
 /**

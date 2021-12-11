@@ -45,6 +45,9 @@ SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k HAVING k > 1;
 
+-- GROUP BY alias with invalid col in SELECT list
+SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k;
+
 -- Aggregate functions cannot be used in GROUP BY
 SELECT COUNT(b) AS k FROM testData GROUP BY k;
 
@@ -189,3 +192,15 @@ SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
 GROUP BY a IS NULL;
 
+
+SELECT
+  histogram_numeric(col, 2) as histogram_2,
+  histogram_numeric(col, 3) as histogram_3,
+  histogram_numeric(col, 5) as histogram_5,
+  histogram_numeric(col, 10) as histogram_10
+FROM VALUES
+ (1), (2), (3), (4), (5), (6), (7), (8), (9), (10),
+ (11), (12), (13), (14), (15), (16), (17), (18), (19), (20),
+ (21), (22), (23), (24), (25), (26), (27), (28), (29), (30),
+ (31), (32), (33), (34), (35), (3), (37), (38), (39), (40),
+ (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col);

@@ -292,6 +292,16 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleStringWithNodeId(): String = {
     throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
+
+  protected def typeSuffix =
+    if (resolved) {
+      dataType match {
+        case LongType => "L"
+        case _ => ""
+      }
+    } else {
+      ""
+    }
 }
 
 
@@ -387,6 +397,7 @@ trait NonSQLExpression extends Expression {
     transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
+      case p: PythonUDF => PrettyPythonUDF(p.name, p.dataType, p.children)
     }.toString
   }
 }

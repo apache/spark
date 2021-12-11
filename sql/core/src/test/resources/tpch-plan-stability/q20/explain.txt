@@ -86,7 +86,7 @@ Input [2]: [p_partkey#8, p_name#9]
 
 (11) BroadcastExchange
 Input [1]: [p_partkey#8]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,true), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#10]
 
 (12) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ps_partkey#5]
@@ -143,7 +143,7 @@ Condition : isnotnull((0.5 * sum(l_quantity))#21)
 
 (23) BroadcastExchange
 Input [3]: [(0.5 * sum(l_quantity))#21, l_partkey#11, l_suppkey#12]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true], input[2, bigint, true]),false,false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true], input[2, bigint, true]),false), [id=#22]
 
 (24) BroadcastHashJoin [codegen id : 5]
 Left keys [2]: [ps_partkey#5, ps_suppkey#6]
@@ -156,7 +156,7 @@ Input [6]: [ps_partkey#5, ps_suppkey#6, ps_availqty#7, (0.5 * sum(l_quantity))#2
 
 (26) BroadcastExchange
 Input [1]: [ps_suppkey#6]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,true), [id=#23]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#23]
 
 (27) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [s_suppkey#1]
@@ -187,7 +187,7 @@ Input [2]: [n_nationkey#24, n_name#25]
 
 (33) BroadcastExchange
 Input [1]: [n_nationkey#24]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false,false), [id=#26]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#26]
 
 (34) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [s_nationkey#4]

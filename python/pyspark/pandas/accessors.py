@@ -43,11 +43,12 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.series import Series
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
@@ -343,11 +344,15 @@ class PandasOnSparkFrameMethods(object):
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
 
-        self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+        self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = func(pdf)
@@ -356,7 +361,7 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            psdf = ps.DataFrame(applied)  # type: DataFrame
+            psdf: DataFrame = DataFrame(applied)
             if len(pdf) <= limit:
                 return psdf
 
@@ -584,6 +589,10 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
             transformed = func(pdf)
@@ -632,7 +641,7 @@ class PandasOnSparkFrameMethods(object):
                     [field.struct_field for field in index_fields + data_fields]
                 )
 
-                self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+                self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
                     self_applied, func, return_schema, retain_index=True
@@ -893,7 +902,7 @@ class PandasOnSparkSeriesMethods(object):
             limit = ps.get_option("compute.shortcut_limit")
             pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
-            psser = Series(transformed)  # type: Series
+            psser: Series = Series(transformed)
 
             field = psser._internal.data_fields[0].normalize_spark_type()
         else:

@@ -108,5 +108,5 @@ case class NoSuchPartitionsException(override val message: String)
 case class NoSuchTempFunctionException(func: String)
   extends AnalysisException(s"Temporary function '$func' not found")
 
-class NoSuchIndexException(indexName: String)
-  extends AnalysisException(s"Index '$indexName' not found")
+class NoSuchIndexException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause)

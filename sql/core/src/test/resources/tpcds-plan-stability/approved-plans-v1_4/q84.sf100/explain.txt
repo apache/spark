@@ -72,7 +72,7 @@ Input [2]: [ca_address_sk#7, ca_city#8]
 
 (8) BroadcastExchange
 Input [1]: [ca_address_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_addr_sk#4]
@@ -117,7 +117,7 @@ Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
 
 (18) BroadcastExchange
 Input [1]: [ib_income_band_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
 
 (19) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [hd_income_band_sk#11]
@@ -130,7 +130,7 @@ Input [3]: [hd_demo_sk#10, hd_income_band_sk#11, ib_income_band_sk#12]
 
 (21) BroadcastExchange
 Input [1]: [hd_demo_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false,false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#16]
 
 (22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_hdemo_sk#3]
@@ -143,7 +143,7 @@ Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first
 
 (24) BroadcastExchange
 Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false,false), [id=#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#17]
 
 (25) Scan parquet default.customer_demographics
 Output [1]: [cd_demo_sk#18]
@@ -170,7 +170,7 @@ Input [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6
 
 (30) BroadcastExchange
 Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18]
-Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false,false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [id=#19]
 
 (31) Scan parquet default.store_returns
 Output [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]

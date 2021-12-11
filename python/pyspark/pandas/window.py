@@ -16,13 +16,7 @@
 #
 from abc import ABCMeta, abstractmethod
 from functools import partial
-from typing import (  # noqa: F401 (SPARK-34943)
-    Any,
-    Callable,
-    Generic,
-    List,
-    Optional,
-)
+from typing import Any, Callable, Generic, List, Optional
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -161,12 +155,13 @@ class Rolling(RollingLike[FrameLike]):
 
         super().__init__(window, min_periods)
 
+        self._psdf_or_psser = psdf_or_psser
+
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
                 "psdf_or_psser must be a series or dataframe; however, got: %s"
                 % type(psdf_or_psser)
             )
-        self._psdf_or_psser = psdf_or_psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeRolling, item):
@@ -681,7 +676,7 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         # Here we need to include grouped key as an index, and shift previous index.
         #   [index_column0, index_column1] -> [grouped key, index_column0, index_column1]
-        new_index_scols = []  # type: List[Column]
+        new_index_scols: List[Column] = []
         new_index_spark_column_names = []
         new_index_names = []
         new_index_fields = []

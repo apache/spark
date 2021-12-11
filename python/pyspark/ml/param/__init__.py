@@ -25,7 +25,7 @@ from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
 
-__all__ = ['Param', 'Params', 'TypeConverters']
+__all__ = ["Param", "Params", "TypeConverters"]
 
 
 class Param(object):
@@ -78,7 +78,7 @@ class TypeConverters(object):
     @staticmethod
     def _is_numeric(value):
         vtype = type(value)
-        return vtype in [int, float, np.float64, np.int64] or vtype.__name__ == 'long'
+        return vtype in [int, float, np.float64, np.int64] or vtype.__name__ == "long"
 
     @staticmethod
     def _is_integer(value):
@@ -263,9 +263,16 @@ class Params(Identifiable, metaclass=ABCMeta):
         :py:class:`Param`.
         """
         if self._params is None:
-            self._params = list(filter(lambda attr: isinstance(attr, Param),
-                                       [getattr(self, x) for x in dir(self) if x != "params" and
-                                        not isinstance(getattr(type(self), x, None), property)]))
+            self._params = list(
+                filter(
+                    lambda attr: isinstance(attr, Param),
+                    [
+                        getattr(self, x)
+                        for x in dir(self)
+                        if x != "params" and not isinstance(getattr(type(self), x, None), property)
+                    ],
+                )
+            )
         return self._params
 
     def explainParam(self, param):
@@ -484,8 +491,9 @@ class Params(Identifiable, metaclass=ABCMeta):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
-                    raise TypeError('Invalid default param value given for param "%s". %s'
-                                    % (p.name, e))
+                    raise TypeError(
+                        'Invalid default param value given for param "%s". %s' % (p.name, e)
+                    )
             self._defaultParamMap[p] = value
         return self
 
@@ -512,11 +520,13 @@ class Params(Identifiable, metaclass=ABCMeta):
                 if isinstance(param, Param):
                     paramMap[param] = value
                 else:
-                    raise TypeError("Expecting a valid instance of Param, but received: {}"
-                                    .format(param))
+                    raise TypeError(
+                        "Expecting a valid instance of Param, but received: {}".format(param)
+                    )
         elif extra is not None:
-            raise TypeError("Expecting a dict, but received an object of type {}."
-                            .format(type(extra)))
+            raise TypeError(
+                "Expecting a dict, but received an object of type {}.".format(type(extra))
+            )
         for param in self.params:
             # copy default params
             if param in self._defaultParamMap and to.hasParam(param.name):

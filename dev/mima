@@ -25,11 +25,6 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
 SPARK_PROFILES=${1:-"-Pmesos -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
-# Apache Spark doesn't have Scala 2.13 maven artifacts yet.
-# TODO(SPARK-36151) Enable MiMa for Scala 2.13 artifacts after Spark 3.2.0 release
-if [[ "$SPARK_PROFILES" == *"-Pscala-2.13"* ]]; then
-  exit 0
-fi
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
 OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | grep jar | tail -n1)"
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -852,6 +853,56 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       assert(!e.contains("get partition: Value for key d is null or empty"))
       assert(e.contains("Partition spec is invalid"))
+    }
+  }
+
+  test("SPARK-35531: Insert data with different cases of bucket column") {
+    withTable("test1") {
+      Seq(true, false).foreach { isHiveTable =>
+        val createSpark = if (isHiveTable) {
+          """
+            |CREATE TABLE TEST1(
+            |v1 BIGINT,
+            |s1 INT)
+            |PARTITIONED BY (pk BIGINT)
+            |CLUSTERED BY (v1)
+            |SORTED BY (s1)
+            |INTO 200 BUCKETS
+            |STORED AS PARQUET
+          """.stripMargin
+        } else {
+          """
+             |CREATE TABLE test1(
+             |v1 BIGINT,
+             |s1 INT)
+             |USING PARQUET
+             |PARTITIONED BY (pk BIGINT)
+             |CLUSTERED BY (v1)
+             |SORTED BY (s1)
+             |INTO 200 BUCKETS
+          """.stripMargin
+        }
+
+        val insertString =
+          """
+            |INSERT INTO test1
+            |SELECT * FROM VALUES(1,1,1)
+          """.stripMargin
+
+        val dropString = "DROP TABLE IF EXISTS test1"
+
+        sql(dropString)
+        sql(createSpark.toLowerCase(Locale.ROOT))
+
+        sql(insertString.toLowerCase(Locale.ROOT))
+        sql(insertString.toUpperCase(Locale.ROOT))
+
+        sql(dropString)
+        sql(createSpark.toUpperCase(Locale.ROOT))
+
+        sql(insertString.toLowerCase(Locale.ROOT))
+        sql(insertString.toUpperCase(Locale.ROOT))
+      }
     }
   }
 }
