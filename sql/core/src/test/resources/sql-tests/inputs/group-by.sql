@@ -204,3 +204,11 @@ FROM VALUES
  (21), (22), (23), (24), (25), (26), (27), (28), (29), (30),
  (31), (32), (33), (34), (35), (3), (37), (38), (39), (40),
  (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col);
+
+-- SPARK-37613: Support ANSI Aggregate Function: regr_count
+SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, 2L), (2, 3L), (2, 4L) AS tab(a, b);
+SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (2, 3L), (2, 4L) AS tab(a, b);
+SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS tab(a, b);
+SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;

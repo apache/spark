@@ -46,9 +46,11 @@ import org.apache.spark.util.Utils
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG)) {
+    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG, REGR_COUNT)) {
     case e: RuntimeReplaceable => e.child
     case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
+    case RegrCount(left, right) =>
+      Count(new NullIf(Or(IsNull(left), IsNull(right)), Literal.TrueLiteral))
     case BoolOr(arg) => Max(arg)
     case BoolAnd(arg) => Min(arg)
   }
