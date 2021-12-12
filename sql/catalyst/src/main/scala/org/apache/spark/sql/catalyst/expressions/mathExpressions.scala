@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
 import org.apache.spark.sql.types._
-// import org.apache.spark.sql.types.Decimal.{ROUND_CEILING, ROUND_FLOOR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -282,33 +281,30 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   }
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
-// case class Ceil(child: Expression, scale: Expression)
-//  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
-//    with Serializable with ImplicitCastInputTypes {
-//  def this(child: Expression) = this(child, Literal(0))
-//
-//  override def dataType: DataType = child.dataType match {
-//    case dt@DecimalType.Fixed(_, 0) => dt
-//    case DecimalType.Fixed(precision, scale) =>
-//      DecimalType.bounded(precision - scale + 1, 0)
-//    case _ => LongType
-//  }
-//
-//  override def inputTypes: Seq[AbstractDataType] =
-//    Seq(TypeCollection(DoubleType, DecimalType, LongType))
-//
-//  override def nullSafeEval(input: Any): Any = nullSafeEvalCeil(input)
-//
-//  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = doGenCodeCeil(ctx, ev)
-//
-//  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-//  : Ceil =
-//    copy(child = newLeft, scale = newRight)
-// }
-//
-// object Ceil {
-//  def apply(child: Expression): Ceil = new Ceil(child)
-// }
+
+object Ceil {
+  def apply(child: Expression, scale: Expression): Expression = {
+    if (scale.eval(EmptyRow).asInstanceOf[Int] == 0) {
+      Ceil(child)
+    } else {
+      RoundCeil(child, scale)
+    }
+  }
+}
+
+case class RoundCeil(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+  override lazy val dataType: DataType = child.dataType match {
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case t => t
+  }
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
+  : RoundCeil = copy(child = newLeft, scale = newRight)
+}
 
 @ExpressionDescription(
   usage = """
@@ -523,33 +519,32 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
  override protected def withNewChildInternal(newChild: Expression): Floor =
   copy(child = newChild)
 }
-// case class Floor(child: Expression, scale: Expression)
-//  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
-//    with Serializable with ImplicitCastInputTypes {
-//  def this(child: Expression) = this(child, Literal(0))
-//
-//  override def dataType: DataType = child.dataType match {
-//    case dt@DecimalType.Fixed(_, 0) => dt
-//    case DecimalType.Fixed(precision, scale) =>
-//      DecimalType.bounded(precision - scale + 1, 0)
-//    case _ => LongType
-//  }
-//
-//  override def inputTypes: Seq[AbstractDataType] =
-//    Seq(TypeCollection(DoubleType, DecimalType, LongType))
-//
-//  override def nullSafeEval(input: Any): Any = nullSafeEvalFloor(input)
-//
-//  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = doGenCodeFloor(ctx, ev)
-//
-//  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-//  : Floor =
-//    copy(child = newLeft, scale = newRight)
-// }
-//
-// object Floor {
-//  def apply(child: Expression): Floor = new Floor(child)
-// }
+
+object Floor {
+  def apply(child: Expression, scale: Expression): Expression = {
+    if (scale.eval(EmptyRow).asInstanceOf[Int] == 0) {
+      Floor(child)
+    } else {
+      RoundFloor(child, scale)
+    }
+  }
+}
+
+case class RoundFloor(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+
+  override lazy val dataType: DataType = child.dataType match {
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case t => t
+  }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
+  : RoundFloor = copy(child = newLeft, scale = newRight)
+}
 
 object Factorial {
 

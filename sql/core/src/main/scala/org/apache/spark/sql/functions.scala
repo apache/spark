@@ -1767,13 +1767,13 @@ object functions {
    */
   def cbrt(columnName: String): Column = cbrt(Column(columnName))
 
-//  /**
-//   * Computes the ceiling of the given value of `e` to `scale` decimal places.
-//   *
-//   * @group math_funcs
-//   * @since 3.3.0
-//   */
-//  def ceil(e: Column, scale: Column): Column = withExpr { Ceil(e.expr, scale.expr) }
+  /**
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def ceil(e: Column, scale: Column): Column = withExpr { Ceil(e.expr, scale.expr) }
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -1781,7 +1781,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def ceil(e: Column): Column = ceil(e)
+  def ceil(e: Column): Column = ceil(e, lit(0))
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -1901,7 +1901,7 @@ object functions {
 //   * @group math_funcs
 //   * @since 3.3.0
 //   */
-//  def floor(e: Column, scale: Column): Column = withExpr { Floor(e.expr, scale.expr) }
+  def floor(e: Column, scale: Column): Column = withExpr { Floor(e.expr, scale.expr) }
 
   /**
    * Computes the floor of the given value of `e` to 0 decimal places.
@@ -1909,7 +1909,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def floor(e: Column): Column = floor(e)
+  def floor(e: Column): Column = floor(e, lit(0))
 
   /**
    * Computes the floor of the given column value to 0 decimal places.
