@@ -108,7 +108,7 @@ private[scheduler] abstract class Stage(
   }
 
   /** Forward the nextAttemptId if skipped and get visited for the first time. */
-  def skipIfNecessary(): Unit = {
+  def increaseAttemptIdOnFirstSkip(): Unit = {
     if (nextAttemptId == 0) {
       nextAttemptId = 1
     }

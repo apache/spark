@@ -723,7 +723,7 @@ private[spark] class DAGScheduler(
                   // Otherwise, once it gets retried,
                   // 1) the stuffs in stage info become distorting, e.g. task num, input byte, e.t.c
                   // 2) the first attempt starts from 0-idx, it will not be marked as a retry
-                  mapStage.skipIfNecessary()
+                  mapStage.increaseAttemptIdOnFirstSkip()
                 }
               case narrowDep: NarrowDependency[_] =>
                 waitingForVisit.prepend(narrowDep.rdd)
