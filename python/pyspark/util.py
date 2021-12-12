@@ -31,6 +31,8 @@ from py4j.clientserver import ClientServer  # type: ignore[import]
 
 __all__: List[str] = []
 
+from py4j.java_gateway import JavaObject
+
 
 def print_exec(stream: TextIO) -> None:
     ei = sys.exc_info()
@@ -366,6 +368,8 @@ class InheritableThread(threading.Thread):
     -----
     This API is experimental.
     """
+
+    _props: JavaObject
 
     def __init__(self, target: Callable, *args: Any, **kwargs: Any):
         from pyspark import SparkContext
