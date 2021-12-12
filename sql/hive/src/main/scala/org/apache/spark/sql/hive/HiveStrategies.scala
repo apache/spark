@@ -26,14 +26,14 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 /**
@@ -228,6 +228,56 @@ case class RelationConversions(
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
+    }
+  }
+}
+
+/**
+ *  In CTAS, Replace name columns that have not alias. Mostly, columns without alias
+ *  always is operator such as sum, divide that will lead to schema check error.
+ *
+ */
+case object ReplaceParquetSchema extends Rule[LogicalPlan] {
+
+  lazy val regex = "[ ,;{}()\n\t=]".r
+
+  private def isConvertible(tableMeta: CatalogTable): Boolean = {
+    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
+
+  private def renameAliases(exprs: Seq[NamedExpression]) = {
+    exprs.map(_.transformUp { case Alias(exp, name) =>
+      Alias(exp, regex.replaceAllIn(name, "_"))()
+    }
+    ).asInstanceOf[Seq[NamedExpression]]
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan resolveOperators {
+      // CTAS
+      case CreateTable(tableDesc, mode, Some(query))
+        if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
+          tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
+          SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) &&
+          SQLConf.get.replaceSchemaAliasAsColumn =>
+        val replaceQuery = query resolveOperators {
+          case Aggregate(groups, aggs, child) if child.resolved =>
+            Aggregate(groups, renameAliases(aggs), child)
+
+          case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
+            if child.resolved && groupByOpt.isDefined =>
+            Pivot(Some(renameAliases(groupByOpt.get)), pivotColumn,
+              pivotValues, aggregates, child)
+
+          case Project(projectList, child) if child.resolved =>
+            Project(renameAliases(projectList), child)
+
+          case query =>
+            query
+        }
+        CreateTable(tableDesc, mode, Some(replaceQuery))
     }
   }
 }

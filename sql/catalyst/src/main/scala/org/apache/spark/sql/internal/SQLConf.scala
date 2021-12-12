@@ -3502,6 +3502,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val REPLACE_SCHEMA_ALIAS_AS_COLUMN = buildConf("spark.sql.schema.replace.alias.asColumn")
+    .doc(s"""When true, Spark will replace invalid attribute charactor(s) among ",;{}()\\n\\t= "
+            |""".stripMargin)
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3626,6 +3633,8 @@ class SQLConf extends Serializable with Logging {
   @transient protected val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def replaceSchemaAliasAsColumn: Boolean = getConf(REPLACE_SCHEMA_ALIAS_AS_COLUMN)
 
   def analyzerMaxIterations: Int = getConf(ANALYZER_MAX_ITERATIONS)
 
