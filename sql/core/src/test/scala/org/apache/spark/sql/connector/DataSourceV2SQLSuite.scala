@@ -407,7 +407,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-34857: CreateTableAsSelect partitions can be specified using " +
+  test("SPARK-36850: CreateTableAsSelect partitions can be specified using " +
     "PARTITIONED BY and/or CLUSTERED BY") {
     val identifier = "testcat.table_name"
     withTable(identifier) {
@@ -425,7 +425,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-34857: ReplaceTableAsSelect partitions can be specified using " +
+  test("SPARK-36850: ReplaceTableAsSelect partitions can be specified using " +
     "PARTITIONED BY and/or CLUSTERED BY") {
     val identifier = "testcat.table_name"
     withTable(identifier) {
