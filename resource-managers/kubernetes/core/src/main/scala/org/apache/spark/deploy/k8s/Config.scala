@@ -444,8 +444,8 @@ private[spark] object Config extends Logging {
         "which in the case of JVM tasks will default to 0.10 and 0.40 for non-JVM jobs")
       .version("2.4.0")
       .doubleConf
-      .checkValue(mem_overhead => mem_overhead >= 0 && mem_overhead < 1,
-        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .checkValue(mem_overhead => mem_overhead >= 0,
+        "Ensure that memory overhead is non-negative")
       .createWithDefault(0.1)
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
