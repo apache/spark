@@ -246,10 +246,6 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
        0
       > SELECT _FUNC_(5);
        5
-      > SELECT _FUNC_(3.1411, 3);
-       3.142
-      > SELECT _FUNC_(3.1411, -3);
-       1000.0
   """,
   since = "1.4.0",
   group = "math_funcs")
@@ -296,12 +292,6 @@ case class RoundCeil(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
-  override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-    case t => t
-  }
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundCeil = copy(child = newLeft, scale = newRight)
 }
@@ -483,10 +473,6 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
        -1
       > SELECT _FUNC_(5);
        5
-      > SELECT _FUNC_(3.1411, 3);
-       3.141
-      > SELECT _FUNC_(3.1411, -3);
-       1000.0
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -534,14 +520,6 @@ case class RoundFloor(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
-
-  override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-    case t => t
-  }
-
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundFloor = copy(child = newLeft, scale = newRight)
 }
@@ -1396,7 +1374,7 @@ case class Logarithm(left: Expression, right: Expression)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
 abstract class RoundBase(child: Expression, scale: Expression,
-                         mode: BigDecimal.RoundingMode.Value, modeStr: String)
+    mode: BigDecimal.RoundingMode.Value, modeStr: String)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def left: Expression = child
@@ -1407,12 +1385,12 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   override def foldable: Boolean = child.foldable
 
-//  override lazy val dataType: DataType = child.dataType match {
-//    // if the new scale is bigger which means we are scaling up,
-//    // keep the original scale as `Decimal` does
-//    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-//    case t => t
-//  }
+  override lazy val dataType: DataType = child.dataType match {
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case t => t
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
@@ -1431,8 +1409,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // Avoid repeated evaluation since `scale` is a constant int,
   // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
   // by checking if scaleV == null as well.
-  protected lazy val scaleV: Any = scale.eval(EmptyRow)
-  protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
+  private lazy val scaleV: Any = scale.eval(EmptyRow)
+  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
 
   override def eval(input: InternalRow): Any = {
     if (scaleV == null) { // if scale is null, no need to eval its child at all
@@ -1445,18 +1423,6 @@ abstract class RoundBase(child: Expression, scale: Expression,
         nullSafeEval(evalE)
       }
     }
-  }
-
-  protected def nullSafeEvalCeil(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => math.ceil(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
-  }
-
-  protected def nullSafeEvalFloor(input: Any): Any = child.dataType match {
-    case LongType => input.asInstanceOf[Long]
-    case DoubleType => math.floor(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
   // not overriding since _scale is a constant int at runtime
@@ -1566,59 +1532,6 @@ abstract class RoundBase(child: Expression, scale: Expression,
         }""")
     }
   }
-
-  def doGenCodeCeil(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.dataType match {
-      case DecimalType.Fixed(_, 0) => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(_, _) =>
-        defineCodeGenUnaryExpression(ctx, ev, c => s"$c.ceil()")
-      case LongType => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
-      case _ => defineCodeGenUnaryExpression(ctx, ev, c =>
-        s"(long)(java.lang.Math.ceil($c))")
-    }
-  }
-
-  def doGenCodeFloor(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    child.dataType match {
-      case DecimalType.Fixed(_, 0) => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(_, _) =>
-        defineCodeGenUnaryExpression(ctx, ev, c => s"$c.floor()")
-      case LongType => defineCodeGenUnaryExpression(ctx, ev, c => s"$c")
-      case _ => defineCodeGenUnaryExpression(ctx, ev, c => s"(long)(java.lang.Math.floor($c))")
-    }
-  }
-
-  protected def defineCodeGenUnaryExpression(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      f: String => String): ExprCode = {
-    nullSafeCodeGenUnaryExpression(ctx, ev, eval => {
-      s"${ev.value} = ${f(eval)};"
-    })
-  }
-
-  protected def nullSafeCodeGenUnaryExpression(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      f: String => String): ExprCode = {
-    val childGen = child.genCode(ctx)
-    val resultCode = f(childGen.value)
-
-    if (nullable) {
-      val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(code = code"""
-        ${childGen.code}
-        boolean ${ev.isNull} = ${childGen.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval
-      """)
-    } else {
-      ev.copy(code = code"""
-        ${childGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
-    }
-  }
 }
 
 /**
@@ -1640,12 +1553,6 @@ case class Round(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
-  override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-    case t => t
-  }
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
 }
@@ -1670,12 +1577,6 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
-  override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
-    case t => t
-  }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
