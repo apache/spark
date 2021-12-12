@@ -806,7 +806,8 @@ abstract class CSVSuite
   }
 
   test("SPARK-37575: null values should not reflect to any characters by default") {
-    val data = Seq(("Tesla", null.asInstanceOf[String], ""))
+    val litNull: String = null
+    val data = Seq(("Tesla", litNull, ""))
     withTempPath { path =>
       val csvDir = new File(path, "csv")
       val cars = data.toDF("make", "comment", "blank")
@@ -1784,7 +1785,7 @@ abstract class CSVSuite
         (1, "John Doe"),
         (2, "-"),
         (3, "-"),
-        (4, "-")
+        (4, null)
       ).toDF("id", "name")
 
       checkAnswer(computed, expected)
