@@ -27,16 +27,16 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, Doub
   usage = """
      _FUNC_(expr) - Returns the average of the independent variable for non-null pairs in a group.
                     right is the independent variable and left is the dependent variable.
-   """,
+  """,
   examples = """
-     Examples:
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
-        2.75
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
-        3.0
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
-        3.0
-   """,
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       2.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       3.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       3.0
+  """,
   group = "agg_funcs",
   since = "3.3.0")
 case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
@@ -54,16 +54,16 @@ case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
   usage = """
      _FUNC_(expr) - Returns the average of the independent variable for non-null pairs in a group.
                     right is the independent variable and left is the dependent variable.
-   """,
+  """,
   examples = """
-     Examples:
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
-        1.75
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
-        1.6666666666666667
-       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
-        1.5
-   """,
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       1.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       1.6666666666666667
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       1.5
+  """,
   group = "agg_funcs",
   since = "3.3.0")
 case class RegrAvgY(left: Expression, right: Expression) extends RegrAvg {
