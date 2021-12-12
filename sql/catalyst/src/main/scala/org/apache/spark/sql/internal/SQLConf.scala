@@ -341,6 +341,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_PUSH_DOWN_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.pushdown")
+      .internal()
+      .doc("When true, push down a dynamic partition pruning from one join to other joins.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3653,6 +3661,9 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicPartitionPruningPushdownEnabled: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_PUSH_DOWN_ENABLED)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

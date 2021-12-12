@@ -17,16 +17,11 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -49,45 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
-
-  /**
-   * Searches for a table scan that can be filtered for a given column in a logical plan.
-   *
-   * This methods tries to find either a v1 or Hive serde partitioned scan for a given
-   * partition column or a v2 scan that support runtime filtering on a given attribute.
-   */
-  def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
-    val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
-    srcInfo.flatMap {
-      case (resExp, l: LogicalRelation) =>
-        l.relation match {
-          case fs: HadoopFsRelation =>
-            val partitionColumns = AttributeSet(
-              l.resolve(fs.partitionSchema, fs.sparkSession.sessionState.analyzer.resolver))
-            if (resExp.references.subsetOf(partitionColumns)) {
-              return Some(l)
-            } else {
-              None
-            }
-          case _ => None
-        }
-      case (resExp, l: HiveTableRelation) =>
-        if (resExp.references.subsetOf(AttributeSet(l.partitionCols))) {
-          return Some(l)
-        } else {
-          None
-        }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
-        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
-        if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
-          Some(r)
-        } else {
-          None
-        }
-      case _ => None
-    }
-  }
+object PartitionPruning extends Rule[LogicalPlan] with DynamicPruningHelper {
 
   /**
    * Insert a dynamic partition pruning predicate on one side of the join using the filter on the
@@ -194,50 +151,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     scanOverhead + cachedOverhead
   }
 
-  /**
-   * Returns whether an expression is likely to be selective
-   */
-  private def isLikelySelective(e: Expression): Boolean = e match {
-    case Not(expr) => isLikelySelective(expr)
-    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
-    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case _: StringRegexExpression => true
-    case _: BinaryComparison => true
-    case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case _: MultiLikeBase => true
-    case _ => false
-  }
-
-  /**
-   * Search a filtering predicate in a given logical plan
-   */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.find {
-      case f: Filter => isLikelySelective(f.condition)
-      case _ => false
-    }.isDefined
-  }
-
-  /**
-   * To be able to prune partitions on a join key, the filtering side needs to
-   * meet the following requirements:
-   *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
-   */
-  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
-  }
-
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
-  }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
@@ -254,17 +167,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           case _ => (Nil, Nil)
         }
 
-        // checks if two expressions are on opposite sides of the join
-        def fromDifferentSides(x: Expression, y: Expression): Boolean = {
-          def fromLeftRight(x: Expression, y: Expression) =
-            !x.references.isEmpty && x.references.subsetOf(left.outputSet) &&
-              !y.references.isEmpty && y.references.subsetOf(right.outputSet)
-          fromLeftRight(x, y) || fromLeftRight(y, x)
-        }
-
         splitConjunctivePredicates(condition).foreach {
           case EqualTo(a: Expression, b: Expression)
-              if fromDifferentSides(a, b) =>
+              if fromDifferentSides(left, right, a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&
               b.references.subsetOf(right.outputSet)) {
               a -> b

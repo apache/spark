@@ -48,6 +48,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
+  protected def shouldPushDown: Boolean = true
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -1482,6 +1483,135 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
     }
   }
+
+  test("push down a dynamic partition pruning from one join to other joins") {
+    Seq(true, false).foreach { pushdown =>
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "600",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_PUSH_DOWN_ENABLED.key -> pushdown.toString) {
+        val df = sql(
+          """
+            |select f.store_id, k.units_sold
+            |FROM fact_stats f
+            | JOIN dim_stats d
+            | ON f.store_id = d.store_id and d.country = 'NL'
+            |left join fact_sk k
+            |ON f.store_id = k.store_id
+          """.stripMargin)
+
+        val dynamicPruningNum =
+          collectDynamicPruningExpressions(df.queryExecution.executedPlan).size
+        if (pushdown) {
+          assert(dynamicPruningNum == 3)
+        } else {
+          assert(dynamicPruningNum == 2)
+        }
+        checkAnswer(df, Row(2, 10) :: Row(2, 10) :: Row(2, 10) :: Row(2, 10) :: Row(1, 10) :: Nil)
+      }
+    }
+  }
+
+  test("push down a dynamic partition pruning from one join with aggregate to other " +
+    "joins") {
+    // In SPARK-29277, updated the implementation of stats from DataSourceV2Relation so tests
+    // will fail if stats are accessed before early pushdown for v2 relations. But, it works well
+    // when not testing, so we skip the test of v2 relations.
+    if (shouldPushDown) {
+      Seq(true, false).foreach { pushdown =>
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_PUSH_DOWN_ENABLED.key -> pushdown.toString) {
+          Seq("inner", "left semi").foreach { j1 =>
+            Seq("inner", "left", "left semi").foreach { j2 =>
+              val df = sql(
+                s"""
+                   |SELECT T.store_id,
+                   |       T.s
+                   |FROM (SELECT f.store_id,
+                   |             sum(f.units_sold) AS s
+                   |      FROM fact_stats f
+                   |      $j1 join dim_stats d ON f.store_id = d.store_id
+                   |      and d.country = 'NL' group by f.store_id) T
+                   | $j2 join fact_sk k
+                   | ON T.store_id = k.store_id
+                   |""".stripMargin)
+
+              val dynamicPruningNum =
+                collectDynamicPruningExpressions(df.queryExecution.executedPlan).size
+              if (pushdown) {
+                assert(dynamicPruningNum == 3)
+              } else {
+                assert(dynamicPruningNum == 2)
+              }
+
+              if (Seq("inner", "left").contains(j2)) {
+                checkAnswer(df, Row(2, 20) :: Row(2, 20) :: Row(1, 10) :: Nil)
+              } else {
+                checkAnswer(df, Row(1, 10) :: Row(2, 20) :: Nil)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("push down some dynamic partition pruning from one join to other joins.") {
+    withTable("fact1", "fact2", "dim") {
+      spark.range(1000).select(
+        $"id",
+        ($"id" + 1).cast("string").as("one"),
+        ($"id" + 2).cast("string").as("two"),
+        ($"id" + 3).cast("string").as("three"),
+        (($"id" * 20) % 100).as("mod"),
+        ($"id" % 10).cast("string").as("str"))
+        .write.partitionBy("one", "two", "three")
+        .format("parquet").mode("overwrite").saveAsTable("fact1")
+
+      spark.range(1000).select(
+        $"id",
+        ($"id" + 1).cast("string").as("one"),
+        ($"id" + 2).cast("string").as("two"),
+        ($"id" + 3).cast("string").as("three"),
+        (($"id" * 20) % 100).as("mod"),
+        ($"id" % 10).cast("string").as("str"))
+        .write.partitionBy("one", "two", "three")
+        .format("parquet").mode("overwrite").saveAsTable("fact2")
+
+      spark.range(10).select(
+        $"id",
+        ($"id" + 1).cast("string").as("one"),
+        ($"id" + 2).cast("string").as("two"),
+        ($"id" + 3).cast("string").as("three"),
+        ($"id" * 10).as("prod"))
+        .write.partitionBy("one", "two", "three", "prod")
+        .format("parquet").mode("overwrite").saveAsTable("dim")
+
+      Seq(true, false).foreach { pushdown =>
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_PUSH_DOWN_ENABLED.key -> pushdown.toString) {
+          val df = sql(
+            """
+              |select f1.id, f1.one,f1.two,f1.three
+              |FROM fact1 f1
+              | JOIN dim d
+              | ON f1.one = d.one and f1.two = d.two and d.prod > 80
+              |left join fact2 f2
+              |ON f1.one = f2.one and f1.two = f2.two
+            """.stripMargin)
+
+          val dynamicPruningNum =
+            collectDynamicPruningExpressions(df.queryExecution.executedPlan).size
+          if (pushdown) {
+            assert(dynamicPruningNum == 6)
+          } else {
+            assert(dynamicPruningNum == 4)
+          }
+          checkAnswer(df, Row(9, "10", "11", "12") :: Nil)
+        }
+      }
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
@@ -1622,6 +1752,8 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
   override protected def runAnalyzeColumnCommands: Boolean = false
+
+  override protected def shouldPushDown: Boolean = false
 
   override protected def initState(): Unit = {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
