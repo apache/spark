@@ -243,7 +243,7 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
-       0.0
+       0
       > SELECT _FUNC_(5);
        5
       > SELECT _FUNC_(3.1411, 3);
@@ -480,7 +480,7 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
-       -1.0
+       -1
       > SELECT _FUNC_(5);
        5
       > SELECT _FUNC_(3.1411, 3);
