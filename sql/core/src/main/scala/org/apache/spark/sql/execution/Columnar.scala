@@ -548,7 +548,7 @@ case class ApplyColumnarRulesAndInsertTransitions(
 
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
-    columnarRules.foreach( r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
+    columnarRules.foreach(r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
     var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
     columnarRules.reverse.foreach( r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
