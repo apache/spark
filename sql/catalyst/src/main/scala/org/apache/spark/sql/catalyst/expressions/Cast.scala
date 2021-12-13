@@ -316,6 +316,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
 
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[CastBase]
+    if (timeZoneId.isDefined && !needsTimeZone) {
+      basic.withTimeZone(null)
+    } else {
+      basic
+    }
+  }
+
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
