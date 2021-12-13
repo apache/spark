@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -664,8 +663,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("reregistration on block update") {
-    when(sc.stopped).thenReturn(new AtomicBoolean(false))
-    SparkContext.setActiveContext(sc)
     val store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
@@ -681,7 +678,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     assert(master.getLocations("a1").size == 0, "a1 was not reregistered with master")
     assert(master.getLocations("a2").size == 0, "master was not told about a2")
-    SparkContext.clearActiveContext()
   }
 
   test("reregistration doesn't dead lock") {
