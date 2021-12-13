@@ -137,7 +137,7 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
+    val gcMetrics = new Array[Long](names.length)
     val mxBeans = ManagementFactory.getGarbageCollectorMXBeans.asScala
     gcMetrics(4) = mxBeans.map(_.getCollectionTime).sum
     mxBeans.foreach { mxBean =>
