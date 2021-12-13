@@ -3011,8 +3011,8 @@ object SubtractDates {
   arguments = """
     Arguments:
       * sourceTz - the time zone for the input timestamp
-        - if not specified, SESSION_LOCAL_TIMEZONE is used when sourceTs is timestamp_ntz,
-          or timezone of sourceTs is used when sourceTs is timestamp_ltz
+          - if not specified, SESSION_LOCAL_TIMEZONE is used when sourceTs is timestamp_ntz,
+            or timezone of sourceTs is used when sourceTs is timestamp_ltz
       * targetTz - the time zone to which the input timestamp should be converted
       * sourceTs - a timestamp
   """,
