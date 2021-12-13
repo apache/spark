@@ -420,15 +420,13 @@
   </dependencies>
   <dependencyManagement>
     <dependencies>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.logging.log4j</groupId>
-          <artifactId>log4j-bom</artifactId>
-          <version>${log4j.version}</version>
-          <scope>import</scope>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-bom</artifactId>
+        <version>${log4j.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-tags_${scala.binary.version}</artifactId>
