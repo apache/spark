@@ -7,6 +7,9 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
+CREATE OR REPLACE TEMPORARY VIEW testRegression AS SELECT * FROM VALUES
+(1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
+AS testRegression(k, y, x);
 
 -- Aggregate with empty GroupBy expressions.
 SELECT a, COUNT(b) FROM testData;
@@ -212,3 +215,5 @@ SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS t
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT regr_count(y, x) FROM testRegression;
+SELECT k, count(*), regr_count(y, x) FROM testRegression group by k;
