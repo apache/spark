@@ -321,7 +321,7 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
       * expr - The binary value to encrypt.
       * key - The passphrase to use to encrypt the data.
       * mode - Specifies which block cipher mode should be used to encrypt messages.
-               Supported modes: ECB, GCM.
+               Valid modes: ECB, GCM.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
                   Valid values: PKCS, NONE.
   """,
