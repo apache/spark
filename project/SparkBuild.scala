@@ -712,9 +712,7 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule("io.netty", "netty-handler"),
-      ExclusionRule("io.netty", "netty-transport-native-epoll"))
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
