@@ -526,7 +526,9 @@ private[spark] object JsonProtocol {
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
     ("Attributes" -> mapToJson(executorInfo.attributes)) ~
     ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo)) ~
-    ("Resource Profile Id" -> executorInfo.resourceProfileId)
+    ("Resource Profile Id" -> executorInfo.resourceProfileId) ~
+    ("Registration Time" -> executorInfo.registrationTime) ~
+    ("Request Time" -> executorInfo.requestTime)
   }
 
   def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {

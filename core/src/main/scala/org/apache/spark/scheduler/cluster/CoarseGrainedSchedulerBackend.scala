@@ -267,7 +267,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             (info.name, new ExecutorResourceInfo(info.name, info.addresses, numParts))
           }
           // If we've requested the executor figure out when we did.
-          val reqTs: Option[Long] = {
+          val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
             execRequestTimes.get(resourceProfileId).flatMap {
               times =>
               times.headOption.map {
@@ -804,11 +804,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     val resourceProfileToNumExecutors = resourceProfileIdToNumExecutors.map { case (rpid, num) =>
       (scheduler.sc.resourceProfileManager.resourceProfileFromId(rpid), num)
     }
-    val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
-      case (rp, num) =>
-        (rp.id, num)
-    }.toMap
     val response = synchronized {
+      val oldResourceProfileToNumExecutors = requestedTotalExecutorsPerResourceProfile.map {
+        case (rp, num) =>
+          (rp.id, num)
+      }.toMap
       this.requestedTotalExecutorsPerResourceProfile.clear()
       this.requestedTotalExecutorsPerResourceProfile ++= resourceProfileToNumExecutors
       this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
