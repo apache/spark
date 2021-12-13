@@ -37,7 +37,7 @@
   <dependencies>
     <!-- NOTE: only test-scope dependencies are allowed in this module. -->
     <dependency>
-      <groupId>log4j</groupId>
+      <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>test</scope>
     </dependency>

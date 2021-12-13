@@ -85,7 +85,7 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
+      <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j</artifactId>
       <scope>provided</scope>
     </dependency>
@@ -206,4 +206,3 @@
   </plugins>
 </build>
 </project>
-
