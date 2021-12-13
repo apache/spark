@@ -276,7 +276,6 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
   val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
-  val JDBC_PUSHDOWN_TOP_N = newOption("pushDownTopN")
   val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
