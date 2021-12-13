@@ -732,7 +732,7 @@
         <!-- runtime scope is appropriate, but causes SBT build problems -->
       </dependency>
       <dependency>
-        <groupId>log4j</groupId>
+        <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
         <scope>${hadoop.deps.scope}</scope>
@@ -1682,7 +1682,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -1738,7 +1738,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -1782,7 +1782,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -1914,7 +1914,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -2027,7 +2027,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -2136,7 +2136,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
@@ -2232,7 +2232,7 @@
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
