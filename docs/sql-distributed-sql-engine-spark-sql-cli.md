@@ -98,24 +98,17 @@ Use `;` (semicolon) to terminate commands. Notice:
 1. The CLI use `;` to terminate commands only when it's at the end of line, and it's not escaped by `\\;`.
 2. `;` is the only way to terminate commands. If the user types `SELECT 1` and presses enter, the console will just wait for input.
 3. If the user types multiple commands in one line like `SELECT 1; SELECT 2;`, the commands `SELECT 1` and `SELECT 2` will be executed separatly.
-4. If `;` appears in a simple comment, as in: 
+4. If `;` appears within a SQL statement (not the end of the line), then it has no special meanings:
    ```sql
-   -- This is a ';' comment
+   -- This is a ; comment
    SELECT ';' as a;
    ```
-   then this comment line will be ignored. `;` in `SELECT ';' as a` will just be treated as a char of string.
-   If `;` appears in the middle of a bracketed comment,
-   ```sql
-   /* This is a comment contains ';'. */
-   SELECT 1;
-   ```
-   then this ';' will not terminate the commands. If `;` appears in a bracketed comment and at the end of line, 
+   This is just a comment line followed by a SQL query which returns a string literal.
    ```sql
    /* This is a comment contains ;
    */ SELECT 1;
    ```
-   then the whole command will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`,
-   Spark will submit these two command and throw parser error.
+   However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two command and throw parser error (unclosed bracketed comment).
 
 
 <table class="table">
