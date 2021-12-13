@@ -55,6 +55,11 @@ You may run `./bin/spark-sql --help` for a complete list of all available option
 
 When invoked without the `-i`, the Spark SQL CLI will attempt to load `$HIVE_HOME/bin/.hiverc` and `$HOME/.hiverc` as initialization files.
 
+## Path interpretation
+
+Spark SQL CLI support run SQL from initialization script file(`-i`) or normal SQL file(`-f`), If path is not absolute, the path will be handled as local file.
+For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-cli.sql`.
+
 ## Supported comment types
 
 <table class="table">
