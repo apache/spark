@@ -1886,7 +1886,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-37568: ") {
+  test("SPARK-37568: Support 2-arguments by the convert_timezone() function") {
     checkEvaluation(
       new ConvertTimezone(
         Literal("UTC"),
@@ -1897,13 +1897,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal.create(null, StringType),
         Literal.create(-1L, TimestampNTZType)),
       null)
+    // If sourceTs is a timestamp_ntz, take the sourceTz from SQL config
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Europe/Amsterdam") {
+      checkEvaluation(
+        new ConvertTimezone(Literal("Europe/Moscow"),
+          Literal(LocalDateTime.of(2022, 3, 27, 3, 0, 0))
+        ),
+        LocalDateTime.of(2022, 3, 27, 4, 0, 0))
+    }
+    // If sourceTs is a timestamp_ltz, convert it to a timestamp_ntz using the targetTz
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    sdf.setTimeZone(TimeZone.getTimeZone("Europe/Amsterdam"))
+    val ts = timestampLiteral("2022-03-27 03:00:00", sdf, TimestampType)
     checkEvaluation(
-      new ConvertTimezone(
-        Literal("Europe/Moscow"),
-        ParseToTimestampLTZ(
-          Literal("2022/02/27 07:00:00[Europe/London]"),
-          None,
-          Cast(Literal("2022/02/27 07:00:00[Europe/London]"), TimestampType))),
+      new ConvertTimezone(Literal("Europe/Moscow"), ts),
       LocalDateTime.of(2022, 3, 27, 4, 0, 0))
 
     outstandingTimezonesIds.foreach { targetTz =>

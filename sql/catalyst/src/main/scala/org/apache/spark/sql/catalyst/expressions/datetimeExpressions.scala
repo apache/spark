@@ -3007,17 +3007,23 @@ object SubtractDates {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  usage = "_FUNC_([sourceTz,] targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
   arguments = """
     Arguments:
       * sourceTz - the time zone for the input timestamp
+        - if not specified, SESSION_LOCAL_TIMEZONE is used when sourceTs is timestamp_ntz,
+          or timezone of sourceTs is used when sourceTs is timestamp_ltz
       * targetTz - the time zone to which the input timestamp should be converted
-      * sourceTs - a timestamp without time zone
+      * sourceTs - a timestamp
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
+      > SELECT _FUNC_('America/Los_Angeles', timestamp'2021-12-06 00:00:00 Europe/Amsterdam');
+       2021-12-05 15:00:00
+      > SELECT _FUNC_('America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+       2021-12-05 07:00:00 (when SESSION_LOCAL_TIMEZONE is Asia/Tokyo)
   """,
   group = "datetime_funcs",
   since = "3.3.0")
@@ -3030,12 +3036,10 @@ case class ConvertTimezone(
 
   def this(targetTz: Expression, sourceTs: Expression) = {
     this(
-      if (sourceTs.dataType == TimestampNTZType) Literal(SQLConf.get.sessionLocalTimeZone)
-      else DateFormatClass(sourceTs, Literal("VV")),
-      // else Literal(SQLConf.get.sessionLocalTimeZone),
+      Literal(SQLConf.get.sessionLocalTimeZone),
       targetTz,
       if (sourceTs.dataType == TimestampNTZType) sourceTs
-      else ParseToTimestampNTZ(sourceTs, None, Cast(sourceTs, TimestampNTZType))
+      else Cast(sourceTs, TimestampNTZType)
     )
   }
 
