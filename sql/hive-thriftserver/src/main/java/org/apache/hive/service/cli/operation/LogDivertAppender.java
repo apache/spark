@@ -25,21 +25,25 @@ import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hadoop.hive.ql.session.OperationLog.LoggingLevel;
 import org.apache.hive.service.cli.CLIServiceUtils;
-import org.apache.log4j.Appender;
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Logger;
-import org.apache.log4j.WriterAppender;
-import org.apache.log4j.spi.Filter;
-import org.apache.log4j.spi.LoggingEvent;
-
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
+import org.apache.logging.log4j.core.appender.WriterManager;
 import com.google.common.base.Joiner;
+import org.apache.logging.log4j.message.Message;
 
 /**
  * An Appender to divert logs from individual threads to the LogObject they belong to.
  */
-public class LogDivertAppender extends WriterAppender {
-  private static final Logger LOG = Logger.getLogger(LogDivertAppender.class.getName());
+public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
+  private static final Logger LOG = LogManager.getLogger(LogDivertAppender.class.getName());
   private final OperationManager operationManager;
   private boolean isVerbose;
   private Layout verboseLayout;
@@ -51,7 +55,7 @@ public class LogDivertAppender extends WriterAppender {
    * they don't generate more logs for themselves when they process logs.
    * White list filter is used for less verbose log collection
    */
-  private static class NameFilter extends Filter {
+  private static class NameFilter implements Filter {
     private Pattern namePattern;
     private LoggingLevel loggingMode;
     private OperationManager operationManager;
@@ -95,18 +99,93 @@ public class LogDivertAppender extends WriterAppender {
     }
 
     @Override
-    public int decide(LoggingEvent ev) {
+    public Result getOnMismatch() {
+      return null;
+    }
+
+    @Override
+    public Result getOnMatch() {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object... objects) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8, Object o9) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Object o, Throwable throwable) {
+      return null;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Message message, Throwable throwable) {
+      return null;
+    }
+
+    @Override
+    public Result filter(LogEvent logEvent) {
       OperationLog log = operationManager.getOperationLogByThread();
       boolean excludeMatches = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
 
       if (log == null) {
-        return Filter.DENY;
+        return Result.DENY;
       }
 
       OperationLog.LoggingLevel currentLoggingMode = log.getOpLoggingLevel();
       // If logging is disabled, deny everything.
       if (currentLoggingMode == OperationLog.LoggingLevel.NONE) {
-        return Filter.DENY;
+        return Result.DENY;
       }
       // Look at the current session's setting
       // and set the pattern and excludeMatches accordingly.
@@ -115,15 +194,45 @@ public class LogDivertAppender extends WriterAppender {
         setCurrentNamePattern(loggingMode);
       }
 
-      boolean isMatch = namePattern.matcher(ev.getLoggerName()).matches();
+      boolean isMatch = namePattern.matcher(logEvent.getLoggerName()).matches();
 
       if (excludeMatches == isMatch) {
         // Deny if this is black-list filter (excludeMatches = true) and it
         // matched
         // or if this is whitelist filter and it didn't match
-        return Filter.DENY;
+        return Result.DENY;
       }
-      return Filter.NEUTRAL;
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public State getState() {
+      return null;
+    }
+
+    @Override
+    public void initialize() {
+
+    }
+
+    @Override
+    public void start() {
+
+    }
+
+    @Override
+    public void stop() {
+
+    }
+
+    @Override
+    public boolean isStarted() {
+      return false;
+    }
+
+    @Override
+    public boolean isStopped() {
+      return false;
     }
   }
 
