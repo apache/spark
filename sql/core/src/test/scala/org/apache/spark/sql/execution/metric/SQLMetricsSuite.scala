@@ -22,7 +22,7 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
@@ -803,6 +803,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         val insert = df.queryExecution.executedPlan.collect {
           case CommandResultExec(_, dataWriting: DataWritingCommandExec, _) => dataWriting.cmd
         }
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(insert.size == 1)
         assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.JOB_COMMIT_TIME))
         assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
@@ -836,8 +837,15 @@ case class CustomFileCommitProtocol(
     dynamicPartitionOverwrite: Boolean = false)
   extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def commitTask(
-    taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
-    Thread.sleep(Random.nextInt(100))
+      taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
+    Thread.sleep(100)
     super.commitTask(taskContext)
+  }
+
+  override def commitJob(
+      jobContext: JobContext,
+      taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
+    Thread.sleep(100)
+    super.commitJob(jobContext, taskCommits)
   }
 }

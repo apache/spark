@@ -34,7 +34,6 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -276,7 +275,9 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
   }
 
-  test("mock time travel test") {
+  test("time travel") {
+    // The testing in-memory table simply append the version/timestamp to the table name when
+    // looking up tables.
     val t1 = s"$catalogName.tSnapshot123456789"
     val t2 = s"$catalogName.t2345678910"
     withTable(t1, t2) {
@@ -298,10 +299,10 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2019-01-29 00:37:58"),
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
     val ts2 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2021-01-29 00:37:58"),
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
     val t3 = s"$catalogName.t$ts1"
     val t4 = s"$catalogName.t$ts2"
     withTable(t3, t4) {
@@ -328,7 +329,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         timestamp = Some("2019-01-29 00:37:58"))
     }
     assert(e.getMessage
-      .contains("Cannot specify both version and timestamp when scanning the table."))
+      .contains("Cannot specify both version and timestamp when time travelling the table."))
   }
 
   private def checkV2Identifiers(

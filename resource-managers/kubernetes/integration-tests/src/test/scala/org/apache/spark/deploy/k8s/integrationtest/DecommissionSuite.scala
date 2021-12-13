@@ -24,6 +24,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.PLUGINS
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
@@ -169,6 +170,34 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         "failed to decommission in 10, killing",
         "killed by driver."),
       appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = None,
+      decommissioningTest = true)
+  }
+
+  test("SPARK-37576: Rolling decommissioning", k8sTestTag) {
+    sparkAppConf
+      .set("spark.kubernetes.container.image", pyImage)
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set(PLUGINS.key, "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin")
+      .set("spark.kubernetes.executor.rollInterval", "30s")
+
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PythonTestsSuite.PYSPARK_PI,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "Initialized driver component for plugin " +
+          "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin",
+        "Ask to decommission executor 1",
+        "Removed 1 successfully in removeExecutor",
+        "Going to request 1 executors",
+        "Ask to decommission executor 2",
+        "Removed 2 successfully in removeExecutor",
+        "Going to request 1 executors"),
+      appArgs = Array("10000"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
       isJVM = false,

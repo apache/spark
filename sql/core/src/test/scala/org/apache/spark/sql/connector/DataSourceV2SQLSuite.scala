@@ -22,7 +22,6 @@ import java.time.{Duration, LocalDate, Period}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
@@ -126,7 +125,7 @@ class DataSourceV2SQLSuite
       " PARTITIONED BY (id)" +
       " TBLPROPERTIES ('bar'='baz')" +
       " COMMENT 'this is a test table'" +
-      " LOCATION '/tmp/testcat/table_name'")
+      " LOCATION 'file:/tmp/testcat/table_name'")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
@@ -149,7 +148,7 @@ class DataSourceV2SQLSuite
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
       Array("Comment", "this is a test table", ""),
-      Array("Location", "/tmp/testcat/table_name", ""),
+      Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
@@ -405,6 +404,38 @@ class DataSourceV2SQLSuite
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
         checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    }
+  }
+
+  test("SPARK-37545: CreateTableAsSelect should store location as qualified") {
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+    Seq(basicIdentifier, atomicIdentifier).foreach { identifier =>
+      withTable(identifier) {
+        spark.sql(s"CREATE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id FROM source")
+        val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
+          .filter("col_name = 'Location'")
+          .select("data_type").head.getString(0)
+        assert(location === "file:/tmp/foo")
+      }
+    }
+  }
+
+  test("SPARK-37546: ReplaceTableAsSelect should store location as qualified") {
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+    Seq(basicIdentifier, atomicIdentifier).foreach { identifier =>
+      withTable(identifier) {
+        spark.sql(s"CREATE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id, data FROM source")
+        spark.sql(s"REPLACE TABLE $identifier USING foo LOCATION '/tmp/foo' " +
+          "AS SELECT id FROM source")
+        val location = spark.sql(s"DESCRIBE EXTENDED $identifier")
+          .filter("col_name = 'Location'")
+          .select("data_type").head.getString(0)
+        assert(location === "file:/tmp/foo")
+      }
     }
   }
 
@@ -1093,6 +1124,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-37456: Location in CreateNamespace should be qualified") {
+    withNamespace("testcat.ns1.ns2") {
+      val e = intercept[IllegalArgumentException] {
+        sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION ''")
+      }
+      assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
+      sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION '/tmp/ns_test'")
+      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
+      assert(descriptionDf.collect() === Seq(
+        Row("Namespace Name", "ns2"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
+        Row("Properties", ""))
+      )
+    }
+  }
+
   test("create/replace/alter table - reserved properties") {
     import TableCatalog._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
@@ -1161,8 +1210,9 @@ class DataSourceV2SQLSuite
               s" ('path'='bar', 'Path'='noop')")
             val tableCatalog = catalog("testcat").asTableCatalog
             val identifier = Identifier.of(Array(), "reservedTest")
-            assert(tableCatalog.loadTable(identifier).properties()
-              .get(TableCatalog.PROP_LOCATION) == "foo",
+            val location = tableCatalog.loadTable(identifier).properties()
+              .get(TableCatalog.PROP_LOCATION)
+            assert(location.startsWith("file:") && location.endsWith("foo"),
               "path as a table property should not have side effects")
             assert(tableCatalog.loadTable(identifier).properties().get("path") == "bar",
               "path as a table property should not have side effects")
@@ -1174,69 +1224,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DropNamespace: basic tests") {
-    // Session catalog is used.
-    sql("CREATE NAMESPACE ns")
-    testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
-    sql("DROP NAMESPACE ns")
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-
-    // V2 non-session catalog is used.
-    sql("CREATE NAMESPACE testcat.ns1")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    sql("DROP NAMESPACE testcat.ns1")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
-  }
-
-  test("DropNamespace: drop non-empty namespace with a non-cascading mode") {
-    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
-
-    def assertDropFails(): Unit = {
-      val e = intercept[SparkException] {
-        sql("DROP NAMESPACE testcat.ns1")
-      }
-      assert(e.getMessage.contains("Cannot drop a non-empty namespace: ns1"))
-    }
-
-    // testcat.ns1.table is present, thus testcat.ns1 cannot be dropped.
-    assertDropFails()
-    sql("DROP TABLE testcat.ns1.table")
-
-    // testcat.ns1.ns2.table is present, thus testcat.ns1 cannot be dropped.
-    assertDropFails()
-    sql("DROP TABLE testcat.ns1.ns2.table")
-
-    // testcat.ns1.ns2 namespace is present, thus testcat.ns1 cannot be dropped.
-    assertDropFails()
-    sql("DROP NAMESPACE testcat.ns1.ns2")
-
-    // Now that testcat.ns1 is empty, it can be dropped.
-    sql("DROP NAMESPACE testcat.ns1")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
-  }
-
-  test("DropNamespace: drop non-empty namespace with a cascade mode") {
-    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
-
-    sql("DROP NAMESPACE testcat.ns1 CASCADE")
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq())
-  }
-
-  test("DropNamespace: test handling of 'IF EXISTS'") {
-    sql("DROP NAMESPACE IF EXISTS testcat.unknown")
-
-    val exception = intercept[NoSuchNamespaceException] {
-      sql("DROP NAMESPACE testcat.ns1")
-    }
-    assert(exception.getMessage.contains("Namespace 'ns1' not found"))
-  }
-
   test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
@@ -1246,7 +1233,7 @@ class DataSourceV2SQLSuite
       assert(descriptionDf.collect() === Seq(
         Row("Namespace Name", "ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test"),
+        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
         Row("Properties", "((a,b), (b,a), (c,c))"))
       )
@@ -1282,22 +1269,6 @@ class DataSourceV2SQLSuite
             "reserved properties should not have side effects")
         }
       }
-    }
-  }
-
-  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test_1'")
-      sql("ALTER NAMESPACE testcat.ns1.ns2 SET LOCATION '/tmp/ns_test_2'")
-      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
-      assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "/tmp/ns_test_2"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", ""))
-      )
     }
   }
 
@@ -1994,7 +1965,7 @@ class DataSourceV2SQLSuite
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
-           |LOCATION '/tmp'
+           |LOCATION 'file:/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
@@ -2011,7 +1982,7 @@ class DataSourceV2SQLSuite
         "'via' = '2')",
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
-        "LOCATION '/tmp'",
+        "LOCATION 'file:/tmp'",
         "TBLPROPERTIES(",
         "'prop1' = '1',",
         "'prop2' = '2',",
@@ -2893,8 +2864,40 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("Mock time travel test") {
+  test("Check HasPartitionKey from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+          .loadTable(Identifier.of(Array(), "tbl"))
+          .asInstanceOf[InMemoryPartitionTable]
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      var partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 3))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 2)
+      assert(partKeys.toSet == Set(1, 2))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 3)
+      assert(partKeys.toSet == Set(1, 2, 4))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partKeys = table.data.map(_.partitionKey().getInt(0))
+      assert(partKeys.length == 5)
+      assert(partKeys.toSet == Set(1, 2, 3, 4, 5))
+    }
+  }
+
+  test("time travel") {
     sql("use testcat")
+    // The testing in-memory table simply append the version/timestamp to the table name when
+    // looking up tables.
     val t1 = "testcat.tSnapshot123456789"
     val t2 = "testcat.t2345678910"
     withTable(t1, t2) {
@@ -2910,26 +2913,13 @@ class DataSourceV2SQLSuite
         === Array(Row(1), Row(2)))
       assert(sql("SELECT * FROM t VERSION AS OF 2345678910").collect
         === Array(Row(3), Row(4)))
-      assert(sql("SELECT * FROM t FOR VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t FOR VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
-
-      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t FOR SYSTEM_VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
-      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 'Snapshot123456789'").collect
-        === Array(Row(1), Row(2)))
-      assert(sql("SELECT * FROM t SYSTEM_VERSION AS OF 2345678910").collect
-        === Array(Row(3), Row(4)))
     }
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
       UTF8String.fromString("2019-01-29 00:37:58"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val ts2 = DateTimeUtils.stringToTimestampAnsi(
-      UTF8String.fromString("2021-01-29 00:37:58"),
+      UTF8String.fromString("2021-01-29 00:00:00"),
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     val t3 = s"testcat.t$ts1"
     val t4 = s"testcat.t$ts2"
@@ -2945,21 +2935,47 @@ class DataSourceV2SQLSuite
 
       assert(sql("SELECT * FROM t TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
         === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF '2021-01-29 00:00:00'").collect
         === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t FOR TIMESTAMP AS OF '2021-01-29 00:37:58'").collect
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF make_date(2021, 1, 29)").collect
+        === Array(Row(7), Row(8)))
+      assert(sql("SELECT * FROM t TIMESTAMP AS OF to_timestamp('2021-01-29 00:00:00')").collect
         === Array(Row(7), Row(8)))
 
-      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t FOR SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
-        === Array(Row(7), Row(8)))
-      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2019-01-29 00:37:58'").collect
-        === Array(Row(5), Row(6)))
-      assert(sql("SELECT * FROM t SYSTEM_TIME AS OF '2021-01-29 00:37:58'").collect
-        === Array(Row(7), Row(8)))
+      val e1 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
+      )
+      assert(e1.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e2 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF 'abc'").collect()
+      )
+      assert(e2.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e3 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF current_user()").collect()
+      )
+      assert(e3.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e4 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF CAST(rand() AS STRING)").collect()
+      )
+      assert(e4.message.contains("is not a valid timestamp expression for time travel"))
+
+      val e5 = intercept[AnalysisException](
+        sql("SELECT * FROM t TIMESTAMP AS OF abs(true)").collect()
+      )
+      assert(e5.message.contains("cannot resolve 'abs(true)' due to data type mismatch"))
+
+      val e6 = intercept[AnalysisException](
+        sql("SELECT * FROM parquet.`/the/path` VERSION AS OF 1")
+      )
+      assert(e6.message.contains("Cannot time travel path-based tables"))
+
+      val e7 = intercept[AnalysisException](
+        sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
+      )
+      assert(e7.message.contains("Cannot time travel subqueries from WITH clause"))
     }
   }
 

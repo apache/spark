@@ -800,11 +800,12 @@ class DataFrameTests(ReusedSQLTestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
-            import numpy as np
+        # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
+        # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
+        # when arrow is enabled
+        import numpy as np
 
-            sql = """
+        sql = """
             SELECT CAST(1 AS TINYINT) AS tinyint,
             CAST(1 AS SMALLINT) AS smallint,
             CAST(1 AS INT) AS int,
@@ -817,17 +818,21 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-            dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-            dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-            self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+                dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+                self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_null_dataframe(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
-            import numpy as np
+        # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
+        # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
+        # using arrow
+        import numpy as np
 
-            sql = """
+        sql = """
             SELECT CAST(NULL AS TINYINT) AS tinyint,
             CAST(NULL AS SMALLINT) AS smallint,
             CAST(NULL AS INT) AS int,
@@ -840,44 +845,51 @@ class DataFrameTests(ReusedSQLTestCase):
             CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-            pdf = self.spark.sql(sql).toPandas()
-            types = pdf.dtypes
-            self.assertEqual(types[0], np.float64)
-            self.assertEqual(types[1], np.float64)
-            self.assertEqual(types[2], np.float64)
-            self.assertEqual(types[3], np.float64)
-            self.assertEqual(types[4], np.float32)
-            self.assertEqual(types[5], np.float64)
-            self.assertEqual(types[6], np.object)
-            self.assertEqual(types[7], np.object)
-            self.assertTrue(np.can_cast(np.datetime64, types[8]))
-            self.assertTrue(np.can_cast(np.datetime64, types[9]))
-            self.assertTrue(np.can_cast(np.timedelta64, types[10]))
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                pdf = self.spark.sql(sql).toPandas()
+                types = pdf.dtypes
+                self.assertEqual(types[0], np.float64)
+                self.assertEqual(types[1], np.float64)
+                self.assertEqual(types[2], np.float64)
+                self.assertEqual(types[3], np.float64)
+                self.assertEqual(types[4], np.float32)
+                self.assertEqual(types[5], np.float64)
+                self.assertEqual(types[6], np.object)
+                self.assertEqual(types[7], np.object)
+                self.assertTrue(np.can_cast(np.datetime64, types[8]))
+                self.assertTrue(np.can_cast(np.datetime64, types[9]))
+                self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
-            import numpy as np
+        # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
+        # SPARK-30537 test that toPandas() on a dataframe with some nulls has correct dtypes
+        # using arrow
+        import numpy as np
 
-            sql = """
-            SELECT CAST(col1 AS TINYINT) AS tinyint,
-            CAST(col2 AS SMALLINT) AS smallint,
-            CAST(col3 AS INT) AS int,
-            CAST(col4 AS BIGINT) AS bigint,
-            CAST(col5 AS FLOAT) AS float,
-            CAST(col6 AS DOUBLE) AS double,
-            CAST(col7 AS BOOLEAN) AS boolean,
-            CAST(col8 AS STRING) AS string,
-            timestamp_seconds(col9) AS timestamp,
-            timestamp_seconds(col10) AS timestamp_ntz,
-            INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
-            FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-                        (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-            """
-            pdf_with_some_nulls = self.spark.sql(sql).toPandas()
-            pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
-            self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+        sql = """
+        SELECT CAST(col1 AS TINYINT) AS tinyint,
+        CAST(col2 AS SMALLINT) AS smallint,
+        CAST(col3 AS INT) AS int,
+        CAST(col4 AS BIGINT) AS bigint,
+        CAST(col5 AS FLOAT) AS float,
+        CAST(col6 AS DOUBLE) AS double,
+        CAST(col7 AS BOOLEAN) AS boolean,
+        CAST(col8 AS STRING) AS string,
+        timestamp_seconds(col9) AS timestamp,
+        timestamp_seconds(col10) AS timestamp_ntz,
+        INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
+        FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+                    (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+        """
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+                pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
+                self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     def test_create_dataframe_from_array_of_long(self):
         import array
@@ -1106,13 +1118,13 @@ class DataFrameTests(ReusedSQLTestCase):
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    def test_to_pandas_on_spark(self):
+    def test_pandas_api(self):
         import pandas as pd
         from pandas.testing import assert_frame_equal
 
         sdf = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["Col1", "Col2"])
-        psdf_from_sdf = sdf.to_pandas_on_spark()
-        psdf_from_sdf_with_index = sdf.to_pandas_on_spark(index_col="Col1")
+        psdf_from_sdf = sdf.pandas_api()
+        psdf_from_sdf_with_index = sdf.pandas_api(index_col="Col1")
         pdf = pd.DataFrame({"Col1": ["a", "b", "c"], "Col2": [1, 2, 3]})
         pdf_with_index = pdf.set_index("Col1")
 

@@ -47,7 +47,7 @@ from pyspark.rdd import (  # type: ignore[attr-defined]
     _load_from_socket,
     _local_iterator_from_socket,
 )
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
@@ -121,7 +121,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`."""
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(CPickleSerializer()))
         return self._lazy_rdd
 
     @property  # type: ignore[misc]
@@ -592,7 +592,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 max_num_rows,
                 self.sql_ctx._conf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
             has_more_data = len(row_data) > max_num_rows
@@ -769,7 +769,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         """
@@ -792,7 +792,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
-        return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
 
     def limit(self, num: int) -> "DataFrame":
         """Limits the result count to the number specified.
@@ -837,7 +837,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
     def foreach(self, f: Callable[[Row], None]) -> None:
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
@@ -3198,7 +3198,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
+    # Keep to_pandas_on_spark for backward compatibility for now.
     def to_pandas_on_spark(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        warnings.warn(
+            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
+            FutureWarning,
+        )
+        return self.pandas_api(index_col)
+
+    def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
         """
@@ -3230,7 +3240,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   c|   3|
         +----+----+
 
-        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+        >>> df.pandas_api()  # doctest: +SKIP
           Col1  Col2
         0    a     1
         1    b     2
@@ -3238,7 +3248,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         We can specify the index columns.
 
-        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+        >>> df.pandas_api(index_col="Col1"): # doctest: +SKIP
               Col2
         Col1
         a        1
@@ -3261,11 +3271,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def to_koalas(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
-            FutureWarning,
-        )
-        return self.to_pandas_on_spark(index_col)
+        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:

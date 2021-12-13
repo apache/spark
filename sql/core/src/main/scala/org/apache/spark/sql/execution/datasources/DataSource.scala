@@ -128,7 +128,7 @@ case class DataSource(
       .getOrElse(true)
   }
 
-  bucketSpec.map { bucket =>
+  bucketSpec.foreach { bucket =>
     SchemaUtils.checkColumnNameDuplication(
       bucket.bucketColumnNames, "in the bucket definition", equality)
     SchemaUtils.checkColumnNameDuplication(
