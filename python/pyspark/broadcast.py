@@ -115,11 +115,11 @@ class Broadcast(Generic[T]):
         """
         if sc is not None:
             # we're on the driver.  We want the pickled data to end up in a file (maybe encrypted)
-            f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)  # type: ignore[attr-defined]
+            f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
             self._path = f.name
             self._sc: Optional["SparkContext"] = sc
-            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)  # type: ignore[attr-defined]
-            if sc._encryption_enabled:  # type: ignore[attr-defined]
+            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
+            if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
                 port, auth_secret = self._python_broadcast.setupEncryptionServer()
@@ -131,14 +131,14 @@ class Broadcast(Generic[T]):
                 # no encryption, we can just write pickled data directly to the file from python
                 broadcast_out = f
             self.dump(value, broadcast_out)  # type: ignore[arg-type]
-            if sc._encryption_enabled:  # type: ignore[attr-defined]
+            if sc._encryption_enabled:
                 self._python_broadcast.waitTillDataReceived()
-            self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)  # type: ignore[attr-defined]
+            self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)
             self._pickle_registry = pickle_registry
         else:
             # we're on an executor
             self._jbroadcast = None
-            self._sc = None  # type: ignore[attr-defined]
+            self._sc = None
             self._python_broadcast = None
             if sock_file is not None:
                 # the jvm is doing decryption for us.  Read the value
@@ -179,7 +179,7 @@ class Broadcast(Generic[T]):
         if not hasattr(self, "_value") and self._path is not None:
             # we only need to decrypt it here when encryption is enabled and
             # if its on the driver, since executor decryption is handled already
-            if self._sc is not None and self._sc._encryption_enabled:  # type: ignore[attr-defined]
+            if self._sc is not None and self._sc._encryption_enabled:
                 port, auth_secret = self._python_broadcast.setupDecryptionServer()
                 (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
