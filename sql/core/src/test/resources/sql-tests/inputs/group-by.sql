@@ -215,5 +215,8 @@ SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS t
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
 SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;
+<<<<<<< HEAD
 SELECT regr_count(y, x) FROM testRegression;
 SELECT k, count(*), regr_count(y, x) FROM testRegression group by k;
+=======
+>>>>>>> 71792f1ec1923168eb0ab99a2359ad29175d0a5b
