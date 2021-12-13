@@ -420,6 +420,15 @@
   </dependencies>
   <dependencyManagement>
     <dependencies>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-bom</artifactId>
+          <version>${log4j.version}</version>
+          <scope>import</scope>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-tags_${scala.binary.version}</artifactId>
@@ -733,8 +742,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
+        <artifactId>log4j-core</artifactId>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
@@ -1683,7 +1691,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1739,7 +1747,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1783,7 +1791,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1915,7 +1923,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -2028,7 +2036,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -2137,7 +2145,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -2233,7 +2241,7 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <artifactId>log4j-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
