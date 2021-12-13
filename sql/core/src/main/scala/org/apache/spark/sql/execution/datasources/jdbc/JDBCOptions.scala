@@ -196,10 +196,6 @@ class JDBCOptions(
   // This only applies to Data Source V2 JDBC
   val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
 
-  // An option to allow/disallow pushing down query of top N into V2 JDBC data source
-  // This only applies to Data Source V2 JDBC
-  val pushDownTopN = parameters.getOrElse(JDBC_PUSHDOWN_TOP_N, "false").toBoolean
-
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
   val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean

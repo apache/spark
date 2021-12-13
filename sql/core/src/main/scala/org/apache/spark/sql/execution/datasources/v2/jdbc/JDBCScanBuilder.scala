@@ -131,7 +131,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
-    if (jdbcOptions.pushDownTopN) {
+    if (jdbcOptions.pushDownLimit) {
       pushedLimit = limit
       sortValues = orders
       return true
