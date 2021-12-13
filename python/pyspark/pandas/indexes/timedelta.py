@@ -27,6 +27,7 @@ from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.internal import SPARK_DEFAULT_INDEX_NAME
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for, verify_temp_column_name
 from pyspark.sql import functions as F
 
@@ -137,69 +138,55 @@ class TimedeltaIndex(Index):
         def pandas_days(x) -> int:
             return x.days
 
-        return ps.Index(self.to_series().transform(pandas_days))
+        return Index(self.to_series().transform(pandas_days))
 
     @property
     def seconds(self) -> Index:
         """
         Number of seconds (>= 0 and less than 1 day) for each element.
         """
-        sdf = self._internal.spark_frame
-        hour_scol_name = verify_temp_column_name(sdf, "__hour_column__")
-        minute_scol_name = verify_temp_column_name(sdf, "__minute_column__")
-        second_scol_name = verify_temp_column_name(sdf, "__second_column__")
-        sum_scol_name = verify_temp_column_name(sdf, "__sum_column__")
 
-        # Extract the hours part, minutes part, seconds part and its fractional part with microseconds
-        sdf = sdf.select(
-            F.expr("date_part('HOUR', %s)" % SPARK_DEFAULT_INDEX_NAME),
-            F.expr("date_part('MINUTE', %s)" % SPARK_DEFAULT_INDEX_NAME),
-            F.expr("date_part('SECOND', %s)" % SPARK_DEFAULT_INDEX_NAME),
-        ).toDF(hour_scol_name, minute_scol_name, second_scol_name)
+        @no_type_check
+        def get_seconds(scol):
+            hour_scol = SF.date_part("HOUR", scol)
+            minute_scol = SF.date_part("MINUTE", scol)
+            second_scol = SF.date_part("SECOND", scol)
+            return (
+                F.when(
+                    hour_scol < 0,
+                    SECONDS_PER_DAY + hour_scol * SECONDS_PER_HOUR,
+                ).otherwise(hour_scol * SECONDS_PER_HOUR)
+                + F.when(
+                    minute_scol < 0,
+                    SECONDS_PER_DAY + minute_scol * SECONDS_PER_MINUTE,
+                ).otherwise(minute_scol * SECONDS_PER_MINUTE)
+                + F.when(
+                    second_scol < 0,
+                    SECONDS_PER_DAY + second_scol,
+                ).otherwise(second_scol)
+            ).cast("int")
 
-        # Transfer to microseconds
-        sdf = sdf.withColumn(
-            sum_scol_name,
-            F.when(
-                scol_for(sdf, hour_scol_name) < 0,
-                SECONDS_PER_DAY + scol_for(sdf, hour_scol_name) * SECONDS_PER_HOUR,
-            ).otherwise(scol_for(sdf, hour_scol_name) * SECONDS_PER_HOUR)
-            + F.when(
-                scol_for(sdf, minute_scol_name) < 0,
-                SECONDS_PER_DAY + scol_for(sdf, minute_scol_name) * SECONDS_PER_MINUTE,
-            ).otherwise(scol_for(sdf, minute_scol_name) * SECONDS_PER_MINUTE)
-            + F.when(
-                scol_for(sdf, second_scol_name) < 0,
-                SECONDS_PER_DAY + scol_for(sdf, second_scol_name),
-            ).otherwise(scol_for(sdf, second_scol_name)),
-        ).select(sum_scol_name)
-        return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
+        return Index(self.to_series().spark.transform(get_seconds))
 
     @property
     def microseconds(self) -> Index:
         """
         Number of microseconds (>= 0 and less than 1 second) for each element.
         """
-        sdf = self._internal.spark_frame
-        second_scol_name = verify_temp_column_name(sdf, "__second_column__")
 
-        # Extract the seconds part and its fractional part with microseconds per element
-        sdf = sdf.select(F.expr("date_part('SECOND', %s)" % SPARK_DEFAULT_INDEX_NAME)).toDF(
-            second_scol_name
-        )
-
-        # Transfer the seconds to microseconds
-        sdf = sdf.withColumn(
-            second_scol_name,
-            (
-                F.when(
-                    (scol_for(sdf, second_scol_name) >= 0) & (scol_for(sdf, second_scol_name) < 1),
-                    scol_for(sdf, second_scol_name),
+        @no_type_check
+        def get_microseconds(scol):
+            second_scol = SF.date_part("SECOND", scol)
+            return (
+                (
+                    F.when(
+                        (second_scol >= 0) & (second_scol < 1),
+                        second_scol,
+                    )
+                    .when(second_scol < 0, 1 + second_scol)
+                    .otherwise(0)
                 )
-                .when(scol_for(sdf, second_scol_name) < 0, 1 + scol_for(sdf, second_scol_name))
-                .otherwise(0)
-            )
-            * MICROS_PER_SECOND,
-        )
+                * MICROS_PER_SECOND
+            ).cast("int")
 
-        return Index(first_series(DataFrame(sdf))).astype(int).rename(self.name)
+        return Index(self.to_series().spark.transform(get_microseconds))
