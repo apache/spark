@@ -152,11 +152,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
-  private def checkPushedLimit(df: DataFrame, limit: Option[Int]): Unit = {
+  private def checkPushedLimit(df: DataFrame, limit: Option[Int] = None,
+      sortValues: Seq[SortValue] = Nil): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           assert(v1.pushedDownOperators.limit === limit)
+          assert(v1.pushedDownOperators.sortValues === sortValues)
       }
     }
   }
@@ -166,12 +168,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .sort("salary")
       .limit(1)
-    checkPushedTopN(df1, Some(1), createSortValues())
+    checkPushedLimit(df1, Some(1), createSortValues())
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
     val df2 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary").limit(1)
-    checkPushedTopN(df2, Some(1), createSortValues())
+    checkPushedLimit(df2, Some(1), createSortValues())
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
     val df3 = spark.read
@@ -183,7 +185,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .orderBy($"salary".desc)
       .limit(1)
-    checkPushedTopN(
+    checkPushedLimit(
       df3, Some(1), createSortValues(SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0)))
 
@@ -192,18 +194,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val scan = df4.queryExecution.optimizedPlan.collectFirst {
       case s: DataSourceV2ScanRelation => s
     }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
-    checkPushedTopN(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
+    assert(scan.schema.names.sameElements(Seq("NAME", "SALARY")))
+    checkPushedLimit(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
     checkAnswer(df4, Seq(Row("david")))
 
     val df5 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary")
-    checkPushedTopN(df5, None, Seq.empty)
+    checkPushedLimit(df5, None, Seq.empty)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0), Row(1, "amy", 10000.00, 1000.0)))
 
     val df6 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).limit(1)
-    checkPushedTopN(df6, Some(1), Seq.empty)
+    checkPushedLimit(df6, Some(1), Seq.empty)
     checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0)))
 
     val df7 = spark.read
@@ -211,7 +213,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .groupBy("DEPT").sum("SALARY")
       .orderBy("DEPT")
       .limit(1)
-    checkPushedTopN(df7)
+    checkPushedLimit(df7)
     checkAnswer(df7, Seq(Row(1, 19000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -223,7 +225,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .sort($"SALARY".desc)
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedTopN(df8)
+    checkPushedLimit(df8)
     checkAnswer(df8, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
@@ -231,17 +233,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       sortDirection: SortDirection = SortDirection.ASCENDING,
       nullOrdering: NullOrdering = NullOrdering.NULLS_FIRST): Seq[SortValue] = {
     Seq(SortValue(FieldReference("salary"), sortDirection, nullOrdering))
-  }
-
-  private def checkPushedTopN(df: DataFrame, limit: Option[Int] = None,
-      sortValues: Seq[SortValue] = Seq.empty[SortValue]): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.limit === limit)
-          assert(v1.pushedDownOperators.sortValues === sortValues)
-      }
-    }
   }
 
   test("scan with filter push-down") {

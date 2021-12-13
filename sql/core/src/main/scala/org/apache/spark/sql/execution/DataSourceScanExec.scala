@@ -145,13 +145,11 @@ case class RowDataSourceScanExec(
     val topNOrLimitInfo =
       if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
         val pushedTopN =
-          s"""
-             |ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}
-             |LIMIT ${pushedDownOperators.limit.get}
-             |""".stripMargin.replaceAll("\n", " ")
+          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+          s" LIMIT ${pushedDownOperators.limit.get}"
         Some("pushedTopN" -> pushedTopN)
     } else {
-        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }
 
     Map(
