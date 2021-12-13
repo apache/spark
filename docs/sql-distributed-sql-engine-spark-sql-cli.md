@@ -145,7 +145,7 @@ Example of setting Hive configuration variables:
 
     ./bin/spark-sql -e 'SELECT COL FROM TBL' --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
     
-Example of setting Hive configuration variables:
+Example of setting Hive configuration variables and using it in the SQL query:
 
     ./bin/spark-sql -e 'SELECT ${hiveconf:aaa}' --hiveconf aaa=bbb --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
     spark-sql> SELECT ${aaa};
