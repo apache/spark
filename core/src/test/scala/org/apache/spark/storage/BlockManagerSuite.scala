@@ -679,8 +679,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
 
-    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
-    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a1").size == 0, "a1 was not reregistered with master")
+    assert(master.getLocations("a2").size == 0, "master was not told about a2")
     SparkContext.clearActiveContext()
   }
 
