@@ -89,6 +89,12 @@ case class SortOrder(
       direction == required.direction && nullOrdering == required.nullOrdering
   }
 
+  def reverse: SortOrder = {
+    val reversedDirection = if (isAscending) Descending else Ascending
+    val reversedNullOrdering = if (nullOrdering == NullsFirst) NullsLast else NullsFirst
+    this.copy(direction = reversedDirection, nullOrdering = reversedNullOrdering)
+  }
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
     copy(child = newChildren.head, sameOrderExpressions = newChildren.tail)
 }
