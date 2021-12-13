@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -144,6 +145,20 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
       .createWithDefault(0)
+
+  object ExecutorRollPolicy extends Enumeration {
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION = Value
+  }
+
+  val EXECUTOR_ROLL_POLICY =
+    ConfigBuilder("spark.kubernetes.executor.rollPolicy")
+      .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME (default), " +
+        "and TOTAL_DURATION")
+      .version("3.3.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(ExecutorRollPolicy.values.map(_.toString))
+      .createWithDefault(ExecutorRollPolicy.TOTAL_GC_TIME.toString)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
