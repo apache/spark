@@ -134,7 +134,7 @@ def callMLlibFunc(name: str, *args: Any) -> "JavaObjectOrPickleDump":
     return callJavaFunc(sc, api, *args)
 
 
-class JavaModelWrapper(object):
+class JavaModelWrapper:
     """
     Wrapper for the model in JVM
     """

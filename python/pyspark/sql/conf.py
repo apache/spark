@@ -23,7 +23,7 @@ from py4j.java_gateway import JavaObject  # type: ignore[import]
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
 
 
-class RuntimeConfig(object):
+class RuntimeConfig:
     """User-facing configuration API, accessible through `SparkSession.conf`.
 
     Options set here are automatically propagated to the Hadoop configuration during I/O.

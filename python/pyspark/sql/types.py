@@ -76,7 +76,7 @@ __all__ = [
 ]
 
 
-class DataType(object):
+class DataType:
     """Base class for data types."""
 
     def __repr__(self) -> str:
@@ -1910,7 +1910,7 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
-class DateConverter(object):
+class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
@@ -1919,7 +1919,7 @@ class DateConverter(object):
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
-class DatetimeConverter(object):
+class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
@@ -1933,7 +1933,7 @@ class DatetimeConverter(object):
         return t
 
 
-class DatetimeNTZConverter(object):
+class DatetimeNTZConverter:
     def can_convert(self, obj: Any) -> bool:
         from pyspark.sql.utils import is_timestamp_ntz_preferred
 
@@ -1953,7 +1953,7 @@ class DatetimeNTZConverter(object):
         )
 
 
-class DayTimeIntervalTypeConverter(object):
+class DayTimeIntervalTypeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.timedelta)
 

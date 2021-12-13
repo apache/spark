@@ -35,7 +35,7 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
     )
 
 
-class MissingPandasLikeIndex(object):
+class MissingPandasLikeIndex:
 
     # Properties
     nbytes = _unsupported_property("nbytes")
@@ -118,7 +118,7 @@ class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
     mean = _unsupported_function("mean", cls="TimedeltaIndex")
 
 
-class MissingPandasLikeMultiIndex(object):
+class MissingPandasLikeMultiIndex:
 
     # Functions
     argsort = _unsupported_function("argsort")

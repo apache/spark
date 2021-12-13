@@ -91,7 +91,7 @@ class SeriesType(Generic[T]):
         return "SeriesType[{}]".format(self.spark_type)
 
 
-class DataFrameType(object):
+class DataFrameType:
     def __init__(
         self,
         index_fields: List["InternalField"],
@@ -114,7 +114,7 @@ class DataFrameType(object):
 
 
 # The type is a scalar type that is furthermore understood by Spark.
-class ScalarType(object):
+class ScalarType:
     def __init__(self, dtype: Dtype, spark_type: types.DataType):
         self.dtype = dtype
         self.spark_type = spark_type
@@ -124,7 +124,7 @@ class ScalarType(object):
 
 
 # The type is left unspecified or we do not know about this type.
-class UnknownType(object):
+class UnknownType:
     def __init__(self, tpe: Any):
         self.tpe = tpe
 
@@ -132,13 +132,13 @@ class UnknownType(object):
         return "UnknownType[{}]".format(self.tpe)
 
 
-class IndexNameTypeHolder(object):
+class IndexNameTypeHolder:
     name = None
     tpe = None
     short_name = "IndexNameType"
 
 
-class NameTypeHolder(object):
+class NameTypeHolder:
     name = None
     tpe = None
     short_name = "NameType"

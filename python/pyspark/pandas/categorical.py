@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps
 
 
-class CategoricalAccessor(object):
+class CategoricalAccessor:
     """
     Accessor object for categorical properties of the Series values.
 

@@ -86,7 +86,7 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
-class SparkContext(object):
+class SparkContext:
 
     """
     Main entry point for Spark functionality. A SparkContext represents the

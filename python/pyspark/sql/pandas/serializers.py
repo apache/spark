@@ -22,7 +22,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
 
 
-class SpecialLengths(object):
+class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3

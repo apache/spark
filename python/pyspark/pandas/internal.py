@@ -211,7 +211,7 @@ class InternalField:
         )
 
 
-class InternalFrame(object):
+class InternalFrame:
     """
     The internal immutable DataFrame which manages Spark DataFrame and column names and index
     information.

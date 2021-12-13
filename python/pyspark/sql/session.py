@@ -138,7 +138,7 @@ class SparkSession(SparkConversionMixin):
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
     """
 
-    class Builder(object):
+    class Builder:
         """Builder for :class:`SparkSession`."""
 
         _lock = RLock()

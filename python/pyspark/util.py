@@ -39,7 +39,7 @@ def print_exec(stream: TextIO) -> None:
     traceback.print_exception(ei[0], ei[1], ei[2], None, stream)
 
 
-class VersionUtils(object):
+class VersionUtils:
     """
     Provides utility method to determine Spark versions with given input string.
     """

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
 
 
-class SparkFiles(object):
+class SparkFiles:
 
     """
     Resolves paths to files added through :meth:`SparkContext.addFile`.
