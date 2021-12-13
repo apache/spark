@@ -12315,19 +12315,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal = this._internal.with_new_columns(applied)
             return DataFrame(internal)
 
-    if sys.version_info >= (3, 7):
-
-        def __class_getitem__(cls, params: Any) -> object:
-            # This is a workaround to support variadic generic in DataFrame in Python 3.7.
-            # See https://github.com/python/typing/issues/193
-            # we always wraps the given type hints by a tuple to mimic the variadic generic.
-            return create_tuple_for_frame_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # This is a workaround to support variadic generic in DataFrame in Python 3.5+
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark DataFrame.
-        is_dataframe = None
+    def __class_getitem__(cls, params: Any) -> object:
+        # This is a workaround to support variadic generic in DataFrame in Python 3.7.
+        # See https://github.com/python/typing/issues/193
+        # we always wraps the given type hints by a tuple to mimic the variadic generic.
+        return create_tuple_for_frame_type(params)
 
 
 def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:
