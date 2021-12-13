@@ -64,7 +64,7 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     [StructField(vec,ArrayType(FloatType,false),false),
     StructField(oldVec,ArrayType(FloatType,false),false)]
     """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     return Column(
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
     )
@@ -100,7 +100,7 @@ def array_to_vector(col: Column) -> Column:
     >>> df3.select(array_to_vector('v1').alias('vec1')).collect()
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
