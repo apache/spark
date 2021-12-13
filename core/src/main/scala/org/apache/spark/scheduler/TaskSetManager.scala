@@ -971,8 +971,14 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      logInfo(s"${taskName(info.taskId)} failed, but the task will not" +
-        " be re-executed (either because the task failed with a shuffle data fetch failure," +
+      val message = if (numFailures(index) >= maxTaskFailures) {
+        s"Task %d in stage %s failed %d times (current failed task %s (TID %s))".format(
+          index, taskSet.id, maxTaskFailures, info.id, info.taskId)
+      } else {
+        s"${taskName(info.taskId)} failed"
+      }
+      logInfo(s"$message, but the task will not be re-executed" +
+        " (either because the task failed with a shuffle data fetch failure," +
         " so the previous stage needs to be re-run, or because a different copy of the task" +
         " has already succeeded).")
     } else {
