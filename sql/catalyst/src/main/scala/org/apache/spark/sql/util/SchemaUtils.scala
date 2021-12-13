@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, Literal, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -179,27 +179,29 @@ private[spark] object SchemaUtils {
         val colNames = b.columns.map(c => UnresolvedAttribute(c.fieldNames()).name)
         // We need to check that we're not duplicating columns within our bucketing transform
         checkColumnNameDuplication(colNames, "in the bucket definition", isCaseSensitive)
-        b.name -> colNames
+        (b.name, colNames, Seq(b.numBuckets))
       case NamedTransform(transformName, refs) =>
         val fieldNameParts =
           refs.collect { case FieldReference(parts) => UnresolvedAttribute(parts).name }
         // We could also check that we're not duplicating column names here as well if
         // fieldNameParts.length > 1, but we're specifically not, because certain transforms can
         // be defined where this is a legitimate use case.
-        transformName -> fieldNameParts
+        val constantParts = refs.collect { case l: Literal[_] => l }
+        (transformName, fieldNameParts, constantParts)
     }
     val normalizedTransforms = if (isCaseSensitive) {
       extractedTransforms
     } else {
-      extractedTransforms.map(t => t._1 -> t._2.map(_.toLowerCase(Locale.ROOT)))
+      extractedTransforms.map(t => (t._1, t._2.map(_.toLowerCase(Locale.ROOT)), t._3))
     }
 
     if (normalizedTransforms.distinct.length != normalizedTransforms.length) {
-      val duplicateColumns = normalizedTransforms.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"
+      val duplicateTransforms = normalizedTransforms.groupBy(identity).collect {
+        case ((name, fields, constants), ys) if ys.length > 1 =>
+          s"$name(${(fields ++ constants.map(_.toString)).mkString(", ")})"
       }
       throw new AnalysisException(
-        s"Found duplicate column(s) $checkType: ${duplicateColumns.mkString(", ")}")
+        s"Found duplicate transform(s) $checkType: ${duplicateTransforms.mkString(", ")}")
     }
   }
 

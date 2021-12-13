@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -1388,7 +1389,7 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
   }
 
   test("tableCreation: column repeated in partition columns") {
-    val errorMsg = "Found duplicate column(s) in the partitioning"
+    val errorMsg = "Found duplicate transform(s) in the partitioning"
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         assertAnalysisError(
@@ -1457,6 +1458,57 @@ class DataSourceV2SQLSuiteV1Filter extends DataSourceV2SQLSuite with AlterTableT
         .filter("col_name = 'Part 2'")
         .select("data_type").head.getString(0)
       assert(part3 === "sorted_bucket(c, d, 4, e, f)")
+    }
+  }
+
+  test("tableCreation: duplicated transform with same arguments") {
+    val errorMsg = "Found duplicate transform(s) in the partitioning"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach{ case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        assertAnalysisError(
+          s"CREATE TABLE t ($c0 INT) USING $v2Source " +
+            s"PARTITIONED BY (truncate($c0, 2), truncate($c1, 2))",
+          errorMsg
+        )
+        assertAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"PARTITIONED BY (truncate($c0, 2), truncate($c1, 2))",
+          errorMsg
+        )
+        assertAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
+            s"PARTITIONED BY (truncate($c0, 2), truncate($c1, 2))",
+          errorMsg
+        )
+        assertAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"PARTITIONED BY (truncate($c0, 2), truncate($c1, 2))",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: duplicated transform with different arguments") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE testcat.t (id int, `a.b` string) USING foo
+          |PARTITIONED BY (bucket(2, id), bucket(4, id))
+        """.stripMargin)
+
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val table = testCatalog.loadTable(Identifier.of(Array.empty, "t"))
+      val partitioning = table.partitioning()
+      val references = partitioning.head.references()
+      assert(references.length == 1)
+      assert(references.head.fieldNames().toSeq == Seq("id"))
+      assert(partitioning.length == 2)
+      assert(partitioning.map(_.name()).toSeq == Seq("bucket", "bucket"))
+      val constantArguments = partitioning.map { case p =>
+        p.arguments().collect{ case l: LiteralValue[_] => l.value }.toSeq
+      }.toSet
+      assert(constantArguments == Set(Seq(2), Seq(4)))
     }
   }
 
