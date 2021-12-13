@@ -22,13 +22,10 @@ from pandas.api.types import is_hashable
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
-from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
-from pyspark.pandas.internal import SPARK_DEFAULT_INDEX_NAME
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
-from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.series import Series
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.utils import scol_for, verify_temp_column_name
 from pyspark.sql import functions as F
 
 
