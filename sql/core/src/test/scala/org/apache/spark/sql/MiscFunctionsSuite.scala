@@ -71,7 +71,8 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(encrypted.filter($"enc" === $"input").isEmpty)
       val result = encrypted.selectExpr(
         "CAST(aes_decrypt(enc, key, 'GCM', 'NONE') AS STRING) AS res", "input")
-      assert(!result.filter($"res" === $"input").isEmpty)
+      assert(!result.filter($"res" === $"input").isEmpty &&
+        result.filter($"res" =!= $"input").isEmpty)
     }
   }
 }
