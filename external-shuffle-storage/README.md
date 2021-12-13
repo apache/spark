@@ -44,3 +44,12 @@ spark.dynamicAllocation.enabled=true
 spark.dynamicAllocation.shuffleTracking.enabled=true
 spark.dynamicAllocation.shuffleTracking.timeout=1
 ```
+
+### How to specify AWS region for the S3 files
+
+Add Spark config like following:
+
+```
+spark.hadoop.fs.s3a.endpoint.region=us-west-2
+```
+
