@@ -34,10 +34,11 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
+import org.apache.hadoop.util.VersionInfo
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -60,7 +61,7 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.{CallerContext, Utils, VersionUtils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -75,6 +76,10 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
+
+  // ContainerLaunchContext.setTokensConf is only available in Hadoop 2.9+ and 3.x, so here we use
+  // reflection to avoid compilation for Hadoop 2.7 profile.
+  private val SET_TOKENS_CONF_METHOD = "setTokensConf"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var appMaster: ApplicationMaster = _
@@ -147,6 +152,10 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  def getApplicationId(): ApplicationId = {
+    appId
+  }
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -166,7 +175,7 @@ private[spark] class Client(
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def submitApplication(): Unit = {
     ResourceRequestHelper.validateResources(sparkConf)
 
     try {
@@ -198,7 +207,7 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
-      val containerContext = createContainerLaunchContext(newAppResponse)
+      val containerContext = createContainerLaunchContext()
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
@@ -206,7 +215,6 @@ private[spark] class Client(
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-      this.appId
     } catch {
       case e: Throwable =>
         if (stagingDirPath != null) {
@@ -338,8 +346,47 @@ private[spark] class Client(
     amContainer.setTokens(ByteBuffer.wrap(serializedCreds))
   }
 
+  /**
+   * Set configurations sent from AM to RM for renewing delegation tokens.
+   */
+  private def setTokenConf(amContainer: ContainerLaunchContext): Unit = {
+    // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
+    // for fetching delegation tokens. See YARN-5910 for more details.
+    val regex = sparkConf.get(config.AM_TOKEN_CONF_REGEX)
+    // The feature is only supported in Hadoop 2.9+ and 3.x, hence the check below.
+    val isSupported = VersionUtils.majorMinorVersion(VersionInfo.getVersion) match {
+      case (2, n) if n >= 9 => true
+      case (3, _) => true
+      case _ => false
+    }
+    if (regex.nonEmpty && isSupported) {
+      logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
+      val dob = new DataOutputBuffer();
+      val copy = new Configuration(false);
+      copy.clear();
+      hadoopConf.asScala.foreach { entry =>
+        if (entry.getKey.matches(regex.get)) {
+          copy.set(entry.getKey, entry.getValue)
+          logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
+        }
+      }
+      copy.write(dob);
+
+      // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
+      // compilation error for Hadoop 2.7 profile.
+      val setTokensConfMethod = try {
+        amContainer.getClass.getMethod(SET_TOKENS_CONF_METHOD, classOf[ByteBuffer])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
+              s" Please check YARN version and make sure it is 2.9+ or 3.x")
+      }
+      setTokensConfMethod.invoke(ByteBuffer.wrap(dob.getData))
+    }
+  }
+
   /** Get the application report from the ResourceManager for an application we have submitted. */
-  def getApplicationReport(appId: ApplicationId): ApplicationReport =
+  def getApplicationReport(): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 
   /**
@@ -910,8 +957,7 @@ private[spark] class Client(
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
-    : ContainerLaunchContext = {
+  private def createContainerLaunchContext(): ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
@@ -1080,6 +1126,7 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
+    setTokenConf(amContainer)
     amContainer
   }
 
@@ -1096,7 +1143,6 @@ private[spark] class Client(
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
-      appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
       interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
@@ -1105,7 +1151,7 @@ private[spark] class Client(
       Thread.sleep(interval)
       val report: ApplicationReport =
         try {
-          getApplicationReport(appId)
+          getApplicationReport
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
@@ -1268,7 +1314,7 @@ private[spark] class Client(
   def run(): Unit = {
     submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
-      val report = getApplicationReport(appId)
+      val report = getApplicationReport
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report, getDriverLogsLink(report)))
@@ -1276,7 +1322,7 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
+      val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
           logError(s"Application diagnostics message: $err")

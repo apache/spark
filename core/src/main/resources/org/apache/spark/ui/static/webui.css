@@ -333,8 +333,8 @@ a.expandbutton {
   width: 190px;
 }
 
-.shuffle-read-blocked-time-checkbox-div {
-  width: 200px;
+.shuffle-read-fetch-wait-time-checkbox-div {
+  width: 215px;
 }
 
 .shuffle-remote-reads-checkbox-div {

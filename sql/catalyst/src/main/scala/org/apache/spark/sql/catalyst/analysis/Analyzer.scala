@@ -1063,9 +1063,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u: UnresolvedRelation =>
         lookupRelation(u).map(resolveViews).getOrElse(u)
 
-      case RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
+      case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(_.resolved) =>
-        lookupRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(u)
+        lookupRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
@@ -1109,11 +1109,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         case _ => None
       }
 
-      if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
-      }
-      if (isTimeTravel && tmpView.nonEmpty) {
-        throw QueryCompilationErrors.viewNotSupportTimeTravelError(identifier)
+      tmpView.foreach { v =>
+        if (isStreaming && !v.isStreaming) {
+          throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
+        }
+        if (isTimeTravel) {
+          val target = if (v.isStreaming) "streams" else "views"
+          throw QueryCompilationErrors.timeTravelUnsupportedError(target)
+        }
       }
       tmpView
     }
