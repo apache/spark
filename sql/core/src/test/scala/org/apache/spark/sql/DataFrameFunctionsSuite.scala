@@ -386,7 +386,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
 
     // Unsupported AES mode and padding in decrypt
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM', 'PKCS')"))
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
