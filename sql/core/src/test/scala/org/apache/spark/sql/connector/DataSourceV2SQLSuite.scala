@@ -407,6 +407,44 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-36850: CreateTableAsSelect partitions can be specified using " +
+    "PARTITIONED BY and/or CLUSTERED BY") {
+    val identifier = "testcat.table_name"
+    withTable(identifier) {
+      spark.sql(s"CREATE TABLE $identifier USING foo PARTITIONED BY (id) " +
+        s"CLUSTERED BY (data) INTO 4 BUCKETS AS SELECT * FROM source")
+      val describe = spark.sql(s"DESCRIBE $identifier")
+      val part1 = describe
+        .filter("col_name = 'Part 0'")
+        .select("data_type").head.getString(0)
+      assert(part1 === "id")
+      val part2 = describe
+        .filter("col_name = 'Part 1'")
+        .select("data_type").head.getString(0)
+      assert(part2 === "bucket(4, data)")
+    }
+  }
+
+  test("SPARK-36850: ReplaceTableAsSelect partitions can be specified using " +
+    "PARTITIONED BY and/or CLUSTERED BY") {
+    val identifier = "testcat.table_name"
+    withTable(identifier) {
+      spark.sql(s"CREATE TABLE $identifier USING foo " +
+        "AS SELECT id FROM source")
+      spark.sql(s"REPLACE TABLE $identifier USING foo PARTITIONED BY (id) " +
+        s"CLUSTERED BY (data) INTO 4 BUCKETS AS SELECT * FROM source")
+      val describe = spark.sql(s"DESCRIBE $identifier")
+      val part1 = describe
+        .filter("col_name = 'Part 0'")
+        .select("data_type").head.getString(0)
+      assert(part1 === "id")
+      val part2 = describe
+        .filter("col_name = 'Part 1'")
+        .select("data_type").head.getString(0)
+      assert(part2 === "bucket(4, data)")
+    }
+  }
+
   test("SPARK-37545: CreateTableAsSelect should store location as qualified") {
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
