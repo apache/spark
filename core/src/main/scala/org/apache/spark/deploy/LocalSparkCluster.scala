@@ -47,6 +47,7 @@ class LocalSparkCluster private (
   private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
   // exposed for testing
   var masterWebUIPort = -1
+  // for test only
   private val workerDirs = ArrayBuffer[String]()
 
   def start(): Array[String] = {
@@ -69,7 +70,7 @@ class LocalSparkCluster private (
       val workDir = if (Utils.isTesting) {
         Utils.createTempDir(namePrefix = "worker").getAbsolutePath
       } else null
-      if (workDir != null) {
+      if (Utils.isTesting) {
         workerDirs += workDir
       }
       val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
