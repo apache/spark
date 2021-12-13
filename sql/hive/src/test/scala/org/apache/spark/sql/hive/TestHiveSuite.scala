@@ -62,7 +62,7 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
     ))).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
 
-    test("replace parquet schema using CTAS") {
+    test("SPARK-37617: replace parquet schema in CTAS") {
       withTable("alias", "alias_b") {
         withSQLConf(SQLConf.REPLACE_SCHEMA_ALIAS_AS_COLUMN.key -> "true",
           "hive.default.fileformat" -> "parquet") {
