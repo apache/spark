@@ -738,11 +738,11 @@
         <version>${slf4j.version}</version>
         <!-- runtime scope is appropriate, but causes SBT build problems -->
       </dependency>
-      <dependency>
+      <!-- <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-core</artifactId>
         <scope>${hadoop.deps.scope}</scope>
-      </dependency>
+      </dependency> -->
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
