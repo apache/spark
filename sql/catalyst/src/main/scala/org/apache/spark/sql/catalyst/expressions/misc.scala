@@ -314,16 +314,17 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
-      Key lengths of 16, 24 and 32 bits are supported.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      The default mode is ECB.
   """,
   arguments = """
     Arguments:
       * expr - The binary value to encrypt.
       * key - The passphrase to use to encrypt the data.
       * mode - Specifies which block cipher mode should be used to encrypt messages.
-               Supported modes: ECB.
+               Valid modes: ECB, GCM.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
   """,
   examples = """
     Examples:
@@ -356,7 +357,7 @@ case class AesEncrypt(
         Seq(BinaryType, BinaryType, StringType, StringType)))
   }
   def this(input: Expression, key: Expression, mode: Expression) =
-    this(input, key, mode, Literal("PKCS"))
+    this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("ECB"))
 
@@ -375,22 +376,25 @@ case class AesEncrypt(
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns a decrepted value of `expr` using AES in `mode` with `padding`.
-      Key lengths of 16, 24 and 32 bits are supported.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      The default mode is ECB.
   """,
   arguments = """
     Arguments:
       * expr - The binary value to decrypt.
       * key - The passphrase to use to decrypt the data.
       * mode - Specifies which block cipher mode should be used to decrypt messages.
-               Valid modes: ECB.
+               Valid modes: ECB, GCM.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
        Spark
       > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+       Spark SQL
+      > SELECT _FUNC_(unbase64('2sXi+jZd/ws+qFC1Tnzvvde5lz+8Haryz9HHBiyrVohXUG7LHA=='), '1234567890abcdef', 'GCM');
        Spark SQL
   """,
   since = "3.3.0",
@@ -417,7 +421,7 @@ case class AesDecrypt(
         Seq(BinaryType, BinaryType, StringType, StringType)))
   }
   def this(input: Expression, key: Expression, mode: Expression) =
-    this(input, key, mode, Literal("PKCS"))
+    this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("ECB"))
 
