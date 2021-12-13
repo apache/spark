@@ -20,9 +20,8 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import sys
 import inspect
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict, defaultdict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
@@ -3329,13 +3328,7 @@ def normalize_keyword_aggregation(
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
     (OrderedDict([('input', ['sum'])]), ['output'], [('input', 'sum')])
     """
-    # this is due to python version issue, not sure the impact on pandas-on-Spark
-    PY36 = sys.version_info >= (3, 6)
-    if not PY36:
-        kwargs = OrderedDict(sorted(kwargs.items()))
-
-    # TODO(Py35): When we drop python 3.5, change this to defaultdict(list)
-    aggspec: Dict[Union[Any, Tuple], List[str]] = OrderedDict()
+    aggspec: Dict[Union[Any, Tuple], List[str]] = defaultdict(list)
     order: List[Tuple] = []
     columns, pairs = zip(*kwargs.items())
 
