@@ -52,6 +52,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
+        ColumnOrName_,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
@@ -1676,12 +1677,12 @@ def struct(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def struct(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
     ...
 
 
 def struct(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new struct column.
 
@@ -3584,12 +3585,12 @@ def create_map(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def create_map(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
     ...
 
 
 def create_map(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new map column.
 
@@ -3649,12 +3650,12 @@ def array(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def array(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
     ...
 
 
 def array(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Creates a new array column.
 
@@ -4759,12 +4760,12 @@ def map_concat(*cols: "ColumnOrName") -> Column:
 
 
 @overload
-def map_concat(__cols: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
     ...
 
 
 def map_concat(
-    *cols: Union["ColumnOrName", Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]]]
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
 ) -> Column:
     """Returns the union of all the given maps.
 
