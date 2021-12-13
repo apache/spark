@@ -2281,7 +2281,7 @@ class TaskSetManagerSuite
     }
     clock.advance(1)
 
-    // running task with taskId(TID 1) fail 3 times (not enough to abort the stage)
+    // running task with taskId(index 1) fail 3 times (not enough to abort the stage)
     (0 until 3).foreach { attempt =>
       val task = runningTaskForIndex(1)
       logInfo(s"failing task $task")
@@ -2302,12 +2302,12 @@ class TaskSetManagerSuite
     assert(manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set(0, 1))
 
-    // make the speculative task(TID 1) success
+    // make the speculative task(index 1) success
     val speculativeTask = manager.resourceOffer("exec1", "host1", NO_PREF)._1
     assert(speculativeTask.isDefined)
-    manager.handleSuccessfulTask(1, createTaskResult(1))
+    manager.handleSuccessfulTask(speculativeTask.get.taskId, createTaskResult(1))
 
-    // failed the task(TID 1) and check if the task manager is zombie
+    // failed the originalTask(index 1) and check if the task manager is zombie
     val failedReason = ExceptionFailure("a", "b", Array(), "c", None)
     manager.handleFailedTask(originalTask.taskId, TaskState.FAILED, failedReason)
     assert(!manager.isZombie)
