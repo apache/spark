@@ -51,6 +51,28 @@ public class RetryingBlockTransferorSuite {
   private final ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
 
   @Test
+  public void testFailureWithoutRetry() throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+
+    List<? extends Map<String, Object>> interactions = Arrays.asList(
+            // b0 failed with IOException, no retry
+            ImmutableMap.<String, Object>builder()
+                    .put("b0", new IOException())
+                    .build(),
+            // This is not reached -- b0 has failed.
+            ImmutableMap.<String, Object>builder()
+                    .put("b0", block0)
+                    .build()
+    );
+
+    performInteractions(interactions, listener, 0);
+
+    verify(listener).onBlockTransferFailure(eq("b0"), any());
+    verify(listener, atLeastOnce()).getTransferType();
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
   public void testNoFailures() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
@@ -62,7 +84,7 @@ public class RetryingBlockTransferorSuite {
         .build()
       );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener).onBlockTransferSuccess("b0", block0);
     verify(listener).onBlockTransferSuccess("b1", block1);
@@ -81,7 +103,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener).onBlockTransferFailure(eq("b0"), any());
     verify(listener).onBlockTransferSuccess("b1", block1);
@@ -105,7 +127,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -128,7 +150,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -157,7 +179,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
@@ -190,7 +212,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
@@ -221,7 +243,7 @@ public class RetryingBlockTransferorSuite {
         .build()
     );
 
-    performInteractions(interactions, listener);
+    performInteractions(interactions, listener, 2);
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
@@ -242,11 +264,12 @@ public class RetryingBlockTransferorSuite {
    */
   @SuppressWarnings("unchecked")
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
-                                          BlockFetchingListener listener)
+                                          BlockFetchingListener listener,
+                                          int maxRetries)
     throws IOException, InterruptedException {
 
     MapConfigProvider provider = new MapConfigProvider(ImmutableMap.of(
-      "spark.shuffle.io.maxRetries", "2",
+      "spark.shuffle.io.maxRetries", String.valueOf(maxRetries),
       "spark.shuffle.io.retryWait", "0"));
     TransportConf conf = new TransportConf("shuffle", provider);
     BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
@@ -263,7 +286,7 @@ public class RetryingBlockTransferorSuite {
         try {
           // Verify that the RetryingBlockFetcher requested the expected blocks.
           String[] requestedBlockIds = (String[]) invocationOnMock.getArguments()[0];
-          String[] desiredBlockIds = interaction.keySet().toArray(new String[interaction.size()]);
+          String[] desiredBlockIds = interaction.keySet().toArray(new String[0]);
           assertArrayEquals(desiredBlockIds, requestedBlockIds);
 
           // Now actually invoke the success/failure callbacks on each block.
@@ -298,7 +321,7 @@ public class RetryingBlockTransferorSuite {
 
     assertNotNull(stub);
     stub.when(fetchStarter).createAndStart(any(), any());
-    String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
+    String[] blockIdArray = blockIds.toArray(new String[0]);
     new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener).start();
   }
 }
