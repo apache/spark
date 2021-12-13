@@ -1564,6 +1564,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("create table using - with sorted bucket") {
+    val identifier = "testcat.table_name"
+    withTable(identifier) {
+      sql(s"CREATE TABLE $identifier (a int, b string, c int) USING $v2Source PARTITIONED BY (c)" +
+        s" CLUSTERED BY (b) SORTED by (a) INTO 4 BUCKETS")
+      val table = getTableMetadata(identifier)
+      val describe = spark.sql(s"DESCRIBE $identifier")
+      val part1 = describe
+        .filter("col_name = 'Part 0'")
+        .select("data_type").head.getString(0)
+      assert(part1 === "c")
+      val part2 = describe
+        .filter("col_name = 'Part 1'")
+        .select("data_type").head.getString(0)
+      assert(part2 === "bucket(4, b, a)")
+    }
+  }
+
   test("REFRESH TABLE: v2 table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
