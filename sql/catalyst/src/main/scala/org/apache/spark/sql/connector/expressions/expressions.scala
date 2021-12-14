@@ -348,12 +348,21 @@ private[sql] object HoursTransform {
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
+  @transient private lazy val internalLit = new catalyst.expressions.Literal(value, dataType)
+
   override def toString: String = {
     if (dataType.isInstanceOf[StringType]) {
       s"'$value'"
     } else {
       s"$value"
     }
+  }
+
+  override def hashCode(): Int = internalLit.hashCode()
+
+  override def equals(obj: Any): Boolean = obj match {
+    case literal: LiteralValue[_] => internalLit.equals(literal.internalLit)
+    case _ => false
   }
 }
 

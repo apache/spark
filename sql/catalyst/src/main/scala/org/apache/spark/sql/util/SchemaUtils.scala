@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, Literal, NamedTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, LiteralValue, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -186,7 +186,7 @@ private[spark] object SchemaUtils {
         // We could also check that we're not duplicating column names here as well if
         // fieldNameParts.length > 1, but we're specifically not, because certain transforms can
         // be defined where this is a legitimate use case.
-        val constantParts = refs.collect { case l: Literal[_] => l }
+        val constantParts = refs.collect { case l: LiteralValue[_] => l }
         (transformName, fieldNameParts, constantParts)
     }
     val normalizedTransforms = if (isCaseSensitive) {
