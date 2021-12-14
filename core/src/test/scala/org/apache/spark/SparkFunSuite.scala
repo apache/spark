@@ -231,6 +231,7 @@ abstract class SparkFunSuite
       logger match {
         case logger: Logger =>
           logger.addAppender(appender)
+          appender.start()
           if (level.isDefined) {
             logger.setLevel(level.get)
           }
@@ -240,6 +241,7 @@ abstract class SparkFunSuite
     }
     try f finally {
       loggers.foreach(_.asInstanceOf[Logger].removeAppender(appender))
+      appender.stop()
       if (level.isDefined) {
         loggers.zipWithIndex.foreach { case (logger, i) =>
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
