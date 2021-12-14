@@ -427,11 +427,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
         assert self._sc._jvm is not None
-        print(
-            self._sc._jvm.PythonSQLUtils.explainString(
-                self._jdf.queryExecution(), explain_mode
-            )
-        )
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but

@@ -618,9 +618,7 @@ class SparkConversionMixin(object):
             arrow_data, ser, reader_func, create_RDD_server
         )
         assert self._jvm is not None
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(
-            jrdd, schema.json(), jsqlContext
-        )
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df

@@ -79,9 +79,7 @@ def _invoke_function(name: str, *args: Any) -> Column:
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
     assert SparkContext._active_spark_context is not None
-    jf = _get_get_jvm_function(
-        name, SparkContext._active_spark_context
-    )
+    jf = _get_get_jvm_function(name, SparkContext._active_spark_context)
     return Column(jf(*args))
 
 

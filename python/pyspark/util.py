@@ -327,11 +327,7 @@ def inheritable_thread_target(f: Callable) -> Callable:
         # copies local properties when the thread starts but `inheritable_thread_target`
         # copies when the function is wrapped.
         assert SparkContext._active_spark_context is not None
-        properties = (
-            SparkContext._active_spark_context._jsc.sc()
-            .getLocalProperties()
-            .clone()
-        )
+        properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
 
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
@@ -406,11 +402,7 @@ class InheritableThread(threading.Thread):
 
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
             assert SparkContext._active_spark_context is not None
-            self._props = (
-                SparkContext._active_spark_context._jsc.sc()
-                .getLocalProperties()
-                .clone()
-            )
+            self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
         return super(InheritableThread, self).start()
 
     @staticmethod
