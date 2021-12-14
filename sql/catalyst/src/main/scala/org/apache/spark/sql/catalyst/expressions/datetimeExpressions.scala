@@ -3007,7 +3007,7 @@ object SubtractDates {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([sourceTz,] targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
   arguments = """
     Arguments:
       * sourceTz - the time zone for the input timestamp
