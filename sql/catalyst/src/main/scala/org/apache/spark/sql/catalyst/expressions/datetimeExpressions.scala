@@ -3022,8 +3022,6 @@ object SubtractDates {
        2021-12-05 15:00:00
       > SELECT _FUNC_('America/Los_Angeles', timestamp'2021-12-06 00:00:00 Europe/Amsterdam');
        2021-12-05 15:00:00
-      > SELECT _FUNC_('America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
-       2021-12-05 07:00:00 (when SESSION_LOCAL_TIMEZONE is Asia/Tokyo)
   """,
   group = "datetime_funcs",
   since = "3.3.0")
