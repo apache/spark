@@ -169,12 +169,6 @@ Example of dumping data out from a query into a file using silent mode:
 Example of running a script non-interactively:
 
     ./bin/spark-sql -f /path/to/spark-sql-script.sql
-    ./bin/spark-sql -f file:///path/to/spark-sql-script.sql
-
-Example of running a script non-interactively from a Hadoop supported filesystem:
-
-    ./bin/spark-sql -f hdfs://<namenode>:<port>/spark-sql-script.sql
-    ./bin/spark-sql -f s3://mys3bucket/spark-sql-script.sql 
 
 Example of running an initialization script before entering interactive mode:
 
