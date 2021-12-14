@@ -701,10 +701,35 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             tasks = map(
                 inheritable_thread_target,
                 _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam))
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics_all[i][j] = metric
-                if collectSubModelsParam:
-                    subModels[i][j] = subModel
+
+            ipy_cmd_canceled = False
+
+            def on_cmd_cancel():
+                nonlocal ipy_cmd_canceled
+                ipy_cmd_canceled = True
+
+            def pool_task(f):
+                nonlocal ipy_cmd_canceled
+                if not ipy_cmd_canceled:
+                    return f()
+                else:
+                    raise RuntimeError('Command is canceled. Skip executing the task.')
+
+            try:
+                ipy = get_ipython()
+            except Exception:
+                ipy = None
+            try:
+                if ipy:
+                    ipy.events.register("post_run_cell", on_cmd_cancel)
+
+                for j, metric, subModel in pool.imap_unordered(pool_task, tasks):
+                    metrics_all[i][j] = metric
+                    if collectSubModelsParam:
+                        subModels[i][j] = subModel
+            finally:
+                if ipy:
+                    ipy.events.unregister("post_run_cell", on_cmd_cancel)
 
             validation.unpersist()
             train.unpersist()
