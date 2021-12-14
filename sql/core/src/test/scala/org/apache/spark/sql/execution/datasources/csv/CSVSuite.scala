@@ -808,7 +808,10 @@ abstract class CSVSuite
   test("SPARK-37575: null values should be saved as nothing rather than " +
     "quoted empty Strings \"\" with default settings") {
     withTempPath { path =>
-      Seq(("Tesla", null: String, "")).toDF("make", "comment", "blank").write.csv(path.getCanonicalPath)
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .csv(path.getCanonicalPath)
       checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
     }
   }
