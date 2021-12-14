@@ -76,7 +76,8 @@ abstract class Regression(val left: Expression, val right: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns the slope of the linear regression line for non-null pairs in a group.
+    _FUNC_(expr1, expr2) - Returns the slope of the linear regression line
+                           for non-null pairs in a group.
   """,
   examples = """
     Examples:
