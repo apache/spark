@@ -960,13 +960,15 @@ private[spark] class TaskSetManager(
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReason))
-      numFailures(index) += 1
-      if (numFailures(index) >= maxTaskFailures && !successful(index)) {
-        logError("Task %d in stage %s failed %d times; aborting job".format(
-          index, taskSet.id, maxTaskFailures))
-        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
-        return
+      if (!successful(index)) {
+        numFailures(index) += 1
+        if (numFailures(index) >= maxTaskFailures && !successful(index)) {
+          logError("Task %d in stage %s failed %d times; aborting job".format(
+            index, taskSet.id, maxTaskFailures))
+          abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+            .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+          return
+        }
       }
     }
 
