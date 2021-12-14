@@ -468,6 +468,10 @@ def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
     if conf is None:
         conf = dict()
 
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        return spark
+
     builder = SparkSession.builder.appName("pandas-on-Spark")
     for key, value in conf.items():
         builder = builder.config(key, value)
