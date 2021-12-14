@@ -17,7 +17,8 @@
 
 package org.apache.spark.internal
 
-import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -44,12 +45,6 @@ trait Logging {
   protected def log: Logger = {
     if (log_ == null) {
       initializeLogIfNecessary(false)
-      if (!Logging.isLog4j12()) {
-        LogManager.getLogger(logName).asInstanceOf[org.apache.logging.log4j.core.Logger]
-          .setLevel(Level.WARN)
-        LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
-          .setLevel(Level.WARN)
-      }
       log_ = LoggerFactory.getLogger(logName)
     }
     log_
@@ -125,6 +120,20 @@ trait Logging {
   }
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
+    if (!Logging.isLog4j12()) {
+      Logging.defaultSparkLog4jConfig = true
+      val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
+      Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+        case Some(url) =>
+          val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
+          context.setConfigLocation(url.toURI)
+          if (!silent) {
+            System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+          }
+        case None =>
+          System.err.println(s"Spark was unable to load $defaultLogProps")
+      }
+    }
     Logging.initialized = true
 
     // Force a call into slf4j to initialize it. Avoids this happening from multiple threads
@@ -135,6 +144,7 @@ trait Logging {
 
 private[spark] object Logging {
   @volatile private var initialized = false
+  @volatile private var defaultSparkLog4jConfig = false
 
   val initLock = new Object()
   try {
@@ -156,10 +166,17 @@ private[spark] object Logging {
    * initialization again.
    */
   def uninitialize(): Unit = initLock.synchronized {
+    if (!isLog4j12()) {
+      if (defaultSparkLog4jConfig) {
+        defaultSparkLog4jConfig = false
+        val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
+        context.reconfigure()
+      }
+    }
     this.initialized = false
   }
 
-  def isLog4j12(): Boolean = {
+  private def isLog4j12(): Boolean = {
     // This distinguishes the log4j 1.2 binding, currently
     // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
     // org.apache.logging.slf4j.Log4jLoggerFactory
