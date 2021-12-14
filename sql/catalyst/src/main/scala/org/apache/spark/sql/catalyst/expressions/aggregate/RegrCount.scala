@@ -59,7 +59,3 @@ case class RegrCount(left: Expression, right: Expression)
       newLeft: Expression, newRight: Expression): RegrCount =
     this.copy(left = newLeft, right = newRight)
 }
-
-object RegrCount {
-  def apply(left: Expression, right: Expression): RegrCount = new RegrCount(left, right)
-}
