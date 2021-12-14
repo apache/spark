@@ -125,8 +125,9 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {
-    val df = spark.range(5)
-    df.persist()
+    val base = spark.range(5)
+    base.persist()
+    val df = base.union(base)
 
     val captured = new ByteArrayOutputStream()
     Console.withOut(captured) {

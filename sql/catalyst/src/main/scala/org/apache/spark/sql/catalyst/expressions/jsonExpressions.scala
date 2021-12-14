@@ -962,7 +962,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
   }
 
   private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
-    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+    val arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
 
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {

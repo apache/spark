@@ -308,7 +308,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
          * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
          */
         def findIncorrectOffsets(): Seq[(TopicPartition, Long, Long)] = {
-          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
+          val incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
           partitionOffsets.foreach { case (tp, offset) =>
             knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
               if (knownOffset > offset) {
