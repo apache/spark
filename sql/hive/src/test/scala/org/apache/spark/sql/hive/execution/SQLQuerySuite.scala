@@ -2659,6 +2659,34 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-37217: Dynamic partitions should fail quickly " +
+    "when writing to external tables to prevent data deletion") {
+    withTable("test") {
+      withTempDir { f =>
+        sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+          s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          val insertSQL = """
+              |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+              |SELECT * FROM VALUES (1, 'n2'), (2, 'n3'), (3, 'n4') AS t(id, p2)
+              """.stripMargin
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "2") {
+            val e = intercept[SparkException] {
+              sql(insertSQL)
+            }
+            assert(e.getMessage.contains("Number of dynamic partitions created"))
+          }
+
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "3") {
+            sql(insertSQL)
+          }
+        }
+      }
+    }
+  }
 }
 
 @SlowHiveTest
