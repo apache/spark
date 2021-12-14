@@ -1684,10 +1684,7 @@ private[spark] class DAGScheduler(
         // we cannot process map stage completion, but have to wait for the finalization
         // to finish. This is because it's not straightforward to interrupt the
         // finalization task and undo what it might have already done.
-        if (scheduleShuffleMergeFinalize(shuffleStage, delay = 0,
-          registerMergeResults = false)) {
-          eventProcessLoop.post(ShuffleMergeFinalized(shuffleStage))
-        }
+        scheduleShuffleMergeFinalize(shuffleStage, delay = 0, registerMergeResults = false)
       } else {
         scheduleShuffleMergeFinalize(shuffleStage, shuffleMergeFinalizeWaitSec)
       }
@@ -2215,26 +2212,29 @@ private[spark] class DAGScheduler(
       s"results set to $registerMergeResults")
     val shuffleId = stage.shuffleDep.shuffleId
     val shuffleMergeId = stage.shuffleDep.shuffleMergeId
+    val numMergers = stage.shuffleDep.getMergerLocs.length
+    val results = (0 until numMergers).map(_ => SettableFuture.create[Boolean]())
     externalShuffleClient.foreach { shuffleClient =>
       if (!registerMergeResults) {
-        stage.shuffleDep.getMergerLocs.foreach {
-          case shuffleServiceLoc =>
-            // Sends async request to shuffle service to finalize shuffle merge on that host.
-            // Since merge statuses will not be registered in this case, we pass a no-op listener.
-            shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-              shuffleServiceLoc.port, shuffleId, shuffleMergeId,
-              new MergeFinalizerListener {
-                override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
-                }
+        results.foreach(_.set(true))
+        // Finalize in separate thread as shuffle merge is a no-op in this case
+        ThreadUtils.runInNewThread("no-op-finalize-shuffle-merge", false) {
+          stage.shuffleDep.getMergerLocs.foreach {
+            case shuffleServiceLoc =>
+              // Sends async request to shuffle service to finalize shuffle merge on that host.
+              // Since merge statuses will not be registered in this case, we pass a no-op listener.
+              shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
+                shuffleServiceLoc.port, shuffleId, shuffleMergeId,
+                new MergeFinalizerListener {
+                  override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
+                  }
 
-                override def onShuffleMergeFailure(e: Throwable): Unit = {
-                }
-              })
+                  override def onShuffleMergeFailure(e: Throwable): Unit = {
+                  }
+                })
+          }
         }
       } else {
-        val numMergers = stage.shuffleDep.getMergerLocs.length
-        val results = (0 until numMergers).map(_ => SettableFuture.create[Boolean]())
-
         stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
           case (shuffleServiceLoc, index) =>
             // Sends async request to shuffle service to finalize shuffle merge on that host
