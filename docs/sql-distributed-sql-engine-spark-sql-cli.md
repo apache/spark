@@ -166,7 +166,7 @@ Example of dumping data out from a query into a file using silent mode:
 
     ./bin/spark-sql -S -e 'SELECT COL FROM TBL' > result.txt
 
-Example of running a script non-interactively from local disk:
+Example of running a script non-interactively:
 
     ./bin/spark-sql -f /path/to/spark-sql-script.sql
     ./bin/spark-sql -f file:///path/to/spark-sql-script.sql
