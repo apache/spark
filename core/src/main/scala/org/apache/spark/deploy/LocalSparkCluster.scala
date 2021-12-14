@@ -105,7 +105,7 @@ class LocalSparkCluster private (
 
 private[spark] object LocalSparkCluster {
 
-  private var localCluster: Option[LocalSparkCluster] = _
+  private var localCluster: Option[LocalSparkCluster] = None
 
   private[spark] def get: Option[LocalSparkCluster] = localCluster
 
