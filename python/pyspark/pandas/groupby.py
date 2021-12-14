@@ -3326,7 +3326,7 @@ def normalize_keyword_aggregation(
     Examples
     --------
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
-    (OrderedDict([('input', ['sum'])]), ['output'], [('input', 'sum')])
+    (defaultdict(<class 'list'>, {'input': ['sum']}), ['output'], [('input', 'sum')])
     """
     aggspec: Dict[Union[Any, Tuple], List[str]] = defaultdict(list)
     order: List[Tuple] = []
