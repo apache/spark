@@ -805,19 +805,28 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-37575: null values should not reflect to any characters by default") {
+  test("SPARK-37575: null values should be saved as nothing rather than " +
+    "quoted empty Strings \"\" with default settings") {
     val litNull: String = null
-    val data = Seq(("Tesla", litNull, ""))
+    val df = Seq(("Tesla", litNull, ""))
+      .toDF("make", "comment", "blank")
     withTempPath { path =>
-      val csvDir = new File(path, "csv")
-      val cars = data.toDF("make", "comment", "blank")
-      cars.coalesce(1).write.csv(csvDir.getCanonicalPath)
+      val csvDir = path.getCanonicalPath
+      df.write.csv(csvDir)
 
-      csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
-        val readBack = Files.readAllBytes(csvFile.toPath)
+      path.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+        val csvData = Files.readAllBytes(csvFile.toPath)
         val expected = ("Tesla,,\"\"" + Properties.lineSeparator).getBytes()
-        assert(readBack === expected)
+        assert(csvData === expected)
       })
+
+      val results = spark.read
+        .format("csv")
+        .schema(df.schema)
+        .load(csvDir)
+        .collect()
+      val expected = Seq(Seq("Tesla", litNull, litNull))
+      assert(results.toSeq.map(_.toSeq) === expected)
     }
   }
 
