@@ -45,7 +45,7 @@ from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
 
 from pyspark import accumulators, since
-from pyspark.accumulators import Accumulator
+from pyspark.accumulators import Accumulator, AccumulatorServer
 from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
@@ -289,7 +289,9 @@ class SparkContext(object):
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
         auth_token = self._gateway.gateway_parameters.auth_token
-        self._accumulatorServer = accumulators._start_update_server(auth_token)  # type: ignore[attr-defined]
+        self._accumulatorServer: Optional[AccumulatorServer] = accumulators._start_update_server(
+            auth_token
+        )
         (host, port) = self._accumulatorServer.server_address
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
@@ -567,6 +569,7 @@ class SparkContext(object):
             finally:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
+            assert self._accumulatorServer is not None
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None
         with SparkContext._lock:
@@ -1194,11 +1197,11 @@ class SparkContext(object):
         """
         if accum_param is None:
             if isinstance(value, int):
-                accum_param = accumulators.INT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast(AccumulatorParam[T], accumulators.INT_ACCUMULATOR_PARAM)
             elif isinstance(value, float):
-                accum_param = accumulators.FLOAT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast(AccumulatorParam[T], accumulators.FLOAT_ACCUMULATOR_PARAM)
             elif isinstance(value, complex):
-                accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast(AccumulatorParam[T], accumulators.COMPLEX_ACCUMULATOR_PARAM)
             else:
                 raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1

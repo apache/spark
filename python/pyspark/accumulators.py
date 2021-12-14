@@ -223,7 +223,7 @@ class AddingAccumulatorParam(AccumulatorParam[U]):
         return self.zero_value
 
     def addInPlace(self, value1: U, value2: U) -> U:
-        value1 += value2
+        value1 += value2  # type: ignore[operator]
         return value1
 
 
