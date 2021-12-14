@@ -116,9 +116,10 @@ case class AdaptiveSparkPlanExec(
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
+      ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements, costEvaluator)
+      OptimizeSkewedJoin(ensureRequirements)
     ) ++ context.session.sessionState.queryStagePrepRules
   }
 

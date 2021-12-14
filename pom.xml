@@ -115,7 +115,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.6.3</maven.version>
+    <maven.version>3.8.4</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
@@ -170,7 +170,7 @@
     <fasterxml.jackson.version>2.13.0</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <netlib.ludovic.dev.version>2.2.0</netlib.ludovic.dev.version>
+    <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.21</commons-compress.version>
     <commons-io.version>2.11.0</commons-io.version>
@@ -194,14 +194,14 @@
     <htmlunit.version>2.50.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.2</commons-cli.version>
+    <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.0</tink.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>2.0.0</arrow.version>
+    <arrow.version>6.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>5.10.1</kubernetes-client.version>
@@ -251,9 +251,9 @@
     <!--
       These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
       only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
-      profile is hadoop-2.7.
+      profile is hadoop-2.
 
-      To make the above work, in the hadoop-2.7 profile section we bind hadoop-client-api to
+      To make the above work, in the hadoop-2 profile section we bind hadoop-client-api to
       hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
       former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
       should be fine since both dependencies are required. We cannot use hadoop-client for both
@@ -261,7 +261,7 @@
 
       We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
       and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
-      declare the dependency when we're using hadoop-3.2 profile, in
+      declare the dependency when we're using hadoop-3 profile, in
       resource-managers/yarn/pom.xml.
 
       Please check SPARK-36835 for more details.
@@ -1066,7 +1066,7 @@
       <dependency>
         <groupId>mysql</groupId>
         <artifactId>mysql-connector-java</artifactId>
-        <version>5.1.38</version>
+        <version>8.0.27</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1222,7 +1222,7 @@
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3.x -->
           <exclusion>
             <groupId>javax.ws.rs</groupId>
             <artifactId>jsr311-api</artifactId>
@@ -1534,7 +1534,7 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3.x -->
           <exclusion>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP-java7</artifactId>
@@ -3334,7 +3334,7 @@
     -->
 
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
       <properties>
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
@@ -3349,13 +3349,8 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
       <!-- Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-      <id>hive-2.3</id>
-      <!-- Default hive profile. Uses global properties. -->
     </profile>
 
     <profile>

@@ -26,7 +26,7 @@ from typing import cast
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import rand, udf
+from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
     StructType,
     StringType,
@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     NullType,
+    DayTimeIntervalType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -205,6 +206,53 @@ class ArrowTests(ReusedSQLTestCase):
                 with self.assertRaisesRegex(Exception, "Unsupported type"):
                     df.toPandas()
 
+    def test_toPandas_empty_df_arrow_enabled(self):
+        # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
+        # when arrow is enabled
+        from datetime import date
+        from decimal import Decimal
+
+        schema = StructType(
+            [
+                StructField("a", StringType(), True),
+                StructField("a", IntegerType(), True),
+                StructField("c", TimestampType(), True),
+                StructField("d", NullType(), True),
+                StructField("e", LongType(), True),
+                StructField("f", FloatType(), True),
+                StructField("g", DateType(), True),
+                StructField("h", BinaryType(), True),
+                StructField("i", DecimalType(38, 18), True),
+                StructField("k", TimestampNTZType(), True),
+                StructField("L", DayTimeIntervalType(0, 3), True),
+            ]
+        )
+        df = self.spark.createDataFrame(self.spark.sparkContext.emptyRDD(), schema=schema)
+        non_empty_df = self.spark.createDataFrame(
+            [
+                (
+                    "a",
+                    1,
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    None,
+                    10,
+                    0.2,
+                    date(1969, 1, 1),
+                    bytearray(b"a"),
+                    Decimal("2.0"),
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    datetime.timedelta(microseconds=123),
+                )
+            ],
+            schema=schema,
+        )
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        pdf_non_empty, pdf_arrow_non_empty = self._toPandas_arrow_toggle(non_empty_df)
+        assert_frame_equal(pdf, pdf_arrow)
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_arrow_non_empty.dtypes))
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_non_empty.dtypes))
+
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame(
             [tuple([None for _ in range(len(self.data_wo_null[0]))])] + self.data_wo_null
@@ -240,6 +288,18 @@ class ArrowTests(ReusedSQLTestCase):
             pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
             assert_frame_equal(origin, pdf)
             assert_frame_equal(pdf, pdf_arrow)
+
+    def test_create_data_frame_to_pandas_day_time_internal(self):
+        # SPARK-37279: Test DayTimeInterval in createDataFrame and toPandas
+        origin = pd.DataFrame({"a": [datetime.timedelta(microseconds=123)]})
+        df = self.spark.createDataFrame(origin)
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.a.cast("string"))
+        ).collect()
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        assert_frame_equal(origin, pdf)
+        assert_frame_equal(pdf, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)

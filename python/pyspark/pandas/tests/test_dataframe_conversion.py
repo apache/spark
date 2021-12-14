@@ -24,7 +24,6 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from distutils.version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -218,18 +217,15 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         self.assert_eq(psdf.to_latex(index_names=False), pdf.to_latex(index_names=False))
         self.assert_eq(psdf.to_latex(bold_rows=True), pdf.to_latex(bold_rows=True))
         self.assert_eq(psdf.to_latex(decimal=","), pdf.to_latex(decimal=","))
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            self.assert_eq(psdf.to_latex(encoding="ascii"), pdf.to_latex(encoding="ascii"))
 
     def test_to_records(self):
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            pdf = pd.DataFrame({"A": [1, 2], "B": [0.5, 0.75]}, index=["a", "b"])
+        pdf = pd.DataFrame({"A": [1, 2], "B": [0.5, 0.75]}, index=["a", "b"])
 
-            psdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-            self.assert_eq(psdf.to_records(), pdf.to_records())
-            self.assert_eq(psdf.to_records(index=False), pdf.to_records(index=False))
-            self.assert_eq(psdf.to_records(index_dtypes="<S2"), pdf.to_records(index_dtypes="<S2"))
+        self.assert_eq(psdf.to_records(), pdf.to_records())
+        self.assert_eq(psdf.to_records(index=False), pdf.to_records(index=False))
+        self.assert_eq(psdf.to_records(index_dtypes="<S2"), pdf.to_records(index_dtypes="<S2"))
 
     def test_from_records(self):
         # Assert using a dict as input

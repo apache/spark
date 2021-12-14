@@ -423,6 +423,9 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
+      // sort order of each node is checked to be valid.
+      ReplaceHashWithSortAgg,
       // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,

@@ -3004,3 +3004,56 @@ case class SubtractDates(
 object SubtractDates {
   def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  arguments = """
+    Arguments:
+      * sourceTz - the time zone for the input timestamp
+      * targetTz - the time zone to which the input timestamp should be converted
+      * sourceTs - a timestamp without time zone
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
+       2021-12-05 15:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class ConvertTimezone(
+    sourceTz: Expression,
+    targetTz: Expression,
+    sourceTs: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def first: Expression = sourceTz
+  override def second: Expression = targetTz
+  override def third: Expression = sourceTs
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
+  override def dataType: DataType = TimestampNTZType
+
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
+    DateTimeUtils.convertTimestampNtzToAnotherTz(
+      srcTz.asInstanceOf[UTF8String].toString,
+      tgtTz.asInstanceOf[UTF8String].toString,
+      micros.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+  }
+
+  override def prettyName: String = "convert_timezone"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ConvertTimezone = {
+    copy(sourceTz = newFirst, targetTz = newSecond, sourceTs = newThird)
+  }
+}

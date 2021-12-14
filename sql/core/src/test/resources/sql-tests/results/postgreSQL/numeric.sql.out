@@ -4793,43 +4793,33 @@ Infinity
 -- !query
 select * from range(cast(0.0 as decimal(38, 18)), cast(4.0 as decimal(38, 18)))
 -- !query schema
-struct<>
+struct<id:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
+0
+1
+2
+3
 
 
 -- !query
 select * from range(cast(0.1 as decimal(38, 18)), cast(4.0 as decimal(38, 18)), cast(1.3 as decimal(38, 18)))
 -- !query schema
-struct<>
+struct<id:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (decimal(38,18), decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
+0
+1
+2
+3
 
 
 -- !query
 select * from range(cast(4.0 as decimal(38, 18)), cast(-1.5 as decimal(38, 18)), cast(-2.2 as decimal(38, 18)))
 -- !query schema
-struct<>
+struct<id:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numSlices: integer)
-    range(start: long, end: long, step: long)
-    range(start: long, end: long)
-    range(end: long)
-cannot be applied to (decimal(38,18), decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
+0
+2
+4
 
 
 -- !query

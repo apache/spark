@@ -19,7 +19,7 @@ import unittest
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, PickleSerializer, SparkConf, SparkContext
+from pyspark import shuffle, CPickleSerializer, SparkConf, SparkContext
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 
 
@@ -80,7 +80,7 @@ class MergerTests(unittest.TestCase):
             self.assertEqual(k, len(vs))
             self.assertEqual(list(range(k)), list(vs))
 
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         l = ser.loads(ser.dumps(list(gen_gs(50002, 30000))))
         for k, vs in l:
             self.assertEqual(k, len(vs))

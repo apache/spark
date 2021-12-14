@@ -535,8 +535,8 @@ case class ApplyColumnarRulesAndInsertTransitions(
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
       insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar) {
-      // `outputsColumnar` is false but the plan outputs columnar format, so add a
+    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
       // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
