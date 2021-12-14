@@ -224,7 +224,10 @@ abstract class SparkFunSuite
     val loggers = if (loggerNames.nonEmpty) {
       loggerNames.map(LogManager.getLogger)
     } else {
-      Seq(LogManager.getRootLogger())
+      Seq(LogManager.getRootLogger)
+    }
+    if (loggers.size == 0) {
+      throw new SparkException(s"Cannot get any logger to add the appender")
     }
     val restoreLevels = loggers.map(_.getLevel)
     loggers.foreach { logger =>
@@ -234,6 +237,7 @@ abstract class SparkFunSuite
           appender.start()
           if (level.isDefined) {
             logger.setLevel(level.get)
+            logger.get().setLevel(level.get)
           }
         case _ =>
           throw new SparkException(s"Cannot add appender to logger ${logger.getName}")
@@ -245,6 +249,7 @@ abstract class SparkFunSuite
       if (level.isDefined) {
         loggers.zipWithIndex.foreach { case (logger, i) =>
           logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
+          logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
       }
     }

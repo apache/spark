@@ -38,6 +38,7 @@ class OptimizerLoggingSuite extends PlanTest {
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new LogAppender("optimizer rules")
+    logAppender.setThreshold(expectedLevel)
     withLogAppender(logAppender, level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
       val query = input.select('a, 'b).select('a).where('a > 1).analyze

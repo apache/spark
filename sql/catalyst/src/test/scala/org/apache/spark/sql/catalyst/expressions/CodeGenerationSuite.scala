@@ -21,6 +21,8 @@ import java.sql.Timestamp
 
 import scala.math.Ordering
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -520,7 +522,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
     val appender = new LogAppender("huge method limit")
-    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName)) {
+    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        Some(Level.INFO)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
