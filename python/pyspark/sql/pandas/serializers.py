@@ -215,7 +215,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, t):
-            if hasattr(s.values, "__arrow_array__"):
+            if hasattr(s.array, "__arrow_array__"):
                 mask = None
             else:
                 mask = s.isnull()
