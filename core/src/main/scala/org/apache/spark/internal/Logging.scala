@@ -121,6 +121,7 @@ trait Logging {
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     if (!Logging.isLog4j12()) {
+      // scalastyle:off println
       Logging.defaultSparkLog4jConfig = true
       val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
       Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
@@ -133,6 +134,7 @@ trait Logging {
         case None =>
           System.err.println(s"Spark was unable to load $defaultLogProps")
       }
+      // scalastyle:on println
     }
     Logging.initialized = true
 
