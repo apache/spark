@@ -4082,18 +4082,21 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
-        case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
+        case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit)
+            if lit.foldable && !SQLConf.get.charVarcharAsString =>
           padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
-        case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
+        case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr))
+            if lit.foldable && !SQLConf.get.charVarcharAsString =>
           padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
         case i @ In(e @ AttrOrOuterRef(attr), list)
-          if attr.dataType == StringType && list.forall(_.foldable) =>
+          if attr.dataType == StringType && list.forall(_.foldable)
+            && !SQLConf.get.charVarcharAsString =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
             case CharType(length) =>
               val (nulls, literalChars) =
@@ -4111,7 +4114,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         // For char type column or inner field comparison, pad the shorter one to the longer length.
         case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
             // For the same attribute, they must be the same length and no padding is needed.
-            if !left.semanticEquals(right) =>
+            if !left.semanticEquals(right) && !SQLConf.get.charVarcharAsString =>
           val outerRefs = (e1, e2) match {
             case (_: OuterReference, _: OuterReference) => Seq(left, right)
             case (_: OuterReference, _) => Seq(left)
@@ -4127,7 +4130,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             b.withNewChildren(newChildren)
           }
 
-        case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
+        case i @ In(e @ AttrOrOuterRef(attr), list)
+            if list.forall(_.isInstanceOf[Attribute]) && !SQLConf.get.charVarcharAsString =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
             attr +: list.map(_.asInstanceOf[Attribute]))
           if (e.isInstanceOf[OuterReference]) {
