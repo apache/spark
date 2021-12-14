@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REGR_COUNT, TreePattern}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, NumericType}
@@ -50,10 +49,6 @@ case class RegrCount(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(REGR_COUNT)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), inputTypes)
-  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrCount =
