@@ -75,7 +75,7 @@ import org.apache.spark.sql.types._
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     WidenSetOperationTypes ::
-    CombinedTypeCoercionRule(
+    new AnsiCombinedTypeCoercionRule(
       InConversion ::
       PromoteStringLiterals ::
       DecimalPrecision ::
@@ -234,11 +234,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
         b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
-      case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
-      case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
-        m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) if e.foldable => UnaryPositive(Cast(e, DoubleType))
-
       // Promotes string literals in `In predicate`.
       case p @ In(a, b)
         if a.dataType != StringType && b.exists( e => e.foldable && e.dataType == StringType) =>
@@ -304,4 +299,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         s.copy(left = newLeft, right = newRight)
     }
   }
+
+  // This is for generating a new rule id, so that we can run both default and Ansi
+  // type coercion rules against one logical plan.
+  class AnsiCombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends
+    CombinedTypeCoercionRule(rules)
 }

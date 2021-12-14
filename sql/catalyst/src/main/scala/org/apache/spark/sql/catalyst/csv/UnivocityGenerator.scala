@@ -49,7 +49,7 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
   private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampFormatInWrite,
+    options.timestampNTZFormatInWrite,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false,
@@ -94,8 +94,6 @@ class UnivocityGenerator(
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
-      } else {
-        values(i) = options.nullValue
       }
       i += 1
     }

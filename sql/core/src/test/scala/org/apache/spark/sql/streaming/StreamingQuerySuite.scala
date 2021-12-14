@@ -1229,7 +1229,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       q.processAllAvailable()
       q
     } finally {
-      spark.streams.active.map(_.stop())
+      spark.streams.active.foreach(_.stop())
     }
   }
 

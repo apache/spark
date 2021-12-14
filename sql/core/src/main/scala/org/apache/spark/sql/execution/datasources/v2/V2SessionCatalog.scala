@@ -83,8 +83,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     t match {
       case V1Table(catalogTable) =>
         if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.viewNotSupportTimeTravelError(
-            ident.namespace() :+ ident.name())
+          throw QueryCompilationErrors.timeTravelUnsupportedError("views")
         } else {
           throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
         }
@@ -319,8 +318,8 @@ private[sql] object V2SessionCatalog {
       case IdentityTransform(FieldReference(Seq(col))) =>
         identityCols += col
 
-      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
-        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
+      case BucketTransform(numBuckets, FieldReference(Seq(col)), FieldReference(Seq(sortCol))) =>
+        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, sortCol :: Nil))
 
       case transform =>
         throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)

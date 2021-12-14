@@ -20,7 +20,6 @@ A base class of DataFrame/Column to behave similar to pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections import Counter
-from distutils.version import LooseVersion
 from functools import reduce
 from typing import (
     Any,
@@ -795,31 +794,17 @@ class Frame(object, metaclass=ABCMeta):
 
         if path is None:
             # If path is none, just collect and use pandas's to_csv.
-            psdf_or_ser = self
-            if (LooseVersion("0.24") > LooseVersion(pd.__version__)) and isinstance(
-                self, ps.Series
-            ):
-                # 0.23 seems not having 'columns' parameter in Series' to_csv.
-                return psdf_or_ser._to_pandas().to_csv(
-                    None,
-                    sep=sep,
-                    na_rep=na_rep,
-                    header=header,
-                    date_format=date_format,
-                    index=False,
-                )
-            else:
-                return psdf_or_ser._to_pandas().to_csv(
-                    None,
-                    sep=sep,
-                    na_rep=na_rep,
-                    columns=columns,
-                    header=header,
-                    quotechar=quotechar,
-                    date_format=date_format,
-                    escapechar=escapechar,
-                    index=False,
-                )
+            return self._to_pandas().to_csv(
+                None,
+                sep=sep,
+                na_rep=na_rep,
+                columns=columns,
+                header=header,
+                quotechar=quotechar,
+                date_format=date_format,
+                escapechar=escapechar,
+                index=False,
+            )
 
         if isinstance(self, ps.DataFrame):
             psdf = self
@@ -3005,11 +2990,6 @@ class Frame(object, metaclass=ABCMeta):
         |  0 | elk        | dog        |
         |  1 | pig        | quetzal    |
         """
-        # `to_markdown` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            raise NotImplementedError(
-                "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
-            )
         log_advice(
             "`to_markdown` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas object is expected to be small."
