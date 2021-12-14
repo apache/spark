@@ -168,6 +168,7 @@ class SQLContext(object):
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
+            assert sc._jvm is not None
             jsqlContext = (
                 sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
                 .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
@@ -733,6 +734,7 @@ class HiveContext(SQLContext):
         confusing error messages.
         """
         jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
+        assert sparkContext._jvm is not None
         jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
             jsc, False
         )

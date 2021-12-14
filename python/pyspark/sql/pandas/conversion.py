@@ -617,7 +617,8 @@ class SparkConversionMixin(object):
         jrdd = self._sc._serialize_to_jvm(  # type: ignore[attr-defined]
             arrow_data, ser, reader_func, create_RDD_server
         )
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(  # type: ignore[attr-defined]
+        assert self._jvm is not None
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(
             jrdd, schema.json(), jsqlContext
         )
         df = DataFrame(jdf, self._wrapped)

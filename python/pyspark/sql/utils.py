@@ -48,6 +48,7 @@ class CapturedException(Exception):
         )
 
         self.desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
+        assert SparkContext._jvm is not None
         self.stackTrace = (
             stackTrace
             if stackTrace is not None
