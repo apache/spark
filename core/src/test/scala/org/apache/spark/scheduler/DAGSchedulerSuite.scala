@@ -3927,7 +3927,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
     // Successfully completing the retry of stage 0.
-     complete(taskSets(2), taskSets(2).tasks.zipWithIndex.map {
+    complete(taskSets(2), taskSets(2).tasks.zipWithIndex.map {
       case (_, idx) =>
         (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
     }.toSeq)
@@ -3960,7 +3960,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-33701: check shuffle merge finalization triggering after minimum" +
-    " threshold tasks complete") {
+    " threshold push complete") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT, 10L)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 5)
@@ -3987,12 +3987,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(makeCompletionEvent(taskSets(0).tasks(0), taskResults(0)._1, taskResults(0)._2))
     runEvent(makeCompletionEvent(taskSets(0).tasks(1), taskResults(0)._1, taskResults(0)._2))
 
-    // Minimum push complete for 2 tasks, schedule merge finalization
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
+
     pushComplete(shuffleStage1.shuffleDep.shuffleId, 0, 0)
     pushComplete(shuffleStage1.shuffleDep.shuffleId, 0, 1)
 
-    assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
+    // Minimum push complete for 2 tasks, schedule merge finalization
     val finalizeTask = shuffleStage1.shuffleDep.getFinalizeTask.get
       .asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask.registerMergeResults && finalizeTask.delay == 0)

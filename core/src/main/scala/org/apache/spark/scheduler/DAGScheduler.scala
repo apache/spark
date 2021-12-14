@@ -2218,22 +2218,25 @@ private[spark] class DAGScheduler(
       if (!registerMergeResults) {
         results.foreach(_.set(true))
         // Finalize in separate thread as shuffle merge is a no-op in this case
-        ThreadUtils.runInNewThread("no-op-finalize-shuffle-merge", false) {
-          stage.shuffleDep.getMergerLocs.foreach {
-            case shuffleServiceLoc =>
-              // Sends async request to shuffle service to finalize shuffle merge on that host.
-              // Since merge statuses will not be registered in this case, we pass a no-op listener.
-              shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-                shuffleServiceLoc.port, shuffleId, shuffleMergeId,
-                new MergeFinalizerListener {
-                  override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
-                  }
+        shuffleMergeFinalizeScheduler.schedule(new Runnable {
+          override def run(): Unit = {
+            stage.shuffleDep.getMergerLocs.foreach {
+              case shuffleServiceLoc =>
+                // Sends async request to shuffle service to finalize shuffle merge on that host.
+                // Since merge statuses will not be registered in this case,
+                // we pass a no-op listener.
+                shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
+                  shuffleServiceLoc.port, shuffleId, shuffleMergeId,
+                  new MergeFinalizerListener {
+                    override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
+                    }
 
-                  override def onShuffleMergeFailure(e: Throwable): Unit = {
-                  }
-                })
+                    override def onShuffleMergeFailure(e: Throwable): Unit = {
+                    }
+                  })
+            }
           }
-        }
+        }, 0, TimeUnit.SECONDS)
       } else {
         stage.shuffleDep.getMergerLocs.zipWithIndex.foreach {
           case (shuffleServiceLoc, index) =>
@@ -2260,18 +2263,18 @@ private[spark] class DAGScheduler(
                 }
               })
         }
-        // DAGScheduler only waits for a limited amount of time for the merge results.
-        // It will attempt to submit the next stage(s) irrespective of whether merge results
-        // from all shuffle services are received or not.
-        try {
-          Futures.allAsList(results: _*).get(shuffleMergeResultsTimeoutSec, TimeUnit.SECONDS)
-        } catch {
-          case _: TimeoutException =>
-            logInfo(s"Timed out on waiting for merge results from all " +
-              s"$numMergers mergers for shuffle $shuffleId")
-        } finally {
-          eventProcessLoop.post(ShuffleMergeFinalized(stage))
-        }
+      }
+      // DAGScheduler only waits for a limited amount of time for the merge results.
+      // It will attempt to submit the next stage(s) irrespective of whether merge results
+      // from all shuffle services are received or not.
+      try {
+        Futures.allAsList(results: _*).get(shuffleMergeResultsTimeoutSec, TimeUnit.SECONDS)
+      } catch {
+        case _: TimeoutException =>
+          logInfo(s"Timed out on waiting for merge results from all " +
+            s"$numMergers mergers for shuffle $shuffleId")
+      } finally {
+        eventProcessLoop.post(ShuffleMergeFinalized(stage))
       }
     }
   }
