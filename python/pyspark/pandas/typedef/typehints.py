@@ -580,8 +580,9 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
         return SeriesType(dtype, spark_type)
 
     # Note that, DataFrame type hints will create a Tuple.
+    # Tuple has _name but other types have __name__
+    name = getattr(tpe, "_name", getattr(tpe, "__name__", None))
     # Check if the name is Tuple.
-    name = getattr(tpe, "_name")
     if name == "Tuple":
         tuple_type = tpe
         parameters = getattr(tuple_type, "__args__")
