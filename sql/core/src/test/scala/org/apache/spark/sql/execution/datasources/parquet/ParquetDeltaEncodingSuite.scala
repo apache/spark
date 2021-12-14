@@ -52,8 +52,6 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
   protected def initValuesWriter (): Unit
 
-//  protected def allocArrayOfType[T: ClassTag](size: Int): Array[T] = new Array[T](size)
-
   protected def allocDataArray(size: Int): Array[T]
 
   protected def getNextRandom: T
@@ -75,8 +73,6 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
 
   protected override def beforeEach(): Unit = {
-    blockSize = 128
-    miniBlockNum = 4
     random = new Random(0)
     initValuesWriter()
     super.beforeAll()
@@ -328,7 +324,7 @@ class ParquetDeltaEncodingLong extends ParquetDeltaEncodingSuite[Long] {
   override protected def getTypeMaxValue: Long = Long.MaxValue
 
   override protected def readData(total: Int, columnVector: WritableColumnVector, rowId: Int): Unit
-  = reader.readLongs(total, columnVector, rowId)
+    = reader.readLongs(total, columnVector, rowId)
 
   override protected def skip(total: Int): Unit = reader.skipLongs(total)
 

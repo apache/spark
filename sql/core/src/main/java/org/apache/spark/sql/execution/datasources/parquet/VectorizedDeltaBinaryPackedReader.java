@@ -212,7 +212,8 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       IntegerOutputWriter outputWriter) {
     if (valuesRead + total > totalValueCount) {
       throw new ParquetDecodingException(
-          "No more values to read, total value count is " + valuesRead);
+          "No more values to read. Total values read:  " + valuesRead + ", total count: "
+              + totalValueCount + ", trying to read " + total + " more.");
     }
     int remaining = total;
     // First value
