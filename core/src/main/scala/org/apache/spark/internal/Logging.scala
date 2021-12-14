@@ -17,8 +17,9 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j._
+import org.apache.logging.log4j.{Level, LogManager}
 import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.impl.StaticLoggerBinder
 
 import org.apache.spark.util.Utils
 
@@ -43,6 +44,12 @@ trait Logging {
   protected def log: Logger = {
     if (log_ == null) {
       initializeLogIfNecessary(false)
+      if (!Logging.isLog4j12()) {
+        LogManager.getLogger(logName).asInstanceOf[org.apache.logging.log4j.core.Logger]
+          .setLevel(Level.WARN)
+        LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+          .setLevel(Level.WARN)
+      }
       log_ = LoggerFactory.getLogger(logName)
     }
     log_
@@ -150,5 +157,13 @@ private[spark] object Logging {
    */
   def uninitialize(): Unit = initLock.synchronized {
     this.initialized = false
+  }
+
+  def isLog4j12(): Boolean = {
+    // This distinguishes the log4j 1.2 binding, currently
+    // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
+    // org.apache.logging.slf4j.Log4jLoggerFactory
+    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
+    "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
   }
 }
