@@ -1197,11 +1197,11 @@ class SparkContext(object):
         """
         if accum_param is None:
             if isinstance(value, int):
-                accum_param = cast(AccumulatorParam[T], accumulators.INT_ACCUMULATOR_PARAM)
+                accum_param = cast("AccumulatorParam[T]", accumulators.INT_ACCUMULATOR_PARAM)
             elif isinstance(value, float):
-                accum_param = cast(AccumulatorParam[T], accumulators.FLOAT_ACCUMULATOR_PARAM)
+                accum_param = cast("AccumulatorParam[T]", accumulators.FLOAT_ACCUMULATOR_PARAM)
             elif isinstance(value, complex):
-                accum_param = cast(AccumulatorParam[T], accumulators.COMPLEX_ACCUMULATOR_PARAM)
+                accum_param = cast("AccumulatorParam[T]", accumulators.COMPLEX_ACCUMULATOR_PARAM)
             else:
                 raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
