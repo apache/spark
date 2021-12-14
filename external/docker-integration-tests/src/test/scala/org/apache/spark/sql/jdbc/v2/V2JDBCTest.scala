@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.DataFrame
@@ -173,7 +173,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === notSupportsTableComment)
     }

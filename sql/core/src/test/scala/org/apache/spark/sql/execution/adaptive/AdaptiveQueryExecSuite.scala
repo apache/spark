@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -825,7 +825,7 @@ class AdaptiveQueryExecSuite
       }
     }
     assert(!testAppender.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains(
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
         s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
         s" enabled but is not supported for")))
   }
@@ -846,7 +846,7 @@ class AdaptiveQueryExecSuite
       Seq("Plan changed", "Final plan").foreach { msg =>
         assert(
           logAppender.loggingEvents.exists { event =>
-            event.getRenderedMessage.contains(msg) && event.getLevel == expectedLevel
+            event.getMessage.getFormattedMessage.contains(msg) && event.getLevel == expectedLevel
           })
       }
     }
@@ -1433,7 +1433,8 @@ class AdaptiveQueryExecSuite
           "=== Result of Batch AQE Post Stage Creation ===",
           "=== Result of Batch AQE Replanning ===",
           "=== Result of Batch AQE Query Stage Optimization ===").foreach { expectedMsg =>
-        assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+        assert(testAppender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains(expectedMsg)))
       }
     }
   }
@@ -1666,7 +1667,7 @@ class AdaptiveQueryExecSuite
       }
     }
     val materializeLogs = testAppender.loggingEvents
-      .map(_.getRenderedMessage)
+      .map(_.getMessage.getFormattedMessage)
       .filter(_.startsWith("Materialize query stage"))
       .toArray
     assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))

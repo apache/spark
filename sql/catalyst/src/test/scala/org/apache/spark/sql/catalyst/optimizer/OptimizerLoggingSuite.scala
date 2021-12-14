@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -49,9 +49,9 @@ class OptimizerLoggingSuite extends PlanTest {
         "Applying Rule",
         "Result of Batch",
         "has no effect",
-        "Metrics of Executed Rules").exists(event.getRenderedMessage().contains)
+        "Metrics of Executed Rules").exists(event.getMessage().getFormattedMessage.contains)
     }
-    val logMessages = events.map(_.getRenderedMessage)
+    val logMessages = events.map(_.getMessage.getFormattedMessage)
     assert(expectedRulesOrBatches.forall
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))

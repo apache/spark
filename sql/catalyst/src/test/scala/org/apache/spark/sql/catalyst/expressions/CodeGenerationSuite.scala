@@ -528,7 +528,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(actual.getInt(0) == x)
     }
     assert(appender.loggingEvents
-      .exists(_.getRenderedMessage().contains("Generated method too long")))
+      .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
   }
 
   test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {

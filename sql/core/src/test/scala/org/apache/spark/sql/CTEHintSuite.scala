@@ -65,7 +65,7 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
     }
     val warningMessages = logAppender.loggingEvents
       .filter(_.getLevel == Level.WARN)
-      .map(_.getRenderedMessage)
+      .map(_.getMessage.getFormattedMessage)
       .filter(_.contains("hint"))
     assert(warningMessages.size == warnings.size)
     warnings.foreach { w =>

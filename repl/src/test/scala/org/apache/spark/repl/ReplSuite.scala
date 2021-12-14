@@ -24,7 +24,6 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
@@ -292,7 +291,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val originalRootLogger = LogManager.getRootLogger
     val originalRootAppender = originalRootLogger.getAppender("file")
     val originalStderr = System.err
-    val originalReplThresholdLevel = Logging.sparkShellThresholdLevel
+    // val originalReplThresholdLevel = Logging.sparkShellThresholdLevel
 
     val replLoggerLogMessage = "Log level for REPL: "
     val warnLogMessage1 = "warnLogMessage1 should not be output"
@@ -358,7 +357,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
         .getContextClassLoader.getResource("log4j.properties")
       LogManager.resetConfiguration()
       PropertyConfigurator.configure(log4jproperties)
-      Logging.sparkShellThresholdLevel = originalReplThresholdLevel
+      // Logging.sparkShellThresholdLevel = originalReplThresholdLevel
     }
 
     // Ensure stderr configuration is successfully restored.

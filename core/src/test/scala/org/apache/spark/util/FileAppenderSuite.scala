@@ -28,8 +28,7 @@ import scala.reflect._
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
 import org.apache.logging.log4j._
-import org.apache.logging.log4j.core.{Appender, Filter, Layout, LogEvent, Logger}
-import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.{Appender, LogEvent, Logger}
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.{atLeast, mock, verify}
 import org.scalatest.BeforeAndAfter
