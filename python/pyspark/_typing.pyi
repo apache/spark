@@ -21,12 +21,11 @@ from typing_extensions import Protocol
 
 F = TypeVar("F", bound=Callable)
 T_co = TypeVar("T_co", covariant=True)
-U = TypeVar("U", bound="SupportsIAdd")
 
 PrimitiveType = Union[bool, float, int, str]
 
 class SupportsIAdd(Protocol):
-    def __iadd__(self: U, other: SupportsIAdd) -> SupportsIAdd: ...
+    def __iadd__(self, other: SupportsIAdd) -> SupportsIAdd: ...
 
 class SupportsOrdering(Protocol):
     def __le__(self, other: SupportsOrdering) -> bool: ...
