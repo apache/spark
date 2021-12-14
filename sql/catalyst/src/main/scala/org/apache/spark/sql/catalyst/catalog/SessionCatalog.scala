@@ -252,7 +252,7 @@ class SessionCatalog(
   }
 
   private def makeQualifiedDBPath(locationUri: URI): URI = {
-    CatalogUtils.makeQualifiedNamespacePath(locationUri, conf.warehousePath, hadoopConf)
+    CatalogUtils.makeQualifiedDBObjectPath(locationUri, conf.warehousePath, hadoopConf)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {

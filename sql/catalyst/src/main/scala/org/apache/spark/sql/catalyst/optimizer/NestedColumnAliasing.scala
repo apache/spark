@@ -365,12 +365,7 @@ object GeneratorNestedColumnAliasing {
             //       df.select(explode($"items.a").as("item.a"))
             val rewrittenG = newG.transformExpressions {
               case e: ExplodeBase =>
-                val extractor = nestedFieldOnGenerator.transformUp {
-                  case _: Attribute =>
-                    e.child
-                  case g: GetStructField =>
-                    ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
-                }
+                val extractor = replaceGenerator(e, nestedFieldOnGenerator)
                 e.withNewChildren(Seq(extractor))
             }
 
@@ -412,6 +407,25 @@ object GeneratorNestedColumnAliasing {
 
     case _ =>
       None
+  }
+
+  /**
+   * Replace the reference attribute of extractor expression with generator input.
+   */
+  private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
+    expr match {
+      case a: Attribute if expr.references.contains(a) =>
+        generator.child
+      case g: GetStructField =>
+        // We cannot simply do a transformUp instead because if we replace the attribute
+        // `extractFieldName` could cause `ClassCastException` error. We need to get the
+        // field name before replacing down the attribute/other extractor.
+        val fieldName = g.extractFieldName
+        val newChild = replaceGenerator(generator, g.child)
+        ExtractValue(newChild, Literal(fieldName), SQLConf.get.resolver)
+      case other =>
+        other.mapChildren(replaceGenerator(generator, _))
+    }
   }
 
   /**

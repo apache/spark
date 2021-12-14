@@ -930,7 +930,7 @@ object SparkSession extends Logging {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        applyModifiableSettings(session)
+        applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
         return session
       }
 
@@ -939,7 +939,7 @@ object SparkSession extends Logging {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          applyModifiableSettings(session)
+          applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
           return session
         }
 
@@ -966,22 +966,6 @@ object SparkSession extends Logging {
       }
 
       return session
-    }
-
-    private def applyModifiableSettings(session: SparkSession): Unit = {
-      val (staticConfs, otherConfs) =
-        options.partition(kv => SQLConf.isStaticConfigKey(kv._1))
-
-      otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-
-      if (staticConfs.nonEmpty) {
-        logWarning("Using an existing SparkSession; the static sql configurations will not take" +
-          " effect.")
-      }
-      if (otherConfs.nonEmpty) {
-        logWarning("Using an existing SparkSession; some spark core configurations may not take" +
-          " effect.")
-      }
     }
   }
 
@@ -1072,6 +1056,28 @@ object SparkSession extends Logging {
   def active: SparkSession = {
     getActiveSession.getOrElse(getDefaultSession.getOrElse(
       throw new IllegalStateException("No active or default Spark session found")))
+  }
+
+  /**
+   * Apply modifiable settings to an existing [[SparkSession]]. This method are used
+   * both in Scala and Python, so put this under [[SparkSession]] object.
+   */
+  private[sql] def applyModifiableSettings(
+      session: SparkSession,
+      options: java.util.HashMap[String, String]): Unit = {
+    val (staticConfs, otherConfs) =
+      options.asScala.partition(kv => SQLConf.isStaticConfigKey(kv._1))
+
+    otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+    if (staticConfs.nonEmpty) {
+      logWarning("Using an existing SparkSession; the static sql configurations will not take" +
+        " effect.")
+    }
+    if (otherConfs.nonEmpty) {
+      logWarning("Using an existing SparkSession; some spark core configurations may not take" +
+        " effect.")
+    }
   }
 
   /**

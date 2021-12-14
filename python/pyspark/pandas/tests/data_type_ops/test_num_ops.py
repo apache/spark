@@ -131,16 +131,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         for n_col in self.non_numeric_df_cols:
             if n_col == "bool":
-                if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
-                    self.assert_eq(
-                        pdf["float"] // pdf["bool"],
-                        psdf["float"] // psdf["bool"],
-                    )
-                else:
-                    self.assert_eq(
-                        pd.Series([1.0, 2.0, np.inf]),
-                        psdf["float"] // psdf["bool"],
-                    )
+                self.assert_eq(pdf["float"] // pdf["bool"], psdf["float"] // psdf["bool"])
             else:
                 for col in self.numeric_df_cols:
                     psser = psdf[col]
@@ -378,13 +369,15 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with ps.option_context("compute.eager_check", False):
             psser.astype(int)
 
-        psser = self.psdf["decimal_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
-        ):
-            psser.astype(int)
-        with ps.option_context("compute.eager_check", False):
-            psser.astype(int)
+        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            psser = self.psdf["decimal_nan"]
+            with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+                ValueError, "Cannot convert"
+            ):
+                psser.astype(int)
+            with ps.option_context("compute.eager_check", False):
+                psser.astype(int)
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf

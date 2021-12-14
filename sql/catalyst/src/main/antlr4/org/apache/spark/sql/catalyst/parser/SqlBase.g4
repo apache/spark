@@ -257,7 +257,7 @@ statement
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
     | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ .*?)?                                          #setQuotedConfiguration
+    | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration

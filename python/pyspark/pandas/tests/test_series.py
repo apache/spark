@@ -236,27 +236,15 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(ValueError, lambda: psser.rename_axis(["index2", "index3"]))
         self.assertRaises(TypeError, lambda: psser.rename_axis(mapper=["index2"], index=["index3"]))
 
-        # index/columns parameters and dict_like/functions mappers introduced in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(
-                pser.rename_axis(index={"index": "index2", "missing": "index4"}).sort_index(),
-                psser.rename_axis(index={"index": "index2", "missing": "index4"}).sort_index(),
-            )
+        self.assert_eq(
+            pser.rename_axis(index={"index": "index2", "missing": "index4"}).sort_index(),
+            psser.rename_axis(index={"index": "index2", "missing": "index4"}).sort_index(),
+        )
 
-            self.assert_eq(
-                pser.rename_axis(index=str.upper).sort_index(),
-                psser.rename_axis(index=str.upper).sort_index(),
-            )
-        else:
-            expected = psser
-            expected.index.name = "index2"
-            result = psser.rename_axis(index={"index": "index2", "missing": "index4"}).sort_index()
-            self.assert_eq(expected, result)
-
-            expected = psser
-            expected.index.name = "INDEX"
-            result = psser.rename_axis(index=str.upper).sort_index()
-            self.assert_eq(expected, result)
+        self.assert_eq(
+            pser.rename_axis(index=str.upper).sort_index(),
+            psser.rename_axis(index=str.upper).sort_index(),
+        )
 
         index = pd.MultiIndex.from_tuples(
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
@@ -271,32 +259,19 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assertRaises(ValueError, lambda: psser.rename_axis(["index3", "index4", "index5"]))
 
-        # index/columns parameters and dict_like/functions mappers introduced in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(
-                pser.rename_axis(
-                    index={"index1": "index3", "index2": "index4", "missing": "index5"}
-                ).sort_index(),
-                psser.rename_axis(
-                    index={"index1": "index3", "index2": "index4", "missing": "index5"}
-                ).sort_index(),
-            )
-
-            self.assert_eq(
-                pser.rename_axis(index=str.upper).sort_index(),
-                psser.rename_axis(index=str.upper).sort_index(),
-            )
-        else:
-            expected = psser
-            expected.index.names = ["index3", "index4"]
-            result = psser.rename_axis(
+        self.assert_eq(
+            pser.rename_axis(
                 index={"index1": "index3", "index2": "index4", "missing": "index5"}
-            ).sort_index()
-            self.assert_eq(expected, result)
+            ).sort_index(),
+            psser.rename_axis(
+                index={"index1": "index3", "index2": "index4", "missing": "index5"}
+            ).sort_index(),
+        )
 
-            expected.index.names = ["INDEX1", "INDEX2"]
-            result = psser.rename_axis(index=str.upper).sort_index()
-            self.assert_eq(expected, result)
+        self.assert_eq(
+            pser.rename_axis(index=str.upper).sort_index(),
+            psser.rename_axis(index=str.upper).sort_index(),
+        )
 
     def test_or(self):
         pdf = pd.DataFrame(
@@ -792,45 +767,43 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # Series with MultiIndex some of index is NaN.
-        # This test only available for pandas >= 0.24.
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-            pser.index = pd.MultiIndex.from_tuples(
-                [("x", "a"), None, ("y", "c"), ("x", "a"), ("y", "c"), ("x", "a")]
-            )
-            psser = ps.from_pandas(pser)
+        pser.index = pd.MultiIndex.from_tuples(
+            [("x", "a"), None, ("y", "c"), ("x", "a"), ("y", "c"), ("x", "a")]
+        )
+        psser = ps.from_pandas(pser)
 
-            self.assert_eq(psser.value_counts(normalize=True), pser.value_counts(normalize=True))
-            self.assert_eq(psser.value_counts(ascending=True), pser.value_counts(ascending=True))
-            self.assert_eq(
-                psser.value_counts(normalize=True, dropna=False),
-                pser.value_counts(normalize=True, dropna=False),
-            )
-            self.assert_eq(
-                psser.value_counts(ascending=True, dropna=False),
-                pser.value_counts(ascending=True, dropna=False),
-            )
+        self.assert_eq(psser.value_counts(normalize=True), pser.value_counts(normalize=True))
+        self.assert_eq(psser.value_counts(ascending=True), pser.value_counts(ascending=True))
+        self.assert_eq(
+            psser.value_counts(normalize=True, dropna=False),
+            pser.value_counts(normalize=True, dropna=False),
+        )
+        self.assert_eq(
+            psser.value_counts(ascending=True, dropna=False),
+            pser.value_counts(ascending=True, dropna=False),
+        )
 
-            # FIXME: MultiIndex.value_counts returns wrong indices.
-            self.assert_eq(
-                psser.index.value_counts(normalize=True),
-                pser.index.value_counts(normalize=True),
-                almost=True,
-            )
-            self.assert_eq(
-                psser.index.value_counts(ascending=True),
-                pser.index.value_counts(ascending=True),
-                almost=True,
-            )
-            self.assert_eq(
-                psser.index.value_counts(normalize=True, dropna=False),
-                pser.index.value_counts(normalize=True, dropna=False),
-                almost=True,
-            )
-            self.assert_eq(
-                psser.index.value_counts(ascending=True, dropna=False),
-                pser.index.value_counts(ascending=True, dropna=False),
-                almost=True,
-            )
+        # FIXME: MultiIndex.value_counts returns wrong indices.
+        self.assert_eq(
+            psser.index.value_counts(normalize=True),
+            pser.index.value_counts(normalize=True),
+            almost=True,
+        )
+        self.assert_eq(
+            psser.index.value_counts(ascending=True),
+            pser.index.value_counts(ascending=True),
+            almost=True,
+        )
+        self.assert_eq(
+            psser.index.value_counts(normalize=True, dropna=False),
+            pser.index.value_counts(normalize=True, dropna=False),
+            almost=True,
+        )
+        self.assert_eq(
+            psser.index.value_counts(ascending=True, dropna=False),
+            pser.index.value_counts(ascending=True, dropna=False),
+            almost=True,
+        )
 
     def test_nsmallest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
@@ -1438,12 +1411,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.shift().shift(-1), pser.shift().shift(-1))
         self.assert_eq(psser.shift().sum(), pser.shift().sum())
 
-        if LooseVersion(pd.__version__) < LooseVersion("0.24.2"):
-            self.assert_eq(psser.shift(periods=2), pser.shift(periods=2))
-        else:
-            self.assert_eq(
-                psser.shift(periods=2, fill_value=0), pser.shift(periods=2, fill_value=0)
-            )
+        self.assert_eq(psser.shift(periods=2, fill_value=0), pser.shift(periods=2, fill_value=0))
+
         with self.assertRaisesRegex(TypeError, "periods should be an int; however"):
             psser.shift(periods=1.5)
 
@@ -1992,51 +1961,29 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([100, None, 300, None, 500], name="Koalas")
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            kdiv, kmod = psser.divmod(-100)
-            pdiv, pmod = pser.divmod(-100)
-            self.assert_eq(kdiv, pdiv)
-            self.assert_eq(kmod, pmod)
+        kdiv, kmod = psser.divmod(-100)
+        pdiv, pmod = pser.divmod(-100)
+        self.assert_eq(kdiv, pdiv)
+        self.assert_eq(kmod, pmod)
 
-            kdiv, kmod = psser.divmod(100)
-            pdiv, pmod = pser.divmod(100)
-            self.assert_eq(kdiv, pdiv)
-            self.assert_eq(kmod, pmod)
-        elif LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            kdiv, kmod = psser.divmod(-100)
-            pdiv, pmod = pser.floordiv(-100), pser.mod(-100)
-            self.assert_eq(kdiv, pdiv)
-            self.assert_eq(kmod, pmod)
-
-            kdiv, kmod = psser.divmod(100)
-            pdiv, pmod = pser.floordiv(100), pser.mod(100)
-            self.assert_eq(kdiv, pdiv)
-            self.assert_eq(kmod, pmod)
+        kdiv, kmod = psser.divmod(100)
+        pdiv, pmod = pser.divmod(100)
+        self.assert_eq(kdiv, pdiv)
+        self.assert_eq(kmod, pmod)
 
     def test_rdivmod(self):
         pser = pd.Series([100, None, 300, None, 500])
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            krdiv, krmod = psser.rdivmod(-100)
-            prdiv, prmod = pser.rdivmod(-100)
-            self.assert_eq(krdiv, prdiv)
-            self.assert_eq(krmod, prmod)
+        krdiv, krmod = psser.rdivmod(-100)
+        prdiv, prmod = pser.rdivmod(-100)
+        self.assert_eq(krdiv, prdiv)
+        self.assert_eq(krmod, prmod)
 
-            krdiv, krmod = psser.rdivmod(100)
-            prdiv, prmod = pser.rdivmod(100)
-            self.assert_eq(krdiv, prdiv)
-            self.assert_eq(krmod, prmod)
-        elif LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            krdiv, krmod = psser.rdivmod(-100)
-            prdiv, prmod = pser.rfloordiv(-100), pser.rmod(-100)
-            self.assert_eq(krdiv, prdiv)
-            self.assert_eq(krmod, prmod)
-
-            krdiv, krmod = psser.rdivmod(100)
-            prdiv, prmod = pser.rfloordiv(100), pser.rmod(100)
-            self.assert_eq(krdiv, prdiv)
-            self.assert_eq(krmod, prmod)
+        krdiv, krmod = psser.rdivmod(100)
+        prdiv, prmod = pser.rdivmod(100)
+        self.assert_eq(krdiv, prdiv)
+        self.assert_eq(krmod, prmod)
 
     def test_mod(self):
         pser = pd.Series([100, None, -300, None, 500, -700], name="Koalas")
@@ -2054,22 +2001,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([0, 0, 1, 1, 1, np.nan, np.nan, np.nan])
         psser = ps.from_pandas(pser)
         self.assert_eq(psser.mode(), pser.mode())
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-            # The `dropna` argument is added in pandas 0.24.
-            self.assert_eq(
-                psser.mode(dropna=False).sort_values().reset_index(drop=True),
-                pser.mode(dropna=False).sort_values().reset_index(drop=True),
-            )
+        self.assert_eq(
+            psser.mode(dropna=False).sort_values().reset_index(drop=True),
+            pser.mode(dropna=False).sort_values().reset_index(drop=True),
+        )
 
         pser.name = "x"
         psser = ps.from_pandas(pser)
         self.assert_eq(psser.mode(), pser.mode())
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-            # The `dropna` argument is added in pandas 0.24.
-            self.assert_eq(
-                psser.mode(dropna=False).sort_values().reset_index(drop=True),
-                pser.mode(dropna=False).sort_values().reset_index(drop=True),
-            )
+        self.assert_eq(
+            psser.mode(dropna=False).sort_values().reset_index(drop=True),
+            pser.mode(dropna=False).sort_values().reset_index(drop=True),
+        )
 
     def test_rmod(self):
         pser = pd.Series([100, None, -300, None, 500, -700], name="Koalas")
@@ -2206,16 +2149,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.truediv(np.nan), psser.truediv(np.nan))
         self.assert_eq(pser / np.nan, psser / np.nan)
 
-        # floordiv has different behavior in pandas > 1.0.0 when divide by 0
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(pser.floordiv(0), psser.floordiv(0))
-            self.assert_eq(pser // 0, psser // 0)
-        else:
-            result = pd.Series(
-                [np.inf, np.nan, -np.inf, np.nan, np.inf, -np.inf, np.inf, -np.inf], name="Koalas"
-            )
-            self.assert_eq(psser.floordiv(0), result)
-            self.assert_eq(psser // 0, result)
+        self.assert_eq(pser.floordiv(0), psser.floordiv(0))
+        self.assert_eq(pser // 0, psser // 0)
         self.assert_eq(pser.floordiv(np.nan), psser.floordiv(np.nan))
 
     def test_mad(self):
@@ -2280,11 +2215,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series(["elk", "pig", "dog", "quetzal"], name="animal")
         psser = ps.from_pandas(pser)
 
-        # `to_markdown()` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            self.assertRaises(NotImplementedError, lambda: psser.to_markdown())
-        else:
-            self.assert_eq(pser.to_markdown(), psser.to_markdown())
+        self.assert_eq(pser.to_markdown(), psser.to_markdown())
 
     def test_unstack(self):
         pser = pd.Series(
@@ -2404,66 +2335,62 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(p_items, k_items)
 
     def test_droplevel(self):
-        # droplevel is new in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            pser = pd.Series(
-                [1, 2, 3],
-                index=pd.MultiIndex.from_tuples(
-                    [("x", "a", "q"), ("x", "b", "w"), ("y", "c", "e")],
-                    names=["level_1", "level_2", "level_3"],
-                ),
-            )
-            psser = ps.from_pandas(pser)
+        pser = pd.Series(
+            [1, 2, 3],
+            index=pd.MultiIndex.from_tuples(
+                [("x", "a", "q"), ("x", "b", "w"), ("y", "c", "e")],
+                names=["level_1", "level_2", "level_3"],
+            ),
+        )
+        psser = ps.from_pandas(pser)
 
-            self.assert_eq(pser.droplevel(0), psser.droplevel(0))
-            self.assert_eq(pser.droplevel("level_1"), psser.droplevel("level_1"))
-            self.assert_eq(pser.droplevel(-1), psser.droplevel(-1))
-            self.assert_eq(pser.droplevel([0]), psser.droplevel([0]))
-            self.assert_eq(pser.droplevel(["level_1"]), psser.droplevel(["level_1"]))
-            self.assert_eq(pser.droplevel((0,)), psser.droplevel((0,)))
-            self.assert_eq(pser.droplevel(("level_1",)), psser.droplevel(("level_1",)))
-            self.assert_eq(pser.droplevel([0, 2]), psser.droplevel([0, 2]))
-            self.assert_eq(
-                pser.droplevel(["level_1", "level_3"]), psser.droplevel(["level_1", "level_3"])
-            )
-            self.assert_eq(pser.droplevel((1, 2)), psser.droplevel((1, 2)))
-            self.assert_eq(
-                pser.droplevel(("level_2", "level_3")), psser.droplevel(("level_2", "level_3"))
-            )
+        self.assert_eq(pser.droplevel(0), psser.droplevel(0))
+        self.assert_eq(pser.droplevel("level_1"), psser.droplevel("level_1"))
+        self.assert_eq(pser.droplevel(-1), psser.droplevel(-1))
+        self.assert_eq(pser.droplevel([0]), psser.droplevel([0]))
+        self.assert_eq(pser.droplevel(["level_1"]), psser.droplevel(["level_1"]))
+        self.assert_eq(pser.droplevel((0,)), psser.droplevel((0,)))
+        self.assert_eq(pser.droplevel(("level_1",)), psser.droplevel(("level_1",)))
+        self.assert_eq(pser.droplevel([0, 2]), psser.droplevel([0, 2]))
+        self.assert_eq(
+            pser.droplevel(["level_1", "level_3"]), psser.droplevel(["level_1", "level_3"])
+        )
+        self.assert_eq(pser.droplevel((1, 2)), psser.droplevel((1, 2)))
+        self.assert_eq(
+            pser.droplevel(("level_2", "level_3")), psser.droplevel(("level_2", "level_3"))
+        )
 
-            with self.assertRaisesRegex(KeyError, "Level {0, 1, 2} not found"):
-                psser.droplevel({0, 1, 2})
-            with self.assertRaisesRegex(KeyError, "Level level_100 not found"):
-                psser.droplevel(["level_1", "level_100"])
-            with self.assertRaisesRegex(
-                IndexError, "Too many levels: Index has only 3 levels, not 11"
-            ):
-                psser.droplevel(10)
-            with self.assertRaisesRegex(
-                IndexError,
-                "Too many levels: Index has only 3 levels, -10 is not a valid level number",
-            ):
-                psser.droplevel(-10)
-            with self.assertRaisesRegex(
-                ValueError,
-                "Cannot remove 3 levels from an index with 3 levels: "
-                "at least one level must be left.",
-            ):
-                psser.droplevel([0, 1, 2])
-            with self.assertRaisesRegex(
-                ValueError,
-                "Cannot remove 5 levels from an index with 3 levels: "
-                "at least one level must be left.",
-            ):
-                psser.droplevel([1, 1, 1, 1, 1])
+        with self.assertRaisesRegex(KeyError, "Level {0, 1, 2} not found"):
+            psser.droplevel({0, 1, 2})
+        with self.assertRaisesRegex(KeyError, "Level level_100 not found"):
+            psser.droplevel(["level_1", "level_100"])
+        with self.assertRaisesRegex(IndexError, "Too many levels: Index has only 3 levels, not 11"):
+            psser.droplevel(10)
+        with self.assertRaisesRegex(
+            IndexError,
+            "Too many levels: Index has only 3 levels, -10 is not a valid level number",
+        ):
+            psser.droplevel(-10)
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot remove 3 levels from an index with 3 levels: "
+            "at least one level must be left.",
+        ):
+            psser.droplevel([0, 1, 2])
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot remove 5 levels from an index with 3 levels: "
+            "at least one level must be left.",
+        ):
+            psser.droplevel([1, 1, 1, 1, 1])
 
-            # Tupled names
-            pser.index.names = [("a", "1"), ("b", "2"), ("c", "3")]
-            psser = ps.from_pandas(pser)
+        # Tupled names
+        pser.index.names = [("a", "1"), ("b", "2"), ("c", "3")]
+        psser = ps.from_pandas(pser)
 
-            self.assert_eq(
-                pser.droplevel([("a", "1"), ("c", "3")]), psser.droplevel([("a", "1"), ("c", "3")])
-            )
+        self.assert_eq(
+            pser.droplevel([("a", "1"), ("c", "3")]), psser.droplevel([("a", "1"), ("c", "3")])
+        )
 
     def test_dot(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
@@ -2684,22 +2611,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         # Deals with na_sentinel
         #
         # pandas >= 1.1.2 support na_sentinel=None
-        # pandas >= 0.24 support na_sentinel not to be -1
         #
         pd_below_1_1_2 = LooseVersion(pd.__version__) < LooseVersion("1.1.2")
-        pd_below_0_24 = LooseVersion(pd.__version__) < LooseVersion("0.24")
 
         pser = pd.Series(["a", "b", "a", np.nan, None])
         psser = ps.from_pandas(pser)
 
         pcodes, puniques = pser.factorize(sort=True, na_sentinel=-2)
         kcodes, kuniques = psser.factorize(na_sentinel=-2)
-        self.assert_eq([0, 1, 0, -2, -2] if pd_below_0_24 else pcodes.tolist(), kcodes.to_list())
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pcodes, puniques = pser.factorize(sort=True, na_sentinel=2)
         kcodes, kuniques = psser.factorize(na_sentinel=2)
-        self.assert_eq([0, 1, 0, 2, 2] if pd_below_0_24 else pcodes.tolist(), kcodes.to_list())
+        self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         if not pd_below_1_1_2:
@@ -2736,50 +2661,19 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(expected, psser)
 
     def test_explode(self):
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25"):
-            pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.explode(), psser.explode(), almost=True)
+        pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.explode(), psser.explode(), almost=True)
 
-            # MultiIndex
-            pser.index = pd.MultiIndex.from_tuples([("a", "w"), ("b", "x"), ("c", "y"), ("d", "z")])
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.explode(), psser.explode(), almost=True)
+        # MultiIndex
+        pser.index = pd.MultiIndex.from_tuples([("a", "w"), ("b", "x"), ("c", "y"), ("d", "z")])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.explode(), psser.explode(), almost=True)
 
-            # non-array type Series
-            pser = pd.Series([1, 2, 3, 4])
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.explode(), psser.explode())
-        else:
-            pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
-            psser = ps.from_pandas(pser)
-            expected = pd.Series([1.0, 2.0, 3.0, None, None, 3.0, 4.0], index=[0, 0, 0, 1, 2, 3, 3])
-            self.assert_eq(psser.explode(), expected)
-
-            # MultiIndex
-            pser.index = pd.MultiIndex.from_tuples([("a", "w"), ("b", "x"), ("c", "y"), ("d", "z")])
-            psser = ps.from_pandas(pser)
-            expected = pd.Series(
-                [1.0, 2.0, 3.0, None, None, 3.0, 4.0],
-                index=pd.MultiIndex.from_tuples(
-                    [
-                        ("a", "w"),
-                        ("a", "w"),
-                        ("a", "w"),
-                        ("b", "x"),
-                        ("c", "y"),
-                        ("d", "z"),
-                        ("d", "z"),
-                    ]
-                ),
-            )
-            self.assert_eq(psser.explode(), expected)
-
-            # non-array type Series
-            pser = pd.Series([1, 2, 3, 4])
-            psser = ps.from_pandas(pser)
-            expected = pser
-            self.assert_eq(psser.explode(), expected)
+        # non-array type Series
+        pser = pd.Series([1, 2, 3, 4])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.explode(), psser.explode())
 
     def test_argsort(self):
         # Without null values
@@ -2888,36 +2782,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psser = ps.from_pandas(pser)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
-            self.assert_eq(pser.argmin(), psser.argmin())
-            self.assert_eq(pser.argmax(), psser.argmax())
+        self.assert_eq(pser.argmin(), psser.argmin())
+        self.assert_eq(pser.argmax(), psser.argmax())
 
-            # MultiIndex
-            pser.index = pd.MultiIndex.from_tuples(
-                [("a", "t"), ("b", "u"), ("c", "v"), ("d", "w"), ("e", "x"), ("f", "u")]
-            )
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.argmin(), psser.argmin())
-            self.assert_eq(pser.argmax(), psser.argmax())
+        # MultiIndex
+        pser.index = pd.MultiIndex.from_tuples(
+            [("a", "t"), ("b", "u"), ("c", "v"), ("d", "w"), ("e", "x"), ("f", "u")]
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.argmin(), psser.argmin())
+        self.assert_eq(pser.argmax(), psser.argmax())
 
-            # Null Series
-            self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
-            self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
-        else:
-            self.assert_eq(pser.values.argmin(), psser.argmin())
-            self.assert_eq(pser.values.argmax(), psser.argmax())
-
-            # MultiIndex
-            pser.index = pd.MultiIndex.from_tuples(
-                [("a", "t"), ("b", "u"), ("c", "v"), ("d", "w"), ("e", "x"), ("f", "u")]
-            )
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.values.argmin(), psser.argmin())
-            self.assert_eq(pser.values.argmax(), psser.argmax())
-
-            # Null Series
-            self.assert_eq(-1, ps.Series([np.nan]).argmin())
-            self.assert_eq(-1, ps.Series([np.nan]).argmax())
+        # Null Series
+        self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
+        self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()

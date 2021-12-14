@@ -2254,6 +2254,59 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-37742: AQE reads invalid InMemoryRelation stats and mistakenly plans BHJ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584") {
+      // Spark estimates a string column as 20 bytes so with 60k rows, these relations should be
+      // estimated at ~120m bytes which is greater than the broadcast join threshold.
+      val joinKeyOne = "00112233445566778899"
+      val joinKeyTwo = "11223344556677889900"
+      Seq.fill(60000)(joinKeyOne).toDF("key")
+        .createOrReplaceTempView("temp")
+      Seq.fill(60000)(joinKeyTwo).toDF("key")
+        .createOrReplaceTempView("temp2")
+
+      Seq(joinKeyOne).toDF("key").createOrReplaceTempView("smallTemp")
+      spark.sql("SELECT key as newKey FROM temp").persist()
+
+      // This query is trying to set up a situation where there are three joins.
+      // The first join will join the cached relation with a smaller relation.
+      // The first join is expected to be a broadcast join since the smaller relation will
+      // fit under the broadcast join threshold.
+      // The second join will join the first join with another relation and is expected
+      // to remain as a sort-merge join.
+      // The third join will join the cached relation with another relation and is expected
+      // to remain as a sort-merge join.
+      val query =
+      s"""
+         |SELECT t3.newKey
+         |FROM
+         |  (SELECT t1.newKey
+         |  FROM (SELECT key as newKey FROM temp) as t1
+         |        JOIN
+         |        (SELECT key FROM smallTemp) as t2
+         |        ON t1.newKey = t2.key
+         |  ) as t3
+         |  JOIN
+         |  (SELECT key FROM temp2) as t4
+         |  ON t3.newKey = t4.key
+         |UNION
+         |SELECT t1.newKey
+         |FROM
+         |    (SELECT key as newKey FROM temp) as t1
+         |    JOIN
+         |    (SELECT key FROM temp2) as t2
+         |    ON t1.newKey = t2.key
+         |""".stripMargin
+      val df = spark.sql(query)
+      df.collect()
+      val adaptivePlan = df.queryExecution.executedPlan
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.length == 1)
+    }
+  }
 }
 
 /**

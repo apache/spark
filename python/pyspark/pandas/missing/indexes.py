@@ -100,6 +100,24 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     std = _unsupported_function("std", cls="DatetimeIndex")
 
 
+class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
+
+    # Properties
+    days = _unsupported_property("days", cls="TimedeltaIndex")
+    seconds = _unsupported_property("seconds", cls="TimedeltaIndex")
+    microseconds = _unsupported_property("microseconds", cls="TimedeltaIndex")
+    nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
+    components = _unsupported_property("components", cls="TimedeltaIndex")
+    inferred_freq = _unsupported_property("inferred_freq", cls="TimedeltaIndex")
+
+    # Functions
+    to_pytimedelta = _unsupported_function("to_pytimedelta", cls="TimedeltaIndex")
+    round = _unsupported_function("round", cls="TimedeltaIndex")
+    floor = _unsupported_function("floor", cls="TimedeltaIndex")
+    ceil = _unsupported_function("ceil", cls="TimedeltaIndex")
+    mean = _unsupported_function("mean", cls="TimedeltaIndex")
+
+
 class MissingPandasLikeMultiIndex(object):
 
     # Functions

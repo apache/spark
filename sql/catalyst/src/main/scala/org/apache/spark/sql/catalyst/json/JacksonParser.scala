@@ -66,7 +66,7 @@ class JacksonParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
   private lazy val timestampNTZFormatter = TimestampFormatter(
-    options.timestampFormatInRead,
+    options.timestampNTZFormatInRead,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
@@ -262,7 +262,7 @@ class JacksonParser(
     case TimestampNTZType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timestampNTZFormatter.parseWithoutTimeZone(parser.getText)
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
       }
 
     case DateType =>

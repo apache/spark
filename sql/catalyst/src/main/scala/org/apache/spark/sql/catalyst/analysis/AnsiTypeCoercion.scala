@@ -75,7 +75,7 @@ import org.apache.spark.sql.types._
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     WidenSetOperationTypes ::
-    CombinedTypeCoercionRule(
+    new AnsiCombinedTypeCoercionRule(
       InConversion ::
       PromoteStringLiterals ::
       DecimalPrecision ::
@@ -304,4 +304,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         s.copy(left = newLeft, right = newRight)
     }
   }
+
+  // This is for generating a new rule id, so that we can run both default and Ansi
+  // type coercion rules against one logical plan.
+  class AnsiCombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends
+    CombinedTypeCoercionRule(rules)
 }

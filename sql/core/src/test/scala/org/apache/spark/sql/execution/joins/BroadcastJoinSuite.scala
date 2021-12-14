@@ -637,6 +637,32 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     }
   }
 
+  test("SPARK-37742: join planning shouldn't read invalid InMemoryRelation stats") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10") {
+      try {
+        val df1 = Seq(1).toDF("key")
+        val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+        df2.persist()
+        df2.queryExecution.toRdd
+
+        val df3 = df1.join(df2, Seq("key"), "inner")
+        val numCachedPlan = collect(df3.queryExecution.executedPlan) {
+          case i: InMemoryTableScanExec => i
+        }.size
+        // df2 should be cached.
+        assert(numCachedPlan === 1)
+
+        val numBroadCastHashJoin = collect(df3.queryExecution.executedPlan) {
+          case b: BroadcastHashJoinExec => b
+        }.size
+        // df2 should not be broadcasted.
+        assert(numBroadCastHashJoin === 0)
+      } finally {
+        spark.catalog.clearCache()
+      }
+    }
+  }
+
   private def expressionsEqual(l: Seq[Expression], r: Seq[Expression]): Boolean = {
     l.length == r.length && l.zip(r).forall { case (e1, e2) => e1.semanticEquals(e2) }
   }
