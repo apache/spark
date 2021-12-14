@@ -139,7 +139,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     }
 
     bucketTransform match {
-      case BucketTransform(numBuckets, FieldReference(seq)) =>
+      case BucketTransform(numBuckets, FieldReference(seq), _) =>
         assert(numBuckets === 16)
         assert(seq === Seq("a", "b"))
       case _ =>
@@ -147,7 +147,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     }
 
     transform("unknown", ref("a", "b")) match {
-      case BucketTransform(_, _) =>
+      case BucketTransform(_, _, _) =>
         fail("Matched unknown transform")
       case _ =>
       // expected

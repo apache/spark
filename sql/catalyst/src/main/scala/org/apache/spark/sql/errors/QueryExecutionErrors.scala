@@ -1400,8 +1400,8 @@ object QueryExecutionErrors {
       s"""
          |Caught Hive MetaException attempting to get partition metadata by filter
          |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
-         |this problem, however this will result in degraded performance. Please
+         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} to true to work
+         |around this problem, however this will result in degraded performance. Please
          |report a bug: https://issues.apache.org/jira/browse/SPARK
        """.stripMargin.replaceAll("\n", " "), e)
   }
@@ -1893,9 +1893,13 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException(
-      s"The key length of aes_encrypt/aes_decrypt should be " +
-        "one of 16, 24 or 32 bytes, but got: $actualLength")
+    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
+      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+  }
+
+  def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
+    new UnsupportedOperationException(
+      s"The AES mode $mode with the padding $padding is not supported")
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {

@@ -34,10 +34,11 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.{DataOutputBuffer, Text}
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
+import org.apache.hadoop.util.VersionInfo
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -60,7 +61,7 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
+import org.apache.spark.util.{CallerContext, Utils, VersionUtils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -75,6 +76,10 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
+
+  // ContainerLaunchContext.setTokensConf is only available in Hadoop 2.9+ and 3.x, so here we use
+  // reflection to avoid compilation for Hadoop 2.7 profile.
+  private val SET_TOKENS_CONF_METHOD = "setTokensConf"
 
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var appMaster: ApplicationMaster = _
@@ -339,6 +344,45 @@ private[spark] class Client(
 
     val serializedCreds = SparkHadoopUtil.get.serialize(credentials)
     amContainer.setTokens(ByteBuffer.wrap(serializedCreds))
+  }
+
+  /**
+   * Set configurations sent from AM to RM for renewing delegation tokens.
+   */
+  private def setTokenConf(amContainer: ContainerLaunchContext): Unit = {
+    // SPARK-37205: this regex is used to grep a list of configurations and send them to YARN RM
+    // for fetching delegation tokens. See YARN-5910 for more details.
+    val regex = sparkConf.get(config.AM_TOKEN_CONF_REGEX)
+    // The feature is only supported in Hadoop 2.9+ and 3.x, hence the check below.
+    val isSupported = VersionUtils.majorMinorVersion(VersionInfo.getVersion) match {
+      case (2, n) if n >= 9 => true
+      case (3, _) => true
+      case _ => false
+    }
+    if (regex.nonEmpty && isSupported) {
+      logInfo(s"Processing token conf (spark.yarn.am.tokenConfRegex) with regex $regex")
+      val dob = new DataOutputBuffer();
+      val copy = new Configuration(false);
+      copy.clear();
+      hadoopConf.asScala.foreach { entry =>
+        if (entry.getKey.matches(regex.get)) {
+          copy.set(entry.getKey, entry.getValue)
+          logInfo(s"Captured key: ${entry.getKey} -> value: ${entry.getValue}")
+        }
+      }
+      copy.write(dob);
+
+      // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
+      // compilation error for Hadoop 2.7 profile.
+      val setTokensConfMethod = try {
+        amContainer.getClass.getMethod(SET_TOKENS_CONF_METHOD, classOf[ByteBuffer])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
+              s" Please check YARN version and make sure it is 2.9+ or 3.x")
+      }
+      setTokensConfMethod.invoke(ByteBuffer.wrap(dob.getData))
+    }
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
@@ -1082,6 +1126,7 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
+    setTokenConf(amContainer)
     amContainer
   }
 

@@ -5,9 +5,10 @@
 -- !query
 SELECT try_element_at(array(1, 2, 3), 0)
 -- !query schema
-struct<try_element_at(array(1, 2, 3), 0):int>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+SQL array indices start at 1
 
 
 -- !query
