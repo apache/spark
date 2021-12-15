@@ -131,7 +131,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }
-
                 val aggOutput = newOutput.drop(groupAttrs.length)
                 val output = groupAttrs ++ aggOutput
 
