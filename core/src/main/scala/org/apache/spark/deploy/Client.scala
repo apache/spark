@@ -190,13 +190,15 @@ private class ClientEndpoint(
                 logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
                   s"continue monitoring driver status.")
               }
-            }
-        }
-      } else {
+          }
+      }
+    } else if (exception.exists(e => Utils.responseFromBackup(e.getMessage))) {
+      logDebug(s"The status response is reported from a backup spark instance. So, ignored.")
+    } else {
         logError(s"ERROR: Cluster master did not recognize $submittedDriverID")
         System.exit(-1)
-      }
     }
+  }
   override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
