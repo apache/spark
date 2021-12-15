@@ -74,8 +74,7 @@ def from_avro(
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
             _to_java_column(data), jsonFormatSchema, options or {}
@@ -121,8 +120,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     try:
         if jsonFormatSchema == "":
             jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))

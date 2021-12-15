@@ -46,15 +46,13 @@ __all__ = ["Column"]
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return sc._jvm.functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return sc._jvm.functions.col(name)
 
 

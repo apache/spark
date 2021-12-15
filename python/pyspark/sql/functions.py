@@ -1082,8 +1082,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     [Row(distinct_ages=2)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if rsd is None:
         jc = sc._jvm.functions.approx_count_distinct(_to_java_column(col))
     else:
@@ -1096,8 +1095,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     """Marks a DataFrame as small enough for use in broadcast joins."""
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
@@ -1137,8 +1135,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+----------------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1158,8 +1155,7 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(c=1.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1178,8 +1174,7 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(c=0.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1198,8 +1193,7 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(c=0.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1228,8 +1222,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.count_distinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1248,8 +1241,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
     return Column(jc)
 
@@ -1273,8 +1265,7 @@ def grouping(col: "ColumnOrName") -> Column:
     +-----+--------------+--------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.grouping(_to_java_column(col))
     return Column(jc)
 
@@ -1304,8 +1295,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     +-----+-------------+--------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -1314,8 +1304,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 def input_file_name() -> Column:
     """Creates a string column for the file name of the current Spark task."""
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.input_file_name())
 
 
@@ -1331,8 +1320,7 @@ def isnan(col: "ColumnOrName") -> Column:
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
 
 
@@ -1348,8 +1336,7 @@ def isnull(col: "ColumnOrName") -> Column:
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
 
@@ -1367,8 +1354,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
     return Column(jc)
 
@@ -1396,8 +1382,7 @@ def monotonically_increasing_id() -> Column:
     [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.monotonically_increasing_id())
 
 
@@ -1415,8 +1400,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -1461,8 +1445,7 @@ def percentile_approx(
      |-- median: double (nullable = true)
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
 
     if isinstance(percentage, (list, tuple)):
         # A local list
@@ -1502,8 +1485,7 @@ def rand(seed: Optional[int] = None) -> Column:
      Row(age=5, name='Bob', rand=2.3913904055683974)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if seed is not None:
         jc = sc._jvm.functions.rand(seed)
     else:
@@ -1528,8 +1510,7 @@ def randn(seed: Optional[int] = None) -> Column:
     Row(age=5, name='Bob', randn=0.7400395449950132)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if seed is not None:
         jc = sc._jvm.functions.randn(seed)
     else:
@@ -1550,8 +1531,7 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     [Row(r=3.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
 
 
@@ -1568,8 +1548,7 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     [Row(r=2.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.bround(_to_java_column(col), scale))
 
 
@@ -1596,8 +1575,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     [Row(r=42)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.shiftleft(_to_java_column(col), numBits))
 
 
@@ -1624,8 +1602,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     [Row(r=21)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.shiftRight(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -1654,8 +1631,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     [Row(r=9223372036854775787)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.shiftRightUnsigned(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -1675,8 +1651,7 @@ def spark_partition_id() -> Column:
     [Row(pid=0), Row(pid=0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.spark_partition_id())
 
 
@@ -1691,8 +1666,7 @@ def expr(str: str) -> Column:
     [Row(length(name)=5), Row(length(name)=3)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.expr(str))
 
 
@@ -1714,8 +1688,7 @@ def struct(*cols: "ColumnOrName") -> Column:
     [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
@@ -1738,8 +1711,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
         raise ValueError("greatest should take at least two columns")
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -1759,8 +1731,7 @@ def least(*cols: Column) -> Column:
     if len(cols) < 2:
         raise ValueError("least should take at least two columns")
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.least(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -1785,8 +1756,7 @@ def when(condition: Column, value: Any) -> Column:
     [Row(age=3), Row(age=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
@@ -1820,8 +1790,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     ['0.69314', '1.60943']
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if arg2 is None:
         jc = sc._jvm.functions.log(_to_java_column(cast("ColumnOrName", arg1)))
     else:
@@ -1840,8 +1809,7 @@ def log2(col: "ColumnOrName") -> Column:
     [Row(log2=2.0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.log2(_to_java_column(col)))
 
 
@@ -1858,8 +1826,7 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     [Row(hex='15')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.conv(_to_java_column(col), fromBase, toBase))
 
 
@@ -1876,8 +1843,7 @@ def factorial(col: "ColumnOrName") -> Column:
     [Row(f=120)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.factorial(_to_java_column(col)))
 
 
@@ -1904,8 +1870,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
         default value
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
@@ -1929,8 +1894,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
         default value
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
@@ -1957,8 +1921,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
         determination of which row to use
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.nth_value(_to_java_column(col), offset, ignoreNulls))
 
 
@@ -1979,8 +1942,7 @@ def ntile(n: int) -> Column:
         an integer
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
@@ -1994,8 +1956,7 @@ def current_date() -> Column:
     All calls of current_date within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.current_date())
 
 
@@ -2005,8 +1966,7 @@ def current_timestamp() -> Column:
     column. All calls of current_timestamp within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.current_timestamp())
 
 
@@ -2033,8 +1993,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     [Row(date='04/08/2015')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
 
 
@@ -2051,8 +2010,7 @@ def year(col: "ColumnOrName") -> Column:
     [Row(year=2015)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.year(_to_java_column(col)))
 
 
@@ -2069,8 +2027,7 @@ def quarter(col: "ColumnOrName") -> Column:
     [Row(quarter=2)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.quarter(_to_java_column(col)))
 
 
@@ -2087,8 +2044,7 @@ def month(col: "ColumnOrName") -> Column:
     [Row(month=4)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.month(_to_java_column(col)))
 
 
@@ -2106,8 +2062,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     [Row(day=4)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.dayofweek(_to_java_column(col)))
 
 
@@ -2124,8 +2079,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.dayofmonth(_to_java_column(col)))
 
 
@@ -2142,8 +2096,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.dayofyear(_to_java_column(col)))
 
 
@@ -2160,8 +2113,7 @@ def hour(col: "ColumnOrName") -> Column:
     [Row(hour=13)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.hour(_to_java_column(col)))
 
 
@@ -2178,8 +2130,7 @@ def minute(col: "ColumnOrName") -> Column:
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.minute(_to_java_column(col)))
 
 
@@ -2196,8 +2147,7 @@ def second(col: "ColumnOrName") -> Column:
     [Row(second=15)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.second(_to_java_column(col)))
 
 
@@ -2216,8 +2166,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.weekofyear(_to_java_column(col)))
 
 
@@ -2243,8 +2192,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     [Row(datefield=datetime.date(2020, 6, 26))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     year_col = _to_java_column(year)
     month_col = _to_java_column(month)
     day_col = _to_java_column(day)
@@ -2265,8 +2213,7 @@ def date_add(start: "ColumnOrName", days: int) -> Column:
     [Row(next_date=datetime.date(2015, 4, 9))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
 
 
@@ -2283,8 +2230,7 @@ def date_sub(start: "ColumnOrName", days: int) -> Column:
     [Row(prev_date=datetime.date(2015, 4, 7))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
 
 
@@ -2301,8 +2247,7 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     [Row(diff=32)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
@@ -2319,8 +2264,7 @@ def add_months(start: "ColumnOrName", months: int) -> Column:
     [Row(next_month=datetime.date(2015, 5, 8))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
 
 
@@ -2343,8 +2287,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     [Row(months=3.9495967741935485)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.months_between(_to_java_column(date1), _to_java_column(date2), roundOff)
     )
@@ -2371,8 +2314,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     [Row(date=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if format is None:
         jc = sc._jvm.functions.to_date(_to_java_column(col))
     else:
@@ -2411,8 +2353,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if format is None:
         jc = sc._jvm.functions.to_timestamp(_to_java_column(col))
     else:
@@ -2443,8 +2384,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     [Row(month=datetime.date(1997, 2, 1))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
 
 
@@ -2473,8 +2413,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.date_trunc(format, _to_java_column(timestamp)))
 
 
@@ -2494,8 +2433,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     [Row(date=datetime.date(2015, 8, 2))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.next_day(_to_java_column(date), dayOfWeek))
 
 
@@ -2512,8 +2450,7 @@ def last_day(date: "ColumnOrName") -> Column:
     [Row(date=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
@@ -2534,8 +2471,7 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
 
 
@@ -2560,8 +2496,7 @@ def unix_timestamp(
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if timestamp is None:
         return Column(sc._jvm.functions.unix_timestamp())
     return Column(sc._jvm.functions.unix_timestamp(_to_java_column(timestamp), format))
@@ -2608,8 +2543,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return Column(sc._jvm.functions.from_utc_timestamp(_to_java_column(timestamp), tz))
@@ -2656,8 +2590,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if isinstance(tz, Column):
         tz = _to_java_column(tz)
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
@@ -2682,8 +2615,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.timestamp_seconds(_to_java_column(col)))
 
 
@@ -2750,8 +2682,7 @@ def window(
             raise TypeError("%s should be provided as a string" % fieldName)
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     time_col = _to_java_column(timeColumn)
     check_string_field(windowDuration, "windowDuration")
     if slideDuration and startTime:
@@ -2817,8 +2748,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
             raise TypeError("%s should be provided as a string or Column" % fieldName)
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     time_col = _to_java_column(timeColumn)
     check_field(gapDuration, "gapDuration")
     gap_duration = gapDuration if isinstance(gapDuration, str) else _to_java_column(gapDuration)
@@ -2842,8 +2772,7 @@ def crc32(col: "ColumnOrName") -> Column:
     [Row(crc32=2743272264)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.crc32(_to_java_column(col)))
 
 
@@ -2858,8 +2787,7 @@ def md5(col: "ColumnOrName") -> Column:
     [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.md5(_to_java_column(col))
     return Column(jc)
 
@@ -2875,8 +2803,7 @@ def sha1(col: "ColumnOrName") -> Column:
     [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.sha1(_to_java_column(col))
     return Column(jc)
 
@@ -2897,8 +2824,7 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     Row(s='cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961')
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.sha2(_to_java_column(col), numBits)
     return Column(jc)
 
@@ -2914,8 +2840,7 @@ def hash(*cols: "ColumnOrName") -> Column:
     [Row(hash=-757602832)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.hash(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -2932,8 +2857,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     [Row(hash=4105715581806190027)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.xxhash64(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
@@ -2958,8 +2882,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     [Row(r=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if errMsg is None:
         return Column(sc._jvm.functions.assert_true(_to_java_column(col)))
     if not isinstance(errMsg, (str, Column)):
@@ -2980,8 +2903,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
         raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     errMsg = (
         _create_column_from_literal(errMsg) if isinstance(errMsg, str) else _to_java_column(errMsg)
     )
@@ -3069,8 +2991,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     [Row(s='abcd-123')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.concat_ws(sep, _to_seq(sc, cols, _to_java_column)))
 
 
@@ -3081,8 +3002,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.decode(_to_java_column(col), charset))
 
 
@@ -3093,8 +3013,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.encode(_to_java_column(col), charset))
 
 
@@ -3116,8 +3035,7 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     [Row(v='5.0000')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.format_number(_to_java_column(col), d))
 
 
@@ -3141,8 +3059,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     [Row(v='5 hello')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.format_string(format, _to_seq(sc, cols, _to_java_column)))
 
 
@@ -3163,8 +3080,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     [Row(s=2)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.instr(_to_java_column(str), substr))
 
 
@@ -3203,8 +3119,7 @@ def overlay(
     len = _create_column_from_literal(len) if isinstance(len, int) else _to_java_column(len)
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
 
     return Column(
         sc._jvm.functions.overlay(_to_java_column(src), _to_java_column(replace), pos, len)
@@ -3247,8 +3162,7 @@ def sentences(
         country = lit("")
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.sentences(
             _to_java_column(string), _to_java_column(language), _to_java_column(country)
@@ -3275,8 +3189,7 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     [Row(s='ab')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.substring(_to_java_column(str), pos, len))
 
 
@@ -3298,8 +3211,7 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     [Row(s='b.c.d')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.substring_index(_to_java_column(str), delim, count))
 
 
@@ -3315,8 +3227,7 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     [Row(d=3)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.levenshtein(_to_java_column(left), _to_java_column(right))
     return Column(jc)
 
@@ -3348,8 +3259,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     [Row(s=2)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.locate(substr, _to_java_column(str), pos))
 
 
@@ -3366,8 +3276,7 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     [Row(s='##abcd')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.lpad(_to_java_column(col), len, pad))
 
 
@@ -3384,8 +3293,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     [Row(s='abcd##')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.rpad(_to_java_column(col), len, pad))
 
 
@@ -3402,8 +3310,7 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     [Row(s='ababab')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.repeat(_to_java_column(col), n))
 
 
@@ -3441,8 +3348,7 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     [Row(s=['one', 'two', 'three', ''])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.split(_to_java_column(str), pattern, limit))
 
 
@@ -3465,8 +3371,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     [Row(d='')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
     return Column(jc)
 
@@ -3483,8 +3388,7 @@ def regexp_replace(str: "ColumnOrName", pattern: str, replacement: str) -> Colum
     [Row(d='-----')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.regexp_replace(_to_java_column(str), pattern, replacement)
     return Column(jc)
 
@@ -3500,8 +3404,7 @@ def initcap(col: "ColumnOrName") -> Column:
     [Row(v='Ab Cd')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.initcap(_to_java_column(col)))
 
 
@@ -3518,8 +3421,7 @@ def soundex(col: "ColumnOrName") -> Column:
     [Row(soundex='P362'), Row(soundex='U612')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.soundex(_to_java_column(col)))
 
 
@@ -3534,8 +3436,7 @@ def bin(col: "ColumnOrName") -> Column:
     [Row(c='10'), Row(c='101')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.bin(_to_java_column(col))
     return Column(jc)
 
@@ -3553,8 +3454,7 @@ def hex(col: "ColumnOrName") -> Column:
     [Row(hex(a)='414243', hex(b)='3')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.hex(_to_java_column(col))
     return Column(jc)
 
@@ -3571,8 +3471,7 @@ def unhex(col: "ColumnOrName") -> Column:
     [Row(unhex(a)=bytearray(b'ABC'))]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.unhex(_to_java_column(col)))
 
 
@@ -3589,8 +3488,7 @@ def length(col: "ColumnOrName") -> Column:
     [Row(length=4)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.length(_to_java_column(col)))
 
 
@@ -3661,8 +3559,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     [Row(r='1a2s3ae')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.translate(_to_java_column(srcCol), matching, replace))
 
 
@@ -3688,8 +3585,7 @@ def create_map(*cols: "ColumnOrName") -> Column:
     [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
@@ -3719,8 +3615,7 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     +----------------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -3743,8 +3638,7 @@ def array(*cols: "ColumnOrName") -> Column:
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
@@ -3774,8 +3668,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     value = value._jc if isinstance(value, Column) else value
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
@@ -3795,8 +3688,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     [Row(overlap=True), Row(overlap=False)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
@@ -3823,8 +3715,7 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     [Row(sliced=[2, 3]), Row(sliced=[5])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.slice(
             _to_java_column(x),
@@ -3852,8 +3743,7 @@ def array_join(
     [Row(joined='a,b,c'), Row(joined='a,NULL')]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if null_replacement is None:
         return Column(sc._jvm.functions.array_join(_to_java_column(col), delimiter))
     else:
@@ -3880,8 +3770,7 @@ def concat(*cols: "ColumnOrName") -> Column:
     [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -3904,8 +3793,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     [Row(array_position(data, a)=3), Row(array_position(data, a)=0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
@@ -3938,8 +3826,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.element_at(_to_java_column(col), lit(extraction)._jc))
 
 
@@ -3963,8 +3850,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     [Row(array_remove(data, 1)=[2, 3]), Row(array_remove(data, 1)=[])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_remove(_to_java_column(col), element))
 
 
@@ -3986,8 +3872,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
     [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_distinct(_to_java_column(col)))
 
 
@@ -4013,8 +3898,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(array_intersect(c1, c2)=['a', 'c'])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_intersect(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -4040,8 +3924,7 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(array_union(c1, c2)=['b', 'a', 'c', 'd', 'f'])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -4067,8 +3950,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     [Row(array_except(c1, c2)=['b'])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
 
 
@@ -4095,8 +3977,7 @@ def explode(col: "ColumnOrName") -> Column:
     +---+-----+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.explode(_to_java_column(col))
     return Column(jc)
 
@@ -4124,8 +4005,7 @@ def posexplode(col: "ColumnOrName") -> Column:
     +---+---+-----+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.posexplode(_to_java_column(col))
     return Column(jc)
 
@@ -4165,8 +4045,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.explode_outer(_to_java_column(col))
     return Column(jc)
 
@@ -4205,8 +4084,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+----+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))
     return Column(jc)
 
@@ -4234,8 +4112,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
     return Column(jc)
 
@@ -4260,8 +4137,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
@@ -4322,8 +4198,7 @@ def from_json(
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if isinstance(schema, DataType):
         schema = schema.json()
     elif isinstance(schema, Column):
@@ -4379,8 +4254,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.to_json(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
@@ -4422,8 +4296,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.schema_of_json(col, _options_to_str(options))
     return Column(jc)
 
@@ -4461,8 +4334,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.schema_of_csv(col, _options_to_str(options))
     return Column(jc)
 
@@ -4495,8 +4367,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     jc = sc._jvm.functions.to_csv(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
@@ -4519,8 +4390,7 @@ def size(col: "ColumnOrName") -> Column:
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.size(_to_java_column(col)))
 
 
@@ -4542,8 +4412,7 @@ def array_min(col: "ColumnOrName") -> Column:
     [Row(min=1), Row(min=-1)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_min(_to_java_column(col)))
 
 
@@ -4565,8 +4434,7 @@ def array_max(col: "ColumnOrName") -> Column:
     [Row(max=3), Row(max=10)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
 
@@ -4594,8 +4462,7 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     [Row(r=[3, 2, 1, None]), Row(r=[1]), Row(r=[])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
@@ -4618,8 +4485,7 @@ def array_sort(col: "ColumnOrName") -> Column:
     [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
@@ -4645,8 +4511,7 @@ def shuffle(col: "ColumnOrName") -> Column:
     [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.shuffle(_to_java_column(col)))
 
 
@@ -4671,8 +4536,7 @@ def reverse(col: "ColumnOrName") -> Column:
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
@@ -4696,8 +4560,7 @@ def flatten(col: "ColumnOrName") -> Column:
     [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.flatten(_to_java_column(col)))
 
 
@@ -4724,8 +4587,7 @@ def map_keys(col: "ColumnOrName") -> Column:
     +------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
 
 
@@ -4752,8 +4614,7 @@ def map_values(col: "ColumnOrName") -> Column:
     +------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
@@ -4780,8 +4641,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     +----------------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.map_entries(_to_java_column(col)))
 
 
@@ -4808,8 +4668,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     +----------------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
@@ -4826,8 +4685,7 @@ def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     [Row(r=['ab', 'ab', 'ab'])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.array_repeat(
             _to_java_column(col), _to_java_column(count) if isinstance(count, Column) else count
@@ -4855,8 +4713,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     [Row(zipped=[Row(vals1=1, vals2=2), Row(vals1=2, vals2=3), Row(vals1=3, vals2=4)])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
@@ -4882,8 +4739,7 @@ def map_concat(*cols: "ColumnOrName") -> Column:
     +------------------------+
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]
     jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
@@ -4910,8 +4766,7 @@ def sequence(
     [Row(r=[4, 2, 0, -2, -4])]
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if step is None:
         return Column(sc._jvm.functions.sequence(_to_java_column(start), _to_java_column(stop)))
     else:
@@ -4963,8 +4818,7 @@ def from_csv(
     """
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     if isinstance(schema, str):
         schema = _create_column_from_literal(schema)
     elif isinstance(schema, Column):
@@ -4986,8 +4840,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     name_parts : str
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     name_parts_seq = _to_seq(sc, name_parts)
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     return Column(sc._jvm.Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq)))
@@ -5034,8 +4887,7 @@ def _create_lambda(f: Callable) -> Callable:
     parameters = _get_lambda_parameters(f)
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
 
     argnames = ["x", "y", "z"]
@@ -5074,8 +4926,7 @@ def _invoke_higher_order_function(
     :return: a Column
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)
 
@@ -5577,8 +5428,7 @@ def years(col: "ColumnOrName") -> Column:
 
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.years(_to_java_column(col)))
 
 
@@ -5603,8 +5453,7 @@ def months(col: "ColumnOrName") -> Column:
 
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.months(_to_java_column(col)))
 
 
@@ -5629,8 +5478,7 @@ def days(col: "ColumnOrName") -> Column:
 
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.days(_to_java_column(col)))
 
 
@@ -5655,8 +5503,7 @@ def hours(col: "ColumnOrName") -> Column:
 
     """
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.hours(_to_java_column(col)))
 
 
@@ -5684,8 +5531,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         raise TypeError("numBuckets should be a Column or an int, got {}".format(type(numBuckets)))
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
-    assert sc._jvm is not None
+    assert sc is not None and sc._jvm is not None
     numBuckets = (
         _create_column_from_literal(numBuckets)
         if isinstance(numBuckets, int)
