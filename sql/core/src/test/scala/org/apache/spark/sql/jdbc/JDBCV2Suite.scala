@@ -160,6 +160,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           assert(v1.pushedDownOperators.sortValues === sortValues)
       }
     }
+    if (sortValues.nonEmpty) {
+      val sorts = df.queryExecution.optimizedPlan.collect {
+        case s: Sort => s
+      }
+      assert(sorts.isEmpty)
+    }
   }
 
   test("simple scan with top N") {
@@ -167,13 +173,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .sort("salary")
       .limit(1)
-    checkSortRemoved(df1)
     checkPushedLimit(df1, Some(1), createSortValues())
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
     val df2 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary").limit(1)
-    checkSortRemoved(df2)
     checkPushedLimit(df2, Some(1), createSortValues())
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
@@ -186,7 +190,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .orderBy($"salary".desc)
       .limit(1)
-    checkSortRemoved(df3)
     checkPushedLimit(
       df3, Some(1), createSortValues(SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0)))
@@ -197,13 +200,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case s: DataSourceV2ScanRelation => s
     }.get
     assert(scan.schema.names.sameElements(Seq("NAME")))
-    checkSortRemoved(df4)
     checkPushedLimit(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
     checkAnswer(df4, Seq(Row("david")))
 
     val df5 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary")
-    checkSortRemoved(df5, false)
     checkPushedLimit(df5, None)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0), Row(1, "amy", 10000.00, 1000.0)))
 
@@ -212,7 +213,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .groupBy("DEPT").sum("SALARY")
       .orderBy("DEPT")
       .limit(1)
-    checkSortRemoved(df6, false)
     checkPushedLimit(df6)
     checkAnswer(df6, Seq(Row(1, 19000.00)))
 
@@ -224,21 +224,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(name($"shortName"))
       .sort($"SALARY".desc)
       .limit(1)
-    checkSortRemoved(df7, false)
     // LIMIT is pushed down only if all the filters are pushed down
     checkPushedLimit(df7)
     checkAnswer(df7, Seq(Row(10000.00, 1000.0, "amy")))
-  }
-
-  private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
-      case s: Sort => s
-    }
-    if (removed) {
-      assert(sorts.isEmpty)
-    } else {
-      assert(sorts.nonEmpty)
-    }
   }
 
   private def createSortValues(
