@@ -121,18 +121,23 @@ trait Logging {
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     if (!Logging.isLog4j12()) {
+      // If Log4j is used but is not initialized, load a default properties file
+      val log4j12Initialized = !LogManager.getRootLogger
+        .asInstanceOf[org.apache.logging.log4j.core.Logger].getAppenders.isEmpty
       // scalastyle:off println
-      Logging.defaultSparkLog4jConfig = true
-      val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
-      Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
-        case Some(url) =>
-          val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
-          context.setConfigLocation(url.toURI)
-          if (!silent) {
-            System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
-          }
-        case None =>
-          System.err.println(s"Spark was unable to load $defaultLogProps")
+      if (!log4j12Initialized) {
+        Logging.defaultSparkLog4jConfig = true
+        val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
+        Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
+          case Some(url) =>
+            val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
+            context.setConfigLocation(url.toURI)
+            if (!silent) {
+              System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            }
+          case None =>
+            System.err.println(s"Spark was unable to load $defaultLogProps")
+        }
       }
       // scalastyle:on println
     }

@@ -58,13 +58,14 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
       PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
     } else {
-      PatternLayout.newBuilder().withPattern(conf.get(DEFAULT_LAYOUT)).build()
+      PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
     }
     val config = logger.getContext.getConfiguration()
     val fa = Log4jFileAppender.createAppender(localLogFile, "false", "false",
       DriverLogger.APPENDER_NAME, "true", "false", "false", "4000", layout, null,
       "false", null, config);
     logger.addAppender(fa)
+    fa.start()
     logInfo(s"Added a local log appender at: ${localLogFile}")
   }
 
@@ -84,6 +85,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       val logger = LogManager.getRootLogger().asInstanceOf[Logger]
       val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
       logger.removeAppender(fa)
+      fa.stop()
       Utils.tryLogNonFatalError(fa.stop())
       writer.foreach(_.closeWriter())
     } catch {
