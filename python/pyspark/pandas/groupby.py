@@ -3308,7 +3308,7 @@ def normalize_keyword_aggregation(
     Normalize user-provided kwargs.
 
     Transforms from the new ``Dict[str, NamedAgg]`` style kwargs
-    to the old OrderedDict[str, List[scalar]]].
+    to the old defaultdict[str, List[scalar]].
 
     Parameters
     ----------
