@@ -160,7 +160,7 @@ There are several types of the default index that can be configured by `compute.
 
 **sequence**: It implements a sequence that increases one by one, by PySpark's Window function without
 specifying partition. Therefore, it can end up with whole partition in single node.
-This index type should be avoided when the data is large. This is default. See the example below:
+This index type should be avoided when the data is large. See the example below:
 
 .. code-block:: python
 
@@ -183,7 +183,7 @@ This is conceptually equivalent to the PySpark example as below:
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
     [0, 1, 2]
 
-**distributed-sequence**: It implements a sequence that increases one by one, by group-by and
+**distributed-sequence** (default): It implements a sequence that increases one by one, by group-by and
 group-map approach in a distributed manner. It still generates the sequential index globally.
 If the default index must be the sequence in a large dataset, this
 index has to be used.
