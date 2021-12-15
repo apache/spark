@@ -20,7 +20,7 @@ package org.apache.spark.shuffle
 import java.io.{File, FileNotFoundException, IOException}
 import java.net.ConnectException
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, Semaphore}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -42,6 +42,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
+import org.apache.spark.util.ThreadUtils
 
 class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -155,6 +156,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     " about push completion") {
     conf.set(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS, 12)
     conf.set("spark.shuffle.push.maxBlockBatchSize", "20b")
+    val latch = new CountDownLatch(1)
     // Different remote servers to send 2 different requests to ensure that all the blocks
     // are pushed before notifying driver about push completion
     when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1),
@@ -163,6 +165,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
+        latch.await()
+        // Add a small wait here to delay the "onBlockPushSuccess" to mimic the real world
+        Thread.sleep(500)
         blocks.foreach { blockId =>
           blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
         }
@@ -171,19 +176,23 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       .thenAnswer((invocation: InvocationOnMock) => {
         val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
         val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
+        latch.await()
         blocks.foreach { blockId =>
           blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
         }
       })
-    val blockPusher = new TestShuffleBlockPusher(conf)
+    val semaphore = new Semaphore(0)
+    val blockPusher = new ConcurrentTestBlockPusher(conf, semaphore)
     val mergerLocs = dependency.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     blockPusher.initiateBlockPush(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 5 }, dependency, 0)
     val pushRequests = blockPusher.prepareBlockPushRequests(5, 0, 0, 0,
       mock(classOf[File]), Array(2, 2, 2, 2, 2), mergerLocs, mock(classOf[TransportConf]))
-    blockPusher.runPendingTasks()
-    assert(pushRequests.length == 2)
+    latch.countDown()
+    latch.countDown()
+    semaphore.acquire()
     assert(blockPusher.bytesInFlight <= 0)
+    assert(pushRequests.length == 2)
     verifyPushRequests(pushRequests, Seq(6, 4))
     verifyBlockPushCompleted(blockPusher)
   }
@@ -446,11 +455,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       }
     }
 
-    override def notifyDriverAboutPushCompletion(): Unit = {
-      super.notifyDriverAboutPushCompletion()
-      assert(bytesInFlight <= 0)
-    }
-
     override protected def createRequestBuffer(
         conf: TransportConf,
         dataFile: File,
@@ -460,6 +464,20 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
       val byteBuffer = new Array[Byte](length.toInt)
       when(managedBuffer.nioByteBuffer()).thenReturn(ByteBuffer.wrap(byteBuffer))
       managedBuffer
+    }
+  }
+
+  private class ConcurrentTestBlockPusher(conf: SparkConf, semaphore: Semaphore)
+      extends TestShuffleBlockPusher(conf) {
+    val blockPusher = ThreadUtils.newDaemonFixedThreadPool(1, "test-block-pusher")
+
+    override protected def submitTask(task: Runnable): Unit = {
+      blockPusher.execute(task)
+    }
+
+    override def notifyDriverAboutPushCompletion(): Unit = {
+      super.notifyDriverAboutPushCompletion()
+      semaphore.release()
     }
   }
 }
