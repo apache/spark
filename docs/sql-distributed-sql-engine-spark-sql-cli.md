@@ -58,7 +58,7 @@ When invoked without the `-i`, the Spark SQL CLI will attempt to load `$HIVE_HOM
 ## Path interpretation
 
 Spark SQL CLI supports running SQL from initialization script file(`-i`) or normal SQL file(`-f`), If path url don't have a scheme component, the path will be handled as local file.
-For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-cli.sql`.
+For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-cli.sql`. User also can use Hadoop supported filesystems such as `s3://path/to/spark-sql-cli.sql` or `hdfs://nameservice/path/to/spark-sql-cli.sql`.
 
 ## Supported comment types
 
