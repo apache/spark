@@ -105,6 +105,7 @@ Decrypt
 Decrypts
 DeidentifyContentResponse
 DeidentifyTemplate
+DependencyMixin
 Deprecations
 Deserialize
 Deserialized
@@ -1348,6 +1349,7 @@ tagValue
 task_group
 taskflow
 taskinstance
+taskmixin
 tblproperties
 tcp
 templatable
