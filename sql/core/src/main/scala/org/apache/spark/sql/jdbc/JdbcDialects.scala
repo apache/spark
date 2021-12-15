@@ -226,6 +226,7 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   /**
    * Whether the database supports complete aggregation push-down.
+   *
    * @return true if the aggregation can be pushed down to database completely, false otherwise.
    */
   @Since("3.3.0")

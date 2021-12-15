@@ -46,8 +46,8 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
-   * Whether the datasource supports complete aggregation push-down. Spark could avoid partial-agg
-   * and final-agg when pushing down aggregation to datasource.
+   * Whether the datasource support complete aggregation push-down. Spark could avoid partial-agg
+   * and final-agg when the aggregation operation can be pushed down to the datasource completely.
    *
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
