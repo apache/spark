@@ -240,7 +240,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   /** This is where the log message will go to */
   private final CharArrayWriter writer = new CharArrayWriter();
 
-  static private StringLayout getLayout(boolean isVerbose, StringLayout lo) {
+  private static StringLayout getLayout(boolean isVerbose, StringLayout lo) {
     if (isVerbose) {
       if (lo == null) {
         lo = CLIServiceUtils.verboseLayout;
@@ -252,7 +252,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     return lo;
   }
 
-  static private StringLayout initLayout(OperationLog.LoggingLevel loggingMode) {
+  private static StringLayout initLayout(OperationLog.LoggingLevel loggingMode) {
     boolean isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
 
     // There should be a ConsoleAppender. Copy its Layout.
