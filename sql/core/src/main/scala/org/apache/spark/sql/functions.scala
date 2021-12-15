@@ -144,8 +144,8 @@ object functions {
    * The difference between this function and [[lit]] is that this function
    * can handle parameterized scala types e.g.: List, Seq and Map.
    *
-   * Note: `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
-   * scala types are not used.
+   * @note `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
+   * Scala types are not used.
    *
    * @group normal_funcs
    * @since 3.2.0
