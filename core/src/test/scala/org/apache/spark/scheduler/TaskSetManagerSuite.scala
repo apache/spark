@@ -2306,6 +2306,11 @@ class TaskSetManagerSuite
     val speculativeTask = manager.resourceOffer("exec1", "host1", NO_PREF)._1
     assert(speculativeTask.isDefined)
     manager.handleSuccessfulTask(speculativeTask.get.taskId, createTaskResult(1))
+    // if task success, numFailures will be reset to 0
+    val numFailuresField = classOf[TaskSetManager].getDeclaredField("numFailures")
+    numFailuresField.setAccessible(true)
+    val numFailures = numFailuresField.get(manager).asInstanceOf[Array[Int]]
+    assert(numFailures(1) == 0)
 
     // failed the originalTask(index 1) and check if the task manager is zombie
     val failedReason = ExceptionFailure("a", "b", Array(), "c", None)

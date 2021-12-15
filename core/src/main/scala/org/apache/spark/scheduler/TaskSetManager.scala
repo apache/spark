@@ -820,6 +820,7 @@ private[spark] class TaskSetManager(
         s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
+      numFailures(index) = 0
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
@@ -843,6 +844,7 @@ private[spark] class TaskSetManager(
       if (!successful(index)) {
         tasksSuccessful += 1
         successful(index) = true
+        numFailures(index) = 0
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }
@@ -973,13 +975,7 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      val message = if (numFailures(index) >= maxTaskFailures) {
-        s"Task %d in stage %s failed %d times (current failed task %s (TID %s))".format(
-          index, taskSet.id, maxTaskFailures, info.id, info.taskId)
-      } else {
-        s"${taskName(info.taskId)} failed"
-      }
-      logInfo(s"$message, but the task will not be re-executed" +
+      logInfo(s"${taskName(info.taskId)} failed, but the task will not be re-executed" +
         " (either because the task failed with a shuffle data fetch failure," +
         " so the previous stage needs to be re-run, or because a different copy of the task" +
         " has already succeeded).")
