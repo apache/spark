@@ -1169,12 +1169,6 @@ class IndexingTest(PandasOnSparkTestCase):
         psser.loc["y"] = psser * 10
         self.assert_eq(psser, pser)
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.0"):
-            # TODO: seems like a pandas' bug in pandas>=1.0.0?
-            pser.loc[("x", "viper"):"y"] = pser * 20
-            psser.loc[("x", "viper"):"y"] = psser * 20
-            self.assert_eq(psser, pser)
-
     def test_series_iloc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
         psdf = ps.from_pandas(pdf)

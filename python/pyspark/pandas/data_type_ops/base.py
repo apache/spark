@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DateType,
+    DayTimeIntervalType,
     DecimalType,
     FractionalType,
     IntegralType,
@@ -234,6 +235,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             IntegralOps,
         )
         from pyspark.pandas.data_type_ops.string_ops import StringOps, StringExtensionOps
+        from pyspark.pandas.data_type_ops.timedelta_ops import TimedeltaOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
@@ -271,6 +273,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
+        elif isinstance(spark_type, DayTimeIntervalType):
+            return object.__new__(TimedeltaOps)
         elif isinstance(spark_type, BinaryType):
             return object.__new__(BinaryOps)
         elif isinstance(spark_type, ArrayType):
@@ -389,7 +393,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             structed_scol = F.struct(
                 sdf[NATURAL_ORDER_COLUMN_NAME],
                 *left._internal.index_spark_columns,
-                left.spark.column
+                left.spark.column,
             )
             # The size of the list is expected to be small.
             collected_structed_scol = F.collect_list(structed_scol)
@@ -411,7 +415,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
                     .otherwise(
                         x[scol_name] == y,
                     )
-                    .alias(scol_name)
+                    .alias(scol_name),
                 ),
             ).alias(scol_name)
             # 1. `sdf_new` here looks like the below (the first field of each set is Index):

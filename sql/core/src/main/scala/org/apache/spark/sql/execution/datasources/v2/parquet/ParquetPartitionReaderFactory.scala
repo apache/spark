@@ -92,11 +92,6 @@ case class ParquetPartitionReaderFactory(
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
       // For aggregate push down, we will get max/min/count from footer statistics.
-      // We want to read the footer for the whole file instead of reading multiple
-      // footers for every split of the file. Basically if the start (the beginning of)
-      // the offset in PartitionedFile is 0, we will read the footer. Otherwise, it means
-      // that we have already read footer for that file, so we will skip reading again.
-      if (file.start != 0) return null
       ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
     }
   }
@@ -134,10 +129,11 @@ case class ParquetPartitionReaderFactory(
         private var hasNext = true
         private lazy val row: InternalRow = {
           val footer = getFooter(file)
+
           if (footer != null && footer.getBlocks.size > 0) {
             ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath, dataSchema,
-              partitionSchema, aggregation.get, readDataSchema,
-              getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+              partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
+              getDatetimeRebaseMode(footer.getFileMetaData))
           } else {
             null
           }
@@ -179,8 +175,8 @@ case class ParquetPartitionReaderFactory(
           val footer = getFooter(file)
           if (footer != null && footer.getBlocks.size > 0) {
             val row = ParquetUtils.createAggInternalRowFromFooter(footer, file.filePath,
-              dataSchema, partitionSchema, aggregation.get, readDataSchema,
-              getDatetimeRebaseMode(footer.getFileMetaData), isCaseSensitive)
+              dataSchema, partitionSchema, aggregation.get, readDataSchema, file.partitionValues,
+              getDatetimeRebaseMode(footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
               row, readDataSchema, enableOffHeapColumnVector && Option(TaskContext.get()).isDefined)
           } else {

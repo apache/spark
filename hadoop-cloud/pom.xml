@@ -190,18 +190,18 @@
 
   <profiles>
     <!--
-     hadoop-3.2 profile is activated by default so hadoop-2.7 profile
-     also needs to be declared here for building with -Phadoop-2.7.
+     hadoop-3 profile is activated by default so hadoop-2 profile
+     also needs to be declared here for building with -Phadoop-2.
     -->
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
     </profile>
     <!--
      Hadoop 3 simplifies the classpath, and adds a new committer base class which
      enables store-specific committers.
     -->
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>

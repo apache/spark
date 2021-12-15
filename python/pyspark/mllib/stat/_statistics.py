@@ -24,7 +24,7 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
 
-__all__ = ['MultivariateStatisticalSummary', 'Statistics']
+__all__ = ["MultivariateStatisticalSummary", "Statistics"]
 
 
 class MultivariateStatisticalSummary(JavaModelWrapper):
@@ -59,7 +59,6 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
 
 class Statistics(object):
-
     @staticmethod
     def colStats(rdd):
         """
@@ -337,24 +336,25 @@ class Statistics(object):
 
         params = [float(param) for param in params]
         return KolmogorovSmirnovTestResult(
-            callMLlibFunc("kolmogorovSmirnovTest", data, distName, params))
+            callMLlibFunc("kolmogorovSmirnovTest", data, distName, params)
+        )
 
 
 def _test():
     import doctest
     import numpy
     from pyspark.sql import SparkSession
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
     globs = globals().copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("mllib.stat.statistics tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = (
+        SparkSession.builder.master("local[4]").appName("mllib.stat.statistics tests").getOrCreate()
+    )
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:

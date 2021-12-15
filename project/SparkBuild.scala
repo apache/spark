@@ -250,7 +250,17 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+          // 1. `The outer reference in this type test cannot be checked at run time`
+          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+          //    has type parameters eliminated by erasure`
+          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+          "-Wconf:cat=unchecked&msg=outer reference:s",
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
         )
       }
     }
@@ -629,12 +639,19 @@ object KubernetesIntegrationTests {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
+        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
+        val extraOptions = if (dockerFile.isDefined) {
+          Seq("-f", s"${dockerFile.get}")
+        } else {
+          Seq("-b", s"java_image_tag=$javaImageTag")
+        }
         val cmd = Seq(dockerTool, "-m",
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile") ++
+          extraOptions :+
           "build"
-        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
@@ -1125,7 +1142,6 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
-    // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
       val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
@@ -1146,7 +1162,7 @@ object TestSettings {
         // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
         // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
         "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {

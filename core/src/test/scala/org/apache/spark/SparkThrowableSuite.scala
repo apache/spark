@@ -69,7 +69,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
       .setSerializationInclusion(Include.NON_ABSENT)
       .writeValueAsString(errorClassToInfoMap)
-    assert(rewrittenString == errorClassFileContents)
+    assert(rewrittenString.trim == errorClassFileContents.trim)
   }
 
   test("SQLSTATE invariants") {
@@ -125,7 +125,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     // Does not fail with too many args (expects 0 args)
     assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) ==
-      "divide by zero. You can use 'try_divide' or set foo to false " +
+      "divide by zero. To return NULL instead, use 'try_divide'. If necessary set foo to false " +
         "(except for ANSI interval type) to bypass this error.")
   }
 

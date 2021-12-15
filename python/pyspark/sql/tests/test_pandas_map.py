@@ -19,10 +19,16 @@ import shutil
 import tempfile
 import time
 import unittest
+from typing import cast
 
 from pyspark.sql import Row
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
-    pandas_requirement_message, pyarrow_requirement_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_pandas:
     import pandas as pd
@@ -30,9 +36,9 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
 class MapInPandasTests(ReusedSQLTestCase):
-
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
@@ -58,11 +64,11 @@ class MapInPandasTests(ReusedSQLTestCase):
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert pdf.columns == ['id']
+                assert pdf.columns == ["id"]
                 yield pdf
 
         df = self.spark.range(10)
-        actual = df.mapInPandas(func, 'id long').collect()
+        actual = df.mapInPandas(func, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
 
@@ -73,7 +79,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert [d.name for d in list(pdf.dtypes)] == ['int32', 'object']
+                assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
                 yield pdf
 
         actual = df.mapInPandas(func, df.schema).collect()
@@ -83,42 +89,40 @@ class MapInPandasTests(ReusedSQLTestCase):
     def test_different_output_length(self):
         def func(iterator):
             for _ in iterator:
-                yield pd.DataFrame({'a': list(range(100))})
+                yield pd.DataFrame({"a": list(range(100))})
 
         df = self.spark.range(10)
-        actual = df.repartition(1).mapInPandas(func, 'a long').collect()
+        actual = df.repartition(1).mapInPandas(func, "a long").collect()
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_empty_iterator(self):
         def empty_iter(_):
             return iter([])
 
-        self.assertEqual(
-            self.spark.range(10).mapInPandas(empty_iter, 'a int, b string').count(), 0)
+        self.assertEqual(self.spark.range(10).mapInPandas(empty_iter, "a int, b string").count(), 0)
 
     def test_empty_rows(self):
         def empty_rows(_):
-            return iter([pd.DataFrame({'a': []})])
+            return iter([pd.DataFrame({"a": []})])
 
-        self.assertEqual(
-            self.spark.range(10).mapInPandas(empty_rows, 'a int').count(), 0)
+        self.assertEqual(self.spark.range(10).mapInPandas(empty_rows, "a int").count(), 0)
 
     def test_chain_map_partitions_in_pandas(self):
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert pdf.columns == ['id']
+                assert pdf.columns == ["id"]
                 yield pdf
 
         df = self.spark.range(10)
-        actual = df.mapInPandas(func, 'id long').mapInPandas(func, 'id long').collect()
+        actual = df.mapInPandas(func, "id long").mapInPandas(func, "id long").collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
 
     def test_self_join(self):
         # SPARK-34319: self-join with MapInPandas
         df1 = self.spark.range(10)
-        df2 = df1.mapInPandas(lambda iter: iter, 'id long')
+        df2 = df1.mapInPandas(lambda iter: iter, "id long")
         actual = df2.join(df2).collect()
         expected = df1.join(df1).collect()
         self.assertEqual(sorted(actual), sorted(expected))
@@ -133,21 +137,24 @@ class MapInPandasTests(ReusedSQLTestCase):
 
             def func(iterator):
                 for pdf in iterator:
-                    yield pd.DataFrame({'id': [0] * len(pdf)})
+                    yield pd.DataFrame({"id": [0] * len(pdf)})
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
                     self.assertEquals(
-                        self.spark.read.parquet(path).mapInPandas(func, 'id long').head(), Row(0))
+                        self.spark.read.parquet(path).mapInPandas(func, "id long").head(), Row(0)
+                    )
         finally:
             shutil.rmtree(path)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

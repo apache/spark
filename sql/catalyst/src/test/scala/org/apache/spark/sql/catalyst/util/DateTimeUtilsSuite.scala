@@ -357,6 +357,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTimestamp("2021-01-01T12:30:4294967297+4294967297:30", None)
   }
 
+  test("SPARK-37326: stringToTimestampWithoutTimeZone with allowTimeZone") {
+    assert(
+      stringToTimestampWithoutTimeZone(
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), true) ==
+      Some(DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2021, 11, 22, 10, 54, 27))))
+
+    assert(
+      stringToTimestampWithoutTimeZone(
+        UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
+      None)
+  }
+
   test("SPARK-15379: special invalid date string") {
     // Test stringToDate
     assert(toDate("2015-02-29 00:00:00").isEmpty)
@@ -915,5 +927,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
     assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
     assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
+  }
+
+  test("SPARK-37552: convert a timestamp_ntz from a source time zone to target one") {
+    Seq(
+      ("1970-01-01T00:00:00", "UTC") -> ("1969-12-31T16:00:00", "America/Los_Angeles"),
+      ("2021-12-05T22:00:00", "Europe/Moscow") -> ("2021-12-06T00:00:00", "Asia/Yekaterinburg"),
+      ("2021-12-06T00:01:02.123456", "Asia/Yekaterinburg") ->
+        ("2021-12-05T20:01:02.123456", "Europe/Amsterdam"),
+      // 7 Nov 2021 is the DST day in the America/Los_Angeles time zone
+      // Sunday, 7 November 2021, 02:00:00 clocks were turned backward 1 hour to
+      // Sunday, 7 November 2021, 01:00:00 local standard time instead.
+      ("2021-11-07T09:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T10:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T11:00:00", "Europe/Amsterdam") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
+      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Amsterdam"),
+      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Amsterdam"),
+      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Amsterdam")
+    ).foreach { case ((inputTs, sourceTz), (expectedTs, targetTz)) =>
+      val micros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(inputTs))
+      val result = DateTimeUtils.convertTimestampNtzToAnotherTz(sourceTz, targetTz, micros)
+      val expectedMicros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(expectedTs))
+      assert(expectedMicros === result,
+        s"The difference is ${(result - expectedMicros) / MICROS_PER_HOUR} hours")
+    }
   }
 }

@@ -438,6 +438,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // about the executor, but the scheduler will not. Therefore, we should remove the
           // executor from the block manager when we hit this case.
           scheduler.sc.env.blockManager.master.removeExecutorAsync(executorId)
+          // SPARK-35011: If we reach this code path, which means the executor has been
+          // already removed from the scheduler backend but the block manager master may
+          // still know it. In this case, removing the executor from block manager master
+          // would only post the event `SparkListenerBlockManagerRemoved`, which is unfortunately
+          // ignored by `AppStatusListener`. As a result, the executor would be shown on the UI
+          // forever. Therefore, we should also post `SparkListenerExecutorRemoved` here.
+          listenerBus.post(SparkListenerExecutorRemoved(
+            System.currentTimeMillis(), executorId, reason.toString))
           logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }

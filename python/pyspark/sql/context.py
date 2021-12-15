@@ -28,12 +28,14 @@ from typing import (
     overload,
     Type,
     ClassVar,
-    TYPE_CHECKING, cast
+    TYPE_CHECKING,
+    cast,
 )
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -48,13 +50,11 @@ from pyspark.conf import SparkConf
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
-        UserDefinedFunctionLike,
+        AtomicValue,
         RowLike,
-        DateTimeLiteral,
-        LiteralType,
-        DecimalLiteral
+        UserDefinedFunctionLike,
     )
-    from pyspark.sql.pandas._typing import DataFrameLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -107,12 +107,12 @@ class SQLContext(object):
         self,
         sparkContext: SparkContext,
         sparkSession: Optional[SparkSession] = None,
-        jsqlContext: Optional[JavaObject] = None
+        jsqlContext: Optional[JavaObject] = None,
     ):
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-                FutureWarning
+                FutureWarning,
             )
 
         self._sc = sparkContext
@@ -126,8 +126,10 @@ class SQLContext(object):
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
-        if (SQLContext._instantiatedContext is None
-                or SQLContext._instantiatedContext._sc._jsc is None):  # type: ignore[attr-defined]
+        if (
+            SQLContext._instantiatedContext is None
+            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[attr-defined]
+        ):
             SQLContext._instantiatedContext = self
 
     @property
@@ -160,13 +162,19 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            FutureWarning
+            FutureWarning,
         )
 
-        if (cls._instantiatedContext is None
-                or SQLContext._instantiatedContext._sc._jsc is None):  # type: ignore[union-attr]
-            jsqlContext = sc._jvm.SparkSession.builder().sparkContext(  # type: ignore[attr-defined]
-                sc._jsc.sc()).getOrCreate().sqlContext()  # type: ignore[attr-defined]
+        if (
+            cls._instantiatedContext is None
+            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
+        ):
+            jsqlContext = (
+                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
+                .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
+                .getOrCreate()
+                .sqlContext()
+            )
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
         return cast(SQLContext, cls._instantiatedContext)
@@ -188,7 +196,7 @@ class SQLContext(object):
         """
         self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
 
-    def getConf(self, key: str, defaultValue: Optional[str] = _NoValue) -> str:
+    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
@@ -226,7 +234,7 @@ class SQLContext(object):
         start: int,
         end: Optional[int] = None,
         step: int = 1,
-        numPartitions: Optional[int] = None
+        numPartitions: Optional[int] = None,
     ) -> DataFrame:
         """
         Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
@@ -263,10 +271,7 @@ class SQLContext(object):
         return self.sparkSession.range(start, end, step, numPartitions)
 
     def registerFunction(
-        self,
-        name: str,
-        f: Callable[..., Any],
-        returnType: Optional[DataType] = None
+        self, name: str, f: Callable[..., Any], returnType: Optional[DataType] = None
     ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
@@ -276,17 +281,11 @@ class SQLContext(object):
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
         """
-        warnings.warn(
-            "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            FutureWarning
-        )
+        warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self.sparkSession.udf.register(name, f, returnType)
 
     def registerJavaFunction(
-        self,
-        name: str,
-        javaClassName: str,
-        returnType: Optional[DataType] = None
+        self, name: str, javaClassName: str, returnType: Optional[DataType] = None
     ) -> None:
         """An alias for :func:`spark.udf.registerJavaFunction`.
         See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
@@ -298,7 +297,7 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
-            FutureWarning
+            FutureWarning,
         )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
@@ -323,7 +322,8 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable["RowLike"],
+        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
     ) -> DataFrame:
         ...
@@ -331,8 +331,9 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable["RowLike"],
-        schema: Union[List[str], Tuple[str, ...]] = ...,
+        data: Union["RDD[RowLike]", Iterable["RowLike"]],
+        schema: Union[StructType, str],
+        *,
         verifySchema: bool = ...,
     ) -> DataFrame:
         ...
@@ -340,7 +341,10 @@ class SQLContext(object):
     @overload
     def createDataFrame(
         self,
-        data: Iterable[Union["DateTimeLiteral", "LiteralType", "DecimalLiteral"]],
+        data: Union[
+            "RDD[AtomicValue]",
+            Iterable["AtomicValue"],
+        ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -348,23 +352,14 @@ class SQLContext(object):
 
     @overload
     def createDataFrame(
-        self,
-        data: Iterable["RowLike"],
-        schema: Union[StructType, str],
-        verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
-
-    @overload
-    def createDataFrame(
-        self, data: "DataFrameLike", samplingRatio: Optional[float] = ...
+        self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: "DataFrameLike",
+        data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -372,10 +367,10 @@ class SQLContext(object):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Iterable["RowLike"],
-        schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
+        schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: bool = True
+        verifySchema: bool = True,
     ) -> DataFrame:
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
@@ -417,9 +412,7 @@ class SQLContext(object):
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
-            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
-            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+            omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
         verifySchema : bool, optional
@@ -479,7 +472,8 @@ class SQLContext(object):
         Py4JJavaError: ...
         """
         return self.sparkSession.createDataFrame(  # type: ignore[call-overload]
-            data, schema, samplingRatio, verifySchema)
+            data, schema, samplingRatio, verifySchema
+        )
 
     def registerDataFrameAsTable(self, df: DataFrame, tableName: str) -> None:
         """Registers the given :class:`DataFrame` as a temporary table in the catalog.
@@ -495,7 +489,7 @@ class SQLContext(object):
         df.createOrReplaceTempView(tableName)
 
     def dropTempTable(self, tableName: str) -> None:
-        """ Remove the temporary table from catalog.
+        """Remove the temporary table from catalog.
 
         .. versionadded:: 1.6.0
 
@@ -512,7 +506,7 @@ class SQLContext(object):
         path: Optional[str] = None,
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
-        **options: str
+        **options: str,
     ) -> DataFrame:
         """Creates an external table based on the dataset in a data source.
 
@@ -532,7 +526,8 @@ class SQLContext(object):
         :class:`DataFrame`
         """
         return self.sparkSession.catalog.createExternalTable(
-            tableName, path, source, schema, **options)
+            tableName, path, source, schema, **options
+        )
 
     def sql(self, sqlQuery: str) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
@@ -639,7 +634,7 @@ class SQLContext(object):
 
     @since(1.3)
     def clearCache(self) -> None:
-        """Removes all cached tables from the in-memory cache. """
+        """Removes all cached tables from the in-memory cache."""
         self._ssql_ctx.clearCache()
 
     @property
@@ -690,6 +685,7 @@ class SQLContext(object):
         This API is evolving.
         """
         from pyspark.sql.streaming import StreamingQueryManager
+
         return StreamingQueryManager(self._ssql_ctx.streams())
 
 
@@ -714,19 +710,16 @@ class HiveContext(SQLContext):
 
     """
 
-    def __init__(
-        self,
-        sparkContext: SparkContext,
-        jhiveContext: Optional[JavaObject] = None
-    ):
+    def __init__(self, sparkContext: SparkContext, jhiveContext: Optional[JavaObject] = None):
         warnings.warn(
-            "HiveContext is deprecated in Spark 2.0.0. Please use " +
-            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            FutureWarning
+            "HiveContext is deprecated in Spark 2.0.0. Please use "
+            + "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+            FutureWarning,
         )
         if jhiveContext is None:
             sparkContext._conf.set(  # type: ignore[attr-defined]
-                "spark.sql.catalogImplementation", "hive")
+                "spark.sql.catalogImplementation", "hive"
+            )
             sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
@@ -741,9 +734,9 @@ class HiveContext(SQLContext):
         confusing error messages.
         """
         jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
-        jtestHive = sparkContext.\
-            _jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
-                jsc, False)
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
+            jsc, False
+        )
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:
@@ -767,28 +760,32 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.context.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['tempfile'] = tempfile
-    globs['os'] = os
-    globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
-    globs['rdd'] = rdd = sc.parallelize(
-        [Row(field1=1, field2="row1"),
-         Row(field1=2, field2="row2"),
-         Row(field1=3, field2="row3")]
+    sc = SparkContext("local[4]", "PythonTest")
+    globs["tempfile"] = tempfile
+    globs["os"] = os
+    globs["sc"] = sc
+    globs["sqlContext"] = SQLContext(sc)
+    globs["rdd"] = rdd = sc.parallelize(
+        [
+            Row(field1=1, field2="row1"),
+            Row(field1=2, field2="row2"),
+            Row(field1=3, field2="row3"),
+        ]
     )
-    globs['df'] = rdd.toDF()
+    globs["df"] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},"field6":[{"field7": "row2"}]}',
-        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}'
+        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}',
     ]
-    globs['jsonStrings'] = jsonStrings
-    globs['json'] = sc.parallelize(jsonStrings)
+    globs["jsonStrings"] = jsonStrings
+    globs["json"] = sc.parallelize(jsonStrings)
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.context, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
-    globs['sc'].stop()
+        pyspark.sql.context,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    globs["sc"].stop()
     if failure_count:
         sys.exit(-1)
 

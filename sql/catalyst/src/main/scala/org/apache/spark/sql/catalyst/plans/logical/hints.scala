@@ -62,6 +62,8 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
  */
 case class JoinHint(leftHint: Option[HintInfo], rightHint: Option[HintInfo]) {
 
+  def isEmpty: Boolean = leftHint.isEmpty && rightHint.isEmpty
+
   override def toString: String = {
     Seq(
       leftHint.map("leftHint=" + _),

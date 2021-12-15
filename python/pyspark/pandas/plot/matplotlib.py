@@ -19,10 +19,23 @@ from distutils.version import LooseVersion
 
 import matplotlib as mat
 import numpy as np
-import pandas as pd
 from matplotlib.axes._base import _process_plot_format
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
+
+from pandas.plotting._matplotlib import (
+    BarPlot as PandasBarPlot,
+    BoxPlot as PandasBoxPlot,
+    HistPlot as PandasHistPlot,
+    PiePlot as PandasPiePlot,
+    AreaPlot as PandasAreaPlot,
+    LinePlot as PandasLinePlot,
+    BarhPlot as PandasBarhPlot,
+    ScatterPlot as PandasScatterPlot,
+    KdePlot as PandasKdePlot,
+)
+from pandas.plotting._core import PlotAccessor
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
 
 from pyspark.pandas.plot import (
     TopNPlotBase,
@@ -33,37 +46,7 @@ from pyspark.pandas.plot import (
     KdePlotBase,
 )
 
-
-if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-    from pandas.plotting._core import (
-        _all_kinds,
-        BarPlot as PandasBarPlot,
-        BoxPlot as PandasBoxPlot,
-        HistPlot as PandasHistPlot,
-        MPLPlot as PandasMPLPlot,
-        PiePlot as PandasPiePlot,
-        AreaPlot as PandasAreaPlot,
-        LinePlot as PandasLinePlot,
-        BarhPlot as PandasBarhPlot,
-        ScatterPlot as PandasScatterPlot,
-        KdePlot as PandasKdePlot,
-    )
-else:
-    from pandas.plotting._matplotlib import (
-        BarPlot as PandasBarPlot,
-        BoxPlot as PandasBoxPlot,
-        HistPlot as PandasHistPlot,
-        PiePlot as PandasPiePlot,
-        AreaPlot as PandasAreaPlot,
-        LinePlot as PandasLinePlot,
-        BarhPlot as PandasBarhPlot,
-        ScatterPlot as PandasScatterPlot,
-        KdePlot as PandasKdePlot,
-    )
-    from pandas.plotting._core import PlotAccessor
-    from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
-
-    _all_kinds = PlotAccessor._all_kinds
+_all_kinds = PlotAccessor._all_kinds
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
@@ -331,7 +314,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         showcaps=None,
         showbox=None,
         showfliers=None,
-        **kwargs
+        **kwargs,
     ):
         # Missing arguments default to rcParams.
         if whis is None:
@@ -564,7 +547,7 @@ def plot_series(
     xerr=None,
     label=None,
     secondary_y=False,  # Series unique
-    **kwds
+    **kwds,
 ):
     """
     Make plots of Series using matplotlib / pylab.
@@ -727,7 +710,7 @@ def plot_frame(
     xerr=None,
     secondary_y=False,
     sort_columns=False,
-    **kwds
+    **kwds,
 ):
     """
     Make plots of DataFrames using matplotlib / pylab.

@@ -18,14 +18,13 @@
 package org.apache.spark.sql.avro
 
 import scala.collection.JavaConverters._
-import scala.util.Random
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -35,8 +34,6 @@ import org.apache.spark.sql.types.Decimal.minBytesForPrecision
  */
 @DeveloperApi
 object SchemaConverters {
-  private lazy val uuidGenerator = RandomUUIDGenerator(new Random().nextLong())
-
   private lazy val nullSchema = Schema.create(Schema.Type.NULL)
 
   /**
@@ -55,11 +52,21 @@ object SchemaConverters {
     toSqlTypeHelper(avroSchema, Set.empty)
   }
 
+  // The property specifies Catalyst type of the given field
+  private val CATALYST_TYPE_PROP_NAME = "spark.sql.catalyst.type"
+
   private def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
-        case _ => SchemaType(IntegerType, nullable = false)
+        case _ =>
+          val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+          val catalystType = if (catalystTypeAttrValue == null) {
+            IntegerType
+          } else {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          }
+          SchemaType(catalystType, nullable = false)
       }
       case STRING => SchemaType(StringType, nullable = false)
       case BOOLEAN => SchemaType(BooleanType, nullable = false)
@@ -76,7 +83,14 @@ object SchemaConverters {
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _: LocalTimestampMillis | _: LocalTimestampMicros =>
           SchemaType(TimestampNTZType, nullable = false)
-        case _ => SchemaType(LongType, nullable = false)
+        case _ =>
+          val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+          val catalystType = if (catalystTypeAttrValue == null) {
+            LongType
+          } else {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+          }
+          SchemaType(catalystType, nullable = false)
       }
 
       case ENUM => SchemaType(StringType, nullable = false)
@@ -198,6 +212,15 @@ object SchemaConverters {
           fieldsAssembler.name(f.name).`type`(fieldAvroType).noDefault()
         }
         fieldsAssembler.endRecord()
+
+      case ym: YearMonthIntervalType =>
+        val ymIntervalType = builder.intType()
+        ymIntervalType.addProp(CATALYST_TYPE_PROP_NAME, ym.typeName)
+        ymIntervalType
+      case dt: DayTimeIntervalType =>
+        val dtIntervalType = builder.longType()
+        dtIntervalType.addProp(CATALYST_TYPE_PROP_NAME, dt.typeName)
+        dtIntervalType
 
       // This should never happen.
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")

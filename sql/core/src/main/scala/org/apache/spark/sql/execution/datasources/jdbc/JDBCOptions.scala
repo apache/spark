@@ -189,10 +189,16 @@ class JDBCOptions(
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 
   // An option to allow/disallow pushing down aggregate into JDBC data source
+  // This only applies to Data Source V2 JDBC
   val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
 
-  // An option to allow/disallow pushing down LIMIT into JDBC data source
+  // An option to allow/disallow pushing down LIMIT into V2 JDBC data source
+  // This only applies to Data Source V2 JDBC
   val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
+
+  // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
 
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
@@ -270,6 +276,7 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
   val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
+  val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
   val JDBC_TABLE_COMMENT = newOption("tableComment")

@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
+import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
@@ -103,8 +103,7 @@ case class RowDataSourceScanExec(
     requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
-    aggregation: Option[Aggregation],
-    limit: Option[Int],
+    pushedDownOperators: PushedDownOperators,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -135,13 +134,6 @@ case class RowDataSourceScanExec(
 
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-    val (aggString, groupByString) = if (aggregation.nonEmpty) {
-      (seqToString(aggregation.get.aggregateExpressions),
-        seqToString(aggregation.get.groupByColumns))
-    } else {
-      ("[]", "[]")
-    }
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -152,10 +144,14 @@ case class RowDataSourceScanExec(
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq),
-      "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString) ++
-      limit.map(value => "PushedLimit" -> s"LIMIT $value")
+      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+      pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
+      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
+      pushedDownOperators.sample.map(v => "PushedSample" ->
+        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
+      )
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
@@ -467,7 +463,7 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       driverMetrics("numPartitions") = partitions.length
     }
   }
@@ -486,7 +482,7 @@ case class FileSourceScanExec(
       None
     }
   } ++ {
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       Map(
         "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
         "pruningTime" ->

@@ -65,6 +65,10 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
+class PandasAPIOnSparkAdviceWarning(Warning):
+    pass
+
+
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -104,7 +108,7 @@ def combine_frames(
     this: "DataFrame",
     *args: DataFrameOrSeries,
     how: str = "full",
-    preserve_order_column: bool = False
+    preserve_order_column: bool = False,
 ) -> "DataFrame":
     """
     This method combines `this` DataFrame with a different `that` DataFrame or
@@ -155,7 +159,7 @@ def combine_frames(
                     for col in sdf.columns
                     if col not in HIDDEN_COLUMNS
                 ],
-                *HIDDEN_COLUMNS
+                *HIDDEN_COLUMNS,
             )
             return internal.copy(
                 spark_frame=sdf,
@@ -245,7 +249,7 @@ def combine_frames(
                 scol_for(that_sdf, that_internal.spark_column_name_for(label))
                 for label in that_internal.column_labels
             ),
-            *order_column
+            *order_column,
         )
 
         index_spark_columns = [scol_for(joined_df, col) for col in index_column_names]
@@ -460,20 +464,12 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
-    if conf is None:
-        conf = dict()
+def default_session() -> SparkSession:
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        return spark
 
     builder = SparkSession.builder.appName("pandas-on-Spark")
-    for key, value in conf.items():
-        builder = builder.config(key, value)
-    # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
-    # configuration. This is needed with Spark 3.0+.
-    builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
-
-    if is_testing():
-        builder.config("spark.executor.allowSparkContext", False)
-
     return builder.getOrCreate()
 
 
@@ -964,7 +960,7 @@ def log_advice(message: str) -> None:
     for the existing pandas/PySpark users who may not be familiar with distributed environments
     or the behavior of pandas.
     """
-    warnings.warn(message, UserWarning)
+    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
 
 
 def _test() -> None:

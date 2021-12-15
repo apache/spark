@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -881,12 +881,27 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   test("SPARK-23312: vectorized cache reader can be disabled") {
     Seq(true, false).foreach { vectorized =>
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        val df = spark.range(10).cache()
-        df.queryExecution.executedPlan.foreach {
+        val df1 = spark.range(10).cache()
+        val df2 = spark.range(10).cache()
+        val union = df1.union(df2)
+        union.queryExecution.executedPlan.foreach {
           case i: InMemoryTableScanExec =>
             assert(i.supportsColumnar == vectorized)
           case _ =>
         }
+      }
+    }
+  }
+
+  test("SPARK-37369: Avoid redundant ColumnarToRow transition on InMemoryTableScan") {
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val cache = spark.range(10).cache()
+        val df = cache.filter($"id" > 0)
+        val columnarToRow = df.queryExecution.executedPlan.collect {
+          case c: ColumnarToRowExec => c
+        }
+        assert(columnarToRow.isEmpty)
       }
     }
   }
@@ -1640,6 +1655,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
             assert(spark.table("t3").rdd.partitions.length == 2)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-37702: cache table with temporary function ") {
+    withUserDefinedFunction("udf" -> true) {
+      spark.udf.register("udf", (id: Int) => id + 1)
+      withTempView("cached_t") {
+        sql("CACHE TABLE cached_t as SELECT udf(id) FROM VALUES (1), (2) t(id)")
+        checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
     }
   }

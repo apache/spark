@@ -662,6 +662,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
+
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
@@ -1011,6 +1020,17 @@ object SQLConf {
         "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
         "that Spark query performance may degrade if this is enabled and there are many " +
         "partitions to be listed. If this is disabled, Spark will fail the query instead.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
+    buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
+      .doc("When this config is enabled, if the predicates are not supported by Hive or Spark " +
+        "does fallback due to encountering MetaException from the metastore, " +
+        "Spark will instead prune partitions by getting the partition names first " +
+        "and then evaluating the filter expressions on the client side. " +
+        "Note that the predicates with TimeZoneAwareExpression is not supported.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -1493,6 +1513,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1751,6 +1778,30 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER shuffled hash join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER sort merge join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.existenceSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for Existence sort merge join.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2606,6 +2657,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
+    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
+      .doc("When true, the data type conversions between datetime types and numeric types are " +
+        "allowed in ANSI SQL mode. This configuration is only effective when " +
+        s"'${ANSI_ENABLED.key}' is true.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3379,13 +3439,20 @@ object SQLConf {
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
       .internal()
-      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
-        " APIs that accept or parse data types as parameters, e.g." +
-        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
-        " string type as Spark 3.0 and earlier.")
+      .doc("When true, Spark treats CHAR/VARCHAR type the same as STRING type, which is the " +
+        "behavior of Spark 3.0 and earlier. This means no length check for CHAR/VARCHAR type and " +
+        "no padding for CHAR type when writing data to the table.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CHAR_AS_VARCHAR = buildConf("spark.sql.charAsVarchar")
+    .doc("When true, Spark replaces CHAR type with VARCHAR type in CREATE/REPLACE/ALTER TABLE " +
+      "commands, so that newly created/updated tables will not have CHAR type columns/fields. " +
+      "Existing tables with CHAR type columns/fields are not affected by this config.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
@@ -3728,6 +3795,9 @@ class SQLConf extends Serializable with Logging {
   def metastorePartitionPruningFallbackOnException: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
 
+  def metastorePartitionPruningFastFallback: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
+
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
@@ -4060,6 +4130,9 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
+    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
