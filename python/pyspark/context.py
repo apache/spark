@@ -151,7 +151,6 @@ class SparkContext(object):
     ValueError: ...
     """
 
-    # set assignment ignore temporarily to prevent errors from other files
     _gateway: ClassVar[Optional[JavaGateway]] = None
     _jvm: ClassVar[Optional[JVMView]] = None
     _next_accum_id = 0
