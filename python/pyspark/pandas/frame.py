@@ -341,24 +341,6 @@ rectangle    16.0  2.348543e+108
 """
 
 
-if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore[attr-defined]
-
-    # This is a workaround to support variadic generic in DataFrame in Python 3.5+.
-    # See https://github.com/python/typing/issues/193
-    # We wrap the input params by a tuple to mimic variadic generic.
-    old_getitem = GenericMeta.__getitem__
-
-    @no_type_check
-    def new_getitem(self, params):
-        if hasattr(self, "is_dataframe"):
-            return old_getitem(self, create_tuple_for_frame_type(params))
-        else:
-            return old_getitem(self, params)
-
-    GenericMeta.__getitem__ = new_getitem
-
-
 class DataFrame(Frame, Generic[T]):
     """
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
