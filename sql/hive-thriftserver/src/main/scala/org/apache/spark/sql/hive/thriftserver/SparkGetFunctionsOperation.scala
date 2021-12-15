@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Spark's own GetFunctionsOperation
@@ -82,14 +83,17 @@ private[hive] class SparkGetFunctionsOperation(
       parentSession.getUsername)
 
     try {
-      var matchedBuiltInFunctions = if (matchingDbs.nonEmpty && functionPattern == "*") {
+      val separateDisplaySystemFunctions =
+        sqlContext.conf.getConf(SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION)
+      var matchedBuiltInFunctions = if (separateDisplaySystemFunctions && functionPattern == "*"
+        && matchingDbs.nonEmpty) {
         FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
       } else {
         Set.empty[FunctionIdentifier]
       }
       matchingDbs.foreach { db =>
         catalog.listFunctions(db, functionPattern).foreach {
-          case (funcIdentifier, "SYSTEM") =>
+          case (funcIdentifier, "SYSTEM") if separateDisplaySystemFunctions =>
             if (!matchedBuiltInFunctions.contains(funcIdentifier)) {
               matchedBuiltInFunctions += funcIdentifier
             }
@@ -97,7 +101,7 @@ private[hive] class SparkGetFunctionsOperation(
             val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-              db, // FUNCTION_SCHEMA
+              db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
               s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
@@ -109,7 +113,7 @@ private[hive] class SparkGetFunctionsOperation(
         val info = catalog.lookupFunctionInfo(functionIdentifier)
         val rowData = Array[AnyRef](
           DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-          "SYSTEM", // FUNCTION_SCHEMA
+          "SYSTEM", // FUNCTION_SCHEM
           functionIdentifier.funcName, // FUNCTION_NAME
           s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
           DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE

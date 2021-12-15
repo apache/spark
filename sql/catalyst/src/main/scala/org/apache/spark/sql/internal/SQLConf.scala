@@ -1158,6 +1158,13 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION =
+    buildConf("spark.sql.thriftserver.separateDisplaySystemFunctions")
+      .doc("")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")

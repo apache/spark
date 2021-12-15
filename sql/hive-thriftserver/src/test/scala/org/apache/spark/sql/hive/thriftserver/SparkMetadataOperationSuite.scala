@@ -210,11 +210,14 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
   }
 
   test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
-    def checkResult(rs: ResultSet, functionNames: Seq[String]): Unit = {
+    def checkResult(
+        rs: ResultSet,
+        functionNames: Seq[String],
+        functionSchema: String = "default"): Unit = {
       functionNames.foreach { func =>
         val exprInfo = FunctionRegistry.expressions(func)._1
         assert(rs.next())
-        assert(rs.getString("FUNCTION_SCHEM") === "SYSTEM")
+        assert(rs.getString("FUNCTION_SCHEM") === functionSchema)
         assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
         assert(rs.getString("REMARKS") ===
           s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
@@ -226,6 +229,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     }
 
     withJdbcStatement() { statement =>
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION.key}=false")
       val metaData = statement.getConnection.getMetaData
       // Hive does not have an overlay function, we use overlay to test.
       checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
@@ -236,6 +240,17 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       checkResult(metaData.getFunctions(null, "default", "shift*"),
         Seq("shiftleft", "shiftright", "shiftrightunsigned"))
       checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"))
+
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION.key}=true")
+      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty, "SYSTEM")
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, "default", "shift*"),
+        Seq("shiftleft", "shiftright", "shiftrightunsigned"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"), "SYSTEM")
+
     }
   }
 
