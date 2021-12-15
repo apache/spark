@@ -55,6 +55,8 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
 
+  override def supportsRowBased: Boolean = true
+
   /**
    * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
    * If false, get data from UnsafeRow build from CachedBatch

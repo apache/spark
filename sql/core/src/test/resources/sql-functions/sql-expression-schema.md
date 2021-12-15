@@ -12,7 +12,7 @@
 | org.apache.spark.sql.catalyst.expressions.Add | + | SELECT 1 + 2 | struct<(1 + 2):int> |
 | org.apache.spark.sql.catalyst.expressions.AddMonths | add_months | SELECT add_months('2016-08-31', 1) | struct<add_months(2016-08-31, 1):date> |
 | org.apache.spark.sql.catalyst.expressions.AesDecrypt | aes_decrypt | SELECT aes_decrypt(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop') | struct<aesdecrypt(unbase64(4Hv0UKCx6nfUeAoPZo1z+w==), abcdefghijklmnop):binary> |
-| org.apache.spark.sql.catalyst.expressions.AesEncrypt | aes_encrypt | SELECT base64(aes_encrypt('Spark', 'abcdefghijklmnop')) | struct<base64(aesencrypt(Spark, abcdefghijklmnop, ECB, PKCS)):string> |
+| org.apache.spark.sql.catalyst.expressions.AesEncrypt | aes_encrypt | SELECT base64(aes_encrypt('Spark', 'abcdefghijklmnop')) | struct<base64(aesencrypt(Spark, abcdefghijklmnop, ECB, DEFAULT)):string> |
 | org.apache.spark.sql.catalyst.expressions.And | and | SELECT true and true | struct<(true AND true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayAggregate | aggregate | SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) | struct<aggregate(array(1, 2, 3), 0, lambdafunction((namedlambdavariable() + namedlambdavariable()), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable())):int> |
 | org.apache.spark.sql.catalyst.expressions.ArrayContains | array_contains | SELECT array_contains(array(1, 2, 3), 2) | struct<array_contains(array(1, 2, 3), 2):boolean> |

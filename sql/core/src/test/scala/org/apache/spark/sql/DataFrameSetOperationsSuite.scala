@@ -1375,12 +1375,11 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         val df1 = Seq(1, 2, 3).toDF("i").cache()
         val df2 = Seq(4, 5, 6).toDF("j").cache()
 
-        checkIfColumnar(df1.queryExecution.executedPlan,
-          _.isInstanceOf[InMemoryTableScanExec], supported)
-        checkIfColumnar(df2.queryExecution.executedPlan,
-          _.isInstanceOf[InMemoryTableScanExec], supported)
-
         val union = df1.union(df2)
+        checkIfColumnar(union.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+        checkIfColumnar(union.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
         checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
         checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
 

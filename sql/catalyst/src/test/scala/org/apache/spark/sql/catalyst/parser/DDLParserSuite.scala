@@ -1770,38 +1770,6 @@ class DDLParserSuite extends AnalysisTest {
           "location" -> "/home/user/db")))
   }
 
-  test("set namespace properties") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-  }
-
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(

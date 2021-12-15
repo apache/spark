@@ -56,17 +56,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
     case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
-      throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE COLUMNS")
 
     case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
       if (a.column.name.length > 1) {
-        throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
+        throw QueryCompilationErrors
+          .operationOnlySupportedWithV2TableError("ALTER COLUMN with qualified column")
       }
       if (a.nullable.isDefined) {
         throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
       }
       if (a.position.isDefined) {
-        throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
+        throw QueryCompilationErrors
+          .operationOnlySupportedWithV2TableError("ALTER COLUMN ... FIRST | ALTER")
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
@@ -88,10 +90,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
     case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
-      throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("RENAME COLUMN")
 
     case DropColumns(ResolvedV1TableIdentifier(_), _) =>
-      throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
+      throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
@@ -145,35 +147,24 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ CreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.tableSpec.provider,
-        c.tableSpec.options,
-        c.tableSpec.location,
-        c.tableSpec.serde,
+        c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        val tableDesc = buildCatalogTable(name.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.tableSpec.bucketSpec, c.tableSpec.properties, provider,
-          c.tableSpec.location, c.tableSpec.comment, storageFormat,
-          c.tableSpec.external)
-        val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTableV1(tableDesc, mode, None)
+        constructV1TableCmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
+          c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
         c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
           tableSpec = newTableSpec)
       }
 
-    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _)
-      if isSessionCatalog(catalog) =>
+    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = true)
-      if (!isV2Provider(provider)) {
-        val tableDesc = buildCatalogTable(name.asTableIdentifier, new StructType,
-          c.partitioning, c.tableSpec.bucketSpec, c.tableSpec.properties, provider,
-          c.tableSpec.location, c.tableSpec.comment, storageFormat, c.tableSpec.external)
-        val mode = if (c.ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-        CreateTableV1(tableDesc, mode, Some(c.query))
+      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+        constructV1TableCmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
+          c.ignoreIfExists, storageFormat, provider)
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
         c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
@@ -189,21 +180,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ ReplaceTable(
-      ResolvedDBObjectName(catalog, name), _, _, _, _) =>
+      ResolvedDBObjectName(catalog, _), _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
-        throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TableError
+        throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE TABLE")
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
         c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
           tableSpec = newTableSpec)
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _)
-        if isSessionCatalog(catalog) =>
+    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError
+      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+        throw QueryCompilationErrors
+          .operationOnlySupportedWithV2TableError("REPLACE TABLE AS SELECT")
       } else {
         val newTableSpec = c.tableSpec.copy(bucketSpec = None)
         c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
@@ -294,7 +285,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ident.asTableIdentifier,
         Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
-    case s @ ShowPartitions(
+    case ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
         pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
       ShowPartitionsCommand(
@@ -302,7 +293,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
       val v1TableName = ident.asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
@@ -385,10 +376,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     // If target is view, force use v1 command
-    case s @ ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
+    case ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
 
-    case s @ ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey, output)
+    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey, output)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
 
@@ -433,6 +424,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // Fallback to v1 command
       val funcIdentifier = identifier.asFunctionIdentifier
       RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+  }
+
+  private def constructV1TableCmd(
+      query: Option[LogicalPlan],
+      tableSpec: TableSpec,
+      name: Seq[String],
+      tableSchema: StructType,
+      partitioning: Seq[Transform],
+      ignoreIfExists: Boolean,
+      storageFormat: CatalogStorageFormat,
+      provider: String): CreateTableV1 = {
+    val tableDesc = buildCatalogTable(name.asTableIdentifier, tableSchema,
+        partitioning, tableSpec.bucketSpec, tableSpec.properties, provider,
+        tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
+    val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+    CreateTableV1(tableDesc, mode, query)
   }
 
   private def getStorageFormatAndProvider(

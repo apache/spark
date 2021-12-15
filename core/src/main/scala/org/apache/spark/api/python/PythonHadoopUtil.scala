@@ -72,9 +72,11 @@ private[python] class WritableToJavaConverter(
       case iw: IntWritable => iw.get()
       case dw: DoubleWritable => dw.get()
       case lw: LongWritable => lw.get()
+      case sw: ShortWritable => sw.get()
       case fw: FloatWritable => fw.get()
       case t: Text => t.toString
       case bw: BooleanWritable => bw.get()
+      case byw: ByteWritable => byw.get()
       case byw: BytesWritable =>
         val bytes = new Array[Byte](byw.getLength)
         System.arraycopy(byw.getBytes(), 0, bytes, 0, byw.getLength)
@@ -123,9 +125,11 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
       case i: java.lang.Integer => new IntWritable(i)
       case d: java.lang.Double => new DoubleWritable(d)
       case l: java.lang.Long => new LongWritable(l)
+      case s: java.lang.Short => new ShortWritable(s)
       case f: java.lang.Float => new FloatWritable(f)
       case s: java.lang.String => new Text(s)
       case b: java.lang.Boolean => new BooleanWritable(b)
+      case b: java.lang.Byte => new ByteWritable(b)
       case aob: Array[Byte] => new BytesWritable(aob)
       case null => NullWritable.get()
       case map: java.util.Map[_, _] =>

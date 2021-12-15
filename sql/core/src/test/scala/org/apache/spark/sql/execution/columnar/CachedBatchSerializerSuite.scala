@@ -138,8 +138,9 @@ class CachedBatchSerializerSuite  extends QueryTest with SharedSparkSession {
       input.write.parquet(workDirPath)
       val data = spark.read.parquet(workDirPath)
       data.cache()
-      assert(data.count() == 3)
-      checkAnswer(data, Row(100) :: Row(200) :: Row(300) :: Nil)
+      val df = data.union(data)
+      assert(df.count() == 6)
+      checkAnswer(df, Row(100) :: Row(200) :: Row(300) :: Row(100) :: Row(200) :: Row(300) :: Nil)
     }
   }
 }
