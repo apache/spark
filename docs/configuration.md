@@ -3030,8 +3030,8 @@ Certain Spark settings can be configured through environment variables, which ar
 `conf/spark-env.sh` script in the directory where Spark is installed (or `conf/spark-env.cmd` on
 Windows). In Standalone and Mesos modes, this file can give machine specific information such as
 hostnames. It is also sourced when running local Spark applications or submission scripts. For
-pyspark applications, the environment variable `_PYSPARK_DRIVER_SYS_EXECUTABLE` will be set to
-the python interpreter's `sys.executable`, which will allow further customization based on the
+PySpark applications, the environment variable `_PYSPARK_DRIVER_SYS_EXECUTABLE` will be set to
+the Python interpreter's `sys.executable`, which will allow further customization based on the
 user's virtual environment.
 
 Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can
