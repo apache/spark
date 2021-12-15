@@ -409,7 +409,7 @@ class InheritableThread(threading.Thread):
     def _clean_py4j_conn_for_current_thread() -> None:
         from pyspark import SparkContext
 
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
         assert jvm is not None
         thread_connection = jvm._gateway_client.get_thread_connection()
         if thread_connection is not None:
