@@ -1659,7 +1659,7 @@ private[spark] class DAGScheduler(
   private[scheduler] def checkAndScheduleShuffleMergeFinalize(
       shuffleStage: ShuffleMapStage): Unit = {
     // Check if a finalize task has already been scheduled. This is to prevent scenarios
-    // where we don't schedule multiple shuffle merge finalization which can happen due
+    // where we don't schedule multiple shuffle merge finalization which can happen due to
     // stage retry or shufflePushMinRatio is already hit etc.
     if (shuffleStage.shuffleDep.getFinalizeTask.isEmpty) {
       // 1. Stage indeterminate and some map outputs are not available - finalize
@@ -1685,11 +1685,6 @@ private[spark] class DAGScheduler(
       }
 
       if (totalSize < shuffleMergeWaitMinSizeThreshold) {
-        // Check if we can process map stage completion. If shuffle merge finalization
-        // is already triggered because push completion ratio was reached earlier,
-        // we cannot process map stage completion, but have to wait for the finalization
-        // to finish. This is because it's not straightforward to interrupt the
-        // finalization task and undo what it might have already done.
         scheduleShuffleMergeFinalize(shuffleStage, delay = 0, registerMergeResults = false)
       } else {
         scheduleShuffleMergeFinalize(shuffleStage, shuffleMergeFinalizeWaitSec)
@@ -2145,12 +2140,11 @@ private[spark] class DAGScheduler(
    *                             stage until MergeStatus have been received from all mergers or
    *                             reaches timeout. For very small shuffle, this could be set to
    *                             false to avoid impact to job runtime.
-   * @return whether the caller is able to schedule a finalize task
    */
   private[scheduler] def scheduleShuffleMergeFinalize(
       stage: ShuffleMapStage,
       delay: Long,
-      registerMergeResults: Boolean = true): Boolean = {
+      registerMergeResults: Boolean = true): Unit = {
     val shuffleDep = stage.shuffleDep
     val scheduledTask: Option[ScheduledFuture[_]] = shuffleDep.getFinalizeTask
     scheduledTask match {
@@ -2175,12 +2169,10 @@ private[spark] class DAGScheduler(
               TimeUnit.SECONDS
             )
           )
-          true
         } else {
           logInfo(s"$stage (${stage.name}) existing scheduled task for finalizing shuffle merge" +
             s"would either be in-progress or finished. No need to schedule shuffle merge" +
             s" finalization again.")
-          false
         }
       case None =>
         // If no previous finalization task is scheduled, schedule the finalization task.
@@ -2194,7 +2186,6 @@ private[spark] class DAGScheduler(
             TimeUnit.SECONDS
           )
         )
-        true
     }
   }
 
