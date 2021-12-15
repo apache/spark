@@ -39,7 +39,9 @@ class SparkSessionTests1(ReusedSQLTestCase):
     def test_sparksession_with_stopped_sparkcontext(self):
         self.sc.stop()
         sc = SparkContext("local[4]", self.sc.appName)
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
         try:
             df = spark.createDataFrame([(1, 2)], ["c", "c"])
             df.collect()
@@ -53,7 +55,9 @@ class SparkSessionTests2(PySparkTestCase):
     # This test is separate because it's closely related with session's start and stop.
     # See SPARK-23228.
     def test_set_jvm_default_session(self):
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
         try:
             self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
         finally:
@@ -65,7 +69,9 @@ class SparkSessionTests2(PySparkTestCase):
         jsession = self.sc._jvm.SparkSession(self.sc._jsc.sc())
         self.sc._jvm.SparkSession.setDefaultSession(jsession)
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
         try:
             self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
             # The session should be the same with the exiting one.

@@ -1981,7 +1981,9 @@ def _test() -> None:
     globs = globals()
     sc = SparkContext("local[4]", "PythonTest")
     globs["sc"] = sc
-    globs["spark"] = SparkSession.builder.getOrCreate()
+    globs["spark"] = SparkSession.getActiveSession()
+    if globs["spark"] is None:
+        globs["spark"] = SparkSession.builder.getOrCreate()
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:

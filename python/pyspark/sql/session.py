@@ -669,7 +669,10 @@ class SparkSession(SparkConversionMixin):
                 )
                 return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
-                return SparkSession.builder.getOrCreate()
+                spark = SparkSession.getActiveSession()
+                if spark is None:
+                    spark = SparkSession.builder.getOrCreate()
+                return spark
         except (py4j.protocol.Py4JError, TypeError):
             if cast(str, conf.get("spark.sql.catalogImplementation", "")).lower() == "hive":
                 warnings.warn(
@@ -677,7 +680,10 @@ class SparkSession(SparkConversionMixin):
                     "please make sure you build spark with hive"
                 )
 
-        return SparkSession.builder.getOrCreate()
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
+        return spark
 
     @overload
     def createDataFrame(
