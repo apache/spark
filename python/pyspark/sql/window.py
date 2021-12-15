@@ -76,8 +76,7 @@ class Window(object):
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
@@ -88,8 +87,7 @@ class Window(object):
         Creates a :class:`WindowSpec` with the ordering defined.
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
@@ -154,8 +152,7 @@ class Window(object):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
 
@@ -223,8 +220,7 @@ class Window(object):
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
 

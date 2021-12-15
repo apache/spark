@@ -1015,15 +1015,13 @@ def _parse_datatype_string(s: str) -> DataType:
     assert sc is not None
 
     def from_ddl_schema(type_str: str) -> DataType:
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
         )

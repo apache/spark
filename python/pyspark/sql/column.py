@@ -122,8 +122,7 @@ def _unary_op(
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         jc = getattr(sc._jvm.functions, name)(self._jc)
         return Column(jc)
 
@@ -138,8 +137,7 @@ def _bin_func_op(
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
         sc = SparkContext._active_spark_context
-        assert sc is not None
-        assert sc._jvm is not None
+        assert sc is not None and sc._jvm is not None
         fn = getattr(sc._jvm.functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
