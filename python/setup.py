@@ -272,7 +272,7 @@ try:
                 'numpy>=1.14',
             ],
         },
-        python_requires='>=3.6',
+        python_requires='>=3.7',
         classifiers=[
             'Development Status :: 5 - Production/Stable',
             'License :: OSI Approved :: Apache Software License',
