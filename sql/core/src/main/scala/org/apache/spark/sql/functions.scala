@@ -117,7 +117,7 @@ object functions {
     case c: Column => c
     case s: Symbol => new ColumnName(s.name)
     case _ =>
-      // This is different from `typedLit`. `typedLit` calls `Literal.create` to use
+      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
       // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this method,
       // `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence, we can
       // just manually call `Literal.apply` to skip the expensive `ScalaReflection` code. This is
@@ -144,7 +144,7 @@ object functions {
    * The difference between this function and [[lit]] is that this function
    * can handle parameterized scala types e.g.: List, Seq and Map.
    *
-   * Note: `typedLit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
+   * Note: `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
    * scala types are not used.
    *
    * @group normal_funcs
