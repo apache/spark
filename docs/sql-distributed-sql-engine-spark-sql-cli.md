@@ -23,7 +23,7 @@ license: |
 {:toc}
 
 
-The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute SQL
+The Spark SQL CLI is a convenient interactive command tool to run the Hive metastore service and execute SQL
 queries input from the command line. Note that the Spark SQL CLI cannot talk to the Thrift JDBC server.
 
 To start the Spark SQL CLI, run the following in the Spark directory:
