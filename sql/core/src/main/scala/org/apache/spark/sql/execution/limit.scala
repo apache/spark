@@ -42,7 +42,8 @@ trait LimitExec extends UnaryExecNode {
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(limit: Int, child: SparkPlan,
+    isSubExec: Boolean = false) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -57,20 +58,26 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
     if (childRDD.getNumPartitions == 0) {
       new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
-      val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
-        childRDD
+      if (isSubExec) {
+        // if [[CollectLimitExec]] is a subExec, avoid shuffle
+        // and scan all data.
+        sparkContext.parallelize(executeCollect(), numSlices = 1)
       } else {
-        val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
-        new ShuffledRowRDD(
-          ShuffleExchangeExec.prepareShuffleDependency(
-            locallyLimited,
-            child.output,
-            SinglePartition,
-            serializer,
-            writeMetrics),
-          readMetrics)
+        val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
+          childRDD
+        } else {
+          val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
+          new ShuffledRowRDD(
+            ShuffleExchangeExec.prepareShuffleDependency(
+              locallyLimited,
+              child.output,
+              SinglePartition,
+              serializer,
+              writeMetrics),
+            readMetrics)
+        }
+        singlePartitionRDD.mapPartitionsInternal(_.take(limit))
       }
-      singlePartitionRDD.mapPartitionsInternal(_.take(limit))
     }
   }
 

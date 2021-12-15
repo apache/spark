@@ -1258,6 +1258,30 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
     checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
   }
+
+  test("SPARK-35355: DataWritingCommand with limit sub query, sub limit can be" +
+    "improve to CollectLimitAsSubExec") {
+    withTable("t1", "t2") {
+      val t1 = sql(
+        """
+          | CREATE TABLE IF NOT EXISTS t1
+          | (id STRING) USING orc
+        """.stripMargin).collect()
+
+      val t2 = sql(
+        """
+          | CREATE TABLE IF NOT EXISTS t2
+          | (id STRING) USING orc
+        """.stripMargin).collect()
+
+      val plan = sql(
+        """
+          | INSERT INTO t1 SELECT id FROM t2 LIMIT 1
+        """.stripMargin).queryExecution.executedPlan
+
+      assert(plan.children.head.isInstanceOf[CollectLimitExec])
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
