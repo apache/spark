@@ -35,6 +35,7 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -195,7 +196,7 @@ class SQLContext(object):
         """
         self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
 
-    def getConf(self, key: str, defaultValue: Optional[str] = _NoValue) -> str:
+    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
