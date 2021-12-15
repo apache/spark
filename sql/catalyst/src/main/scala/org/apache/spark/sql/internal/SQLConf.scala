@@ -1160,7 +1160,8 @@ object SQLConf {
 
   val THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION =
     buildConf("spark.sql.thriftserver.separateDisplaySystemFunctions")
-      .doc("")
+      .doc("When true, Spark Thrift Server will return databases' system functions metadata " +
+        "only once, and Spark will change function schema as `SYSTEM`.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
