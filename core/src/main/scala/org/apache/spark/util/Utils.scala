@@ -61,6 +61,7 @@ import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
+import sun.management.ManagementFactoryHelper
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -3233,12 +3234,20 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  val isG1GarbageCollector: Boolean = {
-    ManagementFactory.getGarbageCollectorMXBeans
-      .asScala
-      .exists(g =>
-        g.getName.equalsIgnoreCase("G1 Young Generation") ||
-          g.getName.equalsIgnoreCase("G1 Old Generation"))
+  /**
+   * Get the value of -XX:G1HeapRegionSize if we are using G1 GC,
+   * otherwise just return None
+   */
+  val G1HeapRegionSize: Option[Long] = {
+    Try {
+      val diagnostic = ManagementFactoryHelper.getDiagnosticMXBean()
+      val isG1GC = diagnostic.getVMOption("UseG1GC")
+      if (isG1GC.getValue().equals("true")) {
+        Some(diagnostic.getVMOption("G1HeapRegionSize").getValue.toLong)
+      } else {
+        None
+      }
+    }.getOrElse(None)
   }
 }
 

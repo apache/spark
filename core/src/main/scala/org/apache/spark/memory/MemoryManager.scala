@@ -245,28 +245,27 @@ private[spark] abstract class MemoryManager(
    * and then divide it by a factor of safety.
    */
   val pageSizeBytes: Long = {
-    val minPageSize = 1L * 1024 * 1024   // 1MB
-    val maxPageSize = 64L * minPageSize  // 64MB
-    val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
-    // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
-    val safetyFactor = 16
-    val maxTungstenMemory: Long = tungstenMemoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
+    val default = Utils.G1HeapRegionSize match {
+      // SPARK-37593 If we are using G1GC, it's better to take the LONG_ARRAY_OFFSET
+      // into consideration so that the requested memory size is power of 2
+      // and can be divided by G1 heap region size
+      // to reduce memory waste within one G1 region
+      case Some(heapRegionSize) if tungstenMemoryMode == MemoryMode.ON_HEAP =>
+        heapRegionSize - Platform.LONG_ARRAY_OFFSET
+      case _ =>
+        val minPageSize = 1L * 1024 * 1024   // 1MB
+        val maxPageSize = 64L * minPageSize  // 64MB
+        val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
+        // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
+        val safetyFactor = 16
+        val maxTungstenMemory: Long = tungstenMemoryMode match {
+          case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
+          case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
+        }
+        val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
+        math.min(maxPageSize, math.max(minPageSize, size))
     }
-    val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
-    val default = math.min(maxPageSize, math.max(minPageSize, size))
-    val sizeAsBytes = conf.get(BUFFER_PAGESIZE).getOrElse(default)
-    // If we are using G1 GC, it's better to take the LONG_ARRAY_OFFSET into consideration
-    // so that the requested memory size is power of 2 and can be divided by G1 region size
-    // to reduce memory waste within one G1 region
-    if (Utils.isG1GarbageCollector &&
-      tungstenMemoryMode == MemoryMode.ON_HEAP &&
-      sizeAsBytes % (1024 * 1024) == 0) {
-      sizeAsBytes - Platform.LONG_ARRAY_OFFSET
-    } else {
-      sizeAsBytes
-    }
+    conf.get(BUFFER_PAGESIZE).getOrElse(default)
   }
 
   /**
