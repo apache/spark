@@ -63,15 +63,15 @@ public class RocksDB implements KVStore {
   /** DB key where type aliases are stored. */
   private static final byte[] TYPE_ALIASES_KEY = "__types__".getBytes(UTF_8);
 
-  static final private BlockBasedTableConfig tableFormatConfig = new BlockBasedTableConfig()
+  private static final BlockBasedTableConfig tableFormatConfig = new BlockBasedTableConfig()
     .setFormatVersion(5);
 
-  static final private Options dbOptions = new Options()
+  private static final Options dbOptions = new Options()
     .setCreateIfMissing(true)
     .setTableFormatConfig(tableFormatConfig)
     .setStatistics(new Statistics());
 
-  static final private WriteOptions writeOptions = new WriteOptions().setSync(true);
+  private static final WriteOptions writeOptions = new WriteOptions().setSync(true);
 
   private AtomicReference<org.rocksdb.RocksDB> _db;
 
