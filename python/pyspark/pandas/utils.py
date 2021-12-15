@@ -464,20 +464,12 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
-    if conf is None:
-        conf = dict()
+def default_session() -> SparkSession:
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        return spark
 
     builder = SparkSession.builder.appName("pandas-on-Spark")
-    for key, value in conf.items():
-        builder = builder.config(key, value)
-    # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
-    # configuration. This is needed with Spark 3.0+.
-    builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
-
-    if is_testing():
-        builder.config("spark.executor.allowSparkContext", False)
-
     return builder.getOrCreate()
 
 

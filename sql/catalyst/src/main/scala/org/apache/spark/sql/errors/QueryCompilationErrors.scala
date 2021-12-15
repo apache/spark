@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -479,20 +479,12 @@ object QueryCompilationErrors {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def replaceColumnsOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
-  }
-
-  def alterQualifiedColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN with qualified column is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
+    new AnalysisException(s"$operation is only supported with v2 tables.")
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
-  }
-
-  def alterOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
   }
 
   def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
@@ -501,24 +493,8 @@ object QueryCompilationErrors {
         s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
   }
 
-  def renameColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
-  }
-
-  def dropColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("DROP COLUMN is only supported with v2 tables.")
-  }
-
   def invalidDatabaseNameError(quoted: String): Throwable = {
     new AnalysisException(s"The database name is not valid: $quoted")
-  }
-
-  def replaceTableOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
-  }
-
-  def replaceTableAsSelectOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
   }
 
   def cannotDropViewWithDropTableError(): Throwable = {
@@ -1382,11 +1358,6 @@ object QueryCompilationErrors {
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
-    new AnalysisException(
-      s"Cannot convert bucketing with sort columns to a transform: $spec")
   }
 
   def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
