@@ -30,7 +30,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{Appender, LogEvent, Logger}
 import org.mockito.ArgumentCaptor
-import org.mockito.Mockito.{atLeast, mock, verify}
+import org.mockito.Mockito.{atLeast, mock, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -274,6 +274,9 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("file appender async close stream abruptly") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
+    when(mockAppender.getName).thenReturn("appender")
+    when(mockAppender.isStarted).thenReturn(true)
+
     val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LogEvent])
 
     // Make sure only logging errors
@@ -300,12 +303,16 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       assert(loggingEvent.getThrown.isInstanceOf[IOException])
     } finally {
       logger.setLevel(oldLogLevel)
+      logger.removeAppender(mockAppender)
     }
   }
 
   test("file appender async close stream gracefully") {
     // Test FileAppender reaction to closing InputStream using a mock logging appender
     val mockAppender = mock(classOf[Appender])
+    when(mockAppender.getName).thenReturn("appender")
+    when(mockAppender.isStarted).thenReturn(true)
+
     val loggingEventCaptor = ArgumentCaptor.forClass(classOf[LogEvent])
 
     // Make sure only logging errors
@@ -339,6 +346,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       }
     } finally {
       logger.setLevel(oldLogLevel)
+      logger.removeAppender(mockAppender)
     }
   }
 
