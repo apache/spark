@@ -21,6 +21,7 @@ import signal
 import shlex
 import shutil
 import socket
+import sys
 import platform
 import tempfile
 import time
@@ -80,6 +81,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
 
             env = dict(os.environ)
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
+            env["_PYSPARK_DRIVER_SYS_EXECUTABLE"] = sys.executable
 
             # Launch the Java gateway.
             popen_kwargs = {} if popen_kwargs is None else popen_kwargs
