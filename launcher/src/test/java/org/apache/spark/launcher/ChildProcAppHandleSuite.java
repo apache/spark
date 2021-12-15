@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
+import org.apache.logging.log4j.core.config.plugins.*;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
@@ -242,19 +243,29 @@ public class ChildProcAppHandleSuite extends BaseSuite {
    * A log4j appender used by child apps of this test. It records all messages logged through it in
    * memory so the test can check them.
    */
+  @Plugin(name="LogAppender", category="Core", elementType="appender", printObject=true)
   public static class LogAppender extends AbstractAppender {
 
     protected LogAppender(String name,
                           Filter filter,
                           Layout<? extends Serializable> layout,
-                          boolean ignoreExceptions,
-                          Property[] properties) {
-      super(name, filter, layout, ignoreExceptions, properties);
+                          boolean ignoreExceptions) {
+      super(name, filter, layout, ignoreExceptions);
     }
 
     @Override
     public void append(LogEvent event) {
       MESSAGES.add(event.getMessage().toString());
+    }
+
+
+    @PluginFactory
+    public static LogAppender createAppender(
+            @PluginAttribute("name") String name,
+            @PluginElement("Layout") Layout<? extends Serializable> layout,
+            @PluginElement("Filter") final Filter filter,
+            @PluginAttribute("otherAttribute") String otherAttribute) {
+      return new LogAppender(name, filter, layout, false);
     }
   }
 }
