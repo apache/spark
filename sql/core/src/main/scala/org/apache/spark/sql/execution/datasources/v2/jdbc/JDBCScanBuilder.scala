@@ -72,10 +72,15 @@ case class JDBCScanBuilder(
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
+  lazy val dialect = JdbcDialects.get(jdbcOptions.url)
+
+  override def supportCompletePushDown(): Boolean = {
+    dialect.supportCompletePushDownAggregates()
+  }
+
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
-    val dialect = JdbcDialects.get(jdbcOptions.url)
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate(_))
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 

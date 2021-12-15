@@ -27,6 +27,8 @@ private object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
+  override def supportCompletePushDownAggregates(): Boolean = true
+
   override def classifyException(message: String, e: Throwable): AnalysisException = {
     if (e.isInstanceOf[SQLException]) {
       // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, BinaryArithmetic, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, ScalaUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -131,7 +131,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }
-                val output = groupAttrs ++ newOutput.drop(groupAttrs.length)
+
+                val aggOutput = newOutput.drop(groupAttrs.length)
+                val output = groupAttrs ++ aggOutput
 
                 logInfo(
                   s"""
@@ -147,40 +149,57 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
-                val plan = Aggregate(
-                  output.take(groupingExpressions.length), resultExpressions, scanRelation)
+                val complexOperators = resultExpressions.flatMap { expr =>
+                  expr.collect {
+                    case arithmetic: BinaryArithmetic => arithmetic
+                    case udf: ScalaUDF => udf
+                  }
+                }
+                if (r.supportCompletePushDown() && complexOperators.isEmpty) {
+                  val outputGroupLength = resultExpressions.length - aggOutput.length
+                  val aggExpressions =
+                    resultExpressions.drop(outputGroupLength).zip(aggOutput).map {
+                      case (a, b) if a.dataType != b.dataType =>
+                        Alias(Cast(b, a.dataType), a.name)(a.exprId)
+                      case (a, b) => Alias(b, a.name)(a.exprId)
+                    }
+                  val projectExpressions = groupAttrs.take(outputGroupLength) ++ aggExpressions
+                  Project(projectExpressions, scanRelation)
+                } else {
+                  val plan = Aggregate(
+                    output.take(groupingExpressions.length), resultExpressions, scanRelation)
 
-                // scalastyle:off
-                // Change the optimized logical plan to reflect the pushed down aggregate
-                // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                // SELECT min(c1), max(c1) FROM t GROUP BY c2;
-                // The original logical plan is
-                // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                // +- RelationV2[c1#9, c2#10] ...
-                //
-                // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
-                // we have the following
-                // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
-                //
-                // We want to change it to
-                // == Optimized Logical Plan ==
-                // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-                // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
-                // scalastyle:on
-                val aggOutput = output.drop(groupAttrs.length)
-                plan.transformExpressions {
-                  case agg: AggregateExpression =>
-                    val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                    val aggFunction: aggregate.AggregateFunction =
-                      agg.aggregateFunction match {
-                        case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
-                        case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
-                        case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
-                        case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
-                        case other => other
-                      }
-                    agg.copy(aggregateFunction = aggFunction)
+                  // scalastyle:off
+                  // Change the optimized logical plan to reflect the pushed down aggregate
+                  // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                  // SELECT min(c1), max(c1) FROM t GROUP BY c2;
+                  // The original logical plan is
+                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[c1#9, c2#10] ...
+                  //
+                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
+                  // we have the following
+                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  //
+                  // We want to change it to
+                  // == Optimized Logical Plan ==
+                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  // scalastyle:on
+                  plan.transformExpressions {
+                    case agg: AggregateExpression =>
+                      val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+                      val aggFunction: aggregate.AggregateFunction =
+                        agg.aggregateFunction match {
+                          case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
+                          case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
+                          case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
+                          case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
+                          case other => other
+                        }
+                      agg.copy(aggregateFunction = aggFunction)
+                  }
                 }
               }
             case _ => aggNode

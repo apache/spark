@@ -225,6 +225,13 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Whether the database supports complete aggregation push-down.
+   * @return true if the aggregation can be pushed down to database completely, false otherwise.
+   */
+  @Since("3.3.0")
+  def supportCompletePushDownAggregates(): Boolean = false
+
+  /**
    * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
    * Some[true] : TRUNCATE TABLE causes cascading.
    * Some[false] : TRUNCATE TABLE does not cause cascading.
