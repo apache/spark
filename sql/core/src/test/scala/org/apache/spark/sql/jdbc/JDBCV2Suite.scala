@@ -23,7 +23,7 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -44,7 +44,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
-    .set("spark.sql.catalog.h2.pushDownTopN", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -168,11 +167,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .sort("salary")
       .limit(1)
+    checkSortRemoved(df1)
     checkPushedLimit(df1, Some(1), createSortValues())
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
     val df2 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary").limit(1)
+    checkSortRemoved(df2)
     checkPushedLimit(df2, Some(1), createSortValues())
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0)))
 
@@ -185,6 +186,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .orderBy($"salary".desc)
       .limit(1)
+    checkSortRemoved(df3)
     checkPushedLimit(
       df3, Some(1), createSortValues(SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0)))
@@ -194,39 +196,49 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val scan = df4.queryExecution.optimizedPlan.collectFirst {
       case s: DataSourceV2ScanRelation => s
     }.get
-    assert(scan.schema.names.sameElements(Seq("NAME", "SALARY")))
+    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkSortRemoved(df4)
     checkPushedLimit(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
     checkAnswer(df4, Seq(Row("david")))
 
     val df5 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary")
-    checkPushedLimit(df5, None, Seq.empty)
+    checkSortRemoved(df5, false)
+    checkPushedLimit(df5, None)
     checkAnswer(df5, Seq(Row(1, "cathy", 9000.00, 1200.0), Row(1, "amy", 10000.00, 1000.0)))
 
-    val df6 = spark.read.table("h2.test.employee")
-      .where($"dept" === 1).limit(1)
-    checkPushedLimit(df6, Some(1), Seq.empty)
-    checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0)))
-
-    val df7 = spark.read
+    val df6 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .orderBy("DEPT")
       .limit(1)
-    checkPushedLimit(df7)
-    checkAnswer(df7, Seq(Row(1, 19000.00)))
+    checkSortRemoved(df6, false)
+    checkPushedLimit(df6)
+    checkAnswer(df6, Seq(Row(1, 19000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
     val sub = udf { (x: String) => x.substring(0, 3) }
-    val df8 = spark.read
+    val df7 = spark.read
       .table("h2.test.employee")
       .select($"SALARY", $"BONUS", sub($"NAME").as("shortName"))
       .filter(name($"shortName"))
       .sort($"SALARY".desc)
       .limit(1)
+    checkSortRemoved(df7, false)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedLimit(df8)
-    checkAnswer(df8, Seq(Row(10000.00, 1000.0, "amy")))
+    checkPushedLimit(df7)
+    checkAnswer(df7, Seq(Row(10000.00, 1000.0, "amy")))
+  }
+
+  private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
+    val sorts = df.queryExecution.optimizedPlan.collect {
+      case s: Sort => s
+    }
+    if (removed) {
+      assert(sorts.isEmpty)
+    } else {
+      assert(sorts.nonEmpty)
+    }
   }
 
   private def createSortValues(

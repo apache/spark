@@ -275,7 +275,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       val newChild = pushDownLimit(child, limitValue)
       val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
-      globalLimit
+      globalLimit.withNewChildren(Seq(newLocalLimit))
   }
 
   private def getWrappedScan(
