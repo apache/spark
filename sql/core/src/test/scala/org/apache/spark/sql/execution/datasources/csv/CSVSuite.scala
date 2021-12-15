@@ -1782,8 +1782,8 @@ abstract class CSVSuite
         .csv(path.getAbsolutePath)
       val expected = Seq(
         (1, "John Doe"),
-        (2, "-"),
-        (3, "-"),
+        (2, ""),
+        (3, ""),
         (4, null)
       ).toDF("id", "name")
 
