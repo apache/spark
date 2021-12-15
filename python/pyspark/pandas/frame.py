@@ -372,8 +372,6 @@ class DataFrame(Frame, Generic[T]):
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
         or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
         other arguments should not be used.
     index : Index or array-like

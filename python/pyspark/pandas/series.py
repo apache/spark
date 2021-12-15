@@ -373,8 +373,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ----------
     data : array-like, dict, or scalar value, pandas Series
         Contains data stored in Series
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas Series, other arguments should not be used.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
