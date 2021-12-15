@@ -75,7 +75,7 @@ case class JDBCScanBuilder(
   lazy val dialect = JdbcDialects.get(jdbcOptions.url)
 
   override def supportCompletePushDown(): Boolean = {
-    dialect.supportCompletePushDownAggregates()
+    jdbcOptions.numPartitions.map(_ == 1).getOrElse(true)
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
