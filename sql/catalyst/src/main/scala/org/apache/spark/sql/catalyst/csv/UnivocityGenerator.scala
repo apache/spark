@@ -84,6 +84,8 @@ class UnivocityGenerator(
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
+      } else {
+        values(i) = options.nullValue
       }
       i += 1
     }

@@ -804,17 +804,6 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-37575: null values should be saved as nothing rather than " +
-    "quoted empty Strings \"\" with default settings") {
-    withTempPath { path =>
-      Seq(("Tesla", null: String, ""))
-        .toDF("make", "comment", "blank")
-        .write
-        .csv(path.getCanonicalPath)
-      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
-    }
-  }
-
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -1585,7 +1574,7 @@ abstract class CSVSuite
         (1, "John Doe"),
         (2, "-"),
         (3, "-"),
-        (4, null)
+        (4, "-")
       ).toDF("id", "name")
 
       checkAnswer(computed, expected)
