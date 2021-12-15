@@ -58,7 +58,7 @@ When invoked without the `-i`, the Spark SQL CLI will attempt to load `$HIVE_HOM
 ## Path interpretation
 
 Spark SQL CLI supports running SQL from initialization script file(`-i`) or normal SQL file(`-f`), If path url don't have a scheme component, the path will be handled as local file.
-For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-cli.sql`. User also can use Hadoop supported filesystems such as `s3://path/to/spark-sql-cli.sql` or `hdfs://nameservice/path/to/spark-sql-cli.sql`.
+For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-cli.sql`. User also can use Hadoop supported filesystems such as `s3://<mys3bucket>/path/to/spark-sql-cli.sql` or `hdfs://<namenode>:<port>/path/to/spark-sql-cli.sql`.
 
 ## Supported comment types
 
@@ -113,8 +113,7 @@ Use `;` (semicolon) to terminate commands. Notice:
    /* This is a comment contains ;
    */ SELECT 1;
    ```
-   However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two command and throw parser error (unclosed bracketed comment).
-
+   However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `extraneous input '*/'`).
 
 <table class="table">
 <tr><th>Command</th><th>Description</th></tr>
