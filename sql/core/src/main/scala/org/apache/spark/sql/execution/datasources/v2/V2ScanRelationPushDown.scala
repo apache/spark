@@ -155,14 +155,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   }
                 }
                 if (r.supportCompletePushDown() && complexOperators.isEmpty) {
-                  val outputGroupLength = resultExpressions.length - aggOutput.length
+                  val groupOutputLength = resultExpressions.length - aggOutput.length
                   val aggExpressions =
-                    resultExpressions.drop(outputGroupLength).zip(aggOutput).map {
+                    resultExpressions.drop(groupOutputLength).zip(aggOutput).map {
                       case (a, b) if a.dataType != b.dataType =>
                         Alias(Cast(b, a.dataType), a.name)(a.exprId)
                       case (a, b) => Alias(b, a.name)(a.exprId)
                     }
-                  val projectExpressions = groupAttrs.take(outputGroupLength) ++ aggExpressions
+                  val projectExpressions = groupAttrs.take(groupOutputLength) ++ aggExpressions
                   Project(projectExpressions, scanRelation)
                 } else {
                   val plan = Aggregate(
