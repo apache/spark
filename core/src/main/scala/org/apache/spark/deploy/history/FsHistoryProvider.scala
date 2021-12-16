@@ -131,6 +131,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
 
+  private val listingLock = new Object
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -464,6 +465,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     secManager.checkUIViewPermissions(user)
   }
 
+  private def withListingLock[A](f: => A): A = listingLock.synchronized {
+    f
+  }
+
   /**
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
@@ -583,11 +588,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       //
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
-      val stale = listing.view(classOf[LogInfo])
-        .index("lastProcessed")
-        .last(newLastScanTime - 1)
-        .asScala
-        .toList
+      val stale = withListingLock {
+        listing.view(classOf[LogInfo])
+          .index("lastProcessed")
+          .last(newLastScanTime - 1)
+          .asScala
+          .toList
+      }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
         .foreach { log =>
@@ -720,7 +727,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], rootPath.toString)
+        withListingLock {
+          listing.delete(classOf[LogInfo], rootPath.toString)
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -833,7 +842,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
             if (!fs.isFile(new Path(inProgressLog))) {
-              listing.delete(classOf[LogInfo], inProgressLog)
+              withListingLock {
+                listing.delete(classOf[LogInfo], inProgressLog)
+              }
             }
           } catch {
             case _: NoSuchElementException =>
