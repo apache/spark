@@ -154,16 +154,25 @@ private[spark] class Client(
         throw e
     }
 
-    // setup resources after pod creation, and refresh all resources owner references
+    // Refresh all pre-resources' owner references
     try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++
-        preKubernetesResources ++ Seq(configMap)
+      addOwnerReference(createdDriverPod, preKubernetesResources)
+      kubernetesClient.resourceList(preKubernetesResources: _*).createOrReplace()
+    } catch {
+      case NonFatal(e) =>
+        kubernetesClient.pods().delete(createdDriverPod)
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        throw e
+    }
+
+    // setup resources after pod creation, and refresh all resources' owner references
+    try {
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
     } catch {
       case NonFatal(e) =>
         kubernetesClient.pods().delete(createdDriverPod)
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         throw e
     }
 
