@@ -18,15 +18,13 @@
 package org.apache.spark.shuffle
 
 import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.JavaConverters._
-
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
-import org.apache.spark.starshuffle.{StarBlockStoreClient, StarBypassMergeSortShuffleWriter}
+import org.apache.spark.starshuffle.{StarBlockStoreClient, StarBypassMergeSortShuffleWriter, StarS3ShuffleFileManager}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, StarShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.{ExternalSorter, OpenHashSet}
@@ -116,6 +114,9 @@ class StarShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
+
+    // TODO use a better way to shutdown TransferManager in StarS3ShuffleFileManager
+    StarS3ShuffleFileManager.shutdownTransferManager()
   }
 }
 
