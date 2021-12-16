@@ -772,10 +772,10 @@ SELECT
   collect_list(b),
   array_agg(b)
 FROM VALUES
-  (1,4),(2,3),(1,1),(1,2) AS v(a,b)
+  (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a
 -- !query schema
 struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
 -- !query output
-1	[4,1,2]	[4,1,2]
-2	[3]	[3]
+1	[4,4]	[4,4]
+2	[3,4]	[3,4]
