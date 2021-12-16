@@ -138,7 +138,7 @@ class SparkSession(SparkConversionMixin):
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
     """
 
-    class Builder(object):
+    class Builder:
         """Builder for :class:`SparkSession`."""
 
         _lock = RLock()
@@ -669,7 +669,7 @@ class SparkSession(SparkConversionMixin):
                 )
                 return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
-                return SparkSession.builder.getOrCreate()
+                return SparkSession._getActiveSessionOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
             if cast(str, conf.get("spark.sql.catalogImplementation", "")).lower() == "hive":
                 warnings.warn(
@@ -677,7 +677,18 @@ class SparkSession(SparkConversionMixin):
                     "please make sure you build spark with hive"
                 )
 
-        return SparkSession.builder.getOrCreate()
+        return SparkSession._getActiveSessionOrCreate()
+
+    @staticmethod
+    def _getActiveSessionOrCreate() -> "SparkSession":
+        """
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder,
+        or if there is no existing one, creates a new one based on the options set in the builder.
+        """
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
+        return spark
 
     @overload
     def createDataFrame(

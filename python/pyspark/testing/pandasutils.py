@@ -247,7 +247,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             return obj
 
 
-class TestUtils(object):
+class TestUtils:
     @contextmanager
     def temp_dir(self):
         tmp = tempfile.mkdtemp()

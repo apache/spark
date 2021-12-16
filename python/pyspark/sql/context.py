@@ -35,6 +35,7 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -59,7 +60,7 @@ __all__ = ["SQLContext", "HiveContext"]
 
 
 # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-class SQLContext(object):
+class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
@@ -118,7 +119,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
-            sparkSession = SparkSession.builder.getOrCreate()
+            sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
@@ -195,7 +196,7 @@ class SQLContext(object):
         """
         self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
 
-    def getConf(self, key: str, defaultValue: Optional[str] = _NoValue) -> str:
+    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return

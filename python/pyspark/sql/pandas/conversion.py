@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 
-class PandasConversionMixin(object):
+class PandasConversionMixin:
     """
     Min-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
     can use this class.
@@ -361,7 +361,7 @@ class PandasConversionMixin(object):
         return [batches[i] for i in batch_order]
 
 
-class SparkConversionMixin(object):
+class SparkConversionMixin:
     """
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.

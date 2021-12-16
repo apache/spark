@@ -66,7 +66,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return FPGrowthModel(wrapper)
 
 
-class FPGrowth(object):
+class FPGrowth:
     """
     A Parallel FP-growth algorithm to mine frequent itemsets.
 
@@ -129,7 +129,7 @@ class PrefixSpanModel(JavaModelWrapper):
         return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
 
-class PrefixSpan(object):
+class PrefixSpan:
     """
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in Jian Pei et al (2001) [1]_

@@ -36,7 +36,7 @@ def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...])
     return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
-class Window(object):
+class Window:
     """
     Utility functions for defining window in DataFrames.
 
@@ -220,7 +220,7 @@ class Window(object):
         return WindowSpec(jspec)
 
 
-class WindowSpec(object):
+class WindowSpec:
     """
     A window specification that defines the partitioning, ordering,
     and frame boundaries.

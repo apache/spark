@@ -73,7 +73,7 @@ def _create_udf(
     return udf_obj._wrapped()
 
 
-class UserDefinedFunction(object):
+class UserDefinedFunction:
     """
     User defined function in Python
 
@@ -217,7 +217,7 @@ class UserDefinedFunction(object):
     def _create_judf(self, func: Callable[..., Any]) -> JavaObject:
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
         wrapped_func = _wrap_function(sc, func, self.returnType)
@@ -303,7 +303,7 @@ class UserDefinedFunction(object):
         return self
 
 
-class UDFRegistration(object):
+class UDFRegistration:
     """
     Wrapper for user-defined function registration. This instance can be accessed by
     :attr:`spark.udf` or :attr:`sqlContext.udf`.
