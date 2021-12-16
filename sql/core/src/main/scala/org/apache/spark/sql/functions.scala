@@ -1896,11 +1896,11 @@ object functions {
   def factorial(e: Column): Column = withExpr { Factorial(e.expr) }
 
   /**
-//   * Computes the floor of the given value of `e` to `scale` decimal places.
-//   *
-//   * @group math_funcs
-//   * @since 3.3.0
-//   */
+   * Computes the floor of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
   def floor(e: Column, scale: Column): Column = withExpr { Floor(e.expr, scale.expr) }
 
   /**

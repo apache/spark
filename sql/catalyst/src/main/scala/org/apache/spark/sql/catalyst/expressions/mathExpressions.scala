@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -249,9 +250,9 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   """,
   since = "1.4.0",
   group = "math_funcs")
- case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
-    case dt@DecimalType.Fixed(_, 0) => dt
+    case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision - scale + 1, 0)
     case _ => LongType
@@ -275,6 +276,7 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
+
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
@@ -285,6 +287,14 @@ object Ceil {
     } else {
       RoundCeil(child, scale)
     }
+  }
+}
+
+object CeilExpressionBuilder extends ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression = {
+    if (expressions.length == 1) Ceil(expressions.head)
+    else if (expressions.length == 2) Ceil(expressions(0), expressions(1))
+    else throw new AnalysisException("Function ceil cannot take more than 2 parameters")
   }
 }
 
@@ -474,11 +484,11 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
       > SELECT _FUNC_(5);
        5
   """,
-  since = "3.3.0",
+  since = "1.4.0",
   group = "math_funcs")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
-    case dt@DecimalType.Fixed(_, 0) => dt
+    case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision - scale + 1, 0)
     case _ => LongType
@@ -513,6 +523,14 @@ object Floor {
     } else {
       RoundFloor(child, scale)
     }
+  }
+}
+
+object FloorExpressionBuilder extends ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression = {
+    if (expressions.length == 1) Floor(expressions.head)
+    else if (expressions.length == 2) Floor(expressions(0), expressions(1))
+    else throw new AnalysisException("Function floor cannot take more than 2 parameters")
   }
 }
 
