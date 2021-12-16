@@ -248,7 +248,7 @@ private[spark] abstract class MemoryManager(
    * into consideration so that the requested memory size is power of 2
    * and can be divided by G1 heap region size to reduce memory waste within one G1 region.
    */
-  lazy val defaultPageSizeBytes = Utils.G1HeapRegionSize match {
+  private lazy val defaultPageSizeBytes = Utils.G1HeapRegionSize match {
     case Some(heapRegionSize) if tungstenMemoryMode == MemoryMode.ON_HEAP =>
       heapRegionSize - Platform.LONG_ARRAY_OFFSET
     case _ =>
