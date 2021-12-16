@@ -451,8 +451,8 @@ case class Lower(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Lower = copy(child = newChild)
 }
 
-/** A base trait for functions that compare two strings, returning a boolean. */
-abstract class StringPredicate extends BinaryExpression
+/** A base trait for functions that compare two strings or binaries, returning a boolean. */
+abstract class BinaryPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: Array[Byte], r: Array[Byte]): Boolean
@@ -505,7 +505,7 @@ abstract class StringPredicate extends BinaryExpression
   since = "3.3.0",
   group = "string_funcs"
 )
-case class Contains(left: Expression, right: Expression) extends StringPredicate {
+case class Contains(left: Expression, right: Expression) extends BinaryPredicate {
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.contains(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
@@ -538,7 +538,7 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   since = "3.3.0",
   group = "string_funcs"
 )
-case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+case class StartsWith(left: Expression, right: Expression) extends BinaryPredicate {
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.startsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
@@ -571,7 +571,7 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   since = "3.3.0",
   group = "string_funcs"
 )
-case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+case class EndsWith(left: Expression, right: Expression) extends BinaryPredicate {
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.endsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
