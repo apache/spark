@@ -315,7 +315,7 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
-      The default mode is ECB.
+      The default mode is GCM.
   """,
   arguments = """
     Arguments:
@@ -359,7 +359,7 @@ case class AesEncrypt(
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
-    this(input, key, Literal("ECB"))
+    this(input, key, Literal("GCM"))
 
   def exprsReplaced: Seq[Expression] = Seq(input, key, mode, padding)
   protected def withNewChildInternal(newChild: Expression): AesEncrypt =
@@ -375,9 +375,9 @@ case class AesEncrypt(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrepted value of `expr` using AES in `mode` with `padding`.
+    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
-      The default mode is ECB.
+      The default mode is GCM.
   """,
   arguments = """
     Arguments:
@@ -423,7 +423,7 @@ case class AesDecrypt(
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
-    this(input, key, Literal("ECB"))
+    this(input, key, Literal("GCM"))
 
   def exprsReplaced: Seq[Expression] = Seq(input, key)
   protected def withNewChildInternal(newChild: Expression): AesDecrypt =
