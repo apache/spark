@@ -27,7 +27,6 @@ import scala.util.Try
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
@@ -298,9 +297,8 @@ private[hive] class IsolatedClientLoader(
 
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = synchronized {
-    val warehouseDir = Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname))
     if (!isolationOn) {
-      return new HiveClientImpl(version, warehouseDir, sparkConf, hadoopConf, config,
+      return new HiveClientImpl(version, sparkConf, hadoopConf, config,
         baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
@@ -312,7 +310,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, warehouseDir, sparkConf, hadoopConf, config, classLoader, this)
+        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>

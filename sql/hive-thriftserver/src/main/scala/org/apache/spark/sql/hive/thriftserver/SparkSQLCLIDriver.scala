@@ -92,6 +92,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val sparkConf = new SparkConf(loadDefaults = true)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+    // Resolve warehouse based on sparkConf and hadoopConf which contains no hive defaults
+    val warehousePath = SharedState.resolveWarehousePath(sparkConf, hadoopConf)
+    val qualified = SharedState.qualifyWarehousePath(hadoopConf, warehousePath)
+    SharedState.setWarehousePathConf(sparkConf, hadoopConf, qualified)
 
     val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
 
@@ -134,9 +138,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
-    val warehousePath = SharedState.resolveWarehousePath(sparkConf, conf)
-    val qualified = SharedState.qualifyWarehousePath(conf, warehousePath)
-    SharedState.setWarehousePathConf(sparkConf, conf, qualified)
     SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
@@ -158,6 +159,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     val cli = new SparkSQLCLIDriver
+    cli.init(sparkConf)
     cli.setHiveVariables(oproc.getHiveVariables)
 
     // In SparkSQL CLI, we may want to use jars augmented by hiveconf
@@ -322,16 +324,17 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val conf: Configuration =
     if (sessionState != null) sessionState.getConf else new Configuration()
 
-  // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
-  // because the Hive unit tests do not go through the main() code path.
-  if (!isRemoteMode) {
-    SparkSQLEnv.init()
-    if (sessionState.getIsSilent) {
-      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+  private def init(conf: SparkConf): Unit = {
+    // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
+    // because the Hive unit tests do not go through the main() code path.
+    if (!isRemoteMode) {
+      SparkSQLEnv.init(conf)
+      if (sessionState.getIsSilent) {
+        SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+      }
+    } else { // Hive 1.2 + not supported in CLI
+      throw QueryExecutionErrors.remoteOperationsUnsupportedError()
     }
-  } else {
-    // Hive 1.2 + not supported in CLI
-    throw QueryExecutionErrors.remoteOperationsUnsupportedError()
   }
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
