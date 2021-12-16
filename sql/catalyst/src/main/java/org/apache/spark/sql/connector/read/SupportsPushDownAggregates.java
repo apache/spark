@@ -51,7 +51,7 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    *
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
-  boolean supportCompletePushDown();
+  default boolean supportCompletePushDown() { return false; }
 
   /**
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should

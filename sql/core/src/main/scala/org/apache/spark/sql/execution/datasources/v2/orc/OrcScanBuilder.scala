@@ -73,8 +73,6 @@ case class OrcScanBuilder(
     }
   }
 
-  override def supportCompletePushDown(): Boolean = false
-
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.orcAggregatePushDown) {
       return false
