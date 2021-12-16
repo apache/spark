@@ -1699,9 +1699,11 @@ class SessionCatalog(
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.
     functions.map {
-      case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
-      case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
-      case f => (f, "USER")
+      case f if FunctionRegistry.functionSet.contains(f) =>
+        (f, FunctionRegistry.builtinFunctionScope)
+      case f if TableFunctionRegistry.functionSet.contains(f) =>
+        (f, FunctionRegistry.builtinFunctionScope)
+      case f => (f, FunctionRegistry.userFunctionScope)
     }.distinct
   }
 

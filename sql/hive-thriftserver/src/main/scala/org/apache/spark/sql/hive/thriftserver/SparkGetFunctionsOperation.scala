@@ -86,14 +86,15 @@ private[hive] class SparkGetFunctionsOperation(
       val separateDisplaySystemFunctions =
         sqlContext.conf.getConf(SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION)
       var matchedBuiltInFunctions = if (separateDisplaySystemFunctions && functionPattern == "*"
-        && matchingDbs.nonEmpty) {
+          && matchingDbs.nonEmpty) {
         FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet
       } else {
         Set.empty[FunctionIdentifier]
       }
       matchingDbs.foreach { db =>
         catalog.listFunctions(db, functionPattern).foreach {
-          case (funcIdentifier, "SYSTEM") if separateDisplaySystemFunctions =>
+          case (funcIdentifier, FunctionRegistry.`builtinFunctionScope`)
+            if separateDisplaySystemFunctions =>
             if (!matchedBuiltInFunctions.contains(funcIdentifier)) {
               matchedBuiltInFunctions += funcIdentifier
             }
@@ -113,7 +114,7 @@ private[hive] class SparkGetFunctionsOperation(
         val info = catalog.lookupFunctionInfo(functionIdentifier)
         val rowData = Array[AnyRef](
           DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-          "SYSTEM", // FUNCTION_SCHEM
+          FunctionRegistry.builtinFunctionScope, // FUNCTION_SCHEM
           functionIdentifier.funcName, // FUNCTION_NAME
           s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
           DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE

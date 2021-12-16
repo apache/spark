@@ -242,15 +242,21 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"))
 
       statement.execute(s"SET ${SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION.key}=true")
-      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"), "SYSTEM")
-      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"), "SYSTEM")
-      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"), "SYSTEM")
-      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty, "SYSTEM")
-      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"), "SYSTEM")
+      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"),
+        FunctionRegistry.builtinFunctionScope)
+      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"),
+        FunctionRegistry.builtinFunctionScope)
+      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"),
+        FunctionRegistry.builtinFunctionScope)
+      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty,
+        FunctionRegistry.builtinFunctionScope)
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"),
+        FunctionRegistry.builtinFunctionScope)
       checkResult(metaData.getFunctions(null, "default", "shift*"),
-        Seq("shiftleft", "shiftright", "shiftrightunsigned"), "SYSTEM")
-      checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"), "SYSTEM")
-
+        Seq("shiftleft", "shiftright", "shiftrightunsigned"),
+        FunctionRegistry.builtinFunctionScope)
+      checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"),
+        FunctionRegistry.builtinFunctionScope)
     }
   }
 
