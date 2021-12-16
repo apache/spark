@@ -907,7 +907,7 @@ class Column:
         elif isinstance(dataType, DataType):
             from pyspark.sql import SparkSession
 
-            spark = SparkSession.builder.getOrCreate()
+            spark = SparkSession._getActiveSessionOrCreate()
             jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:

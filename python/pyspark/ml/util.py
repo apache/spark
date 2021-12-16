@@ -84,7 +84,7 @@ class BaseReadWrite:
         Returns the user-specified Spark Session or the default.
         """
         if self._sparkSession is None:
-            self._sparkSession = SparkSession.builder.getOrCreate()
+            self._sparkSession = SparkSession._getActiveSessionOrCreate()
         return self._sparkSession
 
     @property

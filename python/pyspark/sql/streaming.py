@@ -372,7 +372,7 @@ class DataStreamReader(OptionUtils):
         """
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
@@ -1479,7 +1479,7 @@ def _test() -> None:
 
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except Py4JError:  # noqa: F821
         spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
 

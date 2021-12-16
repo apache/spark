@@ -119,7 +119,7 @@ class SQLContext:
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
-            sparkSession = SparkSession.builder.getOrCreate()
+            sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
