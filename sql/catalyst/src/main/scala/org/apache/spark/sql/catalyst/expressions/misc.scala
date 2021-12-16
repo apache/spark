@@ -328,8 +328,10 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   """,
   examples = """
     Examples:
-      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
-       4Hv0UKCx6nfUeAoPZo1z+w==
+      > SELECT hex(_FUNC_('Spark', '0000111122223333'));
+       83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94
+      > SELECT hex(_FUNC_('Spark SQL', '0000111122223333', 'GCM'));
+       6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210
       > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
        3lmwu+Mw0H3fi5NDvcu9lg==
   """,
@@ -390,11 +392,11 @@ case class AesEncrypt(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
+      > SELECT _FUNC_(unhex('83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94'), '0000111122223333');
        Spark
-      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+      > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
        Spark SQL
-      > SELECT _FUNC_(unbase64('2sXi+jZd/ws+qFC1Tnzvvde5lz+8Haryz9HHBiyrVohXUG7LHA=='), '1234567890abcdef', 'GCM');
+      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
        Spark SQL
   """,
   since = "3.3.0",
