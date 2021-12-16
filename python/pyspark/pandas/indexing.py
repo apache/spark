@@ -26,7 +26,7 @@ from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import BooleanType, LongType
+from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
@@ -1114,7 +1114,11 @@ class LocIndexer(LocIndexerLike):
             if start is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, start, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], start),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1124,7 +1128,11 @@ class LocIndexer(LocIndexerLike):
             if stop is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, stop, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], stop),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
