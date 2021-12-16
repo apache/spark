@@ -84,7 +84,7 @@ private[hive] class SparkGetFunctionsOperation(
 
     try {
       val separateDisplaySystemFunctions =
-        sqlContext.conf.getConf(SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION)
+        sqlContext.conf.getConf(SQLConf.THRIFTSERVER_UNIQUE_SYSTEM_FUNCTIONS)
       var matchedBuiltInFunctions = if (separateDisplaySystemFunctions && functionPattern == "*"
           && matchingDbs.nonEmpty) {
         FunctionRegistry.functionSet ++ TableFunctionRegistry.functionSet

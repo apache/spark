@@ -229,7 +229,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     }
 
     withJdbcStatement() { statement =>
-      statement.execute(s"SET ${SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION.key}=false")
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_UNIQUE_SYSTEM_FUNCTIONS.key}=false")
       val metaData = statement.getConnection.getMetaData
       // Hive does not have an overlay function, we use overlay to test.
       checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
@@ -241,7 +241,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         Seq("shiftleft", "shiftright", "shiftrightunsigned"))
       checkResult(metaData.getFunctions(null, "default", "upPer"), Seq("upper"))
 
-      statement.execute(s"SET ${SQLConf.THRIFTSERVER_SEPARATE_DISPLAY_SYSTEM_FUNCTION.key}=true")
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_UNIQUE_SYSTEM_FUNCTIONS.key}=true")
       checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"),
         FunctionRegistry.builtinFunctionScope)
       checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"),
