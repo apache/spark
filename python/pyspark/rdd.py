@@ -70,7 +70,7 @@ from pyspark.util import fail_on_stopiteration, _parse_memory
 __all__ = ["RDD"]
 
 
-class PythonEvalType(object):
+class PythonEvalType:
     """
     Evaluation type of python rdd.
 
@@ -189,7 +189,7 @@ def _load_from_socket(sock_info, serializer):
 
 
 def _local_iterator_from_socket(sock_info, serializer):
-    class PyLocalIterable(object):
+    class PyLocalIterable:
         """Create a synchronous local iterable over a socket"""
 
         def __init__(self, _sock_info, _serializer):
@@ -235,7 +235,7 @@ def _local_iterator_from_socket(sock_info, serializer):
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-class Partitioner(object):
+class Partitioner:
     def __init__(self, numPartitions, partitionFunc):
         self.numPartitions = numPartitions
         self.partitionFunc = partitionFunc
@@ -251,7 +251,7 @@ class Partitioner(object):
         return self.partitionFunc(k) % self.numPartitions
 
 
-class RDD(object):
+class RDD:
 
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
@@ -2947,7 +2947,7 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     )
 
 
-class RDDBarrier(object):
+class RDDBarrier:
 
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.

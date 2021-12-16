@@ -176,7 +176,7 @@ def _reverse_op(
     return _
 
 
-class Column(object):
+class Column:
 
     """
     A column in a DataFrame.

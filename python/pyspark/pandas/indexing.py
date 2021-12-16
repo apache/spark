@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series
 
 
-class IndexerLike(object):
+class IndexerLike:
     def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series

@@ -34,7 +34,7 @@ from pyspark.pandas.typedef import as_spark_type
 __all__ = ["PythonModelWrapper", "load_model"]
 
 
-class PythonModelWrapper(object):
+class PythonModelWrapper:
     """
     A wrapper around MLflow's Python object model.
 

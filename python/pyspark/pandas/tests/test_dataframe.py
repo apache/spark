@@ -1478,14 +1478,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
 
-        if sys.version_info >= (3, 6):
-            # flaky in Python 3.5.
-            self.assert_eq(
-                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-            )
-            self.assert_eq(
-                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-            )
+        self.assert_eq(
+            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+        )
+        self.assert_eq(
+            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+        )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])

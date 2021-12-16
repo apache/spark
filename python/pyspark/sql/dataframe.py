@@ -3284,7 +3284,7 @@ def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     return sc._jvm.PythonUtils.toScalaMap(jm)  # type: ignore[attr-defined]
 
 
-class DataFrameNaFunctions(object):
+class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
 
     .. versionadded:: 1.4
@@ -3356,7 +3356,7 @@ class DataFrameNaFunctions(object):
     replace.__doc__ = DataFrame.replace.__doc__
 
 
-class DataFrameStatFunctions(object):
+class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 
     .. versionadded:: 1.4

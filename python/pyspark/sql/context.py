@@ -60,7 +60,7 @@ __all__ = ["SQLContext", "HiveContext"]
 
 
 # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-class SQLContext(object):
+class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class

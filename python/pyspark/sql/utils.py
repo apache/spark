@@ -258,7 +258,7 @@ def require_test_compiled() -> None:
         )
 
 
-class ForeachBatchFunction(object):
+class ForeachBatchFunction:
     """
     This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
     the user-defined 'foreachBatch' function such that it can be called from the JVM when

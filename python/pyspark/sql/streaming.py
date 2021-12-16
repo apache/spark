@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
 
-class StreamingQuery(object):
+class StreamingQuery:
     """
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
@@ -211,7 +211,7 @@ class StreamingQuery(object):
             return None
 
 
-class StreamingQueryManager(object):
+class StreamingQueryManager:
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
     .. versionadded:: 2.0.0
@@ -840,7 +840,7 @@ class DataStreamReader(OptionUtils):
             raise TypeError("tableName can be only a single string")
 
 
-class DataStreamWriter(object):
+class DataStreamWriter:
     """
     Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
     storage systems (e.g. file systems, key-value stores, etc).

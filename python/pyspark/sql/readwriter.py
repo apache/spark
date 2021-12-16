@@ -37,7 +37,7 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils(object):
+class OptionUtils:
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -1349,7 +1349,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
-class DataFrameWriterV2(object):
+class DataFrameWriterV2:
     """
     Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
     to external storage using the v2 API.

@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-class PandasOnSparkFrameMethods(object):
+class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
@@ -750,7 +750,7 @@ class PandasOnSparkFrameMethods(object):
                 return DataFrame(internal)
 
 
-class PandasOnSparkSeriesMethods(object):
+class PandasOnSparkSeriesMethods:
     """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):

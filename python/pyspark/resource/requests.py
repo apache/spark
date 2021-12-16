@@ -21,7 +21,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark.util import _parse_memory  # type: ignore[attr-defined]
 
 
-class ExecutorResourceRequest(object):
+class ExecutorResourceRequest:
     """
     An Executor resource request. This is used in conjunction with the ResourceProfile to
     programmatically specify the resources needed for an RDD that will be applied at the
@@ -94,7 +94,7 @@ class ExecutorResourceRequest(object):
         return self._vendor
 
 
-class ExecutorResourceRequests(object):
+class ExecutorResourceRequests:
 
     """
     A set of Executor resource requests. This is used in conjunction with the
@@ -230,7 +230,7 @@ class ExecutorResourceRequests(object):
             return self._executor_resources
 
 
-class TaskResourceRequest(object):
+class TaskResourceRequest:
     """
     A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
@@ -267,7 +267,7 @@ class TaskResourceRequest(object):
         return self._amount
 
 
-class TaskResourceRequests(object):
+class TaskResourceRequests:
 
     """
     A set of task resource requests. This is used in conjunction with the

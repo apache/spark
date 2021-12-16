@@ -27,7 +27,7 @@ from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
-class JavaWrapper(object):
+class JavaWrapper:
     """
     Wrapper class for a Java companion object
     """
