@@ -209,11 +209,5 @@ FROM VALUES
  (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col);
 
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
-SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, 2L), (2, 3L), (2, 4L) AS tab(a, b);
-SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (2, 3L), (2, 4L) AS tab(a, b);
-SELECT regr_count(b, a) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS tab(a, b);
-SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
-SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
-SELECT a, regr_count(b, a) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;
 SELECT regr_count(y, x) FROM testRegression;
 SELECT k, count(*), regr_count(y, x) FROM testRegression group by k;
