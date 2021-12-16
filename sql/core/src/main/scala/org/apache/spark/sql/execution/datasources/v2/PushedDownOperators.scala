@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 
 /**
@@ -26,7 +25,4 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 case class PushedDownOperators(
     aggregation: Option[Aggregation],
     sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    sortValues: Seq[SortOrder]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
-}
+    limit: Option[Int])

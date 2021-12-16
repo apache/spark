@@ -27,7 +27,6 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -302,8 +301,7 @@ private[sql] case class JDBCRelation(
       filters: Array[Filter],
       groupByColumns: Option[Array[String]],
       tableSample: Option[TableSampleInfo],
-      limit: Int,
-      sortValues: Array[SortOrder]): RDD[Row] = {
+      limit: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
@@ -315,8 +313,7 @@ private[sql] case class JDBCRelation(
       Some(finalSchema),
       groupByColumns,
       tableSample,
-      limit,
-      sortValues).asInstanceOf[RDD[Row]]
+      limit).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

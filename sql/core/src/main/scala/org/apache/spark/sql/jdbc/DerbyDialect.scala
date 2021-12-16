@@ -58,7 +58,7 @@ private object DerbyDialect extends JdbcDialect {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 
-  override def getLimitClause(limit: Integer): String = {
-    ""
-  }
+  // ToDo: use fetch first n rows only for limit, e.g.
+  //  select * from employee fetch first 10 rows only;
+  override def supportsLimit(): Boolean = false
 }

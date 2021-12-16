@@ -25,7 +25,6 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -152,14 +151,12 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
-   * @param sample - The pushed down tableSample.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
-   * @param sortValues - The sort values cooperates with limit to realize top N.
+   * @param sample - The pushed down tableSample.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
-  // scalastyle:off argcount
   def scanTable(
       sc: SparkContext,
       schema: StructType,
@@ -170,8 +167,7 @@ object JDBCRDD extends Logging {
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
       sample: Option[TableSampleInfo] = None,
-      limit: Int = 0,
-      sortValues: Array[SortOrder] = Array.empty[SortOrder]): RDD[InternalRow] = {
+      limit: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -191,10 +187,8 @@ object JDBCRDD extends Logging {
       options,
       groupByColumns,
       sample,
-      limit,
-      sortValues)
+      limit)
   }
-  // scalastyle:on argcount
 }
 
 /**
@@ -213,8 +207,7 @@ private[jdbc] class JDBCRDD(
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
-    limit: Int,
-    sortValues: Array[SortOrder])
+    limit: Int)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -257,14 +250,6 @@ private[jdbc] class JDBCRDD(
     if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
       // The GROUP BY columns should already be quoted by the caller side.
       s"GROUP BY ${groupByColumns.get.mkString(", ")}"
-    } else {
-      ""
-    }
-  }
-
-  private def getOrderByClause: String = {
-    if (sortValues.nonEmpty) {
-      s" ORDER BY ${sortValues.map(_.describe()).mkString(", ")}"
     } else {
       ""
     }
@@ -354,7 +339,7 @@ private[jdbc] class JDBCRDD(
     val myLimitClause: String = dialect.getLimitClause(limit)
 
     val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
-      s" $myWhereClause $getGroupByClause $getOrderByClause $myLimitClause"
+      s" $myWhereClause $getGroupByClause $myLimitClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
