@@ -257,11 +257,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case s @ Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
       if filter.isEmpty =>
       val orders = DataSourceStrategy.translateSortOrders(order)
-      val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
-      if (topNPushed) {
-        sHolder.pushedLimit = Some(limit)
-        sHolder.sortValues = orders
-        operation
+      if (orders.length == order.length) {
+        val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
+        if (topNPushed) {
+          sHolder.pushedLimit = Some(limit)
+          sHolder.sortValues = orders
+          operation
+        } else {
+          s
+        }
       } else {
         s
       }

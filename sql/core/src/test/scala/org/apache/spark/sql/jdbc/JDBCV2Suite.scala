@@ -227,6 +227,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // LIMIT is pushed down only if all the filters are pushed down
     checkPushedLimit(df7)
     checkAnswer(df7, Seq(Row(10000.00, 1000.0, "amy")))
+
+    val df8 = spark.read
+      .table("h2.test.employee")
+      .sort(sub($"NAME"))
+      .limit(1)
+    checkPushedLimit(df8)
+    checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0)))
   }
 
   private def createSortValues(
