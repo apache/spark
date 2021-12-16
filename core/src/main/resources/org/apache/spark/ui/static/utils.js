@@ -205,7 +205,7 @@ function createRESTEndPointForExecutorsPage(appId) {
   return uiRoot + "/api/v1/applications/" + appId + "/allexecutors";
 }
 
-function createRESTEndPointForExecutorsPeakMetricsSummariesPage(appId) {
+function createRESTEndPointForExecutorsSummaries(appId) {
   var words = getBaseURI().split('/');
   var ind = words.indexOf("proxy");
   var newBaseURI;

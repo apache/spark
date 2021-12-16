@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createRESTEndPointForExecutorsPeakMetricsSummariesPage, */
+/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createRESTEndPointForExecutorsSummaries, */
 /* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
 /* global jQuery, setDataTableDefaults */
 
@@ -942,7 +942,7 @@ $(document).ready(function () {
     });
 
     var quantiles = "0,0.25,0.5,0.75,1.0";
-    $.getJSON(createRESTEndPointForExecutorsPeakMetricsSummariesPage(appId) + "?activeOnly=true&quantiles=" + quantiles,
+    $.getJSON(createRESTEndPointForExecutorsSummaries(appId) + "?activeOnly=true&quantiles=" + quantiles,
       function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
         var taskMetricKeys = Object.keys(executorMetricsResponse);
         taskMetricKeys.forEach(function (columnKey) {
