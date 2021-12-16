@@ -22,7 +22,6 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.util.Utils
 
 private[spark] class KubernetesExecutorBuilder {
 
@@ -43,7 +42,7 @@ private[spark] class KubernetesExecutorBuilder {
 
     val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
       .map { className =>
-        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+        KubernetesUtils.loadFeatureStep(conf, className)
       }
 
     val features = Seq(

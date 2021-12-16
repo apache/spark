@@ -66,6 +66,40 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
   }
 
+  test("configure a custom test step with base config") {
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone()
+      .set(userFeatureStepsConf.key,
+          "org.apache.spark.deploy.k8s.TestStepWithConf")
+      .set(templateFileConf.key, "template-file.yaml")
+      .set("test-features-key", "test-features-value")
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+    val metadata = pod.pod.getMetadata
+    assert(metadata.getAnnotations.containsKey("test-user-feature-annotation"))
+  }
+
+  test("configure a custom test step with driver or executor config") {
+    val client = mockKubernetesClient()
+    val (featureSteps, annotationKey) = this.getClass.getSimpleName match {
+      case "KubernetesDriverBuilderSuite" =>
+        ("org.apache.spark.deploy.k8s.TestStepWithDrvConf",
+          "test-drv-user-feature-annotation")
+      case "KubernetesExecutorBuilderSuite" =>
+        ("org.apache.spark.deploy.k8s.TestStepWithExecConf",
+          "test-exec-user-feature-annotation")
+    }
+    val sparkConf = baseConf.clone()
+      .set(templateFileConf.key, "template-file.yaml")
+      .set(userFeatureStepsConf.key, featureSteps)
+      .set("test-features-key", "test-features-value")
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+    val metadata = pod.pod.getMetadata
+    assert(metadata.getAnnotations.containsKey(annotationKey))
+    assert(metadata.getAnnotations.get(annotationKey) === "test-features-value")
+  }
+
   test("complain about misconfigured pod template") {
     val client = mockKubernetesClient(
       new PodBuilder()
@@ -247,5 +281,53 @@ class TestStepTwo extends KubernetesFeatureConfigStep {
       .addToVolumeMounts(localDirVolumeMounts: _*)
       .build()
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
+  }
+}
+
+/**
+ * A test user feature step.
+ */
+class TestStepWithConf(conf: KubernetesConf) extends KubernetesFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+        .addToAnnotations("test-user-feature-annotation", conf.get("test-features-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
+  }
+}
+
+/**
+ * A test driver user feature step.
+ */
+class TestStepWithDrvConf(conf: KubernetesDriverConf) extends KubernetesFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+      .addToAnnotations("test-drv-user-feature-annotation", conf.get("test-features-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
+  }
+}
+
+/**
+ * A test executor user feature step.
+ */
+class TestStepWithExecConf(conf: KubernetesExecutorConf) extends KubernetesFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+      .addToAnnotations("test-exec-user-feature-annotation", conf.get("test-features-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
   }
 }
