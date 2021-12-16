@@ -4520,7 +4520,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             The value(s) to be combined with the `Series`.
         func : function
             Function that takes two scalars as inputs and returns an element.
-            Note that type hint for return type is required.
+            Note that type hint for return type is strongly recommended.
         fill_value : scalar, optional
             The value to assume when an index is missing from
             one Series or the other. The default specifies to use the
@@ -4576,12 +4576,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: float64
         >>> reset_option("compute.ops_on_diff_frames")
         """
-        if not isinstance(other, Series) and not np.isscalar(other):
+        if not isinstance(other, Series) and not pd.api.types.is_scalar(other):
             raise TypeError("unsupported type: %s" % type(other))
 
-        assert callable(func), "argument func must be a callable function."
+        if not callable(func):
+            raise TypeError("%s object is not callable" % type(func).__name__)
 
-        if np.isscalar(other):
+        if pd.api.types.is_scalar(other):
             tmp_other_col = verify_temp_column_name(self._internal.spark_frame, "__tmp_other_col__")
             combined = self.to_frame()
             combined[tmp_other_col] = other
@@ -4645,11 +4646,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         this[tmp_col], that[tmp_col] = True, True
 
         combined = combine_frames(this, that)
+        this_col_without_tmp = ("this",) + this_col
+        that_col_without_tmp = ("that",) + that_col
 
-        combined.loc[combined[("this", tmp_col)].isnull(), ("this",) + this_col] = fill_value
-        combined.loc[combined[("that", tmp_col)].isnull(), ("that",) + that_col] = fill_value
+        combined.loc[combined[("this", tmp_col)].isnull(), this_col_without_tmp] = fill_value
+        combined.loc[combined[("that", tmp_col)].isnull(), that_col_without_tmp] = fill_value
 
-        return combined[[("this",) + this_col, ("that",) + that_col]]
+        return combined[[this_col_without_tmp, that_col_without_tmp]]
 
     def update(self, other: "Series") -> None:
         """
