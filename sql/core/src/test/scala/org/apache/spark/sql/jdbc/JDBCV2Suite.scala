@@ -438,7 +438,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("scan with aggregate push-down: aggregate + number") {
     val df = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
-    checkAggregateRemoved(df, false)
+    checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
@@ -619,7 +619,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = spark.table("h2.test.employee")
     val decrease = udf { (x: Double, y: Double) => x - y }
     val query = df.select(decrease(sum($"SALARY"), sum($"BONUS")).as("value"))
-    checkAggregateRemoved(query, false)
+    checkAggregateRemoved(query)
     query.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =

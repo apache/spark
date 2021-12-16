@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, BinaryArithmetic, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, ScalaUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -148,20 +148,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
-                val complexOperators = resultExpressions.flatMap { expr =>
-                  expr.collect {
-                    case arithmetic: BinaryArithmetic => arithmetic
-                    case udf: ScalaUDF => udf
-                  }
-                }
-                if (r.supportCompletePushDown() && complexOperators.isEmpty) {
+                if (r.supportCompletePushDown()) {
                   val groupOutputLength = resultExpressions.length - aggOutput.length
-                  val aggExpressions =
-                    resultExpressions.drop(groupOutputLength).zip(aggOutput).map {
-                      case (a, b) if a.dataType != b.dataType =>
-                        Alias(Cast(b, a.dataType), a.name)(a.exprId)
-                      case (a, b) => Alias(b, a.name)(a.exprId)
+                  val aggExpressions = resultExpressions.drop(groupOutputLength).map { expr =>
+                    expr.transform {
+                      case agg: AggregateExpression =>
+                        val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+                        val aggAttribute = aggOutput(ordinal)
+                        val child = if (aggAttribute.dataType == agg.resultAttribute.dataType) {
+                          aggAttribute
+                        } else {
+                          Cast(aggAttribute, agg.resultAttribute.dataType)
+                        }
+                        Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                     }
+                  }.asInstanceOf[Seq[NamedExpression]]
                   val projectExpressions = groupAttrs.take(groupOutputLength) ++ aggExpressions
                   Project(projectExpressions, scanRelation)
                 } else {
