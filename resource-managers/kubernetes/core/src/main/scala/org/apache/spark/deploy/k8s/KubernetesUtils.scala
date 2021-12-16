@@ -32,6 +32,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
+import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -380,5 +381,24 @@ object KubernetesUtils extends Logging {
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
     }
+  }
+
+  @Since("3.3.0")
+  def loadFeatureStep(conf: KubernetesConf, className: String): KubernetesFeatureConfigStep = {
+    val constructors = Utils.classForName(className).getConstructors
+    val confConstructor = constructors.find { constructor =>
+      constructor.getParameterCount == 1 &&
+        (constructor.getParameterTypes()(0) == conf.getClass ||
+          constructor.getParameterTypes()(0) == classOf[KubernetesConf])
+    }
+    val noParamConstructor = constructors.find { constructor =>
+      constructor.getParameterCount == 0
+    }
+    val constructor = confConstructor.map { confConstructor =>
+      (conf: KubernetesConf) => confConstructor.newInstance(conf)
+    }.getOrElse {
+      (_: KubernetesConf) => noParamConstructor.get.newInstance()
+    }
+    constructor(conf).asInstanceOf[KubernetesFeatureConfigStep]
   }
 }
