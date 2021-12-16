@@ -20,7 +20,6 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder {
 
@@ -39,7 +38,7 @@ private[spark] class KubernetesDriverBuilder {
 
     val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
       .map { className =>
-        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+        KubernetesUtils.loadFeatureStep(conf, className)
       }
 
     val features = Seq(
