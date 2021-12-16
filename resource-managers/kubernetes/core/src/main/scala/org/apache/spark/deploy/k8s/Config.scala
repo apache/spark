@@ -239,6 +239,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val NDOTS =
+    ConfigBuilder("spark.kubernetes.executor.pod.ndots")
+      .doc("The executor pod dns ndots number")
+      .internal()
+      .stringConf
+      .createWithDefault("3")
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

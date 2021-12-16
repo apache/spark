@@ -261,6 +261,55 @@ class BasicExecutorFeatureStepSuite
     assert(executor.pod.getSpec.getPriorityClassName == "some-priority" )
   }
 
+
+  test("Test default pod ndots") {
+    val conf = baseConf.clone()
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        Nil,
+        Seq.empty[String]))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val ndots = executor.pod.getSpec.getDnsConfig.getOptions.asScala.find(_.getName == "ndots").get
+
+    assert(ndots.getValue == "3")
+
+  }
+
+  test("Set pod ndots value") {
+    val conf = baseConf.clone()
+    conf.set("spark.kubernetes.executor.pod.ndots", "5")
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        Nil,
+        Seq.empty[String]))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val ndots = executor.pod.getSpec.getDnsConfig.getOptions.asScala.find(_.getName == "ndots").get
+    assert(ndots.getValue == "5")
+  }
+
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

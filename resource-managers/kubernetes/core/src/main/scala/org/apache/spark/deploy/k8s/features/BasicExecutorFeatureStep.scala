@@ -87,6 +87,8 @@ private[spark] class BasicExecutorFeatureStep(
     null
   }
 
+  private val ndots = kubernetesConf.get(NDOTS)
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
 
@@ -211,6 +213,13 @@ private[spark] class BasicExecutorFeatureStep(
       executorPodBuilder = executorPodBuilder
       .withTolerations(tolerartions.toList.asJava)
     }
+
+    val ndotsConfig = new PodDNSConfigOption("ndots", ndots)
+    val podDNSConfigOptions = List[PodDNSConfigOption](ndotsConfig).asJava
+    val podDNSConfig = new PodDNSConfig()
+    podDNSConfig.setOptions(podDNSConfigOptions)
+    executorPodBuilder = executorPodBuilder
+      .withDnsConfig(podDNSConfig)
 
     val executorPod = executorPodBuilder.endSpec().build()
 
