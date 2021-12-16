@@ -15,18 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
- * Pushed down operators
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
+ * push down top N(query with ORDER BY ... LIMIT n). Please note that the combination of top N
+ * with other operations such as AGGREGATE, GROUP BY, CLUSTER BY, DISTRIBUTE BY, etc.
+ * is NOT pushed down.
+ *
+ * @since 3.3.0
  */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    sortValues: Seq[SortOrder]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
+@Evolving
+public interface SupportsPushDownTopN extends ScanBuilder {
+
+    /**
+     * Pushes down top N to the data source.
+     */
+    boolean pushTopN(SortOrder[] orders, int limit);
 }
