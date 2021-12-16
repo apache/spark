@@ -497,6 +497,10 @@ abstract class StringPredicate extends BinaryExpression
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 'Spark');
+       true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+       true
   """,
   since = "3.3.0",
   group = "string_funcs"
@@ -515,8 +519,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string `left` starts with the string `right`.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns true if the string or binary `left` starts with
+    the string or binary `right`. Returns NULL if either input expression is NULL.
   """,
   examples = """
     Examples:
@@ -526,6 +530,10 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+       true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'));
+       false
   """,
   since = "3.3.0",
   group = "string_funcs"
@@ -544,8 +552,8 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string `left` ends with the string `right`.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns true if the string or binary `left` ends with
+    the binary string `right`. Returns NULL if either input expression is NULL.
   """,
   examples = """
     Examples:
@@ -555,6 +563,10 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
+       true
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 'Spark');
+       false
   """,
   since = "3.3.0",
   group = "string_funcs"
