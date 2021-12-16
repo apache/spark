@@ -1101,8 +1101,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def processIndexProperties(
       properties: util.Map[String, String],
-      catalogName: String
-    ): (String, Array[String]) = {
+      catalogName: String): (String, Array[String]) = {
     var indexType = ""
     val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
     val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
@@ -1126,7 +1125,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
     if (supportedIndexTypeList.isEmpty) {
-      throw new UnsupportedOperationException(s"None of index type is supported.")
+      throw new UnsupportedOperationException(
+        "Cannot specify 'USING index_type' in 'CREATE INDEX'")
     }
     for (indexType <- supportedIndexTypeList) {
       if (value.equalsIgnoreCase(indexType)) return true
