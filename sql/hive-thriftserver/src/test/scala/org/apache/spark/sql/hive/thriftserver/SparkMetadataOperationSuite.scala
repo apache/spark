@@ -706,4 +706,36 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       }
     }
   }
+
+  test("SPARK-37173: SparkGetFunctionOperation return builtin function only once") {
+    def checkFunctions(
+        rs: ResultSet,
+        functionName: String,
+        expectedFunctionSchemas: Seq[String],
+        repeats: Int): Unit = {
+      var nums = 0
+      var functionSchemas = Seq.empty[String]
+      while (rs.next()) {
+        if (rs.getString("FUNCTION_NAME") == functionName) {
+          functionSchemas = functionSchemas :+ rs.getString("FUNCTION_SCHEM")
+          nums += 1
+        }
+      }
+      assert(nums === repeats)
+      functionSchemas.zip(expectedFunctionSchemas).foreach { case (actual, expected) =>
+        assert(actual === expected)
+      }
+    }
+
+    withDatabase("test_spark_37173") { statement =>
+      statement.execute(s"CREATE DATABASE IF NOT EXISTS test_spark_37173")
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_UNIQUE_SYSTEM_FUNCTIONS.key}=false")
+      val metaData = statement.getConnection.getMetaData
+      checkFunctions(metaData.getFunctions(null, "*", "*"),
+        "length", Seq("default", "test_spark_37173"), 2)
+      statement.execute(s"SET ${SQLConf.THRIFTSERVER_UNIQUE_SYSTEM_FUNCTIONS.key}=true")
+      checkFunctions(metaData.getFunctions(null, "*", "*"),
+        "length", Seq("SYSTEM"), 1)
+    }
+  }
 }
