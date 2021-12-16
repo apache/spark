@@ -210,4 +210,6 @@ FROM VALUES
 
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
 SELECT regr_count(y, x) FROM testRegression;
-SELECT k, count(*), regr_count(y, x) FROM testRegression group by k;
+SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL;
+SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k;
+SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k;
