@@ -683,7 +683,7 @@ class SparkSession(SparkConversionMixin):
     def _getActiveSessionOrCreate() -> "SparkSession":
         """
         Returns the active :class:`SparkSession` for the current thread, returned by the builder,
-        of if there is no existing one, creates a new one based on the options set in the builder.
+        or if there is no existing one, creates a new one based on the options set in the builder.
         """
         spark = SparkSession.getActiveSession()
         if spark is None:
