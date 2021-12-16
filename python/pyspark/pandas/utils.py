@@ -19,7 +19,6 @@ Commonly used utils in pandas-on-Spark.
 """
 
 import functools
-from collections import OrderedDict
 from contextlib import contextmanager
 import os
 from typing import (
@@ -441,7 +440,7 @@ def align_diff_frames(
     )
 
     # 3. Restore the names back and deduplicate columns.
-    this_labels = OrderedDict()
+    this_labels: Dict[Label, Label] = {}
     # Add columns in an order of its original frame.
     for this_label in this_column_labels:
         for new_label in applied._internal.column_labels:
@@ -449,7 +448,7 @@ def align_diff_frames(
                 this_labels[new_label[1:]] = new_label
 
     # After that, we will add the rest columns.
-    other_labels = OrderedDict()
+    other_labels: Dict[Label, Label] = {}
     for new_label in applied._internal.column_labels:
         if new_label[1:] not in this_labels:
             other_labels[new_label[1:]] = new_label
