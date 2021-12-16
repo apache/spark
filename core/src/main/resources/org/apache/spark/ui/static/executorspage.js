@@ -143,6 +143,7 @@ var sumOptionalColumns = [3, 4];
 var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
 var execDataTable;
 var sumDataTable;
+var executorSummaryMetricsDataTable;
 
 function reselectCheckboxesBasedOnTaskTableState() {
   var allChecked = true;
@@ -159,10 +160,6 @@ function reselectCheckboxesBasedOnTaskTableState() {
     $("#select-all-box").prop("checked", true);
   }
 }
-
-var executorSummaryMetricsTableArray = [];
-var executorSummaryMetricsTableCurrentStateArray = [];
-var executorSummaryMetricsDataTable;
 
 function getColumnNameForExecutorMetricSummary(columnKey) {
   switch(columnKey) {
@@ -323,7 +320,6 @@ function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTab
     };
     executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
   }
-  executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
 
 $(document).ready(function () {
@@ -784,6 +780,28 @@ $(document).ready(function () {
           }
         });
 
+        $('#executorSummaryMetricsTitle').append("Summary Metrics for " + "<a href='#executorsTitle'>" + allExecCnt + " Executors" + "</a>");
+        $('#executorsTitle').html("Executors (" + allExecCnt + ")");
+        var quantiles = "0,0.25,0.5,0.75,1.0";
+        var executorSummariesEndpoint = createRESTEndPointForExecutorsSummaries(appId) + "?activeOnly=true&quantiles=" + quantiles;
+        $.getJSON(executorSummariesEndpoint, function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
+            var taskMetricKeys = Object.keys(executorMetricsResponse);
+            var executorSummaryMetricsTableArray = [];
+            taskMetricKeys.forEach(function (columnKey) {
+              var row;
+              switch(columnKey) {
+                default:
+                  if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
+                    row = createRowMetadataForColumn(
+                      columnKey, executorMetricsResponse[columnKey]);
+                    executorSummaryMetricsTableArray.push(row);
+                  }
+                  break;
+              }
+            });
+            createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableArray);
+          });
+
         var sumSelector = "#summary-execs-table";
         var sumConf = {
           "data": [activeSummary, deadSummary, totalSummary],
@@ -891,10 +909,6 @@ $(document).ready(function () {
           "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
           "</div>");
 
-        $('#executorSummaryMetricsTitle').append("Summary Metrics for " + "<a href='#executorsTitle'>" + allExecCnt + " Executors" + "</a>");
-        $('#executorsTitle').html("Executors (" + allExecCnt + ")");
-        createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableCurrentStateArray);
-
         reselectCheckboxesBasedOnTaskTableState();
 
         $("#additionalMetrics").click(function() {
@@ -940,25 +954,5 @@ $(document).ready(function () {
         }
       });
     });
-
-    var quantiles = "0,0.25,0.5,0.75,1.0";
-    $.getJSON(createRESTEndPointForExecutorsSummaries(appId) + "?activeOnly=true&quantiles=" + quantiles,
-      function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
-        var taskMetricKeys = Object.keys(executorMetricsResponse);
-        taskMetricKeys.forEach(function (columnKey) {
-          var row;
-          switch(columnKey) {
-            default:
-              if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
-                row = createRowMetadataForColumn(
-                  columnKey, executorMetricsResponse[columnKey]);
-                executorSummaryMetricsTableArray.push(row);
-              }
-              break;
-          }
-        });
-        var executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableArray
-        executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
-      });
   });
 });
