@@ -290,6 +290,19 @@ object Ceil {
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       0
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.142
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
 object CeilExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) Ceil(expressions.head)
@@ -526,6 +539,19 @@ object Floor {
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       -1
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.141
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
 object FloorExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) Floor(expressions.head)
