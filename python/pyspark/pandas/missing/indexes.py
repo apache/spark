@@ -103,9 +103,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
 
     # Properties
-    days = _unsupported_property("days", cls="TimedeltaIndex")
-    seconds = _unsupported_property("seconds", cls="TimedeltaIndex")
-    microseconds = _unsupported_property("microseconds", cls="TimedeltaIndex")
     nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
     components = _unsupported_property("components", cls="TimedeltaIndex")
     inferred_freq = _unsupported_property("inferred_freq", cls="TimedeltaIndex")

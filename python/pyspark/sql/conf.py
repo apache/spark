@@ -16,11 +16,12 @@
 #
 
 import sys
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 
 
 class RuntimeConfig(object):
@@ -39,7 +40,7 @@ class RuntimeConfig(object):
         self._jconf.set(key, value)
 
     @since(2.0)
-    def get(self, key: str, default: Optional[str] = _NoValue) -> str:
+    def get(self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue) -> str:
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """

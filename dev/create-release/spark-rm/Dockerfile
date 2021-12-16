@@ -80,8 +80,11 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
+  $APT_INSTALL libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
+  Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
+  Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.7 ruby2.7-dev && \
   gem install --no-document $GEM_PKGS

@@ -17,6 +17,13 @@ To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify t
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
 
+To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
+Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
+and the custom Dockerfile need to include a Java installation by itself.
+Dockerfile.java17 is an example of custom Dockerfile, and you can specify it to run tests with Java 17.
+
+    ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile.java17
+
 To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
@@ -236,6 +243,13 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
       The image name for the R based Spark image to test
     </td>
     <td><code>spark-r</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.dockerFile</code></td>
+    <td>
+      The path to the custom Dockerfile
+    </td>
+    <td><code>N/A</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.namespace</code></td>

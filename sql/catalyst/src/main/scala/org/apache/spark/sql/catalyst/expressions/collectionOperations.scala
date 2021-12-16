@@ -167,6 +167,36 @@ case class MapKeys(child: Expression)
     copy(child = newChild)
 }
 
+
+/**
+ * Returns an unordered array containing the keys of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
+       true
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 3);
+       false
+  """,
+  group = "map_funcs",
+  since = "3.3.0")
+case class MapContainsKey(
+    left: Expression,
+    right: Expression,
+    child: Expression) extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, ArrayContains(MapKeys(left), right))
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "map_contains_key"
+
+  override protected def withNewChildInternal(newChild: Expression): MapContainsKey =
+    copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(a1, a2, ...) - Returns a merged array of structs in which the N-th struct contains all

@@ -234,11 +234,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
         b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
-      case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
-      case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
-        m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) if e.foldable => UnaryPositive(Cast(e, DoubleType))
-
       // Promotes string literals in `In predicate`.
       case p @ In(a, b)
         if a.dataType != StringType && b.exists( e => e.foldable && e.dataType == StringType) =>

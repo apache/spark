@@ -235,7 +235,7 @@ Use ``distributed`` or ``distributed-sequence`` default index
 One common issue when pandas-on-Spark users face is the slow performance by default index. Pandas API on Spark attaches
 a default index when the index is unknown, for example, Spark DataFrame is directly converted to pandas-on-Spark DataFrame.
 
-This default index is ``sequence`` which requires the computation on single partition which is discouraged. If you plan
+Note that ``sequence`` requires the computation on single partition which is discouraged. If you plan
 to handle large data in production, make it distributed by configuring the default index to ``distributed`` or
 ``distributed-sequence`` .
 
