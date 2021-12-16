@@ -500,9 +500,10 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 
 def run_python_packaging_tests():
-    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
-    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
-    run_cmd(command)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+        command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+        run_cmd(command)
 
 
 def run_build_tests():
