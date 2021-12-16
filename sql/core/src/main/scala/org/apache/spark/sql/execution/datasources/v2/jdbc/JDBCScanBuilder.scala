@@ -53,7 +53,7 @@ case class JDBCScanBuilder(
 
   private var pushedLimit = 0
 
-  private var sortValues: Array[SortOrder] = Array.empty[SortOrder]
+  private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -133,7 +133,7 @@ case class JDBCScanBuilder(
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
       pushedLimit = limit
-      sortValues = orders
+      sortOrders = orders
       return true
     }
     false
@@ -164,6 +164,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortValues)
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
   }
 }

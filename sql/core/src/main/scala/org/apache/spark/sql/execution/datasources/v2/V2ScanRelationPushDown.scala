@@ -261,7 +261,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
         if (topNPushed) {
           sHolder.pushedLimit = Some(limit)
-          sHolder.sortValues = orders
+          sHolder.sortOrders = orders
           operation
         } else {
           s
@@ -294,7 +294,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(aggregation,
-          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortValues)
+          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -307,7 +307,7 @@ case class ScanBuilderHolder(
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
-  var sortValues: Seq[SortOrder] = Seq.empty[SortOrder]
+  var sortOrders: Seq[SortOrder] = Seq.empty[SortOrder]
 
   var pushedSample: Option[TableSampleInfo] = None
 }
