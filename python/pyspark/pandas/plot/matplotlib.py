@@ -23,7 +23,7 @@ from matplotlib.axes._base import _process_plot_format
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
 
-from pandas.plotting._matplotlib import (
+from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,
     HistPlot as PandasHistPlot,

@@ -38,7 +38,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (

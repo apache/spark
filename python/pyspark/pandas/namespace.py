@@ -41,7 +41,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
+from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq

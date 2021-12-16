@@ -24,7 +24,7 @@ from functools import reduce
 from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import BooleanType, LongType
 from pyspark.sql.utils import AnalysisException
@@ -1077,8 +1077,12 @@ class LocIndexer(LocIndexerLike):
 
             return reduce(lambda x, y: x & y, conds), None, None
         else:
+            from pyspark.sql.types import StructType
+
             index = self._psdf_or_psser.index
-            index_data_type = [f.dataType for f in index.to_series().spark.data_type]
+            index_data_type = [
+                f.dataType for f in cast(StructType, index.to_series().spark.data_type)
+            ]
 
             start = rows_sel.start
             if start is not None:

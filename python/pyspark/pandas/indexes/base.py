@@ -21,7 +21,7 @@ import warnings
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import (
+from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
     is_interval_dtype,
     is_bool_dtype,
@@ -33,7 +33,7 @@ from pandas.api.types import (
 )
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import CategoricalDtype, is_hashable
+from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
@@ -253,7 +253,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark = CachedAccessor("spark", SparkIndexMethods)
+    spark: SparkIndexMethods = CachedAccessor("spark", SparkIndexMethods)
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
