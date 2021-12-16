@@ -20,8 +20,9 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -39,6 +40,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
     with SupportsPushDownTableSample
+    with SupportsPushDownTopN
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -50,6 +52,8 @@ case class JDBCScanBuilder(
   private var tableSample: Option[TableSampleInfo] = None
 
   private var pushedLimit = 0
+
+  private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -119,8 +123,17 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit && JdbcDialects.get(jdbcOptions.url).supportsLimit) {
+    if (jdbcOptions.pushDownLimit) {
       pushedLimit = limit
+      return true
+    }
+    false
+  }
+
+  override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit) {
+      pushedLimit = limit
+      sortOrders = orders
       return true
     }
     false
@@ -151,6 +164,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit)
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
   }
 }
