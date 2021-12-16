@@ -217,9 +217,7 @@ class UserDefinedFunction(object):
     def _create_judf(self, func: Callable[..., Any]) -> JavaObject:
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.getActiveSession()
-        if spark is None:
-            spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
         wrapped_func = _wrap_function(sc, func, self.returnType)

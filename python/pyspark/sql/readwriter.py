@@ -110,9 +110,7 @@ class DataFrameReader(OptionUtils):
         """
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.getActiveSession()
-        if spark is None:
-            spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(
                 schema.json()
@@ -1504,9 +1502,7 @@ def _test() -> None:
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext("local[4]", "PythonTest")
     try:
-        spark = SparkSession.getActiveSession()
-        if spark is None:
-            spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
