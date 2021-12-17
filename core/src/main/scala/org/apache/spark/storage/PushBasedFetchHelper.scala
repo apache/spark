@@ -119,7 +119,7 @@ private class PushBasedFetchHelper(
     for (i <- bitmaps.indices) {
       val blockChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId, i)
       chunksMetaMap.put(blockChunkId, bitmaps(i))
-      logDebug(s"adding block chunk $blockChunkId of size $approxChunkSize")
+      logDebug(s"Adding block chunk $blockChunkId of size $approxChunkSize")
       blocksToFetch += ((blockChunkId, approxChunkSize, SHUFFLE_PUSH_MAP_ID))
     }
     blocksToFetch
@@ -145,16 +145,23 @@ private class PushBasedFetchHelper(
         logDebug(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
         try {
-          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
-            reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
+          val bitmaps = meta.readChunkBitmaps()
+          if (bitmaps.nonEmpty) {
+            iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
+              reduceId, sizeMap((shuffleId, reduceId)), bitmaps, address))
+          } else {
+            logInfo(s"No available push-merged block for ($shuffleId, $shuffleMergeId," +
+              s" $reduceId) from ${req.address.host}:${req.address.port}")
+            iterator.addToResultsQueue(
+              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
+          }
         } catch {
           case exception: Exception =>
             logError(s"Failed to parse the meta of push-merged block for ($shuffleId, " +
               s"$shuffleMergeId, $reduceId) from" +
               s" ${req.address.host}:${req.address.port}", exception)
             iterator.addToResultsQueue(
-              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId,
-                address))
+              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
         }
       }
 

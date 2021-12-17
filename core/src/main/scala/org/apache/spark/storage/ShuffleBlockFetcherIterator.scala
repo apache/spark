@@ -972,6 +972,9 @@ final class ShuffleBlockFetcherIterator(
 
         case PushMergedRemoteMetaFetchResult(
           shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps, address) =>
+          // PushMergedRemoteMetaFailedFetchResult will be returned instead of
+          // PushMergedRemoteMetaFetchResult if no available push-merged block.
+          assert(bitmaps.length > 0)
           // The original meta request is processed so we decrease numBlocksToFetch and
           // numBlocksInFlightPerAddress by 1. We will collect new shuffle chunks request and the
           // count of this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
