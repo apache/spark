@@ -16,6 +16,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pandas.core.frame import DataFrame as PandasDataFrame
-
-DataFrameLike = PandasDataFrame
+from pyspark.sql.pandas._typing import DataFrameLike as DataFrameLike

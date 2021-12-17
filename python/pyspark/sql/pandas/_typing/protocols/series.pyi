@@ -16,6 +16,4 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pandas.core.series import Series as PandasSeries
-
-SeriesLike = PandasSeries
+from pyspark.sql.pandas._typing import SeriesLike as SeriesLike

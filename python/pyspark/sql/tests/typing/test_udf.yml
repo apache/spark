@@ -21,25 +21,25 @@
     import pandas.core.series  # type: ignore[import]
     import pandas.core.frame  # type: ignore[import]
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def f(x: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def g(x: pandas.core.series.Series, y: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def h(*xs: pandas.core.series.Series) -> pandas.core.series.Series:
         return xs[0]
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
-    def k(x: pandas.core.frame.DataFrame, y: pandas.core.series.Series) -> pandas.core.series.Series:
+    @pandas_udf("x string, y string", PandasUDFType.SCALAR)
+    def k(x: pandas.core.frame.DataFrame, y: pandas.core.series.Series) -> pandas.core.frame.DataFrame:
         return x
 
-    pandas_udf(lambda x: x, "str", PandasUDFType.SCALAR)
-    pandas_udf(lambda x, y: x, "str", PandasUDFType.SCALAR)
-    pandas_udf(lambda *xs: xs[0], "str", PandasUDFType.SCALAR)
+    pandas_udf(lambda x: x, "string", PandasUDFType.SCALAR)
+    pandas_udf(lambda x, y: x, "string", PandasUDFType.SCALAR)
+    pandas_udf(lambda *xs: xs[0], "string", PandasUDFType.SCALAR)
 
 
 - case: scalarIterUDF
@@ -50,7 +50,7 @@
     from typing import Iterable
 
     @pandas_udf(IntegerType(), PandasUDFType.SCALAR_ITER)
-    def f(xs: pandas.core.series.Series) -> Iterable[pandas.core.series.Series]:
+    def f(xs: Iterable[pandas.core.series.Series]) -> Iterable[pandas.core.series.Series]:
         for x in xs:
             yield x + 1
 
