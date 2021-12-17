@@ -5820,7 +5820,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         to_date = cast(datetime.datetime, self.index.min()) + offset_  # type: ignore[operator]
 
-        return cast(DataFrame, self.loc[:to_date])
+        return cast(DataFrame, self.loc[:to_date])  # type: ignore[misc]
 
     def pivot_table(
         self,
