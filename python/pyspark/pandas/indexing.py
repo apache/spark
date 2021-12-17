@@ -1080,7 +1080,7 @@ class LocIndexer(LocIndexerLike):
             from pyspark.sql.types import StructType
 
             index = self._psdf_or_psser.index
-            index_data_type = [
+            index_data_type = [  # type: ignore[assignment]
                 f.dataType for f in cast(StructType, index.to_series().spark.data_type)
             ]
 
