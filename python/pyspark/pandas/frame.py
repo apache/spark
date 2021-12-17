@@ -12015,7 +12015,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_1   3   2   1   0
         row_2  10  20  30  40
         """
-        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
+        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))  # type: ignore[arg-type]
 
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(
