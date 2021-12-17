@@ -28,20 +28,20 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
 /**
  * Inlines CTE definitions into corresponding references if either of the conditions satisfies:
- * 1. The CTE definition does not contain any non-deterministic expressions. If this CTE
- *    definition references another CTE definition that has non-deterministic expressions, it
- *    is still OK to inline the current CTE definition.
+ * 1. The CTE definition does not contain any non-deterministic expressions or contains attribute
+ *    references to an outer query. If this CTE definition references another CTE definition that
+ *    has non-deterministic expressions, it is still OK to inline the current CTE definition.
  * 2. The CTE definition is only referenced once throughout the main query and all the subqueries.
  *
- * In addition, due to the complexity of correlated subqueries, all CTE references in correlated
- * subqueries are inlined regardless of the conditions above.
+ * CTE definitions that appear in subqueries and are not inlined will be pulled up to the main
+ * query level.
  */
 object InlineCTE extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
       buildCTEMap(plan, cteMap)
-      inlineCTE(plan, cteMap, forceInline = false)
+      inlineCTE(plan, cteMap, None)
     } else {
       plan
     }
@@ -93,25 +93,36 @@ object InlineCTE extends Rule[LogicalPlan] {
   private def inlineCTE(
       plan: LogicalPlan,
       cteMap: mutable.HashMap[Long, (CTERelationDef, Int)],
-      forceInline: Boolean): LogicalPlan = {
-    val (stripped, notInlined) = plan match {
+      notInlinedOpt: Option[mutable.ArrayBuffer[CTERelationDef]]): LogicalPlan = {
+    plan match {
       case WithCTE(child, cteDefs) =>
-        val notInlined = mutable.ArrayBuffer.empty[CTERelationDef]
+        // If `notInlinedOpt` is defined, it means this `WithCTE` exists in a subquery, then we
+        // are adding all CTE defs to the main query level `WithCTE`.
+        // It is worth noting that if any CTE def depends on another CTE def in a subquery, the
+        // CTE def being depended on is either pulled up to the main query level together (if it
+        // is not inlined), or is inlined into the dependant CTE def, in which case the dependant
+        // CTE def will inherit any outer references that may require itself to be inlined.
+        val notInlined = notInlinedOpt.getOrElse(mutable.ArrayBuffer.empty[CTERelationDef])
         cteDefs.foreach { cteDef =>
           val (cte, refCount) = cteMap(cteDef.id)
           if (refCount > 0) {
-            val inlined = cte.copy(child = inlineCTE(cte.child, cteMap, forceInline))
+            val inlined = cte.copy(child = inlineCTE(cte.child, cteMap, Some(notInlined)))
             cteMap.update(cteDef.id, (inlined, refCount))
-            if (!forceInline && !shouldInline(inlined, refCount)) {
+            if (!shouldInline(inlined, refCount)) {
               notInlined.append(inlined)
             }
           }
         }
-        (inlineCTE(child, cteMap, forceInline), notInlined.toSeq)
+        val newChild = inlineCTE(child, cteMap, Some(notInlined))
+        if (notInlinedOpt.isDefined || notInlined.isEmpty) {
+          newChild
+        } else {
+          WithCTE(newChild, notInlined)
+        }
 
       case ref: CTERelationRef =>
         val (cteDef, refCount) = cteMap(ref.cteId)
-        val newRef = if (forceInline || shouldInline(cteDef, refCount)) {
+        if (shouldInline(cteDef, refCount)) {
           if (ref.outputSet == cteDef.outputSet) {
             cteDef.child
           } else {
@@ -125,24 +136,16 @@ object InlineCTE extends Rule[LogicalPlan] {
         } else {
           ref
         }
-        (newRef, Seq.empty)
 
       case _ if plan.containsPattern(CTE) =>
-        val newPlan = plan
-          .withNewChildren(plan.children.map(child => inlineCTE(child, cteMap, forceInline)))
+        plan
+          .withNewChildren(plan.children.map(child => inlineCTE(child, cteMap, notInlinedOpt)))
           .transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
             case e: SubqueryExpression =>
-              e.withNewPlan(inlineCTE(e.plan, cteMap, forceInline = e.isCorrelated))
+              e.withNewPlan(inlineCTE(e.plan, cteMap, notInlinedOpt))
           }
-        (newPlan, Seq.empty)
 
-      case _ => (plan, Seq.empty)
-    }
-
-    if (notInlined.isEmpty) {
-      stripped
-    } else {
-      WithCTE(stripped, notInlined)
+      case _ => plan
     }
   }
 }
