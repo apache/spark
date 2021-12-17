@@ -41,7 +41,15 @@ object InlineCTE extends Rule[LogicalPlan] {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
       buildCTEMap(plan, cteMap)
-      inlineCTE(plan, cteMap, None)
+      val notInlined = mutable.ArrayBuffer.empty[CTERelationDef]
+      val inlined = inlineCTE(plan, cteMap, notInlined)
+      // CTEs in SQL Commands have been inlined by `CTESubstitution` already, so it is safe to add
+      // WithCTE as top node here.
+      if (notInlined.isEmpty) {
+        inlined
+      } else {
+        WithCTE(inlined, notInlined.toSeq)
+      }
     } else {
       plan
     }
@@ -93,32 +101,20 @@ object InlineCTE extends Rule[LogicalPlan] {
   private def inlineCTE(
       plan: LogicalPlan,
       cteMap: mutable.HashMap[Long, (CTERelationDef, Int)],
-      notInlinedOpt: Option[mutable.ArrayBuffer[CTERelationDef]]): LogicalPlan = {
+      notInlined: mutable.ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        // If `notInlinedOpt` is defined, it means this `WithCTE` exists in a subquery, then we
-        // are adding all CTE defs to the main query level `WithCTE`.
-        // It is worth noting that if any CTE def depends on another CTE def in a subquery, the
-        // CTE def being depended on is either pulled up to the main query level together (if it
-        // is not inlined), or is inlined into the dependant CTE def, in which case the dependant
-        // CTE def will inherit any outer references that may require itself to be inlined.
-        val notInlined = notInlinedOpt.getOrElse(mutable.ArrayBuffer.empty[CTERelationDef])
         cteDefs.foreach { cteDef =>
           val (cte, refCount) = cteMap(cteDef.id)
           if (refCount > 0) {
-            val inlined = cte.copy(child = inlineCTE(cte.child, cteMap, Some(notInlined)))
+            val inlined = cte.copy(child = inlineCTE(cte.child, cteMap, notInlined))
             cteMap.update(cteDef.id, (inlined, refCount))
             if (!shouldInline(inlined, refCount)) {
               notInlined.append(inlined)
             }
           }
         }
-        val newChild = inlineCTE(child, cteMap, Some(notInlined))
-        if (notInlinedOpt.isDefined || notInlined.isEmpty) {
-          newChild
-        } else {
-          WithCTE(newChild, notInlined)
-        }
+        inlineCTE(child, cteMap, notInlined)
 
       case ref: CTERelationRef =>
         val (cteDef, refCount) = cteMap(ref.cteId)
@@ -139,10 +135,10 @@ object InlineCTE extends Rule[LogicalPlan] {
 
       case _ if plan.containsPattern(CTE) =>
         plan
-          .withNewChildren(plan.children.map(child => inlineCTE(child, cteMap, notInlinedOpt)))
+          .withNewChildren(plan.children.map(child => inlineCTE(child, cteMap, notInlined)))
           .transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
             case e: SubqueryExpression =>
-              e.withNewPlan(inlineCTE(e.plan, cteMap, notInlinedOpt))
+              e.withNewPlan(inlineCTE(e.plan, cteMap, notInlined))
           }
 
       case _ => plan
