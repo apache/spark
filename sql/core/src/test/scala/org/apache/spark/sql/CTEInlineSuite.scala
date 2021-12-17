@@ -376,6 +376,74 @@ abstract class CTEInlineSuiteBase
         "CTE repartition is reused.")
     }
   }
+
+  test("CTE ID conflict between main query and view query - 1 temp view") {
+    withView("t", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      sql(
+        s"""with
+           |v as (
+           |  select c1 + c2 c3 from t
+           |)
+           |select sum(c3) s from v
+         """.stripMargin).createOrReplaceTempView("t2")
+      val df = sql(
+        s"""with
+           |v as (
+           |  select c1 * c2 c3 from t
+           |)
+           |select sum(c3) from v except select s from t2
+         """.stripMargin)
+      checkAnswer(df, Row(2) :: Nil)
+    }
+  }
+
+  test("CTE ID conflict between main query and view query - 2 temp views") {
+    withView("t", "t2", "t3") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      sql(
+        s"""with
+           |v as (
+           |  select c1 + c2 c3 from t
+           |)
+           |select sum(c3) s from v
+         """.stripMargin).createOrReplaceTempView("t2")
+      sql(
+        s"""with
+           |v as (
+           |  select c1 * c2 c3 from t
+           |)
+           |select sum(c3) s from v
+         """.stripMargin).createOrReplaceTempView("t3")
+      val df = sql("select s from t3 except select s from t2")
+      checkAnswer(df, Row(2) :: Nil)
+    }
+  }
+
+  test("CTE ID conflict between main query and view query - temp view + sql view") {
+    withTable("t") {
+      withView ("t2", "t3") {
+        Seq((0, 1), (1, 2)).toDF("c1", "c2").write.saveAsTable("t")
+        sql(
+          s"""with
+             |v as (
+             |  select c1 + c2 c3 from t
+             |)
+             |select sum(c3) s from v
+           """.stripMargin).createOrReplaceTempView("t2")
+        sql(
+          s"""create view t3 as
+             |with
+             |v as (
+             |  select c1 * c2 c3 from t
+             |)
+             |select sum(c3) s from v
+           """.stripMargin)
+        val df = sql("select s from t3 except select s from t2")
+        checkAnswer(df, Row(2) :: Nil)
+      }
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite
