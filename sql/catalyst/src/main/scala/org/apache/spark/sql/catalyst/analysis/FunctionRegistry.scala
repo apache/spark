@@ -446,6 +446,7 @@ object FunctionRegistry {
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
+    expression[CollectList]("array_agg", true),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[BoolAnd]("every", true),
