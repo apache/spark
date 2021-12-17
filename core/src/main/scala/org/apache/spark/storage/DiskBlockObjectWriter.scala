@@ -121,6 +121,11 @@ private[spark] class DiskBlockObjectWriter(
   private var numRecordsWritten = 0
 
   /**
+   * Keep track of total number of records written.
+   */
+  private var numRecordsTotalWritten = 0L
+
+  /**
    * Set the checksum that the checksumOutputStream should use
    */
   def setChecksum(checksum: Checksum): Unit = {
@@ -282,8 +287,8 @@ private[spark] class DiskBlockObjectWriter(
   def closeAndDelete(): Unit = {
     Utils.tryWithSafeFinally {
       if (initialized) {
-        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
-        writeMetrics.decRecordsWritten(numRecordsWritten)
+        writeMetrics.decBytesWritten(reportedPosition)
+        writeMetrics.decRecordsWritten(numRecordsTotalWritten)
         closeResources()
       }
     } {
@@ -321,6 +326,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   def recordWritten(): Unit = {
     numRecordsWritten += 1
+    numRecordsTotalWritten +=1
     writeMetrics.incRecordsWritten(1)
 
     if (numRecordsWritten % 16384 == 0) {
