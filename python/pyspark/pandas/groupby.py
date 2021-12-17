@@ -314,7 +314,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if relabeling:
             psdf = psdf[order]
-            psdf.columns = columns
+            psdf.columns = columns  # type: ignore[assignment]
         return psdf
 
     agg = aggregate
