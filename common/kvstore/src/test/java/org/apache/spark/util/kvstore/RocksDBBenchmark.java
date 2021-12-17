@@ -121,7 +121,7 @@ public class RocksDBBenchmark {
       System.out.println(row);
     }
 
-    Slf4jReporter.forRegistry(metrics).outputTo(LoggerFactory.getLogger(LevelDBBenchmark.class))
+    Slf4jReporter.forRegistry(metrics).outputTo(LoggerFactory.getLogger(RocksDBBenchmark.class))
       .build().report();
   }
 
