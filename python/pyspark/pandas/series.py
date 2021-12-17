@@ -6369,7 +6369,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __repr__(self) -> str_type:
         max_display_count = get_option("display.max_rows")
         if max_display_count is None:
-            return self._to_internal_pandas().to_string(name=self.name, dtype=self.dtype)
+            return self._to_internal_pandas().to_string(
+                name=bool(self.name), dtype=bool(self.dtype)
+            )
 
         pser = self._psdf._get_or_create_repr_pandas_cache(max_display_count)[self.name]
         pser_length = len(pser)
