@@ -3638,9 +3638,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
-            window2 = Window.partitionBy([self.spark.column] + list(part_cols)).rowsBetween(
-                Window.unboundedPreceding, Window.unboundedFollowing
-            )
+
+            window2 = Window.partitionBy(
+                cast("List[ColumnOrName]", [self.spark.column]) + list(part_cols)
+            ).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
             scol = stat_func(F.row_number().over(window1)).over(window2)
         return self._with_new_scol(scol.cast(DoubleType()))
 
