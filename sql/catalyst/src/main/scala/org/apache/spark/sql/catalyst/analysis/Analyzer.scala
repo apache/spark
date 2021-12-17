@@ -1205,13 +1205,31 @@ class Analyzer(override val catalogManager: CatalogManager)
             }).orElse {
               val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
-              loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+              if (SQLConf.get.isViewCacheEnable) {
+                loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
+              } else {
+                loaded.filter(needCache).foreach(AnalysisContext.get.relationCache.update(key, _))
+              }
               loaded
             }
           case _ => None
         }
       }
     }
+  }
+
+  def needCache(plan: LogicalPlan): Boolean = {
+    var need = false
+    val child = plan.children.apply(0)
+    plan match {
+      case (plan: View) => need = true
+      case _ => need = false
+    }
+    (plan, child) match {
+      case (plan: SubqueryAlias, child: MultiInstanceRelation) => need = true
+      case _ => need = false
+    }
+    need
   }
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
