@@ -61,7 +61,6 @@ import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
-import sun.management.ManagementFactoryHelper
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
