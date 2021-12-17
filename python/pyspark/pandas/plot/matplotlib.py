@@ -46,7 +46,7 @@ from pyspark.pandas.plot import (
     KdePlotBase,
 )
 
-_all_kinds = PlotAccessor._all_kinds
+_all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
