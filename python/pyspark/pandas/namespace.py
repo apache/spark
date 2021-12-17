@@ -2442,7 +2442,7 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))  # type: ignore[assignment]
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
