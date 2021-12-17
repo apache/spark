@@ -216,6 +216,11 @@ SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegre
 
 -- SPARK-27974: Support ANSI Aggregate Function: array_agg
 SELECT
+  collect_list(col),
+  array_agg(col)
+FROM VALUES
+  (1), (2), (1) AS tab(col);
+SELECT
   a,
   collect_list(b),
   array_agg(b)
