@@ -114,7 +114,7 @@ private class PushBasedFetchHelper(
       reduceId: Int,
       blockSize: Long,
       bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
-    val approxChunkSize = blockSize / bitmaps.length
+    val approxChunkSize = if (bitmaps.isEmpty) 0 else blockSize / bitmaps.length
     val blocksToFetch = new ArrayBuffer[(BlockId, Long, Int)]()
     for (i <- bitmaps.indices) {
       val blockChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId, i)
