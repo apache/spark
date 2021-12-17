@@ -16,7 +16,18 @@
 #
 
 from functools import partial
-from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+    no_type_check,
+    TYPE_CHECKING,
+)
 import warnings
 
 import pandas as pd
@@ -72,6 +83,9 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
+
+if TYPE_CHECKING:
+    from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
 
 class Index(IndexOpsMixin):
@@ -253,7 +267,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark: SparkIndexMethods = CachedAccessor("spark", SparkIndexMethods)
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkIndexMethods)  # type: ignore[assignment]
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
