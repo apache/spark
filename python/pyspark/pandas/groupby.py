@@ -2995,7 +2995,7 @@ class SeriesGroupBy(GroupBy[Series]):
             return psser.copy()
 
     def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:  # type: ignore[override]
-        return first_series(pdf).rename().rename(self._psser.name)
+        return first_series(pdf).rename().rename(self._psser.name)  # type: ignore[return-value]  # SPARK-37678
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
