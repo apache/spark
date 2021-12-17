@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.WithCTE
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RepartitionOperation, WithCTE}
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -42,7 +43,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Nil)
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).nonEmpty,
+        df.queryExecution.optimizedPlan.find(_.isInstanceOf[RepartitionOperation]).nonEmpty,
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
@@ -59,7 +60,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Nil)
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).nonEmpty,
+        df.queryExecution.optimizedPlan.find(_.isInstanceOf[RepartitionOperation]).nonEmpty,
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
@@ -79,7 +80,7 @@ abstract class CTEInlineSuiteBase
         df.queryExecution.analyzed.find(_.isInstanceOf[WithCTE]).nonEmpty,
         "With-CTE should not be inlined in analyzed plan.")
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).isEmpty,
+        df.queryExecution.optimizedPlan.find(_.isInstanceOf[RepartitionOperation]).isEmpty,
         "With-CTE with one reference should be inlined in optimized plan.")
     }
   }
@@ -107,8 +108,8 @@ abstract class CTEInlineSuiteBase
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
         df.queryExecution.optimizedPlan.collect {
-          case WithCTE(_, cteDefs) => cteDefs
-        }.head.length == 2,
+          case r: RepartitionOperation => r
+        }.length == 6,
         "With-CTE should contain 2 CTE def after optimization.")
     }
   }
@@ -136,8 +137,8 @@ abstract class CTEInlineSuiteBase
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
         df.queryExecution.optimizedPlan.collect {
-          case WithCTE(_, cteDefs) => cteDefs
-        }.head.length == 1,
+          case r: RepartitionOperation => r
+        }.length == 4,
         "One CTE def should be inlined after optimization.")
     }
   }
@@ -163,7 +164,7 @@ abstract class CTEInlineSuiteBase
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
         df.queryExecution.optimizedPlan.collect {
-          case WithCTE(_, cteDefs) => cteDefs
+          case r: RepartitionOperation => r
         }.isEmpty,
         "CTEs with one reference should all be inlined after optimization.")
     }
@@ -248,7 +249,7 @@ abstract class CTEInlineSuiteBase
         "With-CTE should contain 2 CTE defs after analysis.")
       assert(
         df.queryExecution.optimizedPlan.collect {
-          case WithCTE(_, cteDefs) => cteDefs
+          case r: RepartitionOperation => r
         }.isEmpty,
         "Deterministic CTEs should all be inlined after optimization.")
     }
@@ -270,6 +271,109 @@ abstract class CTEInlineSuiteBase
            |)
          """.stripMargin))
       assert(ex.message.contains("Table or view not found: v1"))
+    }
+  }
+
+  test("CTE Predicate push-down and column pruning") {
+    withView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as (
+           |  select c1, c2, 's' c3, rand() c4 from t
+           |),
+           |vv as (
+           |  select v1.c1, v1.c2, rand() c5 from v v1, v v2
+           |  where v1.c1 > 0 and v1.c3 = 's' and v1.c2 = v2.c2
+           |)
+           |select vv1.c1, vv1.c2, vv2.c1, vv2.c2 from vv vv1, vv vv2
+           |where vv1.c2 > 0 and vv2.c2 > 0 and vv1.c1 = vv2.c1
+         """.stripMargin)
+      checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+      assert(
+        df.queryExecution.analyzed.collect {
+          case WithCTE(_, cteDefs) => cteDefs
+        }.head.length == 2,
+        "With-CTE should contain 2 CTE defs after analysis.")
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.length == 6,
+        "CTE should not be inlined after optimization.")
+      val distinctCteRepartitions = cteRepartitions.distinct
+      // Check column pruning and predicate push-down.
+      assert(distinctCteRepartitions.length == 2)
+      assert(distinctCteRepartitions(1).collectFirst {
+        case p: Project if p.projectList.length == 3 => p
+      }.isDefined, "CTE columns should be pruned.")
+      assert(distinctCteRepartitions(1).collectFirst {
+        case f: Filter if f.condition.semanticEquals(GreaterThan(f.output(1), Literal(0))) => f
+      }.isDefined, "Predicate 'c2 > 0' should be pushed down to the CTE def 'v'.")
+      assert(distinctCteRepartitions(0).collectFirst {
+        case f: Filter if f.condition.find(_.semanticEquals(f.output(0))).isDefined => f
+      }.isDefined, "CTE 'vv' definition contains predicate 'c1 > 0'.")
+      assert(distinctCteRepartitions(1).collectFirst {
+        case f: Filter if f.condition.find(_.semanticEquals(f.output(0))).isDefined => f
+      }.isEmpty, "Predicate 'c1 > 0' should be not pushed down to the CTE def 'v'.")
+      // Check runtime repartition reuse.
+      assert(
+        collectWithSubqueries(df.queryExecution.executedPlan) {
+          case r: ReusedExchangeExec => r
+        }.length == 2,
+        "CTE repartition is reused.")
+    }
+  }
+
+  test("CTE Predicate push-down and column pruning - combined predicate") {
+    withView("t") {
+      Seq((0, 1, 2), (1, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t")
+      val df = sql(
+        s"""with
+           |v as (
+           |  select c1, c2, c3, rand() c4 from t
+           |),
+           |vv as (
+           |  select v1.c1, v1.c2, rand() c5 from v v1, v v2
+           |  where v1.c1 > 0 and v2.c3 < 5 and v1.c2 = v2.c2
+           |)
+           |select vv1.c1, vv1.c2, vv2.c1, vv2.c2 from vv vv1, vv vv2
+           |where vv1.c2 > 0 and vv2.c2 > 0 and vv1.c1 = vv2.c1
+         """.stripMargin)
+      checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+      assert(
+        df.queryExecution.analyzed.collect {
+          case WithCTE(_, cteDefs) => cteDefs
+        }.head.length == 2,
+        "With-CTE should contain 2 CTE defs after analysis.")
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.length == 6,
+        "CTE should not be inlined after optimization.")
+      val distinctCteRepartitions = cteRepartitions.distinct
+      // Check column pruning and predicate push-down.
+      assert(distinctCteRepartitions.length == 2)
+      assert(distinctCteRepartitions(1).collectFirst {
+        case p: Project if p.projectList.length == 3 => p
+      }.isDefined, "CTE columns should be pruned.")
+      assert(
+        distinctCteRepartitions(1).collectFirst {
+          case f: Filter
+              if f.condition.semanticEquals(
+                And(
+                  GreaterThan(f.output(1), Literal(0)),
+                  Or(
+                    GreaterThan(f.output(0), Literal(0)),
+                    LessThan(f.output(2), Literal(5))))) =>
+            f
+        }.isDefined,
+        "Predicate 'c2 > 0 AND (c1 > 0 OR c3 < 5)' should be pushed down to the CTE def 'v'.")
+      // Check runtime repartition reuse.
+      assert(
+        collectWithSubqueries(df.queryExecution.executedPlan) {
+          case r: ReusedExchangeExec => r
+        }.length == 2,
+        "CTE repartition is reused.")
     }
   }
 }

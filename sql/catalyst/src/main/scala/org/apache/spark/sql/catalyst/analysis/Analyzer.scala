@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
+import org.apache.commons.lang3.mutable.MutableInt
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -123,6 +125,7 @@ case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
+    currentCteId: MutableInt = new MutableInt(0),
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
@@ -154,6 +157,7 @@ object AnalysisContext {
       viewDesc.viewCatalogAndNamespace,
       originContext.nestedViewDepth + 1,
       maxNestedViewDepth,
+      originContext.currentCteId,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*))
@@ -1011,6 +1015,24 @@ class Analyzer(override val catalogManager: CatalogManager)
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
         // inside a view maybe resolved incorrectly.
         checkAnalysis(newChild)
+        view.copy(child = newChild)
+      case view @ View(_, _, child) =>
+        // Refresh CTE IDs in view's child that has been analyzed with a different AnalysisContext.
+        val offset = AnalysisContext.get.currentCteId.getValue
+        var maxId = 0L
+        val newChild = child.transformUpWithSubqueries {
+          case d: CTERelationDef =>
+            if (d.id > maxId) {
+              maxId = d.id
+            }
+            d.copy(id = d.id + offset)
+          case r: CTERelationRef =>
+            if (r.cteId > maxId) {
+              maxId = r.cteId
+            }
+            r.copy(cteId = r.cteId + offset)
+        }
+        AnalysisContext.get.currentCteId.add(maxId + 1)
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
