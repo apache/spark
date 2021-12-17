@@ -17,13 +17,13 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.io.IOException;
+import java.util.*;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
-
-import java.io.IOException;
-import java.util.*;
 
 class RocksDBIterator<T> implements KVStoreIterator<T> {
 

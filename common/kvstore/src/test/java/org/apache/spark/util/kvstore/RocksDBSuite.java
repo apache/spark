@@ -17,14 +17,6 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.rocksdb.RocksIterator;
-
 import java.io.File;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -32,6 +24,14 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import com.google.common.collect.ImmutableSet;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.SystemUtils;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.rocksdb.RocksIterator;
 
 import static org.junit.Assert.*;
 import static org.junit.Assume.assumeFalse;
