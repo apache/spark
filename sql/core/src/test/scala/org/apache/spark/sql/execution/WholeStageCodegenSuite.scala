@@ -52,7 +52,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("SortAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).agg(max(col("id")), avg(col("id")))
-    withSQLConf("spark.sql.aggregate.forceApplySortAggregate" -> "true") {
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
       val plan = df.queryExecution.executedPlan
       assert(plan.find(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&

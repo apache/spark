@@ -540,6 +540,6 @@ object AggUtils {
    */
   private def forceApplySortAggregate(conf: SQLConf): Boolean = {
     Utils.isTesting &&
-      conf.getConfString("spark.sql.aggregate.forceApplySortAggregate", "false") == "true"
+      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 }

@@ -47,8 +47,8 @@ trait CodegenSupport extends SparkPlan {
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
-    case _: HashAggregateExec => "hagg"
-    case _: SortAggregateExec => "sagg"
+    case _: HashAggregateExec => "hashAgg"
+    case _: SortAggregateExec => "sortAgg"
     case _: BroadcastHashJoinExec => "bhj"
     case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
