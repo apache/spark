@@ -3989,7 +3989,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
         if is_name_like_tuple(column):
-            if len(column) != len(self.columns.levels):
+            if len(column) != len(self.columns.levels):  # type: ignore[attr-defined]  # SPARK-37668
                 # To be consistent with pandas
                 raise ValueError('"column" must have length equal to number of column levels.')
 
