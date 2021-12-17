@@ -30,7 +30,6 @@ import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.PairsWriter
 
-
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
  * to an existing block. For efficiency, it retains the underlying file channel across
