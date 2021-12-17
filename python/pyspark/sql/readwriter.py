@@ -180,6 +180,7 @@ class DataFrameReader(OptionUtils):
         elif path is not None:
             if type(path) != list:
                 path = [path]  # type: ignore[list-item]
+            assert self._spark._sc._jvm is not None
             return self._df(
                 self._jreader.load(
                     self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
@@ -285,6 +286,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
+            assert self._spark._sc._jvm is not None
             return self._df(
                 self._jreader.json(
                     self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
@@ -302,6 +304,7 @@ class DataFrameReader(OptionUtils):
 
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())  # type: ignore[attr-defined]
             return self._df(self._jreader.json(jrdd))
         else:
@@ -424,6 +427,7 @@ class DataFrameReader(OptionUtils):
 
         if isinstance(paths, str):
             paths = [paths]
+        assert self._spark._sc._jvm is not None
         return self._df(
             self._jreader.text(
                 self._spark._sc._jvm.PythonUtils.toSeq(paths)  # type: ignore[attr-defined]
@@ -541,6 +545,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
+            assert self._spark._sc._jvm is not None
             return self._df(
                 self._jreader.csv(
                     self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
@@ -703,9 +708,10 @@ class DataFrameReader(OptionUtils):
         """
         if properties is None:
             properties = dict()
+        assert self._spark._sc._gateway is not None
         jprop = JavaClass(
             "java.util.Properties",
-            self._spark._sc._gateway._gateway_client,  # type: ignore[attr-defined]
+            self._spark._sc._gateway._gateway_client,
         )()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -721,7 +727,8 @@ class DataFrameReader(OptionUtils):
                 )
             )
         if predicates is not None:
-            gateway = self._spark._sc._gateway  # type: ignore[attr-defined]
+            gateway = self._spark._sc._gateway
+            assert gateway is not None
             jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
@@ -1340,9 +1347,11 @@ class DataFrameWriter(OptionUtils):
         """
         if properties is None:
             properties = dict()
+
+        assert self._spark._sc._gateway is not None
         jprop = JavaClass(
             "java.util.Properties",
-            self._spark._sc._gateway._gateway_client,  # type: ignore[attr-defined]
+            self._spark._sc._gateway._gateway_client,
         )()
         for k in properties:
             jprop.setProperty(k, properties[k])

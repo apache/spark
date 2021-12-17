@@ -304,6 +304,7 @@ class TaskResourceRequests:
 
         _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
+            assert SparkContext._jvm is not None
             self._java_task_resource_requests: Optional[
                 JavaObject
             ] = (

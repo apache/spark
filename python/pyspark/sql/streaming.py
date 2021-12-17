@@ -1062,6 +1062,7 @@ class DataStreamWriter:
             raise ValueError("Multiple triggers not allowed.")
 
         jTrigger = None
+        assert self._spark._sc._jvm is not None
         if processingTime is not None:
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError(
@@ -1270,6 +1271,7 @@ class DataStreamWriter:
 
         serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
+        assert self._spark._sc._jvm is not None
         jForeachWriter = self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(  # type: ignore[attr-defined]
             wrapped_func, self._df._jdf.schema()
         )
@@ -1303,7 +1305,8 @@ class DataStreamWriter:
 
         from pyspark.java_gateway import ensure_callback_server_started
 
-        gw = self._spark._sc._gateway  # type: ignore[attr-defined]
+        gw = self._spark._sc._gateway
+        assert gw is not None
         java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
 
         wrapped_func = ForeachBatchFunction(self._spark, func)

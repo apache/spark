@@ -427,12 +427,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             explain_mode = cast(str, mode)
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
-
-        print(
-            self._sc._jvm.PythonSQLUtils.explainString(  # type: ignore[attr-defined]
-                self._jdf.queryExecution(), explain_mode
-            )
-        )
+        assert self._sc._jvm is not None
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
@@ -2989,7 +2985,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(metadata, dict):
             raise TypeError("metadata should be a dict")
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
 
@@ -3281,7 +3278,8 @@ def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     """
     Convert a dict into a JVM Map.
     """
-    return sc._jvm.PythonUtils.toScalaMap(jm)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
 class DataFrameNaFunctions:

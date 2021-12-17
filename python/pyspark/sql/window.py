@@ -30,9 +30,10 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]) -> int:
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
+    assert sc is not None
     return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
@@ -74,7 +75,8 @@ class Window:
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
         """
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
@@ -84,7 +86,8 @@ class Window:
         """
         Creates a :class:`WindowSpec` with the ordering defined.
         """
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
@@ -148,7 +151,8 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
 
@@ -215,7 +219,8 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
 

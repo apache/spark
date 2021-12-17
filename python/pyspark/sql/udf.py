@@ -48,7 +48,8 @@ def _wrap_function(
 ) -> JavaObject:
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonFunction(
         bytearray(pickled_command),
         env,
         includes,
@@ -222,14 +223,15 @@ class UserDefinedFunction:
 
         wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(  # type: ignore[attr-defined]
+        assert sc._jvm is not None
+        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic
         )
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-
+        sc = SparkContext._active_spark_context
+        assert sc is not None
         profiler: Optional[Profiler] = None
         if sc.profiler_collector:
             f = self.func
