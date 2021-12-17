@@ -8910,7 +8910,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 for i in range(0, len(first_last_values) - 1, 2):
                     first_value = first_last_values[i]
                     last_value = first_last_values[i + 1]
-                    print(first_value)
                     if first_value == np.nan:
                         firsts.append(first_value)
                     else:
