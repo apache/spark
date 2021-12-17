@@ -3476,7 +3476,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if isinstance(q, Iterable):
             return first_series(
-                self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy)
+                cast(
+                    "ps.DataFrame",
+                    self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy),
+                )
             ).rename(self.name)
         else:
             if not isinstance(accuracy, int):
