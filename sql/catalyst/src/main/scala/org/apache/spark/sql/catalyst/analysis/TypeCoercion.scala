@@ -1088,24 +1088,6 @@ object TypeCoercion extends TypeCoercionBase {
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-
-      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case Sum(e @ StringType(), _) => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType(), _) => Average(Cast(e, DoubleType))
-      case s @ StddevPop(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ StddevSamp(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case v @ VariancePop(e @ StringType(), _) =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case v @ VarianceSamp(e @ StringType(), _) =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ Skewness(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case k @ Kurtosis(e @ StringType(), _) =>
-        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 

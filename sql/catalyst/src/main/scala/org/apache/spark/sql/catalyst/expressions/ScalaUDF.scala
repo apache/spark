@@ -64,10 +64,10 @@ case class ScalaUDF(
 
   override def name: String = udfName.getOrElse("UDF")
 
-  override lazy val canonicalized: Expression = {
+  override lazy val preCanonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
-    Canonicalize.execute(copy(children = children.map(_.canonicalized), inputEncoders = Nil))
+    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil)
   }
 
   /**

@@ -318,8 +318,8 @@ private[sql] object V2SessionCatalog {
       case IdentityTransform(FieldReference(Seq(col))) =>
         identityCols += col
 
-      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
-        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
+      case BucketTransform(numBuckets, FieldReference(Seq(col)), FieldReference(Seq(sortCol))) =>
+        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, sortCol :: Nil))
 
       case transform =>
         throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)

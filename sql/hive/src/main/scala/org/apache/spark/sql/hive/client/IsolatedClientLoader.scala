@@ -55,7 +55,8 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will use Hadoop 2.7 if we cannot resolve the Hadoop artifact.
+    // We will use Hadoop 3.x if we can't resolve the hadoop artifact
+    // when builtin hadoop is Hadoop 3. Otherwise we will use Hadoop 2.x.
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
@@ -67,7 +68,11 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = "2.7.4"
+            val fallbackVersion = if (VersionUtils.isHadoop3) {
+              "3.3.1"
+            } else {
+              "2.7.4"
+            }
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
               "again. It is recommended to set jars used by Hive metastore client through " +
