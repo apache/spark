@@ -73,7 +73,7 @@ public class RocksDB implements KVStore {
 
   private static final WriteOptions writeOptions = new WriteOptions().setSync(true);
 
-  private AtomicReference<org.rocksdb.RocksDB> _db;
+  private final AtomicReference<org.rocksdb.RocksDB> _db;
 
   final KVStoreSerializer serializer;
 
