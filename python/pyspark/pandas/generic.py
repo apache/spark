@@ -2927,17 +2927,17 @@ class Frame(object, metaclass=ABCMeta):
 
         if isinstance(self, ps.Series):
             if indexes_increasing:
-                result = first_series(self.to_frame().loc[before:after]).rename(self.name)
+                result = first_series(self.to_frame().loc[before:after]).rename(self.name)  # type: ignore[assignment]
             else:
-                result = first_series(self.to_frame().loc[after:before]).rename(self.name)
+                result = first_series(self.to_frame().loc[after:before]).rename(self.name)  # type: ignore[assignment]
         elif isinstance(self, ps.DataFrame):
             if axis == 0:
                 if indexes_increasing:
-                    result = self.loc[before:after]
+                    result = self.loc[before:after]  # type: ignore[assignment]
                 else:
-                    result = self.loc[after:before]
+                    result = self.loc[after:before]  # type: ignore[assignment]
             elif axis == 1:
-                result = self.loc[:, before:after]
+                result = self.loc[:, before:after]  # type: ignore[assignment]
 
         return cast(DataFrameOrSeries, result.copy() if copy else result)
 
