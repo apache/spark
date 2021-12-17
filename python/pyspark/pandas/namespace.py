@@ -1135,7 +1135,7 @@ def read_excel(
             na_values=na_values,
             keep_default_na=keep_default_na,
             verbose=verbose,
-            parse_dates=parse_dates,
+            parse_dates=parse_dates,  # type: ignore[arg-type]
             date_parser=date_parser,
             thousands=thousands,
             comment=comment,
