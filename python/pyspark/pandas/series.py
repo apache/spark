@@ -3656,7 +3656,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
         return first_series(
-            self.to_frame().filter(items=items, like=like, regex=regex, axis=axis)
+            cast(
+                "ps.DataFrame",
+                self.to_frame().filter(items=items, like=like, regex=regex, axis=axis),
+            )
         ).rename(self.name)
 
     filter.__doc__ = DataFrame.filter.__doc__
@@ -5136,7 +5139,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if repeats == 0:
                 return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
             else:
-                return first_series(ps.concat([psdf] * repeats))
+                return first_series(cast("ps.DataFrame", ps.concat([psdf] * repeats)))
 
     def asof(self, where: Union[Any, List]) -> Union[Scalar, "Series"]:
         """
