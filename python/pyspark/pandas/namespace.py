@@ -32,7 +32,6 @@ from typing import (
     cast,
     no_type_check,
 )
-from collections import OrderedDict
 from collections.abc import Iterable
 from datetime import tzinfo
 from functools import reduce
@@ -339,7 +338,7 @@ def read_csv(
         column_labels: Dict[Any, str]
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)
+            column_labels = {col: col for col in sdf.columns}
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -352,26 +351,26 @@ def read_csv(
                         "of columns [%d]. Try names by a Spark SQL DDL-formatted "
                         "string." % (len(sdf.schema), len(names))
                     )
-                column_labels = OrderedDict(zip(names, sdf.columns))
+                column_labels = dict(zip(names, sdf.columns))
             elif header is None:
-                column_labels = OrderedDict(enumerate(sdf.columns))
+                column_labels = dict(enumerate(sdf.columns))
             else:
-                column_labels = OrderedDict((col, col) for col in sdf.columns)
+                column_labels = {col: col for col in sdf.columns}
 
         if usecols is not None:
             missing: List[Union[int, str]]
             if callable(usecols):
-                column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if usecols(label)
-                )
+                column_labels = {
+                    label: col for label, col in column_labels.items() if usecols(label)
+                }
                 missing = []
             elif all(isinstance(col, int) for col in usecols):
                 usecols_ints = cast(List[int], usecols)
-                new_column_labels = OrderedDict(
-                    (label, col)
+                new_column_labels = {
+                    label: col
                     for i, (label, col) in enumerate(column_labels.items())
                     if i in usecols_ints
-                )
+                }
                 missing = [
                     col
                     for col in usecols_ints
@@ -382,9 +381,9 @@ def read_csv(
                 ]
                 column_labels = new_column_labels
             elif all(isinstance(col, str) for col in usecols):
-                new_column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if label in usecols
-                )
+                new_column_labels = {
+                    label: col for label, col in column_labels.items() if label in usecols
+                }
                 missing = [col for col in usecols if col not in new_column_labels]
                 column_labels = new_column_labels
             else:
@@ -403,7 +402,7 @@ def read_csv(
                 sdf = default_session().createDataFrame([], schema=StructType())
     else:
         sdf = default_session().createDataFrame([], schema=StructType())
-        column_labels = OrderedDict()
+        column_labels = {}
 
     if nrows is not None:
         sdf = sdf.limit(nrows)
@@ -418,9 +417,9 @@ def read_csv(
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
         index_names = [(col,) for col in index_col]
-        column_labels = OrderedDict(
-            (label, col) for label, col in column_labels.items() if label not in index_col
-        )
+        column_labels = {
+            label: col for label, col in column_labels.items() if label not in index_col
+        }
     else:
         log_advice(
             "If `index_col` is not specified for `read_csv`, "
@@ -913,7 +912,7 @@ def read_excel(
     convert_float: bool = True,
     mangle_dupe_cols: bool = True,
     **kwds: Any,
-) -> Union[DataFrame, Series, OrderedDict]:
+) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
@@ -1158,9 +1157,10 @@ def read_excel(
 
     if single_file:
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [(sn, from_pandas(pdf_or_pser)) for sn, pdf_or_pser in pdf_or_psers.items()]
-            )
+            return {
+                sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
+                for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
     else:
@@ -1210,12 +1210,9 @@ def read_excel(
                 return psdf
 
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [
-                    (sn, read_excel_on_spark(pdf_or_pser, sn))
-                    for sn, pdf_or_pser in pdf_or_psers.items()
-                ]
-            )
+            return {
+                sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return read_excel_on_spark(pdf_or_psers, sheet_name)
 
