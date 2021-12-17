@@ -11912,7 +11912,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             right = combined["that"]
 
             if right_is_series:
-                right = first_series(right).rename(other.name)
+                right = first_series(cast(DataFrame[Any], right)).rename(other.name)
 
         if (
             axis is None or axis == 1
