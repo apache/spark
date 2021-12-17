@@ -5779,14 +5779,53 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.astype({"c": float})
 
     def test_describe(self):
-        psdf = self.psdf
+        pdf, psdf = self.df_pair
+
+        # numeric columns
+        self.assert_eq(psdf.describe(), pdf.describe())
+
+        # string columns
+        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+
+        # timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [
+                    pd.Timestamp("2020-10-20"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2022-07-11"),
+                ],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+
+        # String & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": ["a", "b", "c"],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe(percentiles=[1.1])
 
-        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
-
+        psdf = ps.DataFrame()
         msg = "Cannot describe a DataFrame without columns"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
