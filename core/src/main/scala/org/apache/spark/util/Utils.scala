@@ -2428,6 +2428,8 @@ private[spark] object Utils extends Logging {
       .asInstanceOf[org.apache.logging.log4j.core.Logger]
     rootLogger.setLevel(l)
     rootLogger.get().setLevel(l)
+    // Setting threshold to null as rootLevel will define log level for spark-shell
+    Logging.sparkShellThresholdLevel = null
   }
 
   /**
