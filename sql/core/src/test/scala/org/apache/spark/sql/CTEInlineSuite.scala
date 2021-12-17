@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, LessThan, Literal, Or}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, RepartitionOperation, WithCTE}
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec

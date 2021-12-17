@@ -21,8 +21,6 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
