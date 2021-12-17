@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -3238,12 +3238,21 @@ private[spark] object Utils extends Logging {
    * Get the value of -XX:G1HeapRegionSize if we are using G1 GC,
    * otherwise just return None
    */
-  val G1HeapRegionSize: Option[Long] = {
+  val maybeG1HeapRegionSize: Option[Long] = {
     Try {
-      val diagnostic = ManagementFactoryHelper.getDiagnosticMXBean()
-      val isG1GC = diagnostic.getVMOption("UseG1GC")
-      if (isG1GC.getValue().equals("true")) {
-        Some(diagnostic.getVMOption("G1HeapRegionSize").getValue.toLong)
+      val clazz = classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[_ <: PlatformManagedObject]]
+      val vmOptionClazz = classForName("com.sun.management.VMOption")
+      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
+      val valueMethod = vmOptionClazz.getMethod("getValue")
+
+      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
+      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+      if ("true".equals(useG1GC)) {
+        val regionSizeObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "G1HeapRegionSize")
+        val g1HeapRegionSize = valueMethod.invoke(regionSizeObject).asInstanceOf[String].toLong
+        Some(g1HeapRegionSize)
       } else {
         None
       }
