@@ -17,11 +17,57 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{REGR_AGG, TreePattern}
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, DoubleType, NumericType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, DoubleType, LongType, NumericType}
+
+trait RegressionAggregate
+  extends UnevaluableAggregate with ImplicitCastInputTypes with BinaryLike[Expression]{
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(REGR_AGG)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the number of non-null number pairs in a group.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       4
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       3
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       2
+  """,
+  group = "agg_funcs",
+  since = "3.3.0")
+case class RegrCount(left: Expression, right: Expression) extends RegressionAggregate {
+
+  override def prettyName: String = "regr_count"
+
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = LongType
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrCount =
+    this.copy(left = newLeft, right = newRight)
+}
+
+trait RegrAvg extends RegressionAggregate {
+
+  def avgInputExpression: Expression
+
+  override def dataType: DataType = avgInputExpression.dataType match {
+    case DecimalType.Fixed(p, s) =>
+      DecimalType.bounded(p + 4, s + 4)
+    case _ => DoubleType
+  }
+}
 
 @ExpressionDescription(
   usage = """
@@ -43,7 +89,7 @@ case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
 
   override def prettyName: String = "regr_avgx"
 
-  override def avgExpression: Expression = right
+  override def avgInputExpression: Expression = right
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrAvgX =
@@ -70,28 +116,9 @@ case class RegrAvgY(left: Expression, right: Expression) extends RegrAvg {
 
   override def prettyName: String = "regr_avgy"
 
-  override def avgExpression: Expression = left
+  override def avgInputExpression: Expression = left
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrAvgY =
     copy(left = newLeft, right = newRight)
-}
-
-trait RegrAvg extends UnevaluableAggregate with ImplicitCastInputTypes with BinaryLike[Expression]{
-
-  def avgExpression: Expression
-
-  override def dataType: DataType = avgExpression.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      DecimalType.bounded(p + 4, s + 4)
-    case _ => DoubleType
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(REGR_AGG)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    ExpectsInputTypes.checkInputDataTypes(Seq(left, right), inputTypes)
-  }
 }

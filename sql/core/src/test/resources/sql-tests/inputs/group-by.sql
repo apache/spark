@@ -232,12 +232,10 @@ FROM VALUES
 GROUP BY a;
 
 -- SPARK-37614: Support ANSI Aggregate Function: regr_avgx
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, 2L), (2, 3L), (2, 4L) AS tab(a, b);
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (2, 3L), (2, 4L) AS tab(a, b);
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS tab(a, b);
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a;
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a;
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a;
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression;
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
+SELECT k, avg(x), avg(y), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
+SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
 
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT

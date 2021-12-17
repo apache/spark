@@ -775,55 +775,37 @@ struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
 
 
 -- !query
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, 2L), (2, 3L), (2, 4L) AS tab(a, b)
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression
 -- !query schema
-struct<regr_avgx(a, b):double,regr_avgy(a, b):double>
+struct<regr_avgx(y, x):double,regr_avgy(y, x):double>
 -- !query output
-2.75	1.75
+22.666666666666668	20.0
 
 
 -- !query
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (2, 3L), (2, 4L) AS tab(a, b)
+SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL
 -- !query schema
-struct<regr_avgx(a, b):double,regr_avgy(a, b):double>
+struct<regr_avgx(y, x):double,regr_avgy(y, x):double>
 -- !query output
-3.0	1.6666666666666667
+22.666666666666668	20.0
 
 
 -- !query
-SELECT regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2L), (2, null), (null, 3L), (2, 4L) AS tab(a, b)
+SELECT k, avg(x), avg(y), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<regr_avgx(a, b):double,regr_avgy(a, b):double>
+struct<k:int,avg(x):double,avg(y):double,regr_avgx(y, x):double,regr_avgy(y, x):double>
 -- !query output
-3.0	1.5
+1	NULL	10.0	NULL	NULL
+2	22.666666666666668	21.25	22.666666666666668	20.0
 
 
 -- !query
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, 2L), (2, 3D), (2, 4D) AS tab(a, b) group by a
+SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<a:int,regr_avgx(a, b):double,regr_avgy(a, b):double>
+struct<k:int,avg(x) FILTER (WHERE ((x IS NOT NULL) AND (y IS NOT NULL))):double,avg(y) FILTER (WHERE ((x IS NOT NULL) AND (y IS NOT NULL))):double,regr_avgx(y, x):double,regr_avgy(y, x):double>
 -- !query output
-1	2.0	1.0
-2	3.0	2.0
-
-
--- !query
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (2, 3D), (2, 4D) AS tab(a, b) group by a
--- !query schema
-struct<a:int,regr_avgx(a, b):double,regr_avgy(a, b):double>
--- !query output
-1	2.0	1.0
-2	3.5	2.0
-
-
--- !query
-SELECT a, regr_avgx(a, b), regr_avgy(a, b) FROM VALUES (1, 2D), (2, null), (null, 3D), (2, 4D) AS tab(a, b) group by a
--- !query schema
-struct<a:int,regr_avgx(a, b):double,regr_avgy(a, b):double>
--- !query output
-1	2.0	1.0
-2	4.0	2.0
-NULL	NULL	NULL
+1	NULL	NULL	NULL	NULL
+2	22.666666666666668	20.0	22.666666666666668	20.0
 
 
 -- !query
