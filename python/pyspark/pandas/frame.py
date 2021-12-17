@@ -8921,7 +8921,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     else:
                         lasts.append(str(last_value))
 
-                print(firsts, lasts)
                 stats.append(firsts)
                 stats.append(lasts)
                 stats_names.append("first")
