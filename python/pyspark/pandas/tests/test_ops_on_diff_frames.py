@@ -889,6 +889,17 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 ),
             )
             psser1.compare(psser2)
+        # SPARK-37495: Skip identical index checking of Series.compare when config
+        # 'compute.eager_check' is disabled
+        psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
+        psser2 = ps.Series([1, 2, 3, 4, 5, 6], index=pd.Index([1, 2, 4, 3, 6, 7]))
+        expected = ps.DataFrame(
+            {"self": [3, 4, 5, np.nan, np.nan], "other": [4, 3, np.nan, 5.0, 6.0]},
+            index=[3, 4, 5, 6, 7],
+        )
+
+        with ps.option_context("compute.eager_check", False):
+            self.assert_eq(expected, psser1.compare(psser2))
 
     def test_different_columns(self):
         psdf1 = self.psdf1

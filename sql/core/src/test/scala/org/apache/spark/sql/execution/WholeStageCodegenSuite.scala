@@ -467,7 +467,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val planInt = dsIntFilter.queryExecution.executedPlan
     assert(planInt.collect {
       case WholeStageCodegenExec(FilterExec(_,
-          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
+          InputAdapter(_: InMemoryTableScanExec))) => ()
     }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 

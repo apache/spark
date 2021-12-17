@@ -26,7 +26,7 @@ from pyspark.resource.requests import (
 )
 
 
-class ResourceProfile(object):
+class ResourceProfile:
 
     """
     Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
@@ -102,7 +102,7 @@ class ResourceProfile(object):
             return self._executor_resource_requests
 
 
-class ResourceProfileBuilder(object):
+class ResourceProfileBuilder:
 
     """
     Resource profile Builder to build a resource profile to associate with an RDD.

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from pyspark.sql.group import GroupedData
 
 
-class PandasGroupedOpsMixin(object):
+class PandasGroupedOpsMixin:
     """
     Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
@@ -237,7 +237,7 @@ class PandasGroupedOpsMixin(object):
         return PandasCogroupedOps(self, other)
 
 
-class PandasCogroupedOps(object):
+class PandasCogroupedOps:
     """
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.

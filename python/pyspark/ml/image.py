@@ -36,7 +36,7 @@ from pyspark.sql import SparkSession
 __all__ = ["ImageSchema"]
 
 
-class _ImageSchema(object):
+class _ImageSchema:
     """
     Internal class for `pyspark.ml.image.ImageSchema` attribute. Meant to be private and
     not to be instantized. Use `pyspark.ml.image.ImageSchema` attribute to access the

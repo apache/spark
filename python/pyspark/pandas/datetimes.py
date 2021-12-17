@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps
 
 
-class DatetimeMethods(object):
+class DatetimeMethods:
     """Date/Time methods for pandas-on-Spark Series"""
 
     def __init__(self, series: "ps.Series"):

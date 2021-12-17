@@ -296,7 +296,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -348,11 +348,13 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
+      // scalastyle:on line.size.limit
     } else {
       ""
     }
@@ -467,8 +469,8 @@ abstract class StringPredicate extends BinaryExpression
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns a boolean value if expr2 is found inside expr1.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
     Examples:

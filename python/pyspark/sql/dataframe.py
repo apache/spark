@@ -41,6 +41,7 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import copy_func, since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.rdd import (  # type: ignore[attr-defined]
     RDD,
@@ -2530,7 +2531,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
         ],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` replacing a value with another value.
@@ -2673,7 +2676,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]
-            rep_dict = dict(zip(to_replace, value))
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
 
         if isinstance(subset, str):
             subset = [subset]
@@ -3281,7 +3284,7 @@ def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     return sc._jvm.PythonUtils.toScalaMap(jm)  # type: ignore[attr-defined]
 
 
-class DataFrameNaFunctions(object):
+class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
 
     .. versionadded:: 1.4
@@ -3343,7 +3346,9 @@ class DataFrameNaFunctions(object):
     def replace(  # type: ignore[misc]
         self,
         to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> DataFrame:
         return self.df.replace(to_replace, value, subset)  # type: ignore[arg-type]
@@ -3351,7 +3356,7 @@ class DataFrameNaFunctions(object):
     replace.__doc__ = DataFrame.replace.__doc__
 
 
-class DataFrameStatFunctions(object):
+class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 
     .. versionadded:: 1.4

@@ -258,7 +258,7 @@ try:
         license='http://www.apache.org/licenses/LICENSE-2.0',
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=['py4j==0.10.9.2'],
+        install_requires=['py4j==0.10.9.3'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
@@ -272,11 +272,10 @@ try:
                 'numpy>=1.14',
             ],
         },
-        python_requires='>=3.6',
+        python_requires='>=3.7',
         classifiers=[
             'Development Status :: 5 - Production/Stable',
             'License :: OSI Approved :: Apache Software License',
-            'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: 3.9',

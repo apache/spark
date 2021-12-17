@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, TreePattern}
 
 /**
  * A logical node used to time travel the child relation to the given `timestamp` or `version`.
@@ -31,4 +32,5 @@ case class RelationTimeTravel(
     version: Option[String]) extends LeafNode {
   override def output: Seq[Attribute] = Nil
   override lazy val resolved: Boolean = false
+  override val nodePatterns: Seq[TreePattern] = Seq(RELATION_TIME_TRAVEL)
 }

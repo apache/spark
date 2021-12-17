@@ -46,12 +46,13 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
+          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+            None, None, None, false)
           val plan = CreateTableAsSelect(
-            catalog,
-            Identifier.of(Array(), "table_name"),
+            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
             Expressions.identity(ref) :: Nil,
             TestRelation2,
-            Map.empty,
+            tableSpec,
             Map.empty,
             ignoreIfExists = false)
 
@@ -69,12 +70,13 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
+          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+            None, None, None, false)
           val plan = CreateTableAsSelect(
-            catalog,
-            Identifier.of(Array(), "table_name"),
+            UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
             Expressions.bucket(4, ref) :: Nil,
             TestRelation2,
-            Map.empty,
+            tableSpec,
             Map.empty,
             ignoreIfExists = false)
 

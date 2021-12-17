@@ -91,7 +91,7 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
     return [singleTask] * len(epm)
 
 
-class ParamGridBuilder(object):
+class ParamGridBuilder:
     r"""
     Builder for a param grid used in grid search-based model selection.
 

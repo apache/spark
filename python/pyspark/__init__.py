@@ -48,6 +48,7 @@ Public classes:
 
 from functools import wraps
 import types
+from typing import cast, Any, Callable, Optional, TypeVar, Union
 
 from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
@@ -63,8 +64,11 @@ from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
 from pyspark._globals import _NoValue  # noqa: F401
 
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable)
 
-def since(version):
+
+def since(version: Union[str, float]) -> Callable[[F], F]:
     """
     A decorator that annotates a function to append the version of Spark the function was added.
     """
@@ -72,7 +76,9 @@ def since(version):
 
     indent_p = re.compile(r"\n( +)")
 
-    def deco(f):
+    def deco(f: F) -> F:
+        assert f.__doc__ is not None
+
         indents = indent_p.findall(f.__doc__)
         indent = " " * (min(len(m) for m in indents) if indents else 0)
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
@@ -81,15 +87,26 @@ def since(version):
     return deco
 
 
-def copy_func(f, name=None, sinceversion=None, doc=None):
+def copy_func(
+    f: F,
+    name: Optional[str] = None,
+    sinceversion: Optional[Union[str, float]] = None,
+    doc: Optional[str] = None,
+) -> F:
     """
     Returns a function with same code, globals, defaults, closure, and
     name (or provide a new name).
     """
     # See
     # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
+    assert isinstance(f, types.FunctionType)
+
     fn = types.FunctionType(
-        f.__code__, f.__globals__, name or f.__name__, f.__defaults__, f.__closure__
+        f.__code__,
+        f.__globals__,
+        name or f.__name__,
+        f.__defaults__,
+        f.__closure__,
     )
     # in case f was given attrs (note this dict is a shallow copy):
     fn.__dict__.update(f.__dict__)
@@ -97,10 +114,10 @@ def copy_func(f, name=None, sinceversion=None, doc=None):
         fn.__doc__ = doc
     if sinceversion is not None:
         fn = since(sinceversion)(fn)
-    return fn
+    return cast(F, fn)
 
 
-def keyword_only(func):
+def keyword_only(func: F) -> F:
     """
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
@@ -111,13 +128,13 @@ def keyword_only(func):
     """
 
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         if len(args) > 0:
             raise TypeError("Method %s forces keyword arguments." % func.__name__)
         self._input_kwargs = kwargs
         return func(self, **kwargs)
 
-    return wrapper
+    return cast(F, wrapper)
 
 
 # To avoid circular dependencies

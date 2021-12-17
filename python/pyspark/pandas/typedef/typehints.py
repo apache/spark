@@ -73,7 +73,8 @@ import pyarrow as pa
 import pyspark.sql.types as types
 from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
-from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+# For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Dtype, T
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
 
@@ -91,7 +92,7 @@ class SeriesType(Generic[T]):
         return "SeriesType[{}]".format(self.spark_type)
 
 
-class DataFrameType(object):
+class DataFrameType:
     def __init__(
         self,
         index_fields: List["InternalField"],
@@ -114,7 +115,7 @@ class DataFrameType(object):
 
 
 # The type is a scalar type that is furthermore understood by Spark.
-class ScalarType(object):
+class ScalarType:
     def __init__(self, dtype: Dtype, spark_type: types.DataType):
         self.dtype = dtype
         self.spark_type = spark_type
@@ -124,7 +125,7 @@ class ScalarType(object):
 
 
 # The type is left unspecified or we do not know about this type.
-class UnknownType(object):
+class UnknownType:
     def __init__(self, tpe: Any):
         self.tpe = tpe
 
@@ -132,13 +133,13 @@ class UnknownType(object):
         return "UnknownType[{}]".format(self.tpe)
 
 
-class IndexNameTypeHolder(object):
+class IndexNameTypeHolder:
     name = None
     tpe = None
     short_name = "IndexNameType"
 
 
-class NameTypeHolder(object):
+class NameTypeHolder:
     name = None
     tpe = None
     short_name = "NameType"
@@ -571,12 +572,6 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
         # This type hint can happen when given hints are string to avoid forward reference.
         tpe = resolve_string_type_hint(tpe)
 
-    if hasattr(tpe, "__origin__") and (
-        tpe.__origin__ == ps.DataFrame or tpe.__origin__ == ps.Series
-    ):
-        # When Python version is lower then 3.7. Unwrap it to a Tuple/SeriesType type hints.
-        tpe = tpe.__args__[0]
-
     if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
         tpe = tpe.__args__[0]
         if issubclass(tpe, NameTypeHolder):
@@ -585,17 +580,12 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
         return SeriesType(dtype, spark_type)
 
     # Note that, DataFrame type hints will create a Tuple.
-    # Python 3.6 has `__name__`. Python 3.7 and 3.8 have `_name`.
-    # Check if the name is Tuple.
+    # Tuple has _name but other types have __name__
     name = getattr(tpe, "_name", getattr(tpe, "__name__", None))
+    # Check if the name is Tuple.
     if name == "Tuple":
         tuple_type = tpe
-        if hasattr(tuple_type, "__tuple_params__"):
-            # Python 3.5.0 to 3.5.2 has '__tuple_params__' instead.
-            # See https://github.com/python/cpython/blob/v3.5.2/Lib/typing.py
-            parameters = getattr(tuple_type, "__tuple_params__")
-        else:
-            parameters = getattr(tuple_type, "__args__")
+        parameters = getattr(tuple_type, "__args__")
 
         index_parameters = [
             p for p in parameters if isclass(p) and issubclass(p, IndexNameTypeHolder)

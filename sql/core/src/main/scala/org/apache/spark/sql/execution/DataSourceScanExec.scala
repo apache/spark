@@ -142,13 +142,23 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
+    val topNOrLimitInfo =
+      if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
+        val pushedTopN =
+          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+          s" LIMIT ${pushedDownOperators.limit.get}"
+        Some("pushedTopN" -> pushedTopN)
+    } else {
+      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+    }
+
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
+      topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )

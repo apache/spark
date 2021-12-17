@@ -37,7 +37,7 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils(object):
+class OptionUtils:
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -110,7 +110,7 @@ class DataFrameReader(OptionUtils):
         """
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(
                 schema.json()
@@ -1349,7 +1349,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
-class DataFrameWriterV2(object):
+class DataFrameWriterV2:
     """
     Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
     to external storage using the v2 API.
@@ -1502,7 +1502,7 @@ def _test() -> None:
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext("local[4]", "PythonTest")
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 

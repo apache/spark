@@ -39,7 +39,7 @@ def toArray(f):
     return func
 
 
-class RandomRDDs(object):
+class RandomRDDs:
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
