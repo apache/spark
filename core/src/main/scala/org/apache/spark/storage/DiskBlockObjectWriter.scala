@@ -121,9 +121,9 @@ private[spark] class DiskBlockObjectWriter(
   private var numRecordsWritten = 0
 
   /**
-   * Keep track of total number of records written.
+   * Keep track the number of written records committed.
    */
-  private var numRecordsTotalWritten = 0L
+  private var numRecordsCommitted = 0L
 
   /**
    * Set the checksum that the checksumOutputStream should use
@@ -230,6 +230,7 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
       reportedPosition = committedPosition
+      numRecordsCommitted += numRecordsWritten
       numRecordsWritten = 0
       fileSegment
     } else {
@@ -288,7 +289,7 @@ private[spark] class DiskBlockObjectWriter(
     Utils.tryWithSafeFinally {
       if (initialized) {
         writeMetrics.decBytesWritten(reportedPosition)
-        writeMetrics.decRecordsWritten(numRecordsTotalWritten)
+        writeMetrics.decRecordsWritten(numRecordsCommitted + numRecordsWritten)
         closeResources()
       }
     } {
@@ -326,7 +327,6 @@ private[spark] class DiskBlockObjectWriter(
    */
   def recordWritten(): Unit = {
     numRecordsWritten += 1
-    numRecordsTotalWritten +=1
     writeMetrics.incRecordsWritten(1)
 
     if (numRecordsWritten % 16384 == 0) {
