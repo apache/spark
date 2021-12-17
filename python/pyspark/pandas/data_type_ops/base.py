@@ -139,7 +139,7 @@ def _as_categorical_type(
         )
 
 
-def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     spark_type = BooleanType()
     if isinstance(dtype, extension_dtypes):
@@ -154,7 +154,7 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> In
 
 
 def _as_string_type(
-    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
+    index_ops: IndexOpsLike, dtype: Dtype, *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
@@ -170,9 +170,7 @@ def _as_string_type(
     )
 
 
-def _as_other_type(
-    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], spark_type: DataType
-) -> IndexOpsLike:
+def _as_other_type(index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType) -> IndexOpsLike:
     """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
 
     Destination types that need pre-processing: CategoricalDtype, BooleanType, and StringType.
