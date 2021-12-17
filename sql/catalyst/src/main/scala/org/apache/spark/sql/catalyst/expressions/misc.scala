@@ -315,7 +315,7 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
-      The default mode is ECB.
+      The default mode is GCM.
   """,
   arguments = """
     Arguments:
@@ -328,8 +328,10 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
   """,
   examples = """
     Examples:
-      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop'));
-       4Hv0UKCx6nfUeAoPZo1z+w==
+      > SELECT hex(_FUNC_('Spark', '0000111122223333'));
+       83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94
+      > SELECT hex(_FUNC_('Spark SQL', '0000111122223333', 'GCM'));
+       6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210
       > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
        3lmwu+Mw0H3fi5NDvcu9lg==
   """,
@@ -359,7 +361,7 @@ case class AesEncrypt(
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
-    this(input, key, Literal("ECB"))
+    this(input, key, Literal("GCM"))
 
   def exprsReplaced: Seq[Expression] = Seq(input, key, mode, padding)
   protected def withNewChildInternal(newChild: Expression): AesEncrypt =
@@ -375,9 +377,9 @@ case class AesEncrypt(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrepted value of `expr` using AES in `mode` with `padding`.
+    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
       Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
-      The default mode is ECB.
+      The default mode is GCM.
   """,
   arguments = """
     Arguments:
@@ -390,11 +392,11 @@ case class AesEncrypt(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(unbase64('4Hv0UKCx6nfUeAoPZo1z+w=='), 'abcdefghijklmnop');
+      > SELECT _FUNC_(unhex('83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94'), '0000111122223333');
        Spark
-      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
+      > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
        Spark SQL
-      > SELECT _FUNC_(unbase64('2sXi+jZd/ws+qFC1Tnzvvde5lz+8Haryz9HHBiyrVohXUG7LHA=='), '1234567890abcdef', 'GCM');
+      > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
        Spark SQL
   """,
   since = "3.3.0",
@@ -423,7 +425,7 @@ case class AesDecrypt(
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
-    this(input, key, Literal("ECB"))
+    this(input, key, Literal("GCM"))
 
   def exprsReplaced: Seq[Expression] = Seq(input, key)
   protected def withNewChildInternal(newChild: Expression): AesDecrypt =
