@@ -117,6 +117,7 @@ if TYPE_CHECKING:
 
     from pyspark.pandas.groupby import SeriesGroupBy
     from pyspark.pandas.indexes import Index
+    from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -443,7 +444,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: SparkSeriesMethods = CachedAccessor("spark", SparkSeriesMethods)
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)  # type: ignore[assignment]
 
     @property
     def dtypes(self) -> Dtype:
