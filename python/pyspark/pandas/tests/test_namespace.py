@@ -249,12 +249,12 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.timedelta_range(end="3 days", periods=3),
         )
         self.assert_eq(
-            ps.timedelta_range(end="3 days", periods=3, closed='right'),
-            pd.timedelta_range(end="3 days", periods=3, closed='right'),
+            ps.timedelta_range(end="3 days", periods=3, closed="right"),
+            pd.timedelta_range(end="3 days", periods=3, closed="right"),
         )
         self.assert_eq(
-            ps.timedelta_range(start="1 day", end="3 days", freq='6H'),
-            pd.timedelta_range(start="1 day", end="3 days", freq='6H'),
+            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
         )
         self.assert_eq(
             ps.timedelta_range(start="1 day", end="3 days", periods=4),
