@@ -204,7 +204,7 @@ public class RocksDB implements KVStore {
         try (WriteBatch writeBatch = new WriteBatch()) {
           while (valueIter.hasNext()) {
             updateBatch(writeBatch, valueIter.next(), serializedValueIter.next(), klass,
-                    naturalIndex, indices);
+                naturalIndex, indices);
           }
           db().write(writeOptions, writeBatch);
         }
