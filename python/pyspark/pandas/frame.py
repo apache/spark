@@ -5761,7 +5761,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         offset_: Optional[DateOffset] = to_offset(offset)
         assert offset_ is not None
 
-        from_date = cast(datetime.datetime, self.index.max()) - offset_
+        from_date = cast(datetime.datetime, self.index.max()) - offset_  # type: ignore[operator]
 
         return cast(DataFrame, self.loc[from_date:])
 
@@ -5818,7 +5818,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         offset_: Optional[DateOffset] = to_offset(offset)
         assert offset_ is not None
 
-        to_date = cast(datetime.datetime, self.index.min()) + offset_
+        to_date = cast(datetime.datetime, self.index.min()) + offset_  # type: ignore[operator]
 
         return cast(DataFrame, self.loc[:to_date])
 
