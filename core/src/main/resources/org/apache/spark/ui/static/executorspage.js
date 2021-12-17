@@ -785,22 +785,22 @@ $(document).ready(function () {
         var quantiles = "0,0.25,0.5,0.75,1.0";
         var executorSummariesEndpoint = createRESTEndPointForExecutorsSummaries(appId) + "?activeOnly=true&quantiles=" + quantiles;
         $.getJSON(executorSummariesEndpoint, function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
-            var taskMetricKeys = Object.keys(executorMetricsResponse);
-            var executorSummaryMetricsTableArray = [];
-            taskMetricKeys.forEach(function (columnKey) {
-              var row;
-              switch(columnKey) {
-                default:
-                  if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
-                    row = createRowMetadataForColumn(
-                      columnKey, executorMetricsResponse[columnKey]);
-                    executorSummaryMetricsTableArray.push(row);
-                  }
-                  break;
-              }
-            });
-            createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableArray);
+          var taskMetricKeys = Object.keys(executorMetricsResponse);
+          var executorSummaryMetricsTableArray = [];
+          taskMetricKeys.forEach(function (columnKey) {
+            var row;
+            switch(columnKey) {
+              default:
+                if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
+                  row = createRowMetadataForColumn(
+                    columnKey, executorMetricsResponse[columnKey]);
+                  executorSummaryMetricsTableArray.push(row);
+                }
+                break;
+            }
           });
+          createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableArray);
+        });
 
         var sumSelector = "#summary-execs-table";
         var sumConf = {
