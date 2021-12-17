@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter, GreaterThan => V2GreaterThan}
+import org.apache.spark.sql.connector.expressions.filter.{EqualTo => V2EqualTo, Filter => V2Filter, GreaterThan => V2GreaterThan}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -523,6 +523,26 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-36644: Push down boolean column filter") {
+    Seq(classOf[BooleanDataSourceV2WithV2Filter]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+
+        val q1 = df.select('b)
+        checkAnswer(q1, (0 until 10).map(i => Row(i % 10 < 5)))
+        val batch1 = getBatchWithV2Filter(q1)
+        assert(batch1.filters.isEmpty)
+        assert(batch1.requiredSchema.fieldNames === Seq("b"))
+
+        val q2 = df.filter('b).select('b)
+        checkAnswer(q2, (0 until 5).map(i => Row(true)))
+        val batch2 = getBatchWithV2Filter(q2)
+        assert(batch2.filters.flatMap(_.references.map(_.describe)).toSet == Set("b"))
+        assert(batch2.requiredSchema.fieldNames === Seq("b"))
+      }
+    }
+  }
 }
 
 
@@ -765,6 +785,7 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
         val values = requiredSchema.map(_.name).map {
           case "i" => current
           case "j" => -current
+          case "b" => current % 10 < 5
         }
         InternalRow.fromSeq(values)
       }
@@ -969,6 +990,48 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
         new MyScanBuilder
       }
+    }
+  }
+}
+
+class BooleanDataSourceV2WithV2Filter extends AdvancedDataSourceV2WithV2Filter {
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    TestingV2Source.schema.add("b", "boolean")
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def schema(): StructType = super.schema().add("b", "boolean")
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      val scanBuilder = new AdvancedScanBuilderWithV2Filter() {
+        override def pushFilters(filters: Array[V2Filter]): Array[V2Filter] = {
+          val (supported, unsupported) = filters.partition {
+            case _: V2EqualTo => true
+            case _ => false
+          }
+          this.filters = supported
+          unsupported
+        }
+
+        override def toBatch: Batch = new AdvancedBatchWithV2Filter(filters, requiredSchema) {
+          override def planInputPartitions(): Array[InputPartition] = {
+            val bool = filters.collectFirst {
+              case eq: V2EqualTo => eq.value
+            }
+            val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
+            if (bool.isEmpty) {
+              res.append(RangeInputPartition(0, 5))
+              res.append(RangeInputPartition(5, 10))
+            } else if (bool.get.value.asInstanceOf[Boolean]) {
+              res.append(RangeInputPartition(0, 5))
+            } else {
+              res.append(RangeInputPartition(5, 10))
+            }
+            res.toArray
+          }
+        }
+      }
+      scanBuilder.pruneColumns(TestingV2Source.schema.add("b", "boolean"))
+      scanBuilder
     }
   }
 }
