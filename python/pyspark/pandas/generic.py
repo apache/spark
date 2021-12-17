@@ -2927,9 +2927,9 @@ class Frame(object, metaclass=ABCMeta):
 
         if isinstance(self, ps.Series):
             if indexes_increasing:
-                result = first_series(self.to_frame().loc[before:after]).rename(self.name)  # type: ignore[assignment]
+                result = first_series(self.to_frame().loc[before:after]).rename(self.name)  # type: ignore[arg-type, assignment]
             else:
-                result = first_series(self.to_frame().loc[after:before]).rename(self.name)  # type: ignore[assignment]
+                result = first_series(self.to_frame().loc[after:before]).rename(self.name)  # type: ignore[arg-type,assignment]
         elif isinstance(self, ps.DataFrame):
             if axis == 0:
                 if indexes_increasing:
