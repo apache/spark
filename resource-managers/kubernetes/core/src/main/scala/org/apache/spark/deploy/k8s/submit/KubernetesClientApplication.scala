@@ -139,6 +139,8 @@ private[spark] class Client(
       kubernetesClient.resourceList(preKubernetesResources: _*).createOrReplace()
     } catch {
       case NonFatal(e) =>
+        logError("Please check \"kubectl auth can-i create [resource]\" first." +
+          " It should be yes. And please also check your feature step implementation.")
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         throw e
     }

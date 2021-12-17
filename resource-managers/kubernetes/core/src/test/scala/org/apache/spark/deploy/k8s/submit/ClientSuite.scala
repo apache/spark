@@ -216,7 +216,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
   }
 
-  test("The client should create Kubernetes resources with pre resources") {
+  test("SPARK-37331: The client should create Kubernetes resources with pre resources") {
     val sparkConf = new SparkConf(false)
       .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
       .set(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS.key,

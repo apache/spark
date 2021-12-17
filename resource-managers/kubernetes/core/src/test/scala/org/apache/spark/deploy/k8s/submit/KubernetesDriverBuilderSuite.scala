@@ -44,7 +44,7 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     new CustomResourceDefinitionBuilder().withNewMetadata().withName("preCRD").endMetadata().build()
   )
 
-  test("check driver pre kubernetes resource, empty by default") {
+  test("SPARK-37331: check driver pre kubernetes resource, empty by default") {
     val sparkConf = new SparkConf(false)
       .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
     val client = mockKubernetesClient()
@@ -53,7 +53,7 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     assert(spec.driverPreKubernetesResources.size === 0)
   }
 
-  test("check driver pre kubernetes resource, pre kuberenetes resource") {
+  test("SPARK-37331: check driver pre kubernetes resource as expected") {
     val sparkConf = new SparkConf(false)
       .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
       .set(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS.key,
