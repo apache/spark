@@ -681,13 +681,13 @@ class MultiIndex(Index):
         # TODO: We might need to handle internal state change.
         # So far, we don't have any functions to change the internal state of MultiIndex except for
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
-        return super().to_pandas()
+        return cast(pd.MultiIndex, super().to_pandas())
 
     def _to_pandas(self) -> pd.MultiIndex:
         """
-        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
         """
-        return super()._to_pandas()
+        return cast(pd.MultiIndex, super()._to_pandas())
 
     def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
