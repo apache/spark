@@ -410,7 +410,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === false)
     }

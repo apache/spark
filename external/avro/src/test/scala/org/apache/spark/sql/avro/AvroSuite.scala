@@ -1779,7 +1779,7 @@ abstract class AvroSuite
           .count()
       }
       val deprecatedEvents = logAppender.loggingEvents
-        .filter(_.getRenderedMessage.contains(
+        .filter(_.getMessage.getFormattedMessage.contains(
           s"Option ${AvroOptions.ignoreExtensionKey} is deprecated"))
       assert(deprecatedEvents.size === 1)
     }

@@ -26,7 +26,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream
-import org.apache.log4j.{FileAppender => Log4jFileAppender, _}
+import org.apache.logging.log4j._
+import org.apache.logging.log4j.core.Logger
+import org.apache.logging.log4j.core.appender.{FileAppender => Log4jFileAppender}
+import org.apache.logging.log4j.core.layout.PatternLayout
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -51,17 +54,18 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   addLogAppender()
 
   private def addLogAppender(): Unit = {
-    val appenders = LogManager.getRootLogger().getAllAppenders()
+    val logger = LogManager.getRootLogger().asInstanceOf[Logger]
     val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
-      new PatternLayout(conf.get(DRIVER_LOG_LAYOUT).get)
-    } else if (appenders.hasMoreElements()) {
-      appenders.nextElement().asInstanceOf[Appender].getLayout()
+      PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
     } else {
-      new PatternLayout(DEFAULT_LAYOUT)
+      PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
     }
-    val fa = new Log4jFileAppender(layout, localLogFile)
-    fa.setName(DriverLogger.APPENDER_NAME)
-    LogManager.getRootLogger().addAppender(fa)
+    val config = logger.getContext.getConfiguration()
+    val fa = Log4jFileAppender.createAppender(localLogFile, "false", "false",
+      DriverLogger.APPENDER_NAME, "true", "false", "false", "4000", layout, null,
+      "false", null, config);
+    logger.addAppender(fa)
+    fa.start()
     logInfo(s"Added a local log appender at: ${localLogFile}")
   }
 
@@ -78,9 +82,11 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   def stop(): Unit = {
     try {
-      val fa = LogManager.getRootLogger.getAppender(DriverLogger.APPENDER_NAME)
-      LogManager.getRootLogger().removeAppender(DriverLogger.APPENDER_NAME)
-      Utils.tryLogNonFatalError(fa.close())
+      val logger = LogManager.getRootLogger().asInstanceOf[Logger]
+      val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
+      logger.removeAppender(fa)
+      fa.stop()
+      Utils.tryLogNonFatalError(fa.stop())
       writer.foreach(_.closeWriter())
     } catch {
       case e: Exception =>
