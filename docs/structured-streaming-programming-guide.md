@@ -2999,9 +2999,9 @@ query.awaitTermination()   # block until query is terminated, with stop() or wit
 
 query.exception()       # the exception if the query has been terminated with error
 
-query.recentProgress()  # an array of the most recent progress updates for this query
+query.recentProgress  # a list of the most recent progress updates for this query
 
-query.lastProgress()    # the most recent progress update of this streaming query
+query.lastProgress    # the most recent progress update of this streaming query
 
 {% endhighlight %}
 
