@@ -959,18 +959,16 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      assert (null != failureReason)
+      assert(null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReason))
-      if (!successful(index)) {
-        numFailures(index) += 1
-        if (numFailures(index) >= maxTaskFailures) {
-          logError("Task %d in stage %s failed %d times; aborting job".format(
-            index, taskSet.id, maxTaskFailures))
-          abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-            .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
-          return
-        }
+      numFailures(index) += 1
+      if (numFailures(index) >= maxTaskFailures) {
+        logError("Task %d in stage %s failed %d times; aborting job".format(
+          index, taskSet.id, maxTaskFailures))
+        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+          .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
+        return
       }
     }
 
