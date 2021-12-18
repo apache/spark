@@ -57,15 +57,18 @@ private[spark] class KubernetesDriverBuilder {
 
     val spec = KubernetesDriverSpec(
       initialPod,
+      driverPreKubernetesResources = Seq.empty,
       driverKubernetesResources = Seq.empty,
       conf.sparkConf.getAll.toMap)
 
     features.foldLeft(spec) { case (spec, feature) =>
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
+      val addedPreResources = feature.getAdditionalPreKubernetesResources()
       val addedResources = feature.getAdditionalKubernetesResources()
       KubernetesDriverSpec(
         configuredPod,
+        spec.driverPreKubernetesResources ++ addedPreResources,
         spec.driverKubernetesResources ++ addedResources,
         spec.systemProperties ++ addedSystemProperties)
     }
