@@ -959,7 +959,7 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      assert(null != failureReason)
+      assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
