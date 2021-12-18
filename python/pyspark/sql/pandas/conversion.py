@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 
-class PandasConversionMixin(object):
+class PandasConversionMixin:
     """
     Min-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
     can use this class.
@@ -361,7 +361,7 @@ class PandasConversionMixin(object):
         return [batches[i] for i in batch_order]
 
 
-class SparkConversionMixin(object):
+class SparkConversionMixin:
     """
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.
@@ -617,9 +617,8 @@ class SparkConversionMixin(object):
         jrdd = self._sc._serialize_to_jvm(  # type: ignore[attr-defined]
             arrow_data, ser, reader_func, create_RDD_server
         )
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(  # type: ignore[attr-defined]
-            jrdd, schema.json(), jsqlContext
-        )
+        assert self._jvm is not None
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df

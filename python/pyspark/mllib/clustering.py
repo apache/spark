@@ -133,7 +133,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self.call("computeCost", _convert_to_vector(x))
 
 
-class BisectingKMeans(object):
+class BisectingKMeans:
     """
     A bisecting k-means algorithm based on the paper "A comparison of
     document clustering techniques" by Steinbach, Karypis, and Kumar,
@@ -342,7 +342,7 @@ class KMeansModel(Saveable, Loader):
         return KMeansModel(_java2py(sc, java_model.clusterCenters()))
 
 
-class KMeans(object):
+class KMeans:
     """
     K-means clustering.
 
@@ -595,7 +595,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return cls(wrapper)
 
 
-class GaussianMixture(object):
+class GaussianMixture:
     """
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
@@ -739,7 +739,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return PowerIterationClusteringModel(wrapper)
 
 
-class PowerIterationClustering(object):
+class PowerIterationClustering:
     """
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm.
 
@@ -914,7 +914,7 @@ class StreamingKMeansModel(KMeansModel):
         return self
 
 
-class StreamingKMeans(object):
+class StreamingKMeans:
     """
     Provides methods to set k, decayFactor, timeUnit to configure the
     KMeans algorithm for fitting and predicting on incoming dstreams.
@@ -1143,7 +1143,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
         return LDAModel(model)
 
 
-class LDA(object):
+class LDA:
     """
     Train Latent Dirichlet Allocation (LDA) model.
 

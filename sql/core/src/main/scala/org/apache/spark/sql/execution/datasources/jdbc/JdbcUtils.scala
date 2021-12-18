@@ -23,6 +23,8 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -38,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
-import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -1075,6 +1077,73 @@ object JdbcUtils extends Logging with SQLConfHelper {
       statement.executeUpdate(sql)
     } finally {
       statement.close()
+    }
+  }
+
+  /**
+   * Check if index exists in a table
+   */
+  def checkIfIndexExists(
+      conn: Connection,
+      sql: String,
+      options: JDBCOptions): Boolean = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      val rs = statement.executeQuery(sql)
+      rs.next
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+        false
+    } finally {
+      statement.close()
+    }
+  }
+
+  /**
+   * Process index properties and return tuple of indexType and list of the other index properties.
+   */
+  def processIndexProperties(
+      properties: util.Map[String, String],
+      catalogName: String): (String, Array[String]) = {
+    var indexType = ""
+    val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
+    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
+
+    if (!properties.isEmpty) {
+      properties.asScala.foreach { case (k, v) =>
+        if (k.equals(SupportsIndex.PROP_TYPE)) {
+          if (containsIndexTypeIgnoreCase(supportedIndexTypeList, v)) {
+            indexType = s"USING $v"
+          } else {
+            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
+              s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
+          }
+        } else {
+          indexPropertyList.append(s"$k = $v")
+        }
+      }
+    }
+    (indexType, indexPropertyList.toArray)
+  }
+
+  def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
+    if (supportedIndexTypeList.isEmpty) {
+      throw new UnsupportedOperationException(
+        "Cannot specify 'USING index_type' in 'CREATE INDEX'")
+    }
+    for (indexType <- supportedIndexTypeList) {
+      if (value.equalsIgnoreCase(indexType)) return true
+    }
+    false
+  }
+
+  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
+    catalogName match {
+      case "mysql" => Array("BTREE", "HASH")
+      case "postgresql" => Array("BTREE", "HASH", "BRIN")
+      case _ => Array.empty
     }
   }
 

@@ -184,6 +184,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.DECOMMISSION_ENABLED.key, "true")
       .set(PLUGINS.key, "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin")
       .set("spark.kubernetes.executor.rollInterval", "30s")
+      .set("spark.kubernetes.executor.rollPolicy", "ID")
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PythonTestsSuite.PYSPARK_PI,

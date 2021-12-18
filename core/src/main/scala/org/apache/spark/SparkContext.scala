@@ -2966,7 +2966,7 @@ object SparkContext extends Logging {
         sc.conf.setIfMissing(SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)
-        val localCluster = new LocalSparkCluster(
+        val localCluster = LocalSparkCluster(
           numWorkers.toInt, coresPerWorker.toInt, memoryPerWorkerInt, sc.conf)
         val masterUrls = localCluster.start()
         val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)

@@ -32,6 +32,7 @@ import org.apache.logging.log4j.core.{LogEvent, Logger}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
+import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -173,7 +174,18 @@ abstract class SparkFunSuite
     }
   }
 
-  protected def logForFailedTest(): Unit = {}
+  protected def logForFailedTest(): Unit = {
+    LocalSparkCluster.get.foreach { localCluster =>
+      val workerLogfiles = localCluster.workerLogfiles
+      if (workerLogfiles.nonEmpty) {
+        logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
+        workerLogfiles.foreach { logFile =>
+          logInfo(s"\n----- Logfile: ${logFile.getAbsolutePath()}")
+          logInfo(FileUtils.readFileToString(logFile, "UTF-8"))
+        }
+      }
+    }
+  }
 
   /**
    * Log the suite name and the test name before and after each test.

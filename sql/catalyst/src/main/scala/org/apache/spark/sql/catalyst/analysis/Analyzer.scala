@@ -3543,7 +3543,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
           fail(child, u.dataType, walkedTypePath)
 
-        case u @ UpCast(child, _, _) => Cast(child, u.dataType.asNullable)
+        case u @ UpCast(child, _, _) => Cast(child, u.dataType)
       }
     }
   }

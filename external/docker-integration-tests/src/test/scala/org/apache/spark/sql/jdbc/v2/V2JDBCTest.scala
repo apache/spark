@@ -191,6 +191,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsIndex: Boolean = false
 
+  def indexOptions: String = ""
+
   test("SPARK-36895: Test INDEX Using SQL") {
     if (supportsIndex) {
       withTable(s"$catalogName.new_table") {
@@ -208,11 +210,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +
-          s" The supported Index Types are: BTREE and HASH"))
+          s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
-          s" OPTIONS (KEY_BLOCK_SIZE=10)")
+          s" OPTIONS ($indexOptions)")
 
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)

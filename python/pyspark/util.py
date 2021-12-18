@@ -31,13 +31,15 @@ from py4j.clientserver import ClientServer  # type: ignore[import]
 
 __all__: List[str] = []
 
+from py4j.java_gateway import JavaObject
+
 
 def print_exec(stream: TextIO) -> None:
     ei = sys.exc_info()
     traceback.print_exception(ei[0], ei[1], ei[2], None, stream)
 
 
-class VersionUtils(object):
+class VersionUtils:
     """
     Provides utility method to determine Spark versions with given input string.
     """
@@ -324,16 +326,14 @@ def inheritable_thread_target(f: Callable) -> Callable:
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
         # copies when the function is wrapped.
-        properties = (
-            SparkContext._active_spark_context._jsc.sc()  # type: ignore[attr-defined]
-            .getLocalProperties()
-            .clone()
-        )
+        assert SparkContext._active_spark_context is not None
+        properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
 
         @functools.wraps(f)
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             try:
                 # Set local properties in child thread.
+                assert SparkContext._active_spark_context is not None
                 SparkContext._active_spark_context._jsc.sc().setLocalProperties(  # type: ignore[attr-defined]
                     properties
                 )
@@ -367,6 +367,8 @@ class InheritableThread(threading.Thread):
     This API is experimental.
     """
 
+    _props: JavaObject
+
     def __init__(self, target: Callable, *args: Any, **kwargs: Any):
         from pyspark import SparkContext
 
@@ -375,6 +377,7 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # self._props is set before starting the thread to match the behavior with JVM.
                 assert hasattr(self, "_props")
+                assert SparkContext._active_spark_context is not None
                 SparkContext._active_spark_context._jsc.sc().setLocalProperties(  # type: ignore[attr-defined]
                     self._props
                 )
@@ -398,18 +401,16 @@ class InheritableThread(threading.Thread):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
-            self._props = (
-                SparkContext._active_spark_context._jsc.sc()  # type: ignore[attr-defined]
-                .getLocalProperties()
-                .clone()
-            )
+            assert SparkContext._active_spark_context is not None
+            self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
         return super(InheritableThread, self).start()
 
     @staticmethod
     def _clean_py4j_conn_for_current_thread() -> None:
         from pyspark import SparkContext
 
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         thread_connection = jvm._gateway_client.get_thread_connection()
         if thread_connection is not None:
             try:

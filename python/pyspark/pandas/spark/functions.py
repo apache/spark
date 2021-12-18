@@ -45,6 +45,17 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     return _call_udf(sc, "repeat", _to_java_column(col), n)
 
 
+def date_part(field: Union[str, Column], source: Column) -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+    """
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    field = (
+        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
+    )
+    return _call_udf(sc, "date_part", field, _to_java_column(source))
+
+
 def lit(literal: Any) -> Column:
     """
     Creates a Column of literal value.

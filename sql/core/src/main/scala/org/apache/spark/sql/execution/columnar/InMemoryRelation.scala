@@ -256,7 +256,8 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (cachedPlan.supportsColumnar) {
+    val cb = if (cachedPlan.supportsColumnar &&
+        serializer.supportsColumnarInput(cachedPlan.output)) {
       serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,

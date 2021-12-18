@@ -346,6 +346,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(task.attempt === reattempt.attemptNumber)
     }
 
+    check[SpeculationStageSummaryWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numActiveTasks == 2)
+      assert(stage.info.numTasks == 2)
+    }
+
     // Kill one task, restart it.
     time += 1
     val killed = s1Tasks.drop(1).head
@@ -428,6 +433,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.numKilledTasks === 2)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === pending.size)
+    }
+
+    check[SpeculationStageSummaryWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numCompletedTasks == 2)
+      assert(stage.info.numKilledTasks == 2)
     }
 
     pending.foreach { task =>

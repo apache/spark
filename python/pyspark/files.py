@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
 
 
-class SparkFiles(object):
+class SparkFiles:
 
     """
     Resolves paths to files added through :meth:`SparkContext.addFile`.
@@ -60,6 +60,6 @@ class SparkFiles(object):
             return cast(str, cls._root_directory)
         else:
             # This will have to change if we support multiple SparkContexts:
-            return cast(
-                "SparkContext", cls._sc
-            )._jvm.org.apache.spark.SparkFiles.getRootDirectory()  # type: ignore[attr-defined]
+            assert cls._sc is not None
+            assert cls._sc._jvm is not None
+            return cls._sc._jvm.org.apache.spark.SparkFiles.getRootDirectory()  # type: ignore[attr-defined]

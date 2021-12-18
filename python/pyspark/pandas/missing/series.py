@@ -29,7 +29,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class MissingPandasLikeSeries(object):
+class MissingPandasLikeSeries:
 
     # Functions
     asfreq = _unsupported_function("asfreq")

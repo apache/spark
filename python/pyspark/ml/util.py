@@ -38,7 +38,7 @@ def _jvm():
         raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
 
 
-class Identifiable(object):
+class Identifiable:
     """
     Object with a unique ID.
     """
@@ -60,7 +60,7 @@ class Identifiable(object):
 
 
 @inherit_doc
-class BaseReadWrite(object):
+class BaseReadWrite:
     """
     Base class for MLWriter and MLReader. Stores information about the SparkContext
     and SparkSession.
@@ -84,7 +84,7 @@ class BaseReadWrite(object):
         Returns the user-specified Spark Session or the default.
         """
         if self._sparkSession is None:
-            self._sparkSession = SparkSession.builder.getOrCreate()
+            self._sparkSession = SparkSession._getActiveSessionOrCreate()
         return self._sparkSession
 
     @property
@@ -210,7 +210,7 @@ class GeneralJavaMLWriter(JavaMLWriter):
 
 
 @inherit_doc
-class MLWritable(object):
+class MLWritable:
     """
     Mixin for ML instances that provide :py:class:`MLWriter`.
 
@@ -315,7 +315,7 @@ class JavaMLReader(MLReader):
 
 
 @inherit_doc
-class MLReadable(object):
+class MLReadable:
     """
     Mixin for instances that provide :py:class:`MLReader`.
 
@@ -605,7 +605,7 @@ class DefaultParamsReader(MLReader):
 
 
 @inherit_doc
-class HasTrainingSummary(object):
+class HasTrainingSummary:
     """
     Base class for models that provides Training summary.
 
