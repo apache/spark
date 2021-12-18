@@ -61,6 +61,8 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     private LoggingLevel loggingMode;
     private OperationManager operationManager;
 
+    private State state;
+
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
      */
@@ -96,82 +98,83 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       OperationLog.LoggingLevel loggingMode, OperationManager op) {
       this.operationManager = op;
       this.loggingMode = loggingMode;
+      this.state = State.INITIALIZING;
       setCurrentNamePattern(loggingMode);
     }
 
     @Override
     public Result getOnMismatch() {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result getOnMatch() {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object... objects) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8, Object o9) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Object o, Throwable throwable) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
     public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Message message, Throwable throwable) {
-      return null;
+      return Result.NEUTRAL;
     }
 
     @Override
@@ -208,32 +211,32 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
     @Override
     public State getState() {
-      return null;
+      return state;
     }
 
     @Override
     public void initialize() {
-
+      state = State.INITIALIZED;
     }
 
     @Override
     public void start() {
-
+      state = State.STARTED;
     }
 
     @Override
     public void stop() {
-
+      state = State.STOPPED;
     }
 
     @Override
     public boolean isStarted() {
-      return false;
+      return state == State.STARTED;
     }
 
     @Override
     public boolean isStopped() {
-      return false;
+      return state == State.STOPPED;
     }
   }
 
