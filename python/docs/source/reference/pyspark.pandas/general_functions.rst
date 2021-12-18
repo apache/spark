@@ -65,3 +65,4 @@ Top-level dealing with datetimelike
 
    to_datetime
    date_range
+   timedelta_range
