@@ -231,7 +231,7 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
 
--- SPARK-37614: Support ANSI Aggregate Function: regr_avgx
+-- SPARK-37614: Support ANSI Aggregate Function: regr_avgx & regr_avgy
 SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression;
 SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
 SELECT k, avg(x), avg(y), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
