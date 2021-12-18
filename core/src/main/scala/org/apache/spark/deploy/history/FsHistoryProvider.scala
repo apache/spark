@@ -37,6 +37,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
+import org.rocksdb.RocksDBException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -130,10 +131,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
+  private val hybridStoreDiskBackend = conf.get(History.HYBRID_STORE_DISK_BACKEND)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
-    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
+    val dir = hybridStoreDiskBackend match {
+      case "leveldb" => "listing.ldb"
+      case "rocksdb" => "listing.rdb"
+      case db => throw new IllegalArgumentException(s"$db is not supported.")
+    }
+    val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
 
     val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
@@ -149,8 +156,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logInfo("Detected incompatible DB versions, deleting...")
         path.listFiles().foreach(Utils.deleteRecursively)
         open(dbPath, metadata)
-      case dbExc: NativeDB.DBException =>
-        // Get rid of the corrupted listing.ldb and re-create it.
+      case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
+        // Get rid of the corrupted data and re-create it.
         logWarning(s"Failed to load disk store $dbPath :", dbExc)
         Utils.deleteRecursively(dbPath)
         open(dbPath, metadata)
@@ -1214,11 +1221,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to create HybridStore for $appId/${attempt.info.attemptId}." +
-            " Using LevelDB.", e)
+            s" Using $hybridStoreDiskBackend.", e)
       }
     }
 
-    createLevelDBStore(dm, appId, attempt, metadata)
+    createDiskStore(dm, appId, attempt, metadata)
   }
 
   private def createHybridStore(
@@ -1257,24 +1264,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    // Create a LevelDB and start a background thread to dump data to LevelDB
+    // Create a disk-base KVStore and start a background thread to dump data to it
     var lease: dm.Lease = null
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
-      val levelDB = KVUtils.open(lease.tmpPath, metadata)
-      hybridStore.setLevelDB(levelDB)
-      hybridStore.switchToLevelDB(new HybridStore.SwitchToLevelDBListener {
-        override def onSwitchToLevelDBSuccess: Unit = {
-          logInfo(s"Completely switched to LevelDB for app $appId / ${attempt.info.attemptId}.")
-          levelDB.close()
+      val diskStore = KVUtils.open(lease.tmpPath, metadata)
+      hybridStore.setDiskStore(diskStore)
+      hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
+        override def onSwitchToDiskStoreSuccess: Unit = {
+          logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
+          diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
-          hybridStore.setLevelDB(KVUtils.open(newStorePath, metadata))
+          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata))
           memoryManager.release(appId, attempt.info.attemptId)
         }
-        override def onSwitchToLevelDBFail(e: Exception): Unit = {
-          logWarning(s"Failed to switch to LevelDB for app $appId / ${attempt.info.attemptId}", e)
-          levelDB.close()
+        override def onSwitchToDiskStoreFail(e: Exception): Unit = {
+          logWarning(s"Failed to switch to diskStore for app $appId / ${attempt.info.attemptId}", e)
+          diskStore.close()
           lease.rollback()
         }
       }, appId, attempt.info.attemptId)
@@ -1291,7 +1298,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     hybridStore
   }
 
-  private def createLevelDBStore(
+  private def createDiskStore(
       dm: HistoryServerDiskManager,
       appId: String,
       attempt: AttemptInfoWrapper,
