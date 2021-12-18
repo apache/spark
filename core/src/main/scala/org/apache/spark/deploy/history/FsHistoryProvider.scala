@@ -138,7 +138,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dir = hybridStoreDiskBackend match {
       case "leveldb" => "listing.ldb"
       case "rocksdb" => "listing.rdb"
-      case db => throw new IllegalStateException(s"$db is not supported.")
+      case db => throw new IllegalArgumentException(s"$db is not supported.")
     }
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
