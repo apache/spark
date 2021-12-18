@@ -2994,7 +2994,7 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:
+    def _cleanup_and_return(self, pdf: DataFrame) -> Series:
         return first_series(pdf).rename().rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
