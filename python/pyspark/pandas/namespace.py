@@ -1940,7 +1940,7 @@ def timedelta_range(
     TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
 
     The freq parameter specifies the frequency of the TimedeltaIndex.
-    Only fixed frequencies can be passed,non-fixed frequencies such as ‘M’ (month end) will raise.
+    Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
     >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')  # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
