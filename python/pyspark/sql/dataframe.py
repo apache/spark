@@ -553,10 +553,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             try:
                 int_truncate = int(truncate)
-            except ValueError:
+            except ValueError as e:
                 raise TypeError(
                     "Parameter 'truncate={}' should be either bool or int.".format(truncate)
-                )
+                ) from e
 
             print(self._jdf.showString(n, int_truncate, vertical))
 

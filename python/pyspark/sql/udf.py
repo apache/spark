@@ -139,21 +139,21 @@ class UserDefinedFunction:
         ):
             try:
                 to_arrow_type(self._returnType_placeholder)
-            except TypeError:
+            except TypeError as e:
                 raise NotImplementedError(
                     "Invalid return type with scalar Pandas UDFs: %s is "
                     "not supported" % str(self._returnType_placeholder)
-                )
+                ) from e
         elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
-                except TypeError:
+                except TypeError as e:
                     raise NotImplementedError(
                         "Invalid return type with grouped map Pandas UDFs or "
                         "at groupby.applyInPandas: %s is not supported"
                         % str(self._returnType_placeholder)
-                    )
+                    ) from e
             else:
                 raise TypeError(
                     "Invalid return type for grouped map Pandas "
@@ -167,11 +167,11 @@ class UserDefinedFunction:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
-                except TypeError:
+                except TypeError as e:
                     raise NotImplementedError(
                         "Invalid return type in mapInPandas: "
                         "%s is not supported" % str(self._returnType_placeholder)
-                    )
+                    ) from e
             else:
                 raise TypeError(
                     "Invalid return type in mapInPandas/mapInArrow: "
@@ -181,11 +181,11 @@ class UserDefinedFunction:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_type(self._returnType_placeholder)
-                except TypeError:
+                except TypeError as e:
                     raise NotImplementedError(
                         "Invalid return type in cogroup.applyInPandas: "
                         "%s is not supported" % str(self._returnType_placeholder)
-                    )
+                    ) from e
             else:
                 raise TypeError(
                     "Invalid return type in cogroup.applyInPandas: "
@@ -197,11 +197,11 @@ class UserDefinedFunction:
                 if isinstance(self._returnType_placeholder, StructType):
                     raise TypeError
                 to_arrow_type(self._returnType_placeholder)
-            except TypeError:
+            except TypeError as e:
                 raise NotImplementedError(
                     "Invalid  return type with grouped aggregate Pandas UDFs: "
                     "%s is not supported" % str(self._returnType_placeholder)
-                )
+                ) from e
 
         return self._returnType_placeholder
 

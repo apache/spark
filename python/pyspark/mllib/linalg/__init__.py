@@ -338,8 +338,8 @@ class DenseVector(Vector):
 
         try:
             values = [float(val) for val in s.split(",") if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s" % s)
+        except ValueError as e:
+            raise ValueError("Unable to parse values from %s" % s) from e
         return DenseVector(values)
 
     def __reduce__(self):
@@ -650,8 +650,8 @@ class SparseVector(Vector):
         size = s[: s.find(",")]
         try:
             size = int(size)
-        except ValueError:
-            raise ValueError("Cannot parse size %s." % size)
+        except ValueError as e:
+            raise ValueError("Cannot parse size %s." % size) from e
 
         ind_start = s.find("[")
         if ind_start == -1:
@@ -663,8 +663,8 @@ class SparseVector(Vector):
         ind_list = new_s.split(",")
         try:
             indices = [int(ind) for ind in ind_list if ind]
-        except ValueError:
-            raise ValueError("Unable to parse indices from %s." % new_s)
+        except ValueError as e:
+            raise ValueError("Unable to parse indices from %s." % new_s) from e
         s = s[ind_end + 1 :].strip()
 
         val_start = s.find("[")
@@ -676,8 +676,8 @@ class SparseVector(Vector):
         val_list = s[val_start + 1 : val_end].split(",")
         try:
             values = [float(val) for val in val_list if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s." % s)
+        except ValueError as e:
+            raise ValueError("Unable to parse values from %s." % s) from e
         return SparseVector(size, indices, values)
 
     def dot(self, other):

@@ -63,7 +63,7 @@ class CustomAccessor:
             try:
                 return len(self.obj)
             except Exception as e:
-                raise ValueError(str(e))
+                raise ValueError(str(e)) from e
 
 
 class ExtensionTest(PandasOnSparkTestCase):

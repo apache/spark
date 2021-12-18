@@ -3784,15 +3784,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     try:
                         i = self._internal.index_names.index(l)
                         idx.append(i)
-                    except ValueError:
+                    except ValueError as e:
                         if multi_index:
-                            raise KeyError("Level unknown not found")
+                            raise KeyError("Level unknown not found") from e
                         else:
                             raise KeyError(
                                 "Level unknown must be same as name ({})".format(
                                     name_like_string(self._internal.index_names[0])
                                 )
-                            )
+                            ) from e
             else:
                 raise ValueError("Level should be all int or all string.")
             idx.sort()
@@ -12218,10 +12218,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         try:
             return self.loc[:, key]
-        except KeyError:
+        except KeyError as e:
             raise AttributeError(
                 "'%s' object has no attribute '%s'" % (self.__class__.__name__, key)
-            )
+            ) from e
 
     def __setattr__(self, key: str, value: Any) -> None:
         try:

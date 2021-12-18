@@ -532,12 +532,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 else:
                     sdf = sdf.limit(sdf.count() + limit)
                 sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
-        except AnalysisException:
+        except AnalysisException as e:
             raise KeyError(
                 "[{}] don't exist in columns".format(
                     [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
                 )
-            )
+            ) from e
 
         internal = InternalFrame(
             spark_frame=sdf,

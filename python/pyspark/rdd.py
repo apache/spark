@@ -1362,7 +1362,7 @@ class RDD:
                 minv, maxv = filtered.map(lambda x: (x, x)).reduce(minmax)
             except TypeError as e:
                 if " empty " in str(e):
-                    raise ValueError("can not generate buckets from empty RDD")
+                    raise ValueError("can not generate buckets from empty RDD") from e
                 raise
 
             if minv == maxv or buckets == 1:
@@ -1370,8 +1370,8 @@ class RDD:
 
             try:
                 inc = (maxv - minv) / buckets
-            except TypeError:
-                raise TypeError("Can not generate buckets with non-number in RDD")
+            except TypeError as e:
+                raise TypeError("Can not generate buckets with non-number in RDD") from e
 
             if isinf(inc):
                 raise ValueError("Can not generate buckets with infinite value")

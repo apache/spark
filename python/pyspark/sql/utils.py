@@ -247,8 +247,8 @@ def require_test_compiled() -> None:
 
     try:
         spark_home = os.environ["SPARK_HOME"]
-    except KeyError:
-        raise RuntimeError("SPARK_HOME is not defined in environment")
+    except KeyError as e:
+        raise RuntimeError("SPARK_HOME is not defined in environment") from e
 
     test_class_path = os.path.join(spark_home, "sql", "core", "target", "*", "test-classes")
     paths = glob.glob(test_class_path)

@@ -82,7 +82,7 @@ def fail_on_stopiteration(f: Callable) -> Callable:
         except StopIteration as exc:
             raise RuntimeError(
                 "Caught StopIteration thrown from user's code; failing the task", exc
-            )
+            ) from exc
 
     return wrapper
 

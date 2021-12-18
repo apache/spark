@@ -731,8 +731,8 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         try:
             return self.call("transform", word)
-        except Py4JJavaError:
-            raise ValueError("%s not found" % word)
+        except Py4JJavaError as e:
+            raise ValueError("%s not found" % word) from e
 
     def findSynonyms(self, word, num):
         """

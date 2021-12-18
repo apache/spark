@@ -458,7 +458,7 @@ class CloudPickleSerializer(FramedSerializer):
             else:
                 msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
             print_exec(sys.stderr)
-            raise pickle.PicklingError(msg)
+            raise pickle.PicklingError(msg) from e
 
     def loads(self, obj, encoding="bytes"):
         return cloudpickle.loads(obj, encoding=encoding)

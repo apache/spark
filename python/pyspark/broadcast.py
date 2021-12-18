@@ -110,7 +110,7 @@ class Broadcast:
         except Exception as e:
             msg = "Could not serialize broadcast: %s: %s" % (e.__class__.__name__, str(e))
             print_exec(sys.stderr)
-            raise pickle.PicklingError(msg)
+            raise pickle.PicklingError(msg) from e
         f.close()
 
     def load_from_path(self, path):

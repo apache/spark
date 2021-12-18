@@ -742,8 +742,8 @@ class StructType(DataType):
         elif isinstance(key, int):
             try:
                 return self.fields[key]
-            except IndexError:
-                raise IndexError("StructType index out of range")
+            except IndexError as e:
+                raise IndexError("StructType index out of range") from e
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
@@ -1273,8 +1273,8 @@ def _infer_type(
     else:
         try:
             return _infer_schema(obj, infer_dict_as_struct=infer_dict_as_struct)
-        except TypeError:
-            raise TypeError("not supported type: %s" % type(obj))
+        except TypeError as e:
+            raise TypeError("not supported type: %s" % type(obj)) from e
 
 
 def _infer_schema(
@@ -1871,10 +1871,10 @@ class Row(tuple):
             # but this will not be used in normal cases
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
-        except IndexError:
-            raise KeyError(item)
-        except ValueError:
-            raise ValueError(item)
+        except IndexError as e:
+            raise KeyError(item) from e
+        except ValueError as e:
+            raise ValueError(item) from e
 
     def __getattr__(self, item: str) -> Any:
         if item.startswith("__"):
@@ -1884,10 +1884,8 @@ class Row(tuple):
             # but this will not be used in normal cases
             idx = self.__fields__.index(item)
             return self[idx]
-        except IndexError:
-            raise AttributeError(item)
-        except ValueError:
-            raise AttributeError(item)
+        except (IndexError, ValueError) as e:
+            raise AttributeError(item) from e
 
     def __setattr__(self, key: Any, value: Any) -> None:
         if key != "__fields__":

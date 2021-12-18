@@ -411,7 +411,7 @@ class Params(Identifiable, metaclass=ABCMeta):
         try:
             value = param.typeConverter(value)
         except ValueError as e:
-            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e))
+            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e)) from e
         self._paramMap[param] = value
 
     def _shouldOwn(self, param):
@@ -470,7 +470,7 @@ class Params(Identifiable, metaclass=ABCMeta):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:
-                    raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
+                    raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e)) from e
             self._paramMap[p] = value
         return self
 
@@ -493,7 +493,7 @@ class Params(Identifiable, metaclass=ABCMeta):
                 except TypeError as e:
                     raise TypeError(
                         'Invalid default param value given for param "%s". %s' % (p.name, e)
-                    )
+                    ) from e
             self._defaultParamMap[p] = value
         return self
 

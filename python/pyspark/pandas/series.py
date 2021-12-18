@@ -2254,11 +2254,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         internal.index_spark_columns[lvl] == idx
                         for lvl, idx in enumerate(idxes, level)
                     ]
-                except IndexError:
+                except IndexError as e:
                     raise KeyError(
                         "Key length ({}) exceeds index depth ({})".format(
                             internal.index_level, len(idxes)
-                        )
+                        ) from e
                     )
                 drop_index_scols.append(reduce(lambda x, y: x & y, index_scols))
 
@@ -6332,12 +6332,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 # with ints, searches based on index values when the value is int.
                 return self.iloc[key]
             return self.loc[key]
-        except SparkPandasIndexingError:
+        except SparkPandasIndexingError as e:
             raise KeyError(
                 "Key length ({}) exceeds index depth ({})".format(
                     len(key), self._internal.index_level
                 )
-            )
+            ) from e
 
     def __getattr__(self, item: str_type) -> Any:
         if item.startswith("__"):

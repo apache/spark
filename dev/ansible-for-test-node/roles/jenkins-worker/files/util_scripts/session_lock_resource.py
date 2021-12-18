@@ -47,12 +47,12 @@ def _acquire_lock(filename, timeout_secs, message):
             f.write(message)
             f.flush()
             return f
-        except IOError:
+        except IOError as e:
             # Locking failed
             time_attempted += 1
             if timeout_secs and time_attempted >= timeout_secs:
                 # Timeout exceeded
-                raise IOError("Can't get child lock")
+                raise IOError("Can't get child lock") from e
         time.sleep(1)
 
 
