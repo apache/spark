@@ -17,7 +17,7 @@
 import sys
 import warnings
 from collections import Counter
-from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
+from typing import cast, List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
 
 from pyspark.rdd import _load_from_socket  # type: ignore[attr-defined]
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
@@ -46,6 +46,8 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
+    from pyspark.sql.context import SQLContext
+    from py4j.java_gateway import JVMView
 
 
 class PandasConversionMixin:
@@ -397,20 +399,18 @@ class SparkConversionMixin:
 
         require_minimum_pandas_version()
 
-        timezone = self._wrapped._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
+        sqlContext = cast("SQLContext", self._wrapped)
+        timezone = sqlContext._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
 
         # If no schema supplied by user then get the names of columns only
         if schema is None:
             schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
 
-        if (
-            self._wrapped._conf.arrowPySparkEnabled()  # type: ignore[attr-defined]
-            and len(data) > 0
-        ):
+        if sqlContext._conf.arrowPySparkEnabled() and len(data) > 0:  # type: ignore[attr-defined]
             try:
                 return self._create_from_pandas_with_arrow(data, schema, timezone)
             except Exception as e:
-                if self._wrapped._conf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
+                if sqlContext._conf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -599,9 +599,10 @@ class SparkConversionMixin:
             for pdf_slice in pdf_slices
         ]
 
-        jsqlContext = self._wrapped._jsqlContext  # type: ignore[attr-defined]
+        sqlContext = cast("SQLContext", self._wrapped)
+        jsqlContext = sqlContext._jsqlContext  # type: ignore[attr-defined]
 
-        safecheck = self._wrapped._conf.arrowSafeTypeConversion()  # type: ignore[attr-defined]
+        safecheck = sqlContext._conf.arrowSafeTypeConversion()  # type: ignore[attr-defined]
         col_by_name = True  # col by name only applies to StructType columns, can't happen here
         ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
@@ -615,9 +616,10 @@ class SparkConversionMixin:
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
         jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
-        assert self._jvm is not None
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
-        df = DataFrame(jdf, self._wrapped)
+        jvm: Optional["JVMView"] = self._jvm
+        assert jvm is not None
+        jdf = jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
+        df = DataFrame(jdf, sqlContext)
         df._schema = schema
         return df
 

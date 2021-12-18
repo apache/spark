@@ -222,7 +222,8 @@ class UserDefinedFunction:
         sc = spark.sparkContext
 
         wrapped_func = _wrap_function(sc, func, self.returnType)
-        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
+        jsparkSession: JavaObject = spark._jsparkSession
+        jdt = jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic
@@ -453,7 +454,8 @@ class UDFRegistration:
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
             register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
-        self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
+        jsparkSession: JavaObject = self.sparkSession._jsparkSession
+        jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
     def registerJavaFunction(
@@ -502,12 +504,13 @@ class UDFRegistration:
         """
 
         jdt = None
+        jsparkSession: JavaObject = self.sparkSession._jsparkSession
         if returnType is not None:
             if not isinstance(returnType, DataType):
                 returnType = _parse_datatype_string(returnType)
             returnType = cast(DataType, returnType)
-            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
-        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
+            jdt = jsparkSession.parseDataType(returnType.json())
+        jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
         """Register a Java user-defined aggregate function as a SQL function.
@@ -529,8 +532,8 @@ class UDFRegistration:
         >>> spark.sql(q).collect()  # doctest: +SKIP
         [Row(name='b', avg=102.0), Row(name='a', avg=102.0)]
         """
-
-        self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
+        jsparkSession: JavaObject = self.sparkSession._jsparkSession
+        jsparkSession.udf().registerJavaUDAF(name, javaClassName)
 
 
 def _test() -> None:

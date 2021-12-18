@@ -374,7 +374,7 @@ class DataStreamReader(OptionUtils):
 
         spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
-            jschema = spark._jsparkSession.parseDataType(schema.json())
+            jschema = cast(JavaObject, spark._jsparkSession).parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)

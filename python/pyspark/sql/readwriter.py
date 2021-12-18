@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from pyspark.sql.context import SQLContext
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
+    from py4j.java_gateway import JavaObject, JVMView
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -112,7 +113,7 @@ class DataFrameReader(OptionUtils):
 
         spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
-            jschema = spark._jsparkSession.parseDataType(
+            jschema = cast("JavaObject", spark._jsparkSession).parseDataType(
                 schema.json()
             )  # type: ignore[attr-defined]
             self._jreader = self._jreader.schema(jschema)
@@ -279,15 +280,13 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             allowNonNumericNumbers=allowNonNumericNumbers,
         )
+        jvm: "JVMView" = self._spark._sc._jvm
+        assert jvm is not None
+
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
-            assert self._spark._sc._jvm is not None
-            return self._df(
-                self._jreader.json(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            return self._df(self._jreader.json(jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
@@ -300,8 +299,7 @@ class DataFrameReader(OptionUtils):
 
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True  # type: ignore[attr-defined]
-            assert self._spark._jvm is not None
-            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())  # type: ignore[attr-defined]
+            jrdd = keyed._jrdd.map(jvm.BytesToString())  # type: ignore[attr-defined]
             return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string, list or RDD")

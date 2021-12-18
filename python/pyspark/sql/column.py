@@ -917,7 +917,7 @@ class Column:
             from pyspark.sql import SparkSession
 
             spark = SparkSession._getActiveSessionOrCreate()
-            jdt = spark._jsparkSession.parseDataType(dataType.json())
+            jdt = cast(JavaObject, spark._jsparkSession).parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:
             raise TypeError("unexpected type: %s" % type(dataType))

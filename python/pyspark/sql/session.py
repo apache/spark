@@ -36,7 +36,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject, JVMView  # type: ignore[import]
 
 from pyspark import SparkConf, SparkContext, since
 from pyspark.rdd import RDD
@@ -65,7 +65,6 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
     from pyspark.sql.udf import UDFRegistration
-
 
 __all__ = ["SparkSession"]
 
@@ -266,7 +265,7 @@ class SparkSession(SparkConversionMixin):
                 from pyspark.conf import SparkConf
 
                 session = SparkSession._instantiatedSession
-                if session is None or session._sc._jsc is None:  # type: ignore[attr-defined]
+                if session is None or session._sc._jsc is None:
                     if self._sc is not None:
                         sc = self._sc
                     else:
@@ -279,9 +278,14 @@ class SparkSession(SparkConversionMixin):
                     # by all sessions.
                     session = SparkSession(sc, options=self._options)
                 else:
-                    getattr(
-                        getattr(session._jvm, "SparkSession$"), "MODULE$"
-                    ).applyModifiableSettings(session._jsparkSession, self._options)
+                    jvm: Optional[JVMView] = session._jvm
+                    jsparkSession: Optional[JavaObject] = session._jsparkSession
+
+                    assert jvm is not None and jsparkSession is not None
+
+                    getattr(getattr(jvm, "SparkSession$"), "MODULE$").applyModifiableSettings(
+                        jsparkSession, self._options
+                    )
                 return session
 
     builder = Builder()

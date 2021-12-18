@@ -17,7 +17,7 @@
 
 import sys
 import warnings
-from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, cast, NamedTuple, List, Optional, TYPE_CHECKING
 
 from pyspark import since
 from pyspark.sql.dataframe import DataFrame
@@ -26,7 +26,9 @@ from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
+    from pyspark.sql.context import SQLContext
     from pyspark.sql.types import DataType
+    from py4j.java_gateway import JavaObject  # type: ignore[import ]
 
 
 class Database(NamedTuple):
@@ -68,8 +70,8 @@ class Catalog:
     def __init__(self, sparkSession: SparkSession) -> None:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
-        self._jsparkSession = sparkSession._jsparkSession
-        self._jcatalog = sparkSession._jsparkSession.catalog()
+        self._jsparkSession: "JavaObject" = sparkSession._jsparkSession
+        self._jcatalog: "JavaObject" = sparkSession._jsparkSession.catalog()
 
     @since(2.0)
     def currentDatabase(self) -> str:
@@ -342,12 +344,12 @@ class Catalog:
         .. versionchanged:: 3.1
            Added the ``description`` parameter.
         """
+
+        sqlContext = cast("SQLContext", self._sparkSession._wrapped)
         if path is not None:
             options["path"] = path
         if source is None:
-            source = (
-                self._sparkSession._wrapped._conf.defaultDataSourceName()  # type: ignore[attr-defined]
-            )
+            source = sqlContext._conf.defaultDataSourceName()  # type: ignore[attr-defined]
         if description is None:
             description = ""
         if schema is None:
@@ -357,7 +359,7 @@ class Catalog:
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
-        return DataFrame(df, self._sparkSession._wrapped)
+        return DataFrame(df, sqlContext)
 
     def dropTempView(self, viewName: str) -> None:
         """Drops the local temporary view with the given view name in the catalog.
