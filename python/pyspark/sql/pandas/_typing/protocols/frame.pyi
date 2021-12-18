@@ -16,4 +16,5 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# This alias is kept for legacy reasons
 from pyspark.sql.pandas._typing import DataFrameLike as DataFrameLike
