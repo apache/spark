@@ -131,7 +131,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
 
-  private val listingLock = new Object
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
@@ -465,7 +464,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     secManager.checkUIViewPermissions(user)
   }
 
-  private def withListingLock[A](f: => A): A = listingLock.synchronized {
+  private def withListingLock[A](f: => A): A = listing.synchronized {
     f
   }
 
