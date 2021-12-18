@@ -2245,7 +2245,7 @@ class TaskSetManagerSuite
     assert(sched.speculativeTasks.size == 1)
   }
 
-  test("SPARK-37580 task failed reach max failure threshold should check if another attempt " +
+  test("SPARK-37580: task failed reach max failure threshold should check if another attempt " +
     "succeeded before abort the stage") {
     sc = new SparkContext("local", "test")
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
@@ -2281,10 +2281,9 @@ class TaskSetManagerSuite
     }
     clock.advance(1)
 
-    // running task with taskId(index 1) fail 3 times (not enough to abort the stage)
+    // running task with index 1 fail 3 times (not enough to abort the stage)
     (0 until 3).foreach { attempt =>
       val task = runningTaskForIndex(1)
-      logInfo(s"failing task $task")
       val endReason = ExceptionFailure("a", "b", Array(), "c", None)
       manager.handleFailedTask(task.taskId, TaskState.FAILED, endReason)
       sched.endedTasks(task.taskId) = endReason
@@ -2293,6 +2292,12 @@ class TaskSetManagerSuite
       assert(nextTask.isDefined, s"no offer for attempt $attempt of 1")
       tasks += nextTask.get
     }
+
+    val numFailuresField = classOf[TaskSetManager].getDeclaredField("numFailures")
+    numFailuresField.setAccessible(true)
+    val numFailures = numFailuresField.get(manager).asInstanceOf[Array[Int]]
+    // numFailures(1) should be 3
+    assert(numFailures(1) == 3)
 
     // make task(TID 2) success to speculative other tasks
     manager.handleSuccessfulTask(2, createTaskResult(2))
@@ -2307,9 +2312,6 @@ class TaskSetManagerSuite
     assert(speculativeTask.isDefined)
     manager.handleSuccessfulTask(speculativeTask.get.taskId, createTaskResult(1))
     // if task success, numFailures will be reset to 0
-    val numFailuresField = classOf[TaskSetManager].getDeclaredField("numFailures")
-    numFailuresField.setAccessible(true)
-    val numFailures = numFailuresField.get(manager).asInstanceOf[Array[Int]]
     assert(numFailures(1) == 0)
 
     // failed the originalTask(index 1) and check if the task manager is zombie

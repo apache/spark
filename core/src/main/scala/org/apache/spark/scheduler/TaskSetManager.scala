@@ -964,7 +964,7 @@ private[spark] class TaskSetManager(
         info.host, info.executorId, index, failureReason))
       if (!successful(index)) {
         numFailures(index) += 1
-        if (numFailures(index) >= maxTaskFailures && !successful(index)) {
+        if (numFailures(index) >= maxTaskFailures) {
           logError("Task %d in stage %s failed %d times; aborting job".format(
             index, taskSet.id, maxTaskFailures))
           abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
@@ -975,8 +975,8 @@ private[spark] class TaskSetManager(
     }
 
     if (successful(index)) {
-      logInfo(s"${taskName(info.taskId)} failed, but the task will not be re-executed" +
-        " (either because the task failed with a shuffle data fetch failure," +
+      logInfo(s"${taskName(info.taskId)} failed, but the task will not" +
+        " be re-executed (either because the task failed with a shuffle data fetch failure," +
         " so the previous stage needs to be re-run, or because a different copy of the task" +
         " has already succeeded).")
     } else {
