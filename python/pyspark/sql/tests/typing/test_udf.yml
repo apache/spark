@@ -18,8 +18,8 @@
 - case: scalarUDF
   main: |
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-    import pandas.core.series  # type: ignore[import]
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.series
+    import pandas.core.frame
 
     @pandas_udf("string", PandasUDFType.SCALAR)
     def f(x: pandas.core.series.Series) -> pandas.core.series.Series:
@@ -46,7 +46,7 @@
   main: |
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
     from pyspark.sql.types import IntegerType
-    import pandas.core.series  # type: ignore[import]
+    import pandas.core.series
     from typing import Iterable
 
     @pandas_udf(IntegerType(), PandasUDFType.SCALAR_ITER)
@@ -62,7 +62,7 @@
     from pyspark.sql.session import SparkSession
     from pyspark.sql.types import StructField, StructType, LongType
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
 
     @pandas_udf("id long", PandasUDFType.GROUPED_MAP)
     def f(pdf: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame:
@@ -92,7 +92,7 @@
     # Let's keep this one to make sure compatibility imports work
     from pyspark.sql.functions import pandas_udf, PandasUDFType
     from pyspark.sql.types import IntegerType
-    import pandas.core.series  # type: ignore[import]
+    import pandas.core.series
 
     @pandas_udf(IntegerType(), PandasUDFType.GROUPED_AGG)
     def f(x: pandas.core.series.Series) -> int:
@@ -115,7 +115,7 @@
   main: |
     from pyspark.sql.session import SparkSession
     from typing import Iterable
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
 
     spark = SparkSession.builder.getOrCreate()
 
@@ -155,7 +155,7 @@
 - case: cogroupedAggUdf
   main: |
     from pyspark.sql.session import SparkSession
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
     from  pyspark.sql.types import StructType, StructField, LongType
 
     spark = SparkSession.builder.getOrCreate()
