@@ -195,17 +195,13 @@ case class FileSourceScanExec(
     disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
-  lazy val metadataStructCol: Option[AttributeReference] =
-    output.collectFirst { case MetadataAttribute(attr) => attr }
+  lazy val metadataColumns: Seq[AttributeReference] =
+    output.collect { case MetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    // schema without the file metadata struct column
-    val fileSchema = if (metadataStructCol.isEmpty) schema else {
-      output.filter(_.exprId != metadataStructCol.get.exprId).toStructType
-    }
-    relation.fileFormat.supportBatch(relation.sparkSession, fileSchema)
+    relation.fileFormat.supportBatch(relation.sparkSession, schema)
   }
 
   private lazy val needsUnsafeRowConversion: Boolean = {
@@ -222,9 +218,7 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
         // for column-based file format, append metadata struct column's vector type classes if any
-        vectorTypes ++ (if (metadataStructCol.isDefined) {
-          Seq(classOf[OnHeapColumnVector].getName)
-        } else Seq.empty)
+        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[OnHeapColumnVector].getName)
       }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
@@ -368,7 +362,7 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // TODO: should be able to push filters containing metadata struct down to skip files
+    // TODO: should be able to push filters containing metadata columns down to skip files
     dataFilters
       .filterNot(
         _.references.exists {
@@ -619,7 +613,7 @@ case class FileSourceScanExec(
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, metadataStructCol)
+      requiredSchema, metadataColumns)
   }
 
   /**
@@ -676,7 +670,7 @@ case class FileSourceScanExec(
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, metadataStructCol)
+      requiredSchema, metadataColumns)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
