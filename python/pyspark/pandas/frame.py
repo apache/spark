@@ -75,6 +75,7 @@ from pyspark.sql.types import (
     StructType,
     DecimalType,
     TimestampType,
+    TimestampNTZType,
 )
 from pyspark.sql.window import Window
 
@@ -8829,10 +8830,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 exprs_non_numeric.append(psser.spark.column)
                 column_names.append(label[0])
                 # For the timestamp type we also need to retreive the `first` and `last`.
-                if isinstance(spark_data_type, TimestampType):
-                    is_timestamp_types.append(True)
-                else:
-                    is_timestamp_types.append(False)
+                is_timestamp_types.append(
+                    isinstance(spark_data_type, (TimestampType, TimestampNTZType))
+                )
 
         if percentiles is not None:
             if any((p < 0.0) or (p > 1.0) for p in percentiles):
@@ -8851,7 +8851,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             sdf = self._internal.spark_frame.select(*exprs_non_numeric)
 
             # Get `count` & `unique` for each columns
-            has_timestamp_type = True in is_timestamp_types
+            has_timestamp_type = any(is_timestamp_types)
             if not has_timestamp_type:
                 counts, uniques = map(
                     lambda x: x[1:], sdf.summary("count", "count_distinct").take(2)
@@ -8906,7 +8906,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 firsts = []
                 lasts = []
-                first_last_values = list(sdf.select(*exprs).first().asDict().values())
+                first_last_values = list(sdf.select(*exprs).first())
                 for i in range(0, len(first_last_values) - 1, 2):
                     first_value = first_last_values[i]
                     last_value = first_last_values[i + 1]
