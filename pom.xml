@@ -714,39 +714,6 @@
         <version>1.4.01</version>
       </dependency>
 
-      <!--
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>jul-to-slf4j</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>jcl-over-slf4j</artifactId>
-        <version>${slf4j.version}</version>
-        <!- runtime scope is appropriate, but causes SBT build problems ->
-      </dependency>
-      <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      -->
-
-
       <!-- log4j -->
       <dependency>
         <groupId>org.slf4j</groupId>
