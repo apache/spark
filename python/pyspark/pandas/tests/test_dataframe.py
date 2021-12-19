@@ -5785,7 +5785,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.describe(), pdf.describe())
 
         # string columns
-        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
+        psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
         pdf = psdf.to_pandas()
         self.assert_eq(psdf.describe(), pdf.describe().astype(str))
 
@@ -5795,11 +5795,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 "A": [
                     pd.Timestamp("2020-10-20"),
                     pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2021-06-02"),
                     pd.Timestamp("2022-07-11"),
                 ],
                 "B": [
                     pd.Timestamp("2021-11-20"),
                     pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
                     pd.Timestamp("2026-07-11"),
                 ],
             }
@@ -5810,10 +5812,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         # String & timestamp columns
         psdf = ps.DataFrame(
             {
-                "A": ["a", "b", "c"],
+                "A": ["a", "b", "b", "c"],
                 "B": [
                     pd.Timestamp("2021-11-20"),
                     pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
                     pd.Timestamp("2026-07-11"),
                 ],
             }

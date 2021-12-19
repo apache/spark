@@ -8925,8 +8925,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 stats_names.append("first")
                 stats_names.append("last")
 
-            result = ps.DataFrame(
-                stats,
+            result: DataFrame = DataFrame(
+                data=stats,
                 index=stats_names,
                 columns=column_names,
             )
