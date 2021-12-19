@@ -85,7 +85,7 @@ def _to_seq(
     if converter:
         cols = [converter(c) for c in cols]
     assert sc._jvm is not None
-    return sc._jvm.PythonUtils.toSeq(cols)  # type: ignore[attr-defined]
+    return sc._jvm.PythonUtils.toSeq(cols)
 
 
 def _to_list(

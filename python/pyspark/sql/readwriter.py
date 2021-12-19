@@ -181,11 +181,7 @@ class DataFrameReader(OptionUtils):
             if type(path) != list:
                 path = [path]  # type: ignore[list-item]
             assert self._spark._sc._jvm is not None
-            return self._df(
-                self._jreader.load(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
@@ -546,11 +542,7 @@ class DataFrameReader(OptionUtils):
             path = [path]
         if type(path) == list:
             assert self._spark._sc._jvm is not None
-            return self._df(
-                self._jreader.csv(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
             def func(iterator):
