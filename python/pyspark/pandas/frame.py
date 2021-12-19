@@ -8866,7 +8866,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     exprs.append(F.count(column))
                     exprs.append(F.count_distinct(column))
 
-                count_unique_values = list(sdf.select(*exprs).first().asDict().values())
+                count_unique_values = sdf.select(*exprs).first()
                 for i in range(0, len(count_unique_values) - 1, 2):
                     counts.append(str(count_unique_values[i]))
                     uniques.append(str(count_unique_values[i + 1]))
@@ -8875,14 +8875,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             tops = []
             freqs = []
             for column in exprs_non_numeric:
-                top, freq = (
-                    sdf.groupby(column)
-                    .count()
-                    .sort("count", ascending=False)
-                    .first()
-                    .asDict()
-                    .values()
-                )
+                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
                 tops.append(str(top))
                 freqs.append(str(freq))
 
@@ -8906,7 +8899,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 firsts = []
                 lasts = []
-                first_last_values = list(sdf.select(*exprs).first())
+                first_last_values = sdf.select(*exprs).first()
                 for i in range(0, len(first_last_values) - 1, 2):
                     first_value = first_last_values[i]
                     last_value = first_last_values[i + 1]
