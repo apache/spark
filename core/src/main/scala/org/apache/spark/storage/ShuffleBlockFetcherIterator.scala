@@ -1301,9 +1301,12 @@ private class BufferReleasingInputStream(
       block
     } catch {
       case e: IOException if detectCorruption =>
-        val diagnosisResponse = checkedInOpt.map { checkedIn =>
-          iterator.diagnoseCorruption(checkedIn, address, blockId)
-        }
+        val diagnosisResponse = checkedInOpt
+          // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
+          .filterNot { _ => blockId.isShuffleChunk }
+          .map { checkedIn =>
+            iterator.diagnoseCorruption(checkedIn, address, blockId)
+          }
         IOUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
