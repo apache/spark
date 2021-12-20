@@ -356,10 +356,10 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
  * of which have their own requirement regarding whether its data can be considered as
  * co-partitioned from others. This offers APIs for:
  *
- *   1. Comparing with specs from other children of the operator and check if they are compatible.
+ *   - Comparing with specs from other children of the operator and check if they are compatible.
  *      When two specs are compatible, we can say their data are co-partitioned, and Spark will
- *      potentially able to eliminate shuffle if necessary.
- *   1. Creating a partitioning that can be used to re-partition another child, so that to make it
+ *      potentially be able to eliminate shuffle if necessary.
+ *   - Creating a partitioning that can be used to re-partition another child, so that to make it
  *      having a compatible partitioning as this node.
  */
 trait ShuffleSpec {
@@ -383,7 +383,7 @@ trait ShuffleSpec {
   def canCreatePartitioning: Boolean = false
 
   /**
-   * Creates a partitioning that can be used to re-partitioned the other side with the given
+   * Creates a partitioning that can be used to re-partition the other side with the given
    * clustering expressions.
    *
    * This will only be called when:
@@ -397,7 +397,7 @@ trait ShuffleSpec {
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {
   override def isCompatibleWith(other: ShuffleSpec): Boolean = {
-    other.numPartitions == numPartitions
+    other.numPartitions == 1
   }
 
   override def canCreatePartitioning: Boolean = true
@@ -415,6 +415,8 @@ case class RangeShuffleSpec(
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec => numPartitions == 1
     case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
+    // `RangePartitioning` is not compatible with any other partitioning since it can't guarantee
+    // data are co-partitioned for all the children, as range boundaries are randomly sampled.
     case _ => false
   }
 }
@@ -422,7 +424,7 @@ case class RangeShuffleSpec(
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
-  lazy val hashKeyPositions =
+  lazy val hashKeyPositions: Seq[mutable.BitSet] =
     createHashKeyPositions(distribution.clustering, partitioning.expressions)
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
@@ -430,10 +432,12 @@ case class HashShuffleSpec(
       partitioning.numPartitions == 1
     case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution) =>
       // we need to check:
-      //  1. both partitioning have the same number of partitions
-      //  2. both partitioning have the same number of expressions
-      //  3. each pair of expression from both has overlapping positions in their
+      //  1. both distributions have the same number of clustering expressions
+      //  2. both partitioning have the same number of partitions
+      //  3. both partitioning have the same number of expressions
+      //  4. each pair of expression from both has overlapping positions in their
       //     corresponding distributions.
+      distribution.clustering.length == otherDistribution.clustering.length &&
       partitioning.numPartitions == otherPartitioning.numPartitions &&
       partitioning.expressions.length == otherPartitioning.expressions.length && {
         val otherHashKeyPositions = otherHashSpec.hashKeyPositions
@@ -484,8 +488,13 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     // as we only consider # of partitions as the cost now, it doesn't matter which one we choose
     // since they should all have the same # of partitions.
+    require(specs.map(_.numPartitions).toSet.size == 1, "expected all specs in the collection " +
+      "to have the same number of partitions")
     specs.head.createPartitioning(clustering)
   }
 
-  override def numPartitions: Int = specs.head.numPartitions
+  override def numPartitions: Int = {
+    require(specs.nonEmpty, "expected specs to be non-empty")
+    specs.head.numPartitions
+  }
 }

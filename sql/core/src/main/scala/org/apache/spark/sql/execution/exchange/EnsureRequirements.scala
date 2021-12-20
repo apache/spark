@@ -65,8 +65,8 @@ case class EnsureRequirements(
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
-    // Get the indexes of children which have specified distribution requirements and need to have
-    // same number of partitions.
+    // Get the indexes of children which have specified distribution requirements and need to be
+    // co-partitioned.
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
       case (_: ClusteredDistribution, _) => true
       case _ => false
@@ -99,30 +99,30 @@ case class EnsureRequirements(
       //
       // A child is considered to be re-shuffled iff:
       //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false.
-      //   2. It already has `ShuffleExchangeExec`.
+      //   2. It already has `ShuffleExchangeLike`.
       //
       // On the other hand, in scenarios such as:
       //   HashPartitioning(5) <-> HashPartitioning(6)
       // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
       // HashPartitioning(6).
       val canIgnoreMinPartitions = specs.exists(p =>
-        p._2.canCreatePartitioning && !children(p._1).isInstanceOf[ShuffleExchangeExec]
+        p._2.canCreatePartitioning && !children(p._1).isInstanceOf[ShuffleExchangeLike]
       )
       // Choose all the specs that can be used to shuffle other children
       val candidateSpecs = specs
           .filter(_._2.canCreatePartitioning)
           .filter(p => canIgnoreMinPartitions ||
               children(p._1).outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions)
-      val bestSpec = if (candidateSpecs.isEmpty) {
+      val bestSpecOpt = if (candidateSpecs.isEmpty) {
         None
       } else {
-        // When choosing specs, we should consider those children with no `Exchange` node
+        // When choosing specs, we should consider those children with no `ShuffleExchangeLike` node
         // first. For instance, if we have:
         //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
         // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
         // new shuffle for A.
         val candidateSpecsWithoutShuffle = candidateSpecs.filter { case (k, _) =>
-          !children(k).isInstanceOf[ShuffleExchangeExec]
+          !children(k).isInstanceOf[ShuffleExchangeLike]
         }
         val finalCandidateSpecs = if (candidateSpecsWithoutShuffle.nonEmpty) {
           candidateSpecsWithoutShuffle
@@ -137,14 +137,14 @@ case class EnsureRequirements(
         case ((child, _), idx) if !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
-          if (bestSpec.isDefined && bestSpec.get.isCompatibleWith(specs(idx))) {
+          if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             child
           } else {
-            val newPartitioning = if (bestSpec.isDefined) {
+            val newPartitioning = bestSpecOpt.map { bestSpec =>
               // Use the best spec to create a new partitioning to re-shuffle this child
               val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
-              bestSpec.get.createPartitioning(clustering)
-            } else {
+              bestSpec.createPartitioning(clustering)
+            }.getOrElse {
               // No best spec available, so we create default partitioning from the required
               // distribution
               val numPartitions = dist.requiredNumPartitions

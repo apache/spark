@@ -35,7 +35,7 @@ class ShuffleSpecSuite extends SparkFunSuite {
            |$left
            |== Right ShuffleSpec
            |$right
-           |== Does left is compatible with right? ==
+           |== Is left compatible with right? ==
            |Expected $expected but got $actual
            |""".stripMargin
       )
