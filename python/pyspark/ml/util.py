@@ -366,7 +366,7 @@ class DefaultParamsWritable(MLWritable):
             return DefaultParamsWriter(self)
         else:
             raise TypeError(
-                "Cannot use DefautParamsWritable with type %s because it does not "
+                "Cannot use DefaultParamsWritable with type %s because it does not "
                 + " extend Params.",
                 type(self),
             )
