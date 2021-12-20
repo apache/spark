@@ -280,9 +280,9 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /**
-   * Reverts write metrics that haven't been committed yet and delete the file held
-   * by current `DiskBlockObjectWriter`. Callers should invoke this function when there
-   * are runtime exceptions in file writing process and the file is no longer needed.
+   * Reverts write metrics and delete the file held by current `DiskBlockObjectWriter`.
+   * Callers should invoke this function when there are runtime exceptions in file
+   * writing process and the file is no longer needed.
    */
   def closeAndDelete(): Unit = {
     Utils.tryWithSafeFinally {
