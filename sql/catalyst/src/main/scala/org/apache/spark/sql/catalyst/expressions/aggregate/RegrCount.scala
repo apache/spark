@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, Numeric
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the number of non-null number pairs in a group.
+    _FUNC_(expr1, expr2) - Returns the number of non-null number pairs in a group.
   """,
   examples = """
     Examples:
