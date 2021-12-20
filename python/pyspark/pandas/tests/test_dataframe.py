@@ -223,6 +223,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             "loc must be int",
             lambda: psdf.insert((1,), "b", 10),
         )
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Tuple-like name is not supported to non-MultiIndex column",
+            lambda: psdf.insert(0, ("e",), 10),
+        )
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
         self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))

@@ -3989,9 +3989,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
         if is_name_like_tuple(column):
-            if len(column) != len(self.columns.levels):
-                # To be consistent with pandas
-                raise ValueError('"column" must have length equal to number of column levels.')
+            if isinstance(self.columns, pd.MultiIndex):
+                if len(column) != len(self.columns.levels):
+                    # To be consistent with pandas
+                    raise ValueError('"column" must have length equal to number of column levels.')
+            else:
+                raise NotImplementedError(
+                    "Tuple-like name is not supported to non-MultiIndex column"
+                )
 
         if column in self.columns:
             raise ValueError("cannot insert %s, already exists" % column)
