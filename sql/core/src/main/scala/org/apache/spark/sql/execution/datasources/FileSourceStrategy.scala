@@ -238,10 +238,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           dataFilters,
           table.map(_.identifier))
 
-      val metadataAliasOpt = metadataStructOpt.map { metadataStruct =>
-        Alias(CreateStruct(metadataColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
-      }
-
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
         val metadataAlias =
