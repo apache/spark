@@ -37,7 +37,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod
 
-  private val baseConf = new SparkConf(false)
+  protected val baseConf = new SparkConf(false)
     .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
 
   test("use empty initial pod if template is not specified") {
@@ -80,7 +80,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("Could not load pod from template file."))
   }
 
-  private def mockKubernetesClient(pod: Pod = podWithSupportedFeatures()): KubernetesClient = {
+  protected def mockKubernetesClient(pod: Pod = podWithSupportedFeatures()): KubernetesClient = {
     val kubernetesClient = mock(classOf[KubernetesClient])
     val pods =
       mock(classOf[MixedOperation[Pod, PodList, PodResource[Pod]]])

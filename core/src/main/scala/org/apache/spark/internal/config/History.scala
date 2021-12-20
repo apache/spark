@@ -211,4 +211,11 @@ private[spark] object History {
     .version("3.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("2g")
+
+  val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
+    .doc("Specifies a disk-based store used in hybrid store; 'leveldb' or 'rocksdb'.")
+    .version("3.3.0")
+    .stringConf
+    .checkValues(Set("leveldb", "rocksdb"))
+    .createWithDefault("leveldb")
 }

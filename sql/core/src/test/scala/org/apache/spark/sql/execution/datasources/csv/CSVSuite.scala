@@ -1997,7 +1997,8 @@ abstract class CSVSuite
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
     }
     assert(testAppender1.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
 
     val testAppender2 = new LogAppender("CSV header matches to schema w/ enforceSchema")
     withLogAppender(testAppender2) {
@@ -2015,7 +2016,8 @@ abstract class CSVSuite
       }
     }
     assert(testAppender2.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
   }
 
   test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {

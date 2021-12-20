@@ -21,7 +21,7 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 
 from abc import ABCMeta, abstractmethod
 import inspect
-from collections import OrderedDict, defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
@@ -288,7 +288,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         else:
             agg_cols = [col.name for col in self._agg_columns]
-            func_or_funcs = OrderedDict([(col, func_or_funcs) for col in agg_cols])
+            func_or_funcs = {col: func_or_funcs for col in agg_cols}
 
         psdf: DataFrame = DataFrame(
             GroupBy._spark_groupby(self._psdf, func_or_funcs, self._groupkeys)

@@ -169,11 +169,9 @@ class SQLContext:
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
+            assert sc._jvm is not None
             jsqlContext = (
-                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
-                .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
-                .getOrCreate()
-                .sqlContext()
+                sc._jvm.SparkSession.builder().sparkContext(sc._jsc.sc()).getOrCreate().sqlContext()
             )
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
@@ -733,10 +731,9 @@ class HiveContext(SQLContext):
         you may end up launching multiple derby instances and encounter with incredibly
         confusing error messages.
         """
-        jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
-            jsc, False
-        )
+        jsc = sparkContext._jsc.sc()
+        assert sparkContext._jvm is not None
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:

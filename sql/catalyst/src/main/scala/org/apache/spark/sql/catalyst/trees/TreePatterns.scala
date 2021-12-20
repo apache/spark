@@ -74,6 +74,7 @@ object TreePattern extends Enumeration  {
   val PIVOT: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
+  val REGR_COUNT: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val SCALA_UDF: Value = Value

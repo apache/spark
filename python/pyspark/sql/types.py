@@ -1012,13 +1012,16 @@ def _parse_datatype_string(s: str) -> DataType:
     from pyspark import SparkContext
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    assert sc is not None
 
     def from_ddl_schema(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
         )
@@ -1947,7 +1950,8 @@ class DatetimeNTZConverter:
         from pyspark import SparkContext
 
         seconds = calendar.timegm(obj.utctimetuple())
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
             int(seconds) * 1000000 + obj.microsecond
         )
@@ -1960,7 +1964,8 @@ class DayTimeIntervalTypeConverter:
     def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
         from pyspark import SparkContext
 
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
             (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
         )
