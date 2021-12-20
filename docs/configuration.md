@@ -3081,7 +3081,7 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
 `log4j.properties` file in the `conf` directory. One way to start is to copy the existing
-`log4j.properties.template` located there.
+`log4j2.properties.template` located there.
 
 By default, Spark adds 1 record to the MDC (Mapped Diagnostic Context): `mdc.taskName`, which shows something
 like `task 1.0 in stage 0.0`. You can add `%X{mdc.taskName}` to your patternLayout in
