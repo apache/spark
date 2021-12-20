@@ -32,17 +32,19 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     assert(loggingConfURL != null, "Logging configuration file not available.")
 
     val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
-    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j.properties"
+    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
 
     try {
       Files.write(new File(logConfFilePath).toPath, content.getBytes)
 
-      sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j2.debug")
-      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j2.debug")
+      sparkAppConf.set("spark.driver.extraJavaOptions",
+        s"-Dlog4j2.debug -Dlog4j.configurationFile=$logConfFilePath")
+      sparkAppConf.set("spark.executor.extraJavaOptions",
+        s"-Dlog4j2.debug -Dlog4j.configurationFile=$logConfFilePath")
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       val log4jExpectedLog =
-        s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties"
+        s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j2.properties"
 
       runSparkApplicationAndVerifyCompletion(
         appResource = containerLocalSparkDistroExamplesJar,
