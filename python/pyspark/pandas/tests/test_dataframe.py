@@ -5807,7 +5807,16 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         pdf = psdf.to_pandas()
-        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        # NOTE: Set `datetime_is_numeric=True` for pandas:
+        # FutureWarning: Treating datetime data as categorical rather than numeric in `.describe` is deprecated
+        # and will be removed in a future version of pandas. Specify `datetime_is_numeric=True` to silence this
+        # warning and adopt the future behavior now.
+        # NOTE: Compare the result except percentiles, since we use approximate percentile
+        # so the result is different from pandas.
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         # String & timestamp columns
         psdf = ps.DataFrame(
@@ -5822,7 +5831,34 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         pdf = psdf.to_pandas()
-        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+
+        # Numeric & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [1, 2, 2, 3],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        pandas_on_spark_result = psdf.describe()
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        self.assert_eq(
+            pandas_on_spark_result.A.loc[["count", "mean", "min", "max"]],
+            pandas_result.A.loc[["count", "mean", "min", "max"]],
+        )
+        self.assert_eq(
+            pandas_on_spark_result.B.loc[["count", "mean", "min", "max"]],
+            pandas_result.B.astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
