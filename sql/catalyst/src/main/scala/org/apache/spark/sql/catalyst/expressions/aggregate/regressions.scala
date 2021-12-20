@@ -32,7 +32,7 @@ trait RegressionAggregate
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the number of non-null number pairs in a group.
+    _FUNC_(expr1, expr2) - Returns the number of non-null number pairs in a group.
   """,
   examples = """
     Examples:
@@ -71,8 +71,8 @@ trait RegrAvg extends RegressionAggregate {
 
 @ExpressionDescription(
   usage = """
-     _FUNC_(expr) - Returns the average of the independent variable for non-null pairs in a group.
-                    right is the independent variable and left is the dependent variable.
+     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in
+                            a group.
   """,
   examples = """
     Examples:
@@ -98,8 +98,8 @@ case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
 
 @ExpressionDescription(
   usage = """
-     _FUNC_(expr) - Returns the average of the independent variable for non-null pairs in a group.
-                    right is the independent variable and left is the dependent variable.
+     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in
+                            a group.
   """,
   examples = """
     Examples:
