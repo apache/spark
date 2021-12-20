@@ -20,8 +20,7 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, DataFrame}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.types._
@@ -53,26 +52,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
 
-  override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE SCHEMA \"test\"").executeUpdate()
-    conn.prepareStatement("CREATE TYPE position_type AS (x NUMERIC(20, 2), y NUMERIC(20, 2))")
-      .executeUpdate()
-    conn.prepareStatement(
-      "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name VARCHAR(32), salary NUMERIC(20, 2)," +
-        " bonus double precision, position position_type)")
-      .executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, '(1, 2)')").executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, '(1, 2)')").executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, '(2, 3)')").executeUpdate()
-    conn.prepareStatement(
-"INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, '(2, 4)')")
-      .executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, '(3, 4))").executeUpdate()
-  }
+  override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
