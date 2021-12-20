@@ -130,23 +130,23 @@ class DummyScheduledFuture(
   extends ScheduledFuture[Int] {
 
   override def get(timeout: Long, unit: TimeUnit): Int =
-    throw new RuntimeException("should not be reached")
+    throw new IllegalStateException("should not be reached")
 
   override def getDelay(unit: TimeUnit): Long = delay
 
   override def compareTo(o: Delayed): Int =
-    throw new RuntimeException("should not be reached")
+    throw new IllegalStateException("should not be reached")
 
   override def cancel(mayInterruptIfRunning: Boolean): Boolean = true
 
   override def isCancelled: Boolean =
-    throw new RuntimeException("should not be reached")
+    throw new IllegalStateException("should not be reached")
 
   override def isDone: Boolean =
-    throw new RuntimeException("should not be reached")
+    throw new IllegalStateException("should not be reached")
 
   override def get(): Int =
-    throw new RuntimeException("should not be reached")
+    throw new IllegalStateException("should not be reached")
 }
 
 class DAGSchedulerSuiteDummyException extends Exception
@@ -346,6 +346,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
             shuffleMapStage.shuffleDep.shuffleMergeId)))
           handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
         }
+      }
+
+      shuffleMapStage.shuffleDep.getFinalizeTask match {
+        case Some(_) =>
+          assert(delay == 0 && registerMergeResults)
+        case None =>
       }
 
       shuffleMapStage.shuffleDep.setFinalizeTask(
@@ -3476,7 +3482,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-32920: shuffle merge finalization") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 2
     val shuffleMapRdd = new MyRDD(sc, parts, Nil)
@@ -3496,7 +3502,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: merger locations not empty") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 2
 
@@ -3521,7 +3527,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: merger locations reuse from shuffle dependency") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS, 3)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 2
 
@@ -3561,7 +3567,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: Disable shuffle merge due to not enough mergers available") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 6)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 7
 
@@ -3585,7 +3591,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: Ensure child stage should not start before all the" +
       " parent stages are completed with shuffle merge finalized for all the parent stages") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 1
     val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
@@ -3622,7 +3628,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       " ShuffleDependency should not cause DAGScheduler to hang") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 20
 
@@ -3653,7 +3659,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       " ShuffleDependency with shuffle data loss should recompute missing partitions") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 20
 
@@ -3669,7 +3675,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeNextResultStageWithSuccess(1, 0)
 
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     val hosts = (6 to parts).map {x => s"Host$x" }
     DAGSchedulerSuite.addMergerLocs(hosts)
 
@@ -3706,7 +3712,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: Merge results should be unregistered if the running stage is cancelled" +
     " before shuffle merge is finalized") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     scheduler = new MyDAGScheduler(
       sc,
@@ -3742,7 +3748,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-32920: SPARK-35549: Merge results should not get registered" +
     " after shuffle merge finalization") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
 
     scheduler = new MyDAGScheduler(
@@ -3780,7 +3786,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-32920: Disable push based shuffle in the case of a barrier stage") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
 
     val parts = 2
@@ -3827,7 +3833,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-32923: handle stage failure for indeterminate map stage with push-based shuffle") {
     initPushBasedShuffleConfs(conf)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val (shuffleId1, shuffleId2) = constructIndeterminateStageFetchFailed()
 
@@ -3888,10 +3894,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 11, 1 -> 12))
   }
 
-  test("SPARK-33701: shuffle adaptive merge finalization") {
+  test("SPARK-33701: check adaptive shuffle merge finalization triggered after" +
+    " stage completion") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 2
 
@@ -3912,6 +3919,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     for ((result, i) <- taskResults.zipWithIndex) {
       runEvent(makeCompletionEvent(taskSets(0).tasks(i), result._1, result._2))
     }
+    // Verify finalize task is set with default delay of 10s and merge results are marked
+    // for registration
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
     val finalizeTask1 = shuffleStage1.shuffleDep.getFinalizeTask.get
@@ -3924,8 +3933,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         (Success, makeMapStatus("host" + ('A' + idx).toChar, parts, 10))
     }.toSeq)
     val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
-    // Verify finalize task is set with default delay of 10s and merge results are marked
-    // for registration
     assert(shuffleStage2.shuffleDep.getFinalizeTask.nonEmpty)
     val finalizeTask2 = shuffleStage2.shuffleDep.getFinalizeTask.get
       .asInstanceOf[DummyScheduledFuture]
@@ -3942,13 +3949,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-33701: check shuffle merge finalization triggering after minimum" +
+  test("SPARK-33701: check adaptive shuffle merge finalization triggered after minimum" +
     " threshold push complete") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT, 10L)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 5)
     conf.set(config.PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO, 0.5)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 4
 
@@ -3976,7 +3983,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     pushComplete(shuffleStage1.shuffleDep.shuffleId, 0, 0)
     pushComplete(shuffleStage1.shuffleDep.shuffleId, 0, 1)
 
-    // Minimum push complete for 2 tasks, schedule merge finalization
+    // Minimum push complete for 2 tasks, should have scheduled merge finalization
     val finalizeTask = shuffleStage1.shuffleDep.getFinalizeTask.get
       .asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask.registerMergeResults && finalizeTask.delay == 0)
@@ -3993,12 +4000,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-33701: check shuffle merge finalization with stage cancellation") {
+  // Test the behavior of stage cancellation during the spark.shuffle.push.finalize.timeout
+  // wait for shuffle merge finalization, there are 2 different cases:
+  // 1. Deterministic stage - With deterministic stage, the shuffleMergeId = 0 for multiple
+  // stage attempts, so if the stage is cancelled before shuffle is merge finalized then
+  // the merge results are unregistered from MapOutputTracker
+  // 2. Indeterminate stage - Different attempt of the same stage can trigger shuffle merge
+  // finalization but it is validated by the shuffleMergeId (unique across stages and stage
+  // attempts for indeterminate stages) and only the shuffle merge is finalized
+  test("SPARK-33701: check adaptive shuffle merge finalization behavior with stage" +
+    " cancellation during spark.shuffle.push.finalize.timeout wait") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT, 10L)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 5)
     conf.set(config.PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO, 0.5)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 4
 
@@ -4069,13 +4085,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(!shuffleIndeterminateStage.shuffleDep.shuffleMergeFinalized)
   }
 
-  test("SPARK-33701: check shuffle merge finalization with minimum pushes complete" +
+  // With Adaptive shuffle merge finalization, once minimum shuffle pushes complete after stage
+  // completion, the existing shuffle merge finalization task with
+  // delay = spark.shuffle.push.finalize.timeout should be replaced with a new shuffle merge
+  // finalization task with delay = 0
+  test("SPARK-33701: check adaptive shuffle merge finalization with minimum pushes complete" +
     " after the stage completion replacing the finalize task with delay = 0") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT, 10L)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 5)
     conf.set(config.PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO, 0.5)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 4
 
@@ -4198,7 +4218,7 @@ object DAGSchedulerSuite {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }
   }
 
-  def clearMergerLocs: Unit = mergerLocs.clear()
+  def clearMergerLocs(): Unit = mergerLocs.clear()
 
 }
 
