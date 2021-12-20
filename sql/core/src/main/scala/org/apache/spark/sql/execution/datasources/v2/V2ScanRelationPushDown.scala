@@ -150,6 +150,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
                 if (r.supportCompletePushDown()) {
                   val projectExpressions = resultExpressions.map { expr =>
+                    // TODO At present, only push down group by attribute is supported.
+                    // In future, more attribute conversion is extended here. e.g. GetStructField
                     expr.transform {
                       case agg: AggregateExpression =>
                         val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
