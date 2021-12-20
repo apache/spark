@@ -174,7 +174,7 @@ class ParquetFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      ParquetFileFormat.isBatchReadSupported(conf, schema) &&
+      ParquetUtils.isBatchReadSupportedForSchema(conf, schema) &&
         !WholeStageCodegenExec.isTooManyFields(conf, schema)
   }
 
@@ -241,8 +241,7 @@ class ParquetFileFormat
     val sqlConf = sparkSession.sessionState.conf
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
     val enableVectorizedReader: Boolean =
-      sqlConf.parquetVectorizedReaderEnabled &&
-      resultSchema.map(_.dataType).forall(ParquetFileFormat.isBatchReadSupported(sqlConf, _))
+      ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
     val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
     val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -464,23 +463,6 @@ object ParquetFileFormat extends Logging {
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(left, right, e)
       }
     }
-  }
-
-  private[parquet] def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
-    case _: AtomicType =>
-      true
-    case at: ArrayType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, at.elementType)
-    case mt: MapType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, mt.keyType) &&
-          isBatchReadSupported(sqlConf, mt.valueType)
-    case st: StructType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
-    case _ =>
-      false
   }
 
   /**
