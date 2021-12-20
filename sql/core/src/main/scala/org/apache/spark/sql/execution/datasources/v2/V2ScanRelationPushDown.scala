@@ -153,12 +153,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     expr.transform {
                       case agg: AggregateExpression =>
                         val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                        val aggAttribute = aggOutput(ordinal)
-                        val child = if (aggAttribute.dataType == agg.resultAttribute.dataType) {
-                          aggAttribute
-                        } else {
-                          Cast(aggAttribute, agg.resultAttribute.dataType)
-                        }
+                        val child = newAggOutput(aggOutput(ordinal), agg)
                         Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
@@ -188,12 +183,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   plan.transformExpressions {
                     case agg: AggregateExpression =>
                       val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
+                      val child = newAggOutput(aggOutput(ordinal), agg)
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
-                          case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
-                          case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
-                          case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
-                          case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
+                          case max: aggregate.Max => max.copy(child = child)
+                          case min: aggregate.Min => min.copy(child = child)
+                          case sum: aggregate.Sum => sum.copy(child = child)
+                          case _: aggregate.Count => aggregate.Sum(child)
                           case other => other
                         }
                       agg.copy(aggregateFunction = aggFunction)
@@ -205,6 +201,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case _ => aggNode
       }
   }
+
+  private def newAggOutput(aggAttribute: AttributeReference, agg: AggregateExpression) =
+    if (aggAttribute.dataType == agg.resultAttribute.dataType) {
+      aggAttribute
+    } else {
+      Cast(aggAttribute, agg.resultAttribute.dataType)
+    }
 
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
