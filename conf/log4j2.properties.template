@@ -17,7 +17,7 @@
 
 # Set everything to be logged to the console
 rootLogger.level = info
-rootLogger.appenderRef.file.ref = console
+rootLogger.appenderRef.stdout.ref = console
 
 appender.console.type = Console
 appender.console.name = console
