@@ -149,8 +149,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
                 if (r.supportCompletePushDown()) {
-                  val groupOutputLength = resultExpressions.length - aggOutput.length
-                  val aggExpressions = resultExpressions.drop(groupOutputLength).map { expr =>
+                  val projectExpressions = resultExpressions.map { expr =>
                     expr.transform {
                       case agg: AggregateExpression =>
                         val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
@@ -163,7 +162,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                         Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
-                  val projectExpressions = groupAttrs.take(groupOutputLength) ++ aggExpressions
                   Project(projectExpressions, scanRelation)
                 } else {
                   val plan = Aggregate(

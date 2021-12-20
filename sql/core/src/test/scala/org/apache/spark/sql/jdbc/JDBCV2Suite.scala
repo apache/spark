@@ -556,6 +556,60 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row(10000, 1000), Row(12000, 1200)))
   }
 
+  test("scan with aggregate push-down: with concat multiple group key in project") {
+    val df1 = sql("select concat_ws('#', DEPT, NAME), MAX(SALARY) FROM h2.test.employee" +
+      " where dept > 0 group by DEPT, NAME")
+    val filters1 = df1.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters1.isEmpty)
+    checkAggregateRemoved(df1)
+    df1.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [MAX(SALARY)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT, NAME]"
+        checkKeywordsExistsInExplain(df1, expected_plan_fragment)
+    }
+    checkAnswer(df1, Seq(Row("1#amy", 10000), Row("1#cathy", 9000), Row("2#alex", 12000),
+      Row("2#david", 10000), Row("6#jen", 12000)))
+
+    val df2 = sql("select concat_ws('#', DEPT, NAME), MAX(SALARY) + MIN(BONUS)" +
+      " FROM h2.test.employee where dept > 0 group by DEPT, NAME")
+    val filters2 = df2.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters2.isEmpty)
+    checkAggregateRemoved(df2)
+    df2.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT, NAME]"
+        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+    }
+    checkAnswer(df2, Seq(Row("1#amy", 11000), Row("1#cathy", 10200), Row("2#alex", 13200),
+      Row("2#david", 11300), Row("6#jen", 13200)))
+
+    val df3 = sql("select concat_ws('#', DEPT, NAME), MAX(SALARY) + MIN(BONUS)" +
+      " FROM h2.test.employee where dept > 0 group by concat_ws('#', DEPT, NAME)")
+    val filters3 = df3.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters3.isEmpty)
+    checkAggregateRemoved(df3, false)
+    df3.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], "
+        checkKeywordsExistsInExplain(df3, expected_plan_fragment)
+    }
+    checkAnswer(df3, Seq(Row("1#amy", 11000), Row("1#cathy", 10200), Row("2#alex", 13200),
+      Row("2#david", 11300), Row("6#jen", 13200)))
+  }
+
   test("scan with aggregate push-down: with having clause") {
     val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT having MIN(BONUS) > 1000")
