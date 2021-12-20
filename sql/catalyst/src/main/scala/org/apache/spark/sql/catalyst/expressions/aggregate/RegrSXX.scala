@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Numer
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs.
+    _FUNC_(expr1, expr2) - Returns REGR_COUNT(expr1, expr2) * VAR_POP(expr2) for non-null pairs.
   """,
   examples = """
     Examples:
