@@ -169,6 +169,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   }
 
   test("keeps track of stored blocks for each rdd and split") {
+    knownExecs ++= Set("1", "2")
+
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
 
     monitor.onBlockUpdated(rddUpdate(1, 0, "1"))
@@ -234,6 +236,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
   }
 
   test("SPARK-27677: don't track blocks stored on disk when using shuffle service") {
+    knownExecs += "1"
     // First make sure that blocks on disk are counted when no shuffle service is available.
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     monitor.onBlockUpdated(rddUpdate(1, 0, "1", level = StorageLevel.DISK_ONLY))
