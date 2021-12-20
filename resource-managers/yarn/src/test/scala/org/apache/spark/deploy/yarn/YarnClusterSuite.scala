@@ -309,7 +309,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val confDir = new File(tempDir, "conf")
     confDir.mkdir()
     val javaOptsFile = new File(confDir, "java-opts")
-    Files.write(s"-Dlog4j.configuration=file://$log4jConf\n", javaOptsFile, StandardCharsets.UTF_8)
+    Files.write(s"-Dlog4j.configurationFile=file://$log4jConf\n", javaOptsFile,
+      StandardCharsets.UTF_8)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,

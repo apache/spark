@@ -48,7 +48,7 @@ abstract class BaseYarnClusterSuite
   // by YARN instead of trying to overwrite unit-tests.log.
   protected val LOG4J_CONF = """
     |rootLogger.level = debug
-    |rootLogger.appenderRef.file.ref = console
+    |rootLogger.appenderRef.stdout.ref = console
     |appender.console.type = Console
     |appender.console.name = console
     |appender.console.target = SYSTEM_ERR
