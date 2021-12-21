@@ -1036,9 +1036,9 @@ final class ShuffleBlockFetcherIterator(
       address: BlockManagerId,
       blockId: BlockId): String = {
     logInfo("Start corruption diagnosis.")
-    val startTimeNs = System.nanoTime()
     blockId match {
       case shuffleBlock: ShuffleBlockId =>
+        val startTimeNs = System.nanoTime()
         val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
         // consume the remaining data to calculate the checksum
         var cause: Cause = null
@@ -1073,7 +1073,7 @@ final class ShuffleBlockFetcherIterator(
       case shuffleBlockChunk: ShuffleBlockChunkId =>
         // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
         val diagnosisResponse = s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
-          s"diagnosis failed due to lack of shuffle checksum support for push-based shuffle."
+          s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
         logWarning(diagnosisResponse)
         diagnosisResponse
       case unexpected: BlockId =>
