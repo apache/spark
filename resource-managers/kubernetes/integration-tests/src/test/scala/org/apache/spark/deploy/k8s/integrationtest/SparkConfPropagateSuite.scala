@@ -34,8 +34,12 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
 
+    k8sSuite.logWarning(s"logConfFilePath: $logConfFilePath")
+
     try {
-      Files.write(new File(logConfFilePath).toPath, content.getBytes)
+      val logConfFile = new File(logConfFilePath)
+      Files.write(logConfFile.toPath, content.getBytes)
+      assert(Files.exists(logConfFile.toPath), s"${logConfFile.toPath} does not exist!")
 
       sparkAppConf.set("spark.driver.extraJavaOptions",
         s"-Dlog4j2.debug -Dlog4j.configurationFile=$logConfFilePath")
