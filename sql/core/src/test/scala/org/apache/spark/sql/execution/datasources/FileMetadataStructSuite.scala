@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
@@ -289,7 +290,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   Seq(true, false).foreach { caseSensitive =>
     metadataColumnsTest(s"upper/lower case when case " +
       s"sensitive is $caseSensitive", schemaWithNameConflicts) { (df, f0, f1) =>
-      withSQLConf("spark.sql.caseSensitive" -> caseSensitive.toString) {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         // file schema: name, age, _METADATA.id, _METADATA.university
 
         if (caseSensitive) {

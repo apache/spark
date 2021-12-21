@@ -243,7 +243,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         val metadataAlias =
           Alias(CreateStruct(metadataColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
-          scan.output.filterNot(metadataColumns.contains) :+ metadataAlias, scan)
+          scan.output.dropRight(metadataColumns.length) :+ metadataAlias, scan)
       }.getOrElse(scan)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)

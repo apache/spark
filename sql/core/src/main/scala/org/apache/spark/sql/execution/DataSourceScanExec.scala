@@ -363,14 +363,10 @@ case class FileSourceScanExec(
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // TODO: should be able to push filters containing metadata columns down to skip files
-    dataFilters
-      .filterNot(
-        _.references.exists {
-          case MetadataAttribute(_) => true
-          case _ => false
-        }
-      )
-      .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+    dataFilters.filterNot(_.references.exists {
+      case MetadataAttribute(_) => true
+      case _ => false
+    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 
   override lazy val metadata: Map[String, String] = {
