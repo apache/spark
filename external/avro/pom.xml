@@ -25,6 +25,20 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
+  <repositories>
+    <repository>
+      <name>Confluent Repository</name>
+      <id>confluent</id>
+      <url>https://packages.confluent.io/maven/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
   <artifactId>spark-avro_2.12</artifactId>
   <properties>
     <sbt.project.name>avro</sbt.project.name>
@@ -70,6 +84,13 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-connect-avro-converter</artifactId>
+      <version>7.0.0</version>
+    </dependency>
+
     <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>

@@ -66,6 +66,23 @@ object functions {
   }
 
   /**
+   * Converts a binary column of Avro format into its corresponding catalyst value.
+   *
+   * @param data the binary column.
+   * @param schemaRegistryAddr the avro schema in JSON string format.
+   * @param subject key subject or value subject of schema registry
+   *
+   * @since 3.3.0
+   */
+  @Experimental
+  def from_avro(
+      data: Column,
+      schemaRegistryAddr: String,
+      subject: String): Column = {
+    new Column(ConfluentSRToCatalyst(data.expr, schemaRegistryAddr, subject))
+  }
+
+  /**
    * Converts a column into binary of avro format.
    *
    * @param data the data column.
