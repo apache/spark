@@ -1922,7 +1922,7 @@ def to_timedelta(
 
     Returns
     -------
-    ret : timedelta64 or TimedeltaIndex if parsing succeeded.
+    ret : timedelta64, TimedeltaIndex or Series of timedelta64 if parsing succeeded.
 
     See Also
     --------
