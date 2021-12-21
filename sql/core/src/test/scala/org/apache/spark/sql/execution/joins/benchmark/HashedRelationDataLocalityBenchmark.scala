@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins.benchmark
 
+import scala.util.Random
+
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
@@ -31,6 +33,8 @@ import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Logging {
+
+  private val random = new Random(1234567L)
 
   private val taskMemoryManager = new TaskMemoryManager(
     new UnifiedMemoryManager(
@@ -52,8 +56,8 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
     benchmark.run()
   }
 
-  private def runLongHashedRelationBenchmark(): Unit = {
-    val totalNumRow: Long = 10000000L
+  private def runLongHashedRelationMicroBenchmark(): Unit = {
+    val totalNumRow: Long = 1000000L
     val keyExpr = Seq(BoundReference(0, LongType, nullable = false))
     val keyGenerator = UnsafeProjection.create(keyExpr)
 
@@ -63,9 +67,11 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
     }
     val unsafeProj = UnsafeProjection.create(fields)
 
-    runBenchmark("runLongHashedRelationBenchmark") {
-      val benchmark = new Benchmark("LongHashedRelation", totalNumRow)
-      Array(1, 1000, 5000, 10000).foreach { keyDuplicationFactor =>
+    runBenchmark("runLongHashedRelationMicroBenchmark") {
+      Array(1, 5, 10, 20).foreach { keyDuplicationFactor =>
+        val benchmark = new Benchmark(
+          s"LongHashedRelation - keyDuplicationFactor: $keyDuplicationFactor", totalNumRow,
+          output = output)
         val seedRows = (0L until totalNumRow / keyDuplicationFactor).map { i =>
           unsafeProj(
             InternalRow(
@@ -76,24 +82,30 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
           ).copy()
         }
 
-        benchmark.addCase(s"keyDuplicationFactor $keyDuplicationFactor, " +
-          s"Total keys: $totalNumRow, Unique keys: ${seedRows.size}", 10) { _ =>
+        Seq(false, true).foreach { reorderMap =>
+          benchmark.addCase(s"Reorder map: $reorderMap, Total rows: $totalNumRow," +
+            s" Unique keys: ${seedRows.size}", 5) { _ =>
 
-          val rows = (0 until keyDuplicationFactor).flatMap(_ => seedRows).map(_.copy())
-          val longRelation = LongHashedRelation(rows.iterator, keyExpr, 10, taskMemoryManager,
-            reorderFactor = if (keyDuplicationFactor != 1) Some(keyDuplicationFactor) else None)
+            val rows = (0 until keyDuplicationFactor).flatMap(_ => seedRows).map(_.copy())
+            // Shuffling rows to mimic real world data set
+            val shuffledRows = random.shuffle(rows)
+            val longRelation = LongHashedRelation(shuffledRows.iterator, keyExpr, seedRows.size,
+              taskMemoryManager,
+              reorderFactor = if (reorderMap) Some(keyDuplicationFactor) else None)
 
-          seedRows.foreach { seedRow =>
-            val key = keyGenerator(seedRow)
-            longRelation.get(key).foreach { fetchedRow =>
-              assert(seedRow.equals(fetchedRow))
+            // Mimicking the stream side of a Hash join
+            shuffledRows.foreach { row =>
+              val key = keyGenerator(row)
+              longRelation.get(key).foreach { fetchedRow =>
+                assert(row.equals(fetchedRow))
+              }
             }
-          }
 
-          longRelation.close()
+            longRelation.close()
+          }
         }
+        benchmark.run()
       }
-      benchmark.run()
     }
   }
 
@@ -107,7 +119,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
    * for each benchmark scenario.
    */
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runLongHashedRelationBenchmark()
+    runLongHashedRelationMicroBenchmark()
     runUnsafeHashedRelationBenchmark()
   }
 }
