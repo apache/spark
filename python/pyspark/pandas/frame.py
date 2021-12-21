@@ -8829,7 +8829,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 # For checking if the column has timestamp type.
                 # We should handle the timestamp type differently from numeric type.
                 is_timestamp_types.append(
-                    isinstance(spark_data_type, (TimestampType, TimestampNTZType))
+                    (
+                        isinstance(spark_data_type, (TimestampType, TimestampNTZType)),
+                        spark_data_type,
+                    )
                 )
             else:
                 exprs_non_numeric.append(psser.spark.column)
@@ -8870,7 +8873,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index=stats_names,
                 columns=column_names,
             )
-        elif any(is_timestamp_types):
+        elif any(map(lambda bool_and_type: bool_and_type[0], is_timestamp_types)):
             # Handling numeric & timestamp type columns
             # If DataFrame has timestamp type column, we cannot use `summary`
             # so should manually calculate the stats for each column.
@@ -8878,7 +8881,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_length = len(column_labels)
 
             # If DataFrame has only timestamp column, we don't need to compute `std`.
-            is_all_timestamp_types = all(is_timestamp_types)
+            is_all_timestamp_types = all(
+                map(lambda bool_and_type: bool_and_type[0], is_timestamp_types)
+            )
 
             # Apply stat functions for each column.
             count_exprs = map(F.count, column_names)
@@ -8892,17 +8897,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 perc_exprs += perc_expr
             max_exprs = map(F.max, column_names)
             if is_all_timestamp_types:
-                mean_exprs = list(map(lambda x: F.mean(x).astype(TimestampType()), column_names))
+                mean_exprs = []
+                for column_name, is_timestamp_type in zip(column_names, is_timestamp_types):
+                    mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
                 exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
             else:
                 mean_exprs = []
                 std_exprs = []
                 for column_name, is_timestamp_type in zip(column_names, is_timestamp_types):
-                    if is_timestamp_type:
+                    if is_timestamp_type[0]:
                         std_exprs.append(
                             F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
                         )
-                        mean_exprs.append(F.mean(column_name).astype(TimestampType()))
+                        mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
                     else:
                         std_exprs.append(F.stddev(column_name))
                         mean_exprs.append(F.mean(column_name))
@@ -8915,18 +8922,33 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             counts = []
             means = []
             mins = []
+            # `percentiles` is variable length according to user input.
+            # Therefore, it cannot be assigned to a fixed variable such as
+            # `percs1`, `percs2`, `percs3`.
+            # So we will create a list of list equal to the length of percentiles,
+            # and store the each percentile value in each list.
             percs: List[List] = [[] for _ in range(len(percentiles))]
             maxs = []
             if not is_all_timestamp_types:
                 stds = []
             for i, is_timestamp_type in zip(range(column_length), is_timestamp_types):
-                if is_timestamp_type:
+                if is_timestamp_type[0]:
                     counts.append(str(stat_values[i]))
                     means.append(str(stat_values[i + column_length]))
                     mins.append(str(stat_values[i + column_length * 2]))
+                    # The calculated value of each percentile is stored in
+                    # `stat_values[i + column_length * (3 + j)]` as long as the length of
+                    # percentiles.
                     for j in range(len(percentiles)):
                         percs[j].append(str(stat_values[i + column_length * (3 + j)]))
+                    # Here, `j` is increased by the length of percentiles.
+                    # The result of calculating percentile values were stored in
+                    # `stat_values[i + column_length * (3 + j)]`,
+                    # so, `stat_values[i + column_length * (3 + j + 1)]` stores
+                    # the result of calculating max,
                     maxs.append(str(stat_values[i + column_length * (3 + j + 1)]))
+                    # and `stat_values[i + column_length * (3 + j + 2)]` stores
+                    # the result of calculating std.
                     if not is_all_timestamp_types:
                         stds.append(str(stat_values[i + column_length * (3 + j + 2)]))
                 else:
