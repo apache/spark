@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -375,6 +375,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val path = new Path(tmpDir.getCanonicalPath).toUri
       databaseNames.foreach { dbName =>
         try {
+          val e = intercept[IllegalArgumentException] {
+            sql(s"CREATE DATABASE $dbName Location ''")
+          }
+          assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
@@ -746,7 +751,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Alter/Describe Database") {
+  test("Describe Database") {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
 
@@ -755,9 +760,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location = getDBPath(dbNameWithoutBackTicks)
 
-        sql(s"CREATE DATABASE $dbName")
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        sql(s"CREATE DATABASE $dbName WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
         checkAnswer(
           sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
@@ -766,101 +769,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Comment", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
-
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName").toDF("key", "value")
-            .where("key not like 'Owner%'"), // filter for consistency with in-memory catalog
-          Row("Namespace Name", dbNameWithoutBackTicks) ::
-            Row("Comment", "") ::
-            Row("Location", CatalogUtils.URIToString(location)) ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-
-        withTempDir { tmpDir =>
-          if (isUsingHiveMetastore) {
-            val e1 = intercept[AnalysisException] {
-              sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            }
-            assert(e1.getMessage.contains("does not support altering database location"))
-          } else {
-            sql(s"ALTER DATABASE $dbName SET LOCATION '${tmpDir.toURI}'")
-            val uriInCatalog = catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri
-            assert("file" === uriInCatalog.getScheme)
-            assert(new Path(tmpDir.getPath).toUri.getPath === uriInCatalog.getPath)
-          }
-
-          intercept[NoSuchDatabaseException] {
-            sql(s"ALTER DATABASE `db-not-exist` SET LOCATION '${tmpDir.toURI}'")
-          }
-
-          val e3 = intercept[IllegalArgumentException] {
-            sql(s"ALTER DATABASE $dbName SET LOCATION ''")
-          }
-          assert(e3.getMessage.contains("Can not create a Path from an empty string"))
-        }
       } finally {
         catalog.reset()
       }
     }
-  }
-
-  test("Drop/Alter Database - database does not exists") {
-    val databaseNames = Seq("db1", "`database`")
-
-    databaseNames.foreach { dbName =>
-      val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-      assert(!spark.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
-
-      var message = intercept[AnalysisException] {
-        sql(s"DROP DATABASE $dbName")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-
-      message = intercept[AnalysisException] {
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
-      }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-    }
-  }
-
-  test("drop non-empty database in restrict mode") {
-    val catalog = spark.sessionState.catalog
-    val dbName = "db1"
-    sql(s"CREATE DATABASE $dbName")
-
-    // create a table in database
-    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
-    createTable(catalog, tableIdent1)
-
-    // drop a non-empty database in Restrict mode
-    val message = intercept[AnalysisException] {
-      sql(s"DROP DATABASE $dbName RESTRICT")
-    }.getMessage
-    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
-
-
-    catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
-
-    assert(catalog.listDatabases().contains(dbName))
-    sql(s"DROP DATABASE $dbName RESTRICT")
-    assert(!catalog.listDatabases().contains(dbName))
-  }
-
-  test("drop non-empty database in cascade mode") {
-    val catalog = spark.sessionState.catalog
-    val dbName = "db1"
-    sql(s"CREATE DATABASE $dbName")
-
-    // create a table in database
-    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
-    createTable(catalog, tableIdent1)
-
-    // drop a non-empty database in CASCADE mode
-    assert(catalog.listTables(dbName).contains(tableIdent1))
-    assert(catalog.listDatabases().contains(dbName))
-    sql(s"DROP DATABASE $dbName CASCADE")
-    assert(!catalog.listDatabases().contains(dbName))
   }
 
   test("create table in default db") {
@@ -1556,39 +1468,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
       checkAnswer(spark.table("t2"), spark.table("t1"))
-    }
-  }
-
-  test("drop current database") {
-    withDatabase("temp") {
-      sql("CREATE DATABASE temp")
-      sql("USE temp")
-      sql("DROP DATABASE temp")
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT) USING parquet")
-      }.getMessage
-      assert(e.contains("Database 'temp' not found"))
-    }
-  }
-
-  test("drop default database") {
-    val caseSensitiveOptions = if (isUsingHiveMetastore) Seq("false") else Seq("true", "false")
-    caseSensitiveOptions.foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        var message = intercept[AnalysisException] {
-          sql("DROP DATABASE default")
-        }.getMessage
-        assert(message.contains("Can not drop default database"))
-
-        message = intercept[AnalysisException] {
-          sql("DROP DATABASE DeFault")
-        }.getMessage
-        if (caseSensitive == "true") {
-          assert(message.contains("Database 'DeFault' not found"))
-        } else {
-          assert(message.contains("Can not drop default database"))
-        }
-      }
     }
   }
 

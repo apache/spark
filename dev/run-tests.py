@@ -333,8 +333,8 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.7": ["-Phadoop-2.7"],
-        "hadoop3.2": ["-Phadoop-3.2"],
+        "hadoop2": ["-Phadoop-2"],
+        "hadoop3": ["-Phadoop-3"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -342,24 +342,6 @@ def get_hadoop_profiles(hadoop_version):
     else:
         print("[error] Could not find", hadoop_version, "in the list. Valid options",
               " are", sbt_maven_hadoop_profiles.keys())
-        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-
-def get_hive_profiles(hive_version):
-    """
-    For the given Hive version tag, return a list of Maven/SBT profile flags for
-    building and testing against that Hive version.
-    """
-
-    sbt_maven_hive_profiles = {
-        "hive2.3": ["-Phive-2.3"],
-    }
-
-    if hive_version in sbt_maven_hive_profiles:
-        return sbt_maven_hive_profiles[hive_version]
-    else:
-        print("[error] Could not find", hive_version, "in the list. Valid options",
-              " are", sbt_maven_hive_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -469,7 +451,8 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
 
-    test_modules = set(test_modules)
+    # Remove duplicates while keeping the test module order
+    test_modules = list(dict.fromkeys(test_modules))
 
     test_profiles = extra_profiles + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
@@ -517,9 +500,10 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
 
 
 def run_python_packaging_tests():
-    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
-    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
-    run_cmd(command)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+        command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+        run_cmd(command)
 
 
 def run_build_tests():
@@ -614,8 +598,7 @@ def main():
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
@@ -625,15 +608,13 @@ def main():
         # else we're running locally or GitHub Actions.
         build_tool = "sbt"
         scala_version = os.environ.get("SCALA_PROFILE")
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
         if "GITHUB_ACTIONS" in os.environ:
             test_env = "github_actions"
         else:
             test_env = "local"
 
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version) + \
-        get_scala_profiles(scala_version)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
     print("[info] Using build tool", build_tool, "with profiles",
           *(extra_profiles + ["under environment", test_env]))

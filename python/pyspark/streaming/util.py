@@ -25,7 +25,7 @@ from py4j.java_gateway import is_instance_of
 from pyspark import SparkContext, RDD
 
 
-class TransformFunction(object):
+class TransformFunction:
     """
     This class wraps a function RDD[X] -> RDD[Y] that was passed to
     DStream.transform(), allowing it to be called from Java via Py4J's
@@ -91,7 +91,7 @@ class TransformFunction(object):
         implements = ["org.apache.spark.streaming.api.python.PythonTransformFunction"]
 
 
-class TransformFunctionSerializer(object):
+class TransformFunctionSerializer:
     """
     This class implements a serializer for PythonTransformFunction Java
     objects.

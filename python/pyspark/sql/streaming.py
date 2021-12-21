@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
 
-class StreamingQuery(object):
+class StreamingQuery:
     """
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
@@ -211,7 +211,7 @@ class StreamingQuery(object):
             return None
 
 
-class StreamingQueryManager(object):
+class StreamingQueryManager:
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
     .. versionadded:: 2.0.0
@@ -372,7 +372,7 @@ class DataStreamReader(OptionUtils):
         """
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
@@ -840,7 +840,7 @@ class DataStreamReader(OptionUtils):
             raise TypeError("tableName can be only a single string")
 
 
-class DataStreamWriter(object):
+class DataStreamWriter:
     """
     Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
     storage systems (e.g. file systems, key-value stores, etc).
@@ -1005,12 +1005,17 @@ class DataStreamWriter(object):
     def trigger(self, *, continuous: str) -> "DataStreamWriter":
         ...
 
+    @overload
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
+        ...
+
     def trigger(
         self,
         *,
         processingTime: Optional[str] = None,
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
+        availableNow: Optional[bool] = None,
     ) -> "DataStreamWriter":
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
@@ -1030,6 +1035,9 @@ class DataStreamWriter(object):
             a time interval as a string, e.g. '5 seconds', '1 minute'.
             Set a trigger that runs a continuous query with a given checkpoint
             interval. Only one trigger can be set.
+        availableNow : bool, optional
+            if set to True, set a trigger that processes all available data in multiple
+            batches then terminates the query. Only one trigger can be set.
 
         Notes
         -----
@@ -1043,15 +1051,18 @@ class DataStreamWriter(object):
         >>> writer = sdf.writeStream.trigger(once=True)
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
+        >>> # trigger the query for reading all available data with multiple batches
+        >>> writer = sdf.writeStream.trigger(availableNow=True)
         """
-        params = [processingTime, once, continuous]
+        params = [processingTime, once, continuous, availableNow]
 
-        if params.count(None) == 3:
+        if params.count(None) == 4:
             raise ValueError("No trigger provided")
-        elif params.count(None) < 2:
+        elif params.count(None) < 3:
             raise ValueError("Multiple triggers not allowed.")
 
         jTrigger = None
+        assert self._spark._sc._jvm is not None
         if processingTime is not None:
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError(
@@ -1069,7 +1080,7 @@ class DataStreamWriter(object):
                 self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()  # type: ignore[attr-defined]
             )
 
-        else:
+        elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
                 raise ValueError(
                     "Value for continuous must be a non empty string. Got: %s" % continuous
@@ -1077,6 +1088,12 @@ class DataStreamWriter(object):
             interval = continuous.strip()
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(  # type: ignore[attr-defined]
                 interval
+            )
+        else:
+            if availableNow is not True:
+                raise ValueError("Value for availableNow must be True. Got: %s" % availableNow)
+            jTrigger = (
+                self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.AvailableNow()  # type: ignore[attr-defined]
             )
 
         self._jwrite = self._jwrite.trigger(jTrigger)
@@ -1184,7 +1201,7 @@ class DataStreamWriter(object):
         """
 
         from pyspark.rdd import _wrap_function  # type: ignore[attr-defined]
-        from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -1252,10 +1269,13 @@ class DataStreamWriter(object):
 
             func = func_with_open_process_close  # type: ignore[assignment]
 
-        serializer = AutoBatchedSerializer(PickleSerializer())
+        serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
-        jForeachWriter = self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(  # type: ignore[attr-defined]
-            wrapped_func, self._df._jdf.schema()
+        assert self._spark._sc._jvm is not None
+        jForeachWriter = (
+            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
+                wrapped_func, self._df._jdf.schema()
+            )
         )
         self._jwrite.foreach(jForeachWriter)
         return self
@@ -1287,7 +1307,8 @@ class DataStreamWriter(object):
 
         from pyspark.java_gateway import ensure_callback_server_started
 
-        gw = self._spark._sc._gateway  # type: ignore[attr-defined]
+        gw = self._spark._sc._gateway
+        assert gw is not None
         java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
 
         wrapped_func = ForeachBatchFunction(self._spark, func)
@@ -1463,7 +1484,7 @@ def _test() -> None:
 
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except Py4JError:  # noqa: F821
         spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
 

@@ -39,7 +39,7 @@ from pyspark.serializers import (
     CartesianDeserializer,
     CloudPickleSerializer,
     PairDeserializer,
-    PickleSerializer,
+    CPickleSerializer,
     pack_long,
     read_int,
     write_int,
@@ -70,7 +70,7 @@ from pyspark.util import fail_on_stopiteration, _parse_memory
 __all__ = ["RDD"]
 
 
-class PythonEvalType(object):
+class PythonEvalType:
     """
     Evaluation type of python rdd.
 
@@ -90,6 +90,7 @@ class PythonEvalType(object):
     SQL_SCALAR_PANDAS_ITER_UDF = 204
     SQL_MAP_PANDAS_ITER_UDF = 205
     SQL_COGROUPED_MAP_PANDAS_UDF = 206
+    SQL_MAP_ARROW_ITER_UDF = 207
 
 
 def portable_hash(x):
@@ -188,7 +189,7 @@ def _load_from_socket(sock_info, serializer):
 
 
 def _local_iterator_from_socket(sock_info, serializer):
-    class PyLocalIterable(object):
+    class PyLocalIterable:
         """Create a synchronous local iterable over a socket"""
 
         def __init__(self, _sock_info, _serializer):
@@ -234,7 +235,7 @@ def _local_iterator_from_socket(sock_info, serializer):
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-class Partitioner(object):
+class Partitioner:
     def __init__(self, numPartitions, partitionFunc):
         self.numPartitions = numPartitions
         self.partitionFunc = partitionFunc
@@ -250,7 +251,7 @@ class Partitioner(object):
         return self.partitionFunc(k) % self.numPartitions
 
 
-class RDD(object):
+class RDD:
 
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
@@ -258,7 +259,7 @@ class RDD(object):
     operated on in parallel.
     """
 
-    def __init__(self, jrdd, ctx, jrdd_deserializer=AutoBatchedSerializer(PickleSerializer())):
+    def __init__(self, jrdd, ctx, jrdd_deserializer=AutoBatchedSerializer(CPickleSerializer())):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
@@ -269,7 +270,7 @@ class RDD(object):
         self.partitioner = None
 
     def _pickled(self):
-        return self._reserialize(AutoBatchedSerializer(PickleSerializer()))
+        return self._reserialize(AutoBatchedSerializer(CPickleSerializer()))
 
     def id(self):
         """
@@ -1840,7 +1841,7 @@ class RDD(object):
     def saveAsPickleFile(self, path, batchSize=10):
         """
         Save this RDD as a SequenceFile of serialized objects. The serializer
-        used is :class:`pyspark.serializers.PickleSerializer`, default batch size
+        used is :class:`pyspark.serializers.CPickleSerializer`, default batch size
         is 10.
 
         Examples
@@ -1853,9 +1854,9 @@ class RDD(object):
         ['1', '2', 'rdd', 'spark']
         """
         if batchSize == 0:
-            ser = AutoBatchedSerializer(PickleSerializer())
+            ser = AutoBatchedSerializer(CPickleSerializer())
         else:
-            ser = BatchedSerializer(PickleSerializer(), batchSize)
+            ser = BatchedSerializer(CPickleSerializer(), batchSize)
         self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
     def saveAsTextFile(self, path, compressionCodecClass=None):
@@ -2519,7 +2520,7 @@ class RDD(object):
             # Decrease the batch size in order to distribute evenly the elements across output
             # partitions. Otherwise, repartition will possibly produce highly skewed partitions.
             batchSize = min(10, self.ctx._batchSize or 1024)
-            ser = BatchedSerializer(PickleSerializer(), batchSize)
+            ser = BatchedSerializer(CPickleSerializer(), batchSize)
             selfCopy = self._reserialize(ser)
             jrdd_deserializer = selfCopy._jrdd_deserializer
             jrdd = selfCopy._jrdd.coalesce(numPartitions, shuffle)
@@ -2550,7 +2551,7 @@ class RDD(object):
             return 1  # not batched
 
         def batch_as(rdd, batchSize):
-            return rdd._reserialize(BatchedSerializer(PickleSerializer(), batchSize))
+            return rdd._reserialize(BatchedSerializer(CPickleSerializer(), batchSize))
 
         my_batch = get_batch_size(self._jrdd_deserializer)
         other_batch = get_batch_size(other._jrdd_deserializer)
@@ -2946,7 +2947,7 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     )
 
 
-class RDDBarrier(object):
+class RDDBarrier:
 
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.

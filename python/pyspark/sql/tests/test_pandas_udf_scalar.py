@@ -697,8 +697,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return pd.Series(msgs)
 
         def iter_check_data(it):
-            for idx, date, date_copy in it:
-                yield scalar_check_data(idx, date, date_copy)
+            for idx, test_date, date_copy in it:
+                yield scalar_check_data(idx, test_date, date_copy)
 
         pandas_scalar_check_data = pandas_udf(scalar_check_data, StringType())
         pandas_iter_check_data = pandas_udf(

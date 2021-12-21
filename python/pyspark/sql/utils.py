@@ -48,6 +48,7 @@ class CapturedException(Exception):
         )
 
         self.desc = desc if desc is not None else cast(Py4JJavaError, origin).getMessage()
+        assert SparkContext._jvm is not None
         self.stackTrace = (
             stackTrace
             if stackTrace is not None
@@ -258,7 +259,7 @@ def require_test_compiled() -> None:
         )
 
 
-class ForeachBatchFunction(object):
+class ForeachBatchFunction:
     """
     This is the Python implementation of Java interface 'ForeachBatchFunction'. This wraps
     the user-defined 'foreachBatch' function such that it can be called from the JVM when

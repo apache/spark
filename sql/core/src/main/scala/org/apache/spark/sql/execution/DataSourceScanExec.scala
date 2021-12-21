@@ -135,13 +135,6 @@ case class RowDataSourceScanExec(
 
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-    val (aggString, groupByString) = if (pushedDownOperators.aggregation.nonEmpty) {
-      (seqToString(pushedDownOperators.aggregation.get.aggregateExpressions),
-        seqToString(pushedDownOperators.aggregation.get.groupByColumns))
-    } else {
-      ("[]", "[]")
-    }
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -150,12 +143,23 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
+    val topNOrLimitInfo =
+      if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
+        val pushedTopN =
+          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+          s" LIMIT ${pushedDownOperators.limit.get}"
+        Some("pushedTopN" -> pushedTopN)
+    } else {
+      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+    }
+
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq),
-      "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString) ++
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
+      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+      pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
+      topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
@@ -480,7 +484,7 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       driverMetrics("numPartitions") = partitions.length
     }
   }
@@ -499,7 +503,7 @@ case class FileSourceScanExec(
       None
     }
   } ++ {
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       Map(
         "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
         "pruningTime" ->

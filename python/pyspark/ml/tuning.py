@@ -91,7 +91,7 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
     return [singleTask] * len(epm)
 
 
-class ParamGridBuilder(object):
+class ParamGridBuilder:
     r"""
     Builder for a param grid used in grid search-based model selection.
 
@@ -404,7 +404,7 @@ class _ValidatorSharedReadWrite:
         estimatorParamMaps = instance.getEstimatorParamMaps()
         paramErr = (
             "Validator save requires all Params in estimatorParamMaps to apply to "
-            f"its Estimator, An extraneous Param was found: "
+            "its Estimator, An extraneous Param was found: "
         )
         for paramMap in estimatorParamMaps:
             for param in paramMap:

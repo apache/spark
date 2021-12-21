@@ -32,10 +32,8 @@ from typing import (
     cast,
     no_type_check,
 )
-from collections import OrderedDict
 from collections.abc import Iterable
 from datetime import tzinfo
-from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
@@ -90,7 +88,7 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.indexes import Index, DatetimeIndex
+from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
 
@@ -107,6 +105,7 @@ __all__ = [
     "read_html",
     "to_datetime",
     "date_range",
+    "timedelta_range",
     "get_dummies",
     "concat",
     "melt",
@@ -224,6 +223,7 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
+    encoding: Optional[str] = None,
     **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
@@ -276,6 +276,8 @@ def read_csv(
         One-character string used to escape delimiter
     comment: str, optional
         Indicates the line should not be parsed.
+    encoding: str, optional
+        Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
 
@@ -291,6 +293,9 @@ def read_csv(
     --------
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
+    # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
+    encoding_mapping = {"latin-1": "iso-8859-1"}
+
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -328,10 +333,13 @@ def read_csv(
 
         reader.options(**options)
 
+        if encoding is not None:
+            reader.option("encoding", encoding_mapping.get(encoding, encoding))
+
         column_labels: Dict[Any, str]
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)
+            column_labels = {col: col for col in sdf.columns}
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -344,26 +352,26 @@ def read_csv(
                         "of columns [%d]. Try names by a Spark SQL DDL-formatted "
                         "string." % (len(sdf.schema), len(names))
                     )
-                column_labels = OrderedDict(zip(names, sdf.columns))
+                column_labels = dict(zip(names, sdf.columns))
             elif header is None:
-                column_labels = OrderedDict(enumerate(sdf.columns))
+                column_labels = dict(enumerate(sdf.columns))
             else:
-                column_labels = OrderedDict((col, col) for col in sdf.columns)
+                column_labels = {col: col for col in sdf.columns}
 
         if usecols is not None:
             missing: List[Union[int, str]]
             if callable(usecols):
-                column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if usecols(label)
-                )
+                column_labels = {
+                    label: col for label, col in column_labels.items() if usecols(label)
+                }
                 missing = []
             elif all(isinstance(col, int) for col in usecols):
                 usecols_ints = cast(List[int], usecols)
-                new_column_labels = OrderedDict(
-                    (label, col)
+                new_column_labels = {
+                    label: col
                     for i, (label, col) in enumerate(column_labels.items())
                     if i in usecols_ints
-                )
+                }
                 missing = [
                     col
                     for col in usecols_ints
@@ -374,9 +382,9 @@ def read_csv(
                 ]
                 column_labels = new_column_labels
             elif all(isinstance(col, str) for col in usecols):
-                new_column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if label in usecols
-                )
+                new_column_labels = {
+                    label: col for label, col in column_labels.items() if label in usecols
+                }
                 missing = [col for col in usecols if col not in new_column_labels]
                 column_labels = new_column_labels
             else:
@@ -395,7 +403,7 @@ def read_csv(
                 sdf = default_session().createDataFrame([], schema=StructType())
     else:
         sdf = default_session().createDataFrame([], schema=StructType())
-        column_labels = OrderedDict()
+        column_labels = {}
 
     if nrows is not None:
         sdf = sdf.limit(nrows)
@@ -410,9 +418,9 @@ def read_csv(
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
         index_names = [(col,) for col in index_col]
-        column_labels = OrderedDict(
-            (label, col) for label, col in column_labels.items() if label not in index_col
-        )
+        column_labels = {
+            label: col for label, col in column_labels.items() if label not in index_col
+        }
     else:
         log_advice(
             "If `index_col` is not specified for `read_csv`, "
@@ -529,12 +537,12 @@ def read_delta(
     version : string, optional
         Specifies the table version (based on Delta's internal transaction version) to read from,
         using Delta's time travel feature. This sets Delta's 'versionAsOf' option. Note that
-        this paramter and `timestamp` paramter cannot be used together, otherwise it will raise a
+        this parameter and `timestamp` parameter cannot be used together, otherwise it will raise a
         `ValueError`.
     timestamp : string, optional
         Specifies the table version (based on timestamp) to read from,
         using Delta's time travel feature. This must be a valid date or timestamp string in Spark,
-        and sets Delta's 'timestampAsOf' option. Note that this paramter and `version` paramter
+        and sets Delta's 'timestampAsOf' option. Note that this parameter and `version` parameter
         cannot be used together, otherwise it will raise a `ValueError`.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
@@ -905,7 +913,7 @@ def read_excel(
     convert_float: bool = True,
     mangle_dupe_cols: bool = True,
     **kwds: Any,
-) -> Union[DataFrame, Series, OrderedDict]:
+) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
@@ -1150,9 +1158,10 @@ def read_excel(
 
     if single_file:
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [(sn, from_pandas(pdf_or_pser)) for sn, pdf_or_pser in pdf_or_psers.items()]
-            )
+            return {
+                sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
+                for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
     else:
@@ -1202,12 +1211,9 @@ def read_excel(
                 return psdf
 
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [
-                    (sn, read_excel_on_spark(pdf_or_pser, sn))
-                    for sn, pdf_or_pser in pdf_or_psers.items()
-                ]
-            )
+            return {
+                sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return read_excel_on_spark(pdf_or_psers, sheet_name)
 
@@ -1881,6 +1887,90 @@ def date_range(
     )
 
 
+def timedelta_range(
+    start: Union[str, Any] = None,
+    end: Union[str, Any] = None,
+    periods: Optional[int] = None,
+    freq: Optional[Union[str, DateOffset]] = None,
+    name: Optional[str] = None,
+    closed: Optional[str] = None,
+) -> TimedeltaIndex:
+    """
+    Return a fixed frequency TimedeltaIndex, with day as the default frequency.
+
+    Parameters
+    ----------
+    start : str or timedelta-like, optional
+        Left bound for generating timedeltas.
+    end : str or timedelta-like, optional
+        Right bound for generating timedeltas.
+    periods : int, optional
+        Number of periods to generate.
+    freq : str or DateOffset, default 'D'
+        Frequency strings can have multiples, e.g. '5H'.
+    name : str, default None
+        Name of the resulting TimedeltaIndex.
+    closed : {None, 'left', 'right'}, optional
+        Make the interval closed with respect to the given frequency to
+        the 'left', 'right', or both sides (None, the default).
+
+    Returns
+    -------
+    TimedeltaIndex
+
+    Notes
+    -----
+    Of the four parameters ``start``, ``end``, ``periods``, and ``freq``,
+    exactly three must be specified. If ``freq`` is omitted, the resulting
+    ``TimedeltaIndex`` will have ``periods`` linearly spaced elements between
+    ``start`` and ``end`` (closed on both sides).
+
+    To learn more about the frequency strings, please see `this link
+    <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases>`__.
+
+    Examples
+    --------
+    >>> ps.timedelta_range(start='1 day', periods=4)  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days', '2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+
+    The closed parameter specifies which endpoint is included.
+    The default behavior is to include both endpoints.
+
+    >>> ps.timedelta_range(start='1 day', periods=4, closed='right')  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+
+    The freq parameter specifies the frequency of the TimedeltaIndex.
+    Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
+
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
+                    '1 days 18:00:00', '2 days 00:00:00'],
+                   dtype='timedelta64[ns]', freq=None)
+
+    Specify start, end, and periods; the frequency is generated automatically (linearly spaced).
+
+    >>> ps.timedelta_range(start='1 day', end='5 days', periods=4)  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '2 days 08:00:00', '3 days 16:00:00',
+                    '5 days 00:00:00'],
+                   dtype='timedelta64[ns]', freq=None)
+    """
+    assert freq not in ["N", "ns"], "nanoseconds is not supported"
+
+    return cast(
+        TimedeltaIndex,
+        ps.from_pandas(
+            pd.timedelta_range(
+                start=start,
+                end=end,
+                periods=periods,
+                freq=freq,
+                name=name,
+                closed=closed,
+            )
+        ),
+    )
+
+
 def get_dummies(
     data: Union[DataFrame, Series],
     prefix: Optional[Union[str, List[str], Dict[str, str]]] = None,
@@ -2431,13 +2521,9 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-                # Always sort when multi-index columns, and if there are Series, never sort.
-                sort = len(merged_columns[0]) > 1 or (num_series == 0 and sort)
-            else:
-                # Always sort when multi-index columns or there are more than two Series,
-                # and if there is only one Series, never sort.
-                sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
+            # Always sort when multi-index columns or there are more than two Series,
+            # and if there is only one Series, never sort.
+            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
 
             if sort:
                 # FIXME: better ordering

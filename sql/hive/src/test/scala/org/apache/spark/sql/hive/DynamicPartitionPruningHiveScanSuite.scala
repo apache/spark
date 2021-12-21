@@ -21,12 +21,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
-abstract class DynamicPartitionPruningHiveScanSuite
+abstract class DynamicPartitionPruningHiveScanSuiteBase
     extends DynamicPartitionPruningSuiteBase with TestHiveSingleton with SQLTestUtils {
 
   override val tableFormat: String = "hive"
@@ -34,9 +33,6 @@ abstract class DynamicPartitionPruningHiveScanSuite
   override protected def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
     flatMap(plan) {
       case s: FileSourceScanExec => s.partitionFilters.collect {
-        case d: DynamicPruningExpression => d.child
-      }
-      case s: BatchScanExec => s.runtimeFilters.collect {
         case d: DynamicPruningExpression => d.child
       }
       case h: HiveTableScanExec => h.partitionPruningPred.collect {
@@ -47,8 +43,8 @@ abstract class DynamicPartitionPruningHiveScanSuite
   }
 }
 
-class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuite
+class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuiteBase
   with DisableAdaptiveExecutionSuite
 
-class DynamicPartitionPruningHiveScanSuiteAEOn extends DynamicPartitionPruningHiveScanSuite
+class DynamicPartitionPruningHiveScanSuiteAEOn extends DynamicPartitionPruningHiveScanSuiteBase
   with EnableAdaptiveExecutionSuite

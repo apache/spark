@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.DataFrame
@@ -173,7 +173,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === notSupportsTableComment)
     }
@@ -190,6 +190,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   def supportsIndex: Boolean = false
+
+  def indexOptions: String = ""
 
   test("SPARK-36895: Test INDEX Using SQL") {
     if (supportsIndex) {
@@ -208,11 +210,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +
-          s" The supported Index Types are: BTREE and HASH"))
+          s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
-          s" OPTIONS (KEY_BLOCK_SIZE=10)")
+          s" OPTIONS ($indexOptions)")
 
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)
@@ -300,7 +302,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df3))
         assert(limitPushed(df3, 2))
         assert(columnPruned(df3, "col1"))
-        assert(df3.collect().length == 2)
+        assert(df3.collect().length <= 2)
 
         // sample(... PERCENT) push down + limit push down + column pruning
         val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
@@ -308,7 +310,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df4))
         assert(limitPushed(df4, 2))
         assert(columnPruned(df4, "col1"))
-        assert(df4.collect().length == 2)
+        assert(df4.collect().length <= 2)
 
         // sample push down + filter push down + limit push down
         val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
@@ -316,7 +318,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(samplePushed(df5))
         assert(filterPushed(df5))
         assert(limitPushed(df5, 2))
-        assert(df5.collect().length == 2)
+        assert(df5.collect().length <= 2)
 
         // sample + filter + limit + column pruning
         // sample pushed down, filer/limit not pushed down, column pruned
@@ -327,7 +329,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(!filterPushed(df6))
         assert(!limitPushed(df6, 2))
         assert(columnPruned(df6, "col1"))
-        assert(df6.collect().length == 2)
+        assert(df6.collect().length <= 2)
 
         // sample + limit
         // Push down order is sample -> filter -> limit

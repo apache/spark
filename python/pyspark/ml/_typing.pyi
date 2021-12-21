@@ -23,6 +23,7 @@ import pyspark.ml.base
 import pyspark.ml.param
 import pyspark.ml.util
 import pyspark.ml.wrapper
+from py4j.java_gateway import JavaObject
 
 ParamMap = Dict[pyspark.ml.param.Param, Any]
 PipelineStage = Union[pyspark.ml.base.Estimator, pyspark.ml.base.Transformer]
@@ -31,7 +32,9 @@ T = TypeVar("T")
 P = TypeVar("P", bound=pyspark.ml.param.Params)
 M = TypeVar("M", bound=pyspark.ml.base.Transformer)
 JM = TypeVar("JM", bound=pyspark.ml.wrapper.JavaTransformer)
+C = TypeVar("C", bound=type)
 
+JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]
 BinaryClassificationEvaluatorMetricType = Union[Literal["areaUnderROC"], Literal["areaUnderPR"]]
 RegressionEvaluatorMetricType = Union[
     Literal["rmse"], Literal["mse"], Literal["r2"], Literal["mae"], Literal["var"]
@@ -64,7 +67,7 @@ MultilabelClassificationEvaluatorMetricType = Union[
     Literal["microRecall"],
     Literal["microF1Measure"],
 ]
-ClusteringEvaluatorMetricType = Union[Literal["silhouette"]]
+ClusteringEvaluatorMetricType = Literal["silhouette"]
 RankingEvaluatorMetricType = Union[
     Literal["meanAveragePrecision"],
     Literal["meanAveragePrecisionAtK"],

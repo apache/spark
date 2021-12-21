@@ -1019,4 +1019,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-37508: Support contains string expression") {
+    checkEvaluation(Contains(Literal("aa"), Literal.create(null, StringType)), null)
+    checkEvaluation(Contains(Literal.create(null, StringType), Literal("aa")), null)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("Spark")), true)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("SPARK")), false)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("SQL")), true)
+    checkEvaluation(Contains(Literal("Spark SQL"), Literal("k S")), true)
+  }
 }

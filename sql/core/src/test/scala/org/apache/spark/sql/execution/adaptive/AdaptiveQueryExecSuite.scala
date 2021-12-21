@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -825,7 +825,7 @@ class AdaptiveQueryExecSuite
       }
     }
     assert(!testAppender.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains(
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
         s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is" +
         s" enabled but is not supported for")))
   }
@@ -833,6 +833,7 @@ class AdaptiveQueryExecSuite
   test("test log level") {
     def verifyLog(expectedLevel: Level): Unit = {
       val logAppender = new LogAppender("adaptive execution")
+      logAppender.setThreshold(expectedLevel)
       withLogAppender(
         logAppender,
         loggerNames = Seq(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
@@ -846,7 +847,7 @@ class AdaptiveQueryExecSuite
       Seq("Plan changed", "Final plan").foreach { msg =>
         assert(
           logAppender.loggingEvents.exists { event =>
-            event.getRenderedMessage.contains(msg) && event.getLevel == expectedLevel
+            event.getMessage.getFormattedMessage.contains(msg) && event.getLevel == expectedLevel
           })
       }
     }
@@ -1433,7 +1434,8 @@ class AdaptiveQueryExecSuite
           "=== Result of Batch AQE Post Stage Creation ===",
           "=== Result of Batch AQE Replanning ===",
           "=== Result of Batch AQE Query Stage Optimization ===").foreach { expectedMsg =>
-        assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+        assert(testAppender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains(expectedMsg)))
       }
     }
   }
@@ -1650,6 +1652,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-33933: Materialize BroadcastQueryStage first in AQE") {
     val testAppender = new LogAppender("aqe query stage materialization order test")
+    testAppender.setThreshold(Level.DEBUG)
     val df = spark.range(1000).select($"id" % 26, $"id" % 10)
       .toDF("index", "pv")
     val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
@@ -1666,7 +1669,7 @@ class AdaptiveQueryExecSuite
       }
     }
     val materializeLogs = testAppender.loggingEvents
-      .map(_.getRenderedMessage)
+      .map(_.getMessage.getFormattedMessage)
       .filter(_.startsWith("Materialize query stage"))
       .toArray
     assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
@@ -2190,6 +2193,121 @@ class AdaptiveQueryExecSuite
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
       }
+    }
+  }
+
+  test("SPARK-37063: OptimizeSkewInRebalancePartitions support optimize non-root node") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 2) 2 else i, i.toString)), 2)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkRebalance(query: String, numShufflePartitions: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(adaptive.collect {
+            case sort: SortExec => sort
+          }.size == 1)
+          val read = collect(adaptive) {
+            case read: AQEShuffleReadExec => read
+          }
+          assert(read.size == 1)
+          assert(read.head.partitionSpecs.forall(_.isInstanceOf[PartialReducerPartitionSpec]))
+          assert(read.head.partitionSpecs.size == numShufflePartitions)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "50") {
+          checkRebalance("SELECT /*+ REBALANCE(c1) */ * FROM v SORT BY c1", 2)
+          checkRebalance("SELECT /*+ REBALANCE */ * FROM v SORT BY c1", 2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-37357: Add small partition factor for rebalance partitions") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        spark.sparkContext.parallelize(
+          (1 to 8).map(i => TestData(if (i > 2) 2 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkAQEShuffleReadExists(query: String, exists: Boolean): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(
+            collect(adaptive) {
+              case read: AQEShuffleReadExec => read
+            }.nonEmpty == exists)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
+          withSQLConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR.key -> "0.5") {
+            // block size: [88, 97, 97]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM v", false)
+          }
+          withSQLConf(SQLConf.ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR.key -> "0.2") {
+            // block size: [88, 97, 97]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM v", true)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37742: AQE reads invalid InMemoryRelation stats and mistakenly plans BHJ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584") {
+      // Spark estimates a string column as 20 bytes so with 60k rows, these relations should be
+      // estimated at ~120m bytes which is greater than the broadcast join threshold.
+      val joinKeyOne = "00112233445566778899"
+      val joinKeyTwo = "11223344556677889900"
+      Seq.fill(60000)(joinKeyOne).toDF("key")
+        .createOrReplaceTempView("temp")
+      Seq.fill(60000)(joinKeyTwo).toDF("key")
+        .createOrReplaceTempView("temp2")
+
+      Seq(joinKeyOne).toDF("key").createOrReplaceTempView("smallTemp")
+      spark.sql("SELECT key as newKey FROM temp").persist()
+
+      // This query is trying to set up a situation where there are three joins.
+      // The first join will join the cached relation with a smaller relation.
+      // The first join is expected to be a broadcast join since the smaller relation will
+      // fit under the broadcast join threshold.
+      // The second join will join the first join with another relation and is expected
+      // to remain as a sort-merge join.
+      // The third join will join the cached relation with another relation and is expected
+      // to remain as a sort-merge join.
+      val query =
+      s"""
+         |SELECT t3.newKey
+         |FROM
+         |  (SELECT t1.newKey
+         |  FROM (SELECT key as newKey FROM temp) as t1
+         |        JOIN
+         |        (SELECT key FROM smallTemp) as t2
+         |        ON t1.newKey = t2.key
+         |  ) as t3
+         |  JOIN
+         |  (SELECT key FROM temp2) as t4
+         |  ON t3.newKey = t4.key
+         |UNION
+         |SELECT t1.newKey
+         |FROM
+         |    (SELECT key as newKey FROM temp) as t1
+         |    JOIN
+         |    (SELECT key FROM temp2) as t2
+         |    ON t1.newKey = t2.key
+         |""".stripMargin
+      val df = spark.sql(query)
+      df.collect()
+      val adaptivePlan = df.queryExecution.executedPlan
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.length == 1)
     }
   }
 }

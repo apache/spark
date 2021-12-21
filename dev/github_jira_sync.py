@@ -77,9 +77,9 @@ def get_jira_prs():
         page_json = get_json(page)
 
         for pull in page_json:
-            jiras = re.findall(JIRA_PROJECT_NAME + "-[0-9]{4,5}", pull['title'])
-            for jira in jiras:
-                result = result + [(jira, pull)]
+            jira_issues = re.findall(JIRA_PROJECT_NAME + "-[0-9]{4,5}", pull['title'])
+            for jira_issue in jira_issues:
+                result = result + [(jira_issue, pull)]
 
         # Check if there is another page
         link_headers = list(filter(lambda k: k.startswith("Link"), page.headers))

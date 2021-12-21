@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Type, Dict, List, Optional, Union, cast
+from typing import ClassVar, Type, Dict, List, Optional, Union, cast
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.resource import ResourceInformation
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 
-class TaskContext(object):
+class TaskContext:
 
     """
     Contextual information about a task which can be read or mutated during
@@ -29,7 +29,7 @@ class TaskContext(object):
     :meth:`TaskContext.get`.
     """
 
-    _taskContext: Optional["TaskContext"] = None
+    _taskContext: ClassVar[Optional["TaskContext"]] = None
 
     _attemptNumber: Optional[int] = None
     _partitionId: Optional[int] = None
@@ -171,8 +171,8 @@ class BarrierTaskContext(TaskContext):
     This API is experimental
     """
 
-    _port = None
-    _secret = None
+    _port: ClassVar[Optional[Union[str, int]]] = None
+    _secret: ClassVar[Optional[str]] = None
 
     @classmethod
     def _getOrCreate(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":
@@ -282,7 +282,7 @@ class BarrierTaskContext(TaskContext):
             return [BarrierTaskInfo(h.strip()) for h in addresses.split(",")]
 
 
-class BarrierTaskInfo(object):
+class BarrierTaskInfo:
     """
     Carries all task infos of a barrier task.
 

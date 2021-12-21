@@ -235,6 +235,36 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, freq="N")
         )
 
+    def test_timedelta_range(self):
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days"),
+            pd.timedelta_range(start="1 day", end="3 days"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", periods=3),
+            pd.timedelta_range(start="1 day", periods=3),
+        )
+        self.assert_eq(
+            ps.timedelta_range(end="3 days", periods=3),
+            pd.timedelta_range(end="3 days", periods=3),
+        )
+        self.assert_eq(
+            ps.timedelta_range(end="3 days", periods=3, closed="right"),
+            pd.timedelta_range(end="3 days", periods=3, closed="right"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
+        )
+        self.assert_eq(
+            ps.timedelta_range(start="1 day", end="3 days", periods=4),
+            pd.timedelta_range(start="1 day", end="3 days", periods=4),
+        )
+
+        self.assertRaises(
+            AssertionError, lambda: ps.timedelta_range(start="1 day", periods=3, freq="ns")
+        )
+
     def test_concat_index_axis(self):
         pdf = pd.DataFrame({"A": [0, 2, 4], "B": [1, 3, 5], "C": [6, 7, 8]})
         # TODO: pdf.columns.names = ["ABC"]

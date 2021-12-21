@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series
 
 
-class IndexerLike(object):
+class IndexerLike:
     def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
@@ -560,7 +560,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             psdf_or_psser = psdf
 
         if remaining_index is not None and remaining_index == 0:
-            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
+            pdf_or_pser = psdf_or_psser.head(2)._to_pandas()
             length = len(pdf_or_pser)
             if length == 0:
                 raise KeyError(name_like_string(key))

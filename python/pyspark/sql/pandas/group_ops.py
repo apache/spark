@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from pyspark.sql.group import GroupedData
 
 
-class PandasGroupedOpsMixin(object):
+class PandasGroupedOpsMixin:
     """
     Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
@@ -199,12 +199,6 @@ class PandasGroupedOpsMixin(object):
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
-
         This API is experimental.
 
         See Also
@@ -237,7 +231,7 @@ class PandasGroupedOpsMixin(object):
         return PandasCogroupedOps(self, other)
 
 
-class PandasCogroupedOps(object):
+class PandasCogroupedOps:
     """
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.
@@ -333,12 +327,6 @@ class PandasCogroupedOps(object):
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
-
         This API is experimental.
 
         See Also
@@ -347,9 +335,11 @@ class PandasCogroupedOps(object):
         """
         from pyspark.sql.pandas.functions import pandas_udf
 
+        # The usage of the pandas_udf is internal so type checking is disabled.
         udf = pandas_udf(
             func, returnType=schema, functionType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-        )
+        )  # type: ignore[call-overload]
+
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
         jdf = self._gd1._jgd.flatMapCoGroupsInPandas(  # type: ignore[attr-defined]

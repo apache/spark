@@ -135,7 +135,7 @@ object PartitioningUtils extends SQLConfHelper{
       Map.empty[String, String]
     }
 
-    val dateFormatter = DateFormatter()
+    val dateFormatter = DateFormatter(DateFormatter.defaultPattern)
     val timestampFormatter = TimestampFormatter(
       timestampPartitionPattern,
       zoneId,

@@ -35,6 +35,7 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -59,7 +60,7 @@ __all__ = ["SQLContext", "HiveContext"]
 
 
 # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-class SQLContext(object):
+class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
@@ -118,7 +119,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
-            sparkSession = SparkSession.builder.getOrCreate()
+            sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
@@ -168,11 +169,9 @@ class SQLContext(object):
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
+            assert sc._jvm is not None
             jsqlContext = (
-                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
-                .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
-                .getOrCreate()
-                .sqlContext()
+                sc._jvm.SparkSession.builder().sparkContext(sc._jsc.sc()).getOrCreate().sqlContext()
             )
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
@@ -195,7 +194,7 @@ class SQLContext(object):
         """
         self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
 
-    def getConf(self, key: str, defaultValue: Optional[str] = _NoValue) -> str:
+    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
@@ -411,9 +410,7 @@ class SQLContext(object):
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
-            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
-            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
-            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
+            omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
         verifySchema : bool, optional
@@ -734,10 +731,9 @@ class HiveContext(SQLContext):
         you may end up launching multiple derby instances and encounter with incredibly
         confusing error messages.
         """
-        jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
-            jsc, False
-        )
+        jsc = sparkContext._jsc.sc()
+        assert sparkContext._jvm is not None
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:
