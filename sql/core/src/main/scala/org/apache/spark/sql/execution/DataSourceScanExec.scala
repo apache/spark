@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -198,6 +199,9 @@ case class FileSourceScanExec(
     disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
+  lazy val metadataColumns: Seq[AttributeReference] =
+    output.collect { case MetadataAttribute(attr) => attr }
+
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
@@ -216,7 +220,10 @@ case class FileSourceScanExec(
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      relation.sparkSession.sessionState.conf)
+      relation.sparkSession.sessionState.conf).map { vectorTypes =>
+        // for column-based file format, append metadata struct column's vector type classes if any
+        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[OnHeapColumnVector].getName)
+      }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
@@ -359,7 +366,11 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+    // TODO: should be able to push filters containing metadata columns down to skip files
+    dataFilters.filterNot(_.references.exists {
+      case MetadataAttribute(_) => true
+      case _ => false
+    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 
   override lazy val metadata: Map[String, String] = {
@@ -601,7 +612,8 @@ case class FileSourceScanExec(
       }
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
+      requiredSchema, metadataColumns)
   }
 
   /**
@@ -657,7 +669,8 @@ case class FileSourceScanExec(
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
+      requiredSchema, metadataColumns)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
