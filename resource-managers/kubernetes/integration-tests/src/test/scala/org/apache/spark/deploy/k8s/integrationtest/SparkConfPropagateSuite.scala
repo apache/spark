@@ -37,8 +37,8 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     try {
       Files.write(new File(logConfFilePath).toPath, content.getBytes)
 
-      sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j.debug")
-      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j.debug")
+      sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j2.debug")
+      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j2.debug")
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       val log4jExpectedLog =

@@ -137,7 +137,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.2</parquet.version>
-    <orc.version>1.7.1</orc.version>
+    <orc.version>1.7.2</orc.version>
     <jetty.version>9.4.43.v20210629</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -713,39 +713,6 @@
         <artifactId>xml-apis</artifactId>
         <version>1.4.01</version>
       </dependency>
-
-      <!--
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>jul-to-slf4j</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>jcl-over-slf4j</artifactId>
-        <version>${slf4j.version}</version>
-        <!- runtime scope is appropriate, but causes SBT build problems ->
-      </dependency>
-      <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      -->
-
 
       <!-- log4j -->
       <dependency>
@@ -2857,7 +2824,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -2909,7 +2876,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -3348,7 +3315,7 @@
             </goals>
             <configuration>
               <excludes>
-                <exclude>log4j.properties</exclude>
+                <exclude>log4j2.properties</exclude>
               </excludes>
             </configuration>
           </execution>

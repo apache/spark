@@ -1272,8 +1272,10 @@ class DataStreamWriter:
         serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
         assert self._spark._sc._jvm is not None
-        jForeachWriter = self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(  # type: ignore[attr-defined]
-            wrapped_func, self._df._jdf.schema()
+        jForeachWriter = (
+            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
+                wrapped_func, self._df._jdf.schema()
+            )
         )
         self._jwrite.foreach(jForeachWriter)
         return self

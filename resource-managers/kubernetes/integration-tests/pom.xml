@@ -145,7 +145,7 @@
           <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=1g ${extraScalaTestArgs}</argLine>
           <stderr/>
           <systemProperties>
-            <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+            <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
             <java.awt.headless>true</java.awt.headless>
             <spark.kubernetes.test.imageTagFile>${spark.kubernetes.test.imageTagFile}</spark.kubernetes.test.imageTagFile>
             <spark.kubernetes.test.unpackSparkDir>${spark.kubernetes.test.unpackSparkDir}</spark.kubernetes.test.unpackSparkDir>
