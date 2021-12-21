@@ -32,6 +32,10 @@ class OpsgenieAlertOperator(BaseOperator):
     Each Opsgenie API key can be pre-configured to a team integration.
     You can override these defaults in this operator.
 
+    .. seealso::
+        For more information on how to use this operator, take a look at the guide:
+        :ref:`howto/operator:OpsgenieAlertOperator`
+
     :param opsgenie_conn_id: The name of the Opsgenie connection to use
     :type opsgenie_conn_id: str
     :param message: The Message of the Opsgenie alert (templated)
@@ -137,4 +141,4 @@ class OpsgenieAlertOperator(BaseOperator):
     def execute(self, context) -> None:
         """Call the OpsgenieAlertHook to post message"""
         self.hook = OpsgenieAlertHook(self.opsgenie_conn_id)
-        self.hook.execute(self._build_opsgenie_payload())
+        self.hook.create_alert(self._build_opsgenie_payload())
