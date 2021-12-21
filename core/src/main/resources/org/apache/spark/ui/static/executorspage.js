@@ -194,7 +194,7 @@ function getColumnNameForExecutorMetricSummary(columnKey) {
       return "Mapped Pool Memory";
 
     case "ProcessTreeJVMVMemory":
-      return "Process Tree JVM Memory";
+      return "Process Tree JVM VMemory";
 
     case "ProcessTreeJVMRSSMemory":
       return "Process Tree JVM RSS Memory";
