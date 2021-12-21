@@ -1141,7 +1141,8 @@ object TestSettings {
     (Test / javaOptions) += "-ea",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
+      val heapSpaceSize = sys.env.get("HEAPSPACE_SIZE").getOrElse("4g")
+      val extraTestJavaArgs = Seq("-XX:+IgnoreUnrecognizedVMOptions",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -1154,13 +1155,14 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
-        .split(" ").toSeq
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED")
+      Seq(s"-Xmx$heapSpaceSize", "-Xss4m", s"-XX:MaxMetaspaceSize=$metaspaceSize",
+      "-XX:ReservedCodeCacheSize=128m") ++ extraTestJavaArgs
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      val heapSpaceSize = sys.env.get("HEAPSPACE_SIZE").getOrElse("4g")
+      Seq(s"-Xmx$heapSpaceSize", s"-XX:MaxMetaspaceSize=$metaspaceSize")
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
