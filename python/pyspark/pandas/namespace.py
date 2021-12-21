@@ -1971,13 +1971,10 @@ def to_timedelta(
         return arg.transform(pandas_to_timedelta)
 
     else:
-        return cast(
-            TimedeltaIndex,
-            pd.to_timedelta(
-                arg=arg,
-                unit=unit,
-                errors=errors,
-            ),
+        return pd.to_timedelta(
+            arg=arg,
+            unit=unit,
+            errors=errors,
         )
 
 
