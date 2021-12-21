@@ -614,9 +614,7 @@ class SparkConversionMixin:
             return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(  # type: ignore[attr-defined]
-            arrow_data, ser, reader_func, create_RDD_server
-        )
+        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
         assert self._jvm is not None
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)

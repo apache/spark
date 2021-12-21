@@ -184,4 +184,23 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     writer.close()
     assert(segment.length === 0)
   }
+
+  test("calling closeAndDelete() on a partial write file") {
+    val (writer, file, writeMetrics) = createWriter()
+
+    for (i <- 1 to 1000) {
+      writer.write(i, i)
+    }
+    val firstSegment = writer.commitAndGet()
+    assert(firstSegment.length === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
+
+    for (i <- 1 to 500) {
+      writer.write(i, i)
+    }
+    writer.closeAndDelete()
+    assert(!file.exists())
+    assert(writeMetrics.bytesWritten == 0)
+    assert(writeMetrics.recordsWritten == 0)
+  }
 }
