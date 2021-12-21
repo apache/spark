@@ -331,6 +331,24 @@ def inheritable_thread_target(f):
         return f
 
 
+def run_func_with_ipython_cancel_event(func, on_cancel):
+    try:
+        from IPython import get_ipython
+        has_ipython = True
+    except ImportError:
+        has_ipython = False
+
+    if has_ipython:
+        ipython = get_ipython()
+        ipython.events.register("post_run_cell", on_cancel)
+        try:
+            return func()
+        finally:
+            ipython.events.unregister("post_run_cell", on_cancel)
+    else:
+        return func()
+
+
 class InheritableThread(threading.Thread):
     """
     Thread that is recommended to be used in PySpark instead of :class:`threading.Thread`

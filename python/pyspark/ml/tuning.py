@@ -33,6 +33,7 @@ from pyspark.ml.util import DefaultParamsReader, DefaultParamsWriter, MetaAlgori
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
+from pyspark.util import run_func_with_ipython_cancel_event
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -715,21 +716,13 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                 else:
                     raise RuntimeError('Command is canceled. Skip executing the task.')
 
-            try:
-                ipy = get_ipython()
-            except Exception:
-                ipy = None
-            try:
-                if ipy:
-                    ipy.events.register("post_run_cell", on_cmd_cancel)
-
+            def run_tasks_in_parallel():
                 for j, metric, subModel in pool.imap_unordered(pool_task, tasks):
                     metrics_all[i][j] = metric
                     if collectSubModelsParam:
                         subModels[i][j] = subModel
-            finally:
-                if ipy:
-                    ipy.events.unregister("post_run_cell", on_cmd_cancel)
+
+            run_func_with_ipython_cancel_event(run_tasks_in_parallel, on_cmd_cancel)
 
             validation.unpersist()
             train.unpersist()
