@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
-import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96}
+import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
@@ -310,7 +310,8 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+  test("SPARK-33163, SPARK-37705: write the metadata keys 'org.apache.spark.legacyDateTime' " +
+    "and 'org.apache.spark.timeZone'") {
     def checkMetadataKey(dir: java.io.File, exists: Boolean): Unit = {
       Seq("timestamp '1000-01-01 01:02:03'", "date '1000-01-01'").foreach { dt =>
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
@@ -323,6 +324,8 @@ abstract class ParquetRebaseDatetimeSuite
           val metaData = getMetaData(dir)
           val expected = if (exists) Some("") else None
           assert(metaData.get(SPARK_LEGACY_DATETIME) === expected)
+          val expectedTz = if (exists) Some(SQLConf.get.sessionLocalTimeZone) else None
+          assert(metaData.get(SPARK_TIMEZONE_METADATA_KEY) === expectedTz)
         }
       }
     }
@@ -341,7 +344,8 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-33160: write the metadata key 'org.apache.spark.legacyINT96'") {
+  test("SPARK-33160, SPARK-37705: write the metadata key 'org.apache.spark.legacyINT96' " +
+    "and 'org.apache.spark.timeZone'") {
     def saveTs(dir: java.io.File, ts: String = "1000-01-01 01:02:03"): Unit = {
       Seq(Timestamp.valueOf(ts)).toDF()
         .repartition(1)
@@ -352,12 +356,14 @@ abstract class ParquetRebaseDatetimeSuite
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
+        assert(getMetaData(dir)(SPARK_TIMEZONE_METADATA_KEY) === SQLConf.get.sessionLocalTimeZone)
       }
     }
     withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+        assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
       }
     }
     withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
@@ -367,6 +373,7 @@ abstract class ParquetRebaseDatetimeSuite
       withTempPath { dir =>
         saveTs(dir, "2020-10-22 01:02:03")
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+        assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
       }
     }
   }
