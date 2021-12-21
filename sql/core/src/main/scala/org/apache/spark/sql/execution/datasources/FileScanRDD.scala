@@ -132,9 +132,9 @@ class FileScanRDD(
 
       /**
        * For each partitioned file, metadata columns for each record in the file are exactly same.
-       * Only update metadata columns when `currentFile` is changed.
+       * Only update metadata row when `currentFile` is changed.
        */
-      private def updateMetadataColumns(): Unit = {
+      private def updateMetadataRow(): Unit = {
         if (metadataColumns.nonEmpty && currentFile != null) {
           val path = new Path(currentFile.filePath)
           metadataColumns.zipWithIndex.foreach { case (attr, i) =>
@@ -236,7 +236,7 @@ class FileScanRDD(
       private def nextIterator(): Boolean = {
         if (files.hasNext) {
           currentFile = files.next()
-          updateMetadataColumns()
+          updateMetadataRow()
           logInfo(s"Reading File $currentFile")
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
@@ -304,7 +304,7 @@ class FileScanRDD(
           }
         } else {
           currentFile = null
-          updateMetadataColumns()
+          updateMetadataRow()
           InputFileBlockHolder.unset()
           false
         }
