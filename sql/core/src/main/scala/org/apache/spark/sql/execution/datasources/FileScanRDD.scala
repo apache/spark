@@ -45,7 +45,7 @@ import org.apache.spark.util.NextIterator
  * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
- * @param modificationTime The modification time of the input file, in microseconds.
+ * @param modificationTime The modification time of the input file, in milliseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
  */
 case class PartitionedFile(
@@ -142,7 +142,10 @@ class FileScanRDD(
               case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
               case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
               case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
-              case FILE_MODIFICATION_TIME => metadataRow.update(i, currentFile.modificationTime)
+              case FILE_MODIFICATION_TIME =>
+                // the modificationTime from the file is in millisecond,
+                // while internally, the TimestampType is stored in microsecond
+                metadataRow.update(i, currentFile.modificationTime * 1000L)
             }
           }
         }
@@ -181,7 +184,9 @@ class FileScanRDD(
             columnVector
           case FILE_MODIFICATION_TIME =>
             val columnVector = new OnHeapColumnVector(c.numRows(), LongType)
-            columnVector.putLongs(0, c.numRows(), currentFile.modificationTime)
+            // the modificationTime from the file is in millisecond,
+            // while internally, the TimestampType is stored in microsecond
+            columnVector.putLongs(0, c.numRows(), currentFile.modificationTime * 1000L)
             columnVector
         }.toArray
       }
