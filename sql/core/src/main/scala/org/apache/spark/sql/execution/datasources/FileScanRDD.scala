@@ -69,7 +69,7 @@ class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition],
-    val requiredSchema: StructType = StructType(Seq.empty),
+    val readDataSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
@@ -126,10 +126,10 @@ class FileScanRDD(
       // metadata columns internal row, will only be updated when the current file is changed
       @volatile private var metadataColumnsInternalRow: InternalRow = _
       // an unsafe joiner to join an unsafe row with the metadata unsafe row
-      lazy private val metadataUnsafeRowJoiner =
-        GenerateUnsafeRowJoiner.create(requiredSchema, metadataColumns.toStructType)
+      private lazy val metadataUnsafeRowJoiner =
+        GenerateUnsafeRowJoiner.create(readDataSchema, metadataColumns.toStructType)
       // metadata columns unsafe row converter
-      lazy private val unsafeRowConverter = {
+      private lazy val unsafeRowConverter = {
         val metadataColumnsDataTypes = metadataColumns.map(_.dataType).toArray
         val converter = UnsafeProjection.create(metadataColumnsDataTypes)
         (row: InternalRow) => converter(row)
