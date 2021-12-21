@@ -42,15 +42,13 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       val log4jExpectedLog =
-        s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j2.properties"
+        Seq("Reconfiguration complete for context", "at URI /opt/spark/conf/log4j2.properties")
 
       runSparkApplicationAndVerifyCompletion(
         appResource = containerLocalSparkDistroExamplesJar,
         mainClass = SPARK_PI_MAIN_CLASS,
-        expectedDriverLogOnCompletion = (Seq("DEBUG",
-          log4jExpectedLog,
-          "Pi is roughly 3")),
-        expectedExecutorLogOnCompletion = Seq(log4jExpectedLog),
+        expectedDriverLogOnCompletion = Seq("DEBUG", "Pi is roughly 3") ++ log4jExpectedLog,
+        expectedExecutorLogOnCompletion = log4jExpectedLog,
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,
