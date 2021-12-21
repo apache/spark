@@ -192,31 +192,33 @@ object Cast {
    * In practice, the behavior is mostly the same as PostgreSQL. It disallows certain unreasonable
    * type conversions such as converting `string` to `int` or `double` to `boolean`.
    */
-  def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
-    case _ if from == to => true
-    case (NullType, _) => true
-    case (_: NumericType, _: NumericType) => true
-    case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
-    case (DateType, TimestampType) => true
-    case (TimestampType, DateType) => true
+  def canANSIStoreAssign(from: DataType, to: DataType): Boolean = {
+    val dateTimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+    (from, to) match {
+      case _ if from == to => true
+      case (NullType, _) => true
+      case (_: NumericType, _: NumericType) => true
+      case (_: AtomicType, StringType) => true
+      case (_: CalendarIntervalType, StringType) => true
+      case _ if dateTimeTypes.contains(from) && dateTimeTypes.contains(to) => true
 
-    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
+      case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+        resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
 
-    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      resolvableNullability(fn, tn) && canANSIStoreAssign(fromKey, toKey) &&
-        canANSIStoreAssign(fromValue, toValue)
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        resolvableNullability(fn, tn) && canANSIStoreAssign(fromKey, toKey) &&
+          canANSIStoreAssign(fromValue, toValue)
 
-    case (StructType(fromFields), StructType(toFields)) =>
-      fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (f1, f2) =>
-            resolvableNullability(f1.nullable, f2.nullable) &&
-              canANSIStoreAssign(f1.dataType, f2.dataType)
-        }
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall {
+            case (f1, f2) =>
+              resolvableNullability(f1.nullable, f2.nullable) &&
+                canANSIStoreAssign(f1.dataType, f2.dataType)
+          }
 
-    case _ => false
+      case _ => false
+    }
   }
 
   private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
