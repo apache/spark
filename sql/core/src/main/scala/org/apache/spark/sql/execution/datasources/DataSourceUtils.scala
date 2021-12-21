@@ -216,7 +216,9 @@ object DataSourceUtils extends PredicateHelper {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      val timeZone = SQLConf.get.sessionLocalTimeZone
+      RebaseDateTime.rebaseGregorianToJulianMicros(timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
