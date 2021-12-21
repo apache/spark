@@ -28,7 +28,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -120,8 +120,9 @@ class FileScanRDD(
       // FILE METADATA METHODS //
       ///////////////////////////
 
-      // a metadata columns internal row, will only be updated when the current file is changed
-      @volatile private var metadataColumnsInternalRow: InternalRow = _
+      // a metadata internal row, will only be updated when the current file is changed
+      val metadataRow: InternalRow = new GenericInternalRow(metadataColumns.length)
+
       // an unsafe projection to convert a joined internal row to an unsafe row
       private lazy val projection = {
         val joinedExpressions =
@@ -134,20 +135,15 @@ class FileScanRDD(
        * Only update metadata columns when `currentFile` is changed.
        */
       private def updateMetadataColumns(): Unit = {
-        if (metadataColumns.nonEmpty) {
-          if (currentFile == null) {
-            metadataColumnsInternalRow = null
-          } else {
-            // construct an internal row
-            val path = new Path(currentFile.filePath)
-            metadataColumnsInternalRow = InternalRow.fromSeq(
-              metadataColumns.map(_.name).map {
-                case FILE_PATH => UTF8String.fromString(path.toString)
-                case FILE_NAME => UTF8String.fromString(path.getName)
-                case FILE_SIZE => currentFile.fileSize
-                case FILE_MODIFICATION_TIME => currentFile.modificationTime
-              }
-            )
+        if (metadataColumns.nonEmpty && currentFile != null) {
+          val path = new Path(currentFile.filePath)
+          metadataColumns.zipWithIndex.foreach { case (attr, i) =>
+            attr.name match {
+              case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
+              case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
+              case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
+              case FILE_MODIFICATION_TIME => metadataRow.update(i, currentFile.modificationTime)
+            }
           }
         }
       }
@@ -201,8 +197,8 @@ class FileScanRDD(
               new ColumnarBatch(
                 Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
                 c.numRows())
-            case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataColumnsInternalRow))
-            case i: InternalRow => new JoinedRow(i, metadataColumnsInternalRow)
+            case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataRow))
+            case i: InternalRow => new JoinedRow(i, metadataRow)
           }
         } else {
           nextElement
