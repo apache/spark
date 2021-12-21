@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -41,13 +41,24 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(2)))
   }
 
-  test("Aggregate should be included in WholeStageCodegen") {
+  test("HashAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
+  }
+
+  test("SortAggregate should be included in WholeStageCodegen") {
+    val df = spark.range(10).agg(max(col("id")), avg(col("id")))
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]).isDefined)
+      assert(df.collect() === Array(Row(9, 4.5)))
+    }
   }
 
   testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
@@ -129,7 +140,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
   }
 
-  test("Aggregate with grouping keys should be included in WholeStageCodegen") {
+  test("HashAggregate with grouping keys should be included in WholeStageCodegen") {
     val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>

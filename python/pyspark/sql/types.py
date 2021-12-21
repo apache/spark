@@ -76,7 +76,7 @@ __all__ = [
 ]
 
 
-class DataType(object):
+class DataType:
     """Base class for data types."""
 
     def __repr__(self) -> str:
@@ -1012,13 +1012,16 @@ def _parse_datatype_string(s: str) -> DataType:
     from pyspark import SparkContext
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    assert sc is not None
 
     def from_ddl_schema(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
         )
@@ -1910,7 +1913,7 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
-class DateConverter(object):
+class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
@@ -1919,7 +1922,7 @@ class DateConverter(object):
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
-class DatetimeConverter(object):
+class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
@@ -1933,7 +1936,7 @@ class DatetimeConverter(object):
         return t
 
 
-class DatetimeNTZConverter(object):
+class DatetimeNTZConverter:
     def can_convert(self, obj: Any) -> bool:
         from pyspark.sql.utils import is_timestamp_ntz_preferred
 
@@ -1947,20 +1950,22 @@ class DatetimeNTZConverter(object):
         from pyspark import SparkContext
 
         seconds = calendar.timegm(obj.utctimetuple())
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
             int(seconds) * 1000000 + obj.microsecond
         )
 
 
-class DayTimeIntervalTypeConverter(object):
+class DayTimeIntervalTypeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.timedelta)
 
     def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
         from pyspark import SparkContext
 
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
             (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
         )

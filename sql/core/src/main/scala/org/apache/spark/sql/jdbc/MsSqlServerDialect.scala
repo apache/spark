@@ -119,6 +119,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 
-  // ToDo: use top n to get limit, e.g. select top 100 * from employee;
-  override def supportsLimit(): Boolean = false
+  override def getLimitClause(limit: Integer): String = {
+    ""
+  }
 }

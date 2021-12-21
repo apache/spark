@@ -98,7 +98,7 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
         )
 
 
-class QuietTest(object):
+class QuietTest:
     def __init__(self, sc):
         self.log4j = sc._jvm.org.apache.log4j
 
@@ -138,7 +138,7 @@ class ReusedPySparkTestCase(unittest.TestCase):
         cls.sc.stop()
 
 
-class ByteArrayOutput(object):
+class ByteArrayOutput:
     def __init__(self):
         self.buffer = bytearray()
 

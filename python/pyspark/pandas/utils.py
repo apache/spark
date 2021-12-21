@@ -19,7 +19,6 @@ Commonly used utils in pandas-on-Spark.
 """
 
 import functools
-from collections import OrderedDict
 from contextlib import contextmanager
 import os
 from typing import (
@@ -441,7 +440,7 @@ def align_diff_frames(
     )
 
     # 3. Restore the names back and deduplicate columns.
-    this_labels = OrderedDict()
+    this_labels: Dict[Label, Label] = {}
     # Add columns in an order of its original frame.
     for this_label in this_column_labels:
         for new_label in applied._internal.column_labels:
@@ -449,7 +448,7 @@ def align_diff_frames(
                 this_labels[new_label[1:]] = new_label
 
     # After that, we will add the rest columns.
-    other_labels = OrderedDict()
+    other_labels: Dict[Label, Label] = {}
     for new_label in applied._internal.column_labels:
         if new_label[1:] not in this_labels:
             other_labels[new_label[1:]] = new_label
@@ -464,20 +463,12 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
-    if conf is None:
-        conf = dict()
+def default_session() -> SparkSession:
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        return spark
 
     builder = SparkSession.builder.appName("pandas-on-Spark")
-    for key, value in conf.items():
-        builder = builder.config(key, value)
-    # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
-    # configuration. This is needed with Spark 3.0+.
-    builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
-
-    if is_testing():
-        builder.config("spark.executor.allowSparkContext", False)
-
     return builder.getOrCreate()
 
 

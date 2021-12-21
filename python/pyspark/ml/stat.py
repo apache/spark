@@ -24,7 +24,7 @@ from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
 
 
-class ChiSquareTest(object):
+class ChiSquareTest:
     """
     Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
@@ -100,7 +100,7 @@ class ChiSquareTest(object):
         return _java2py(sc, javaTestObj.test(*args))
 
 
-class Correlation(object):
+class Correlation:
     """
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
@@ -167,7 +167,7 @@ class Correlation(object):
         return _java2py(sc, javaCorrObj.corr(*args))
 
 
-class KolmogorovSmirnovTest(object):
+class KolmogorovSmirnovTest:
     """
     Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
     distribution.
@@ -236,7 +236,7 @@ class KolmogorovSmirnovTest(object):
         )
 
 
-class Summarizer(object):
+class Summarizer:
     """
     Tools for vectorized statistics on MLlib Vectors.
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
@@ -459,7 +459,7 @@ class SummaryBuilder(JavaWrapper):
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
 
 
-class MultivariateGaussian(object):
+class MultivariateGaussian:
     """Represents a (mean, cov) tuple
 
     .. versionadded:: 3.0.0

@@ -138,7 +138,7 @@ def infer_eval_type(
 def check_tuple_annotation(
     annotation: Any, parameter_check_func: Optional[Callable[[Any], bool]] = None
 ) -> bool:
-    # Python 3.6 has `__name__`. Python 3.7 and 3.8 have `_name`.
+    # Tuple has _name but other types have __name__
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
     return name == "Tuple" and (

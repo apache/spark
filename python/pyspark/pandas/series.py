@@ -344,21 +344,6 @@ dtype: float64
 str_type = str
 
 
-if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore[attr-defined]
-
-    old_getitem = GenericMeta.__getitem__
-
-    @no_type_check
-    def new_getitem(self, params):
-        if hasattr(self, "is_series"):
-            return old_getitem(self, create_type_for_series_type(params))
-        else:
-            return old_getitem(self, params)
-
-    GenericMeta.__getitem__ = new_getitem
-
-
 class Series(Frame, IndexOpsMixin, Generic[T]):
     """
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
@@ -373,8 +358,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ----------
     data : array-like, dict, or scalar value, pandas Series
         Contains data stored in Series
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas Series, other arguments should not be used.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.

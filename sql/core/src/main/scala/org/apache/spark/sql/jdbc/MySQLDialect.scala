@@ -21,12 +21,10 @@ import java.sql.{Connection, SQLException, Types}
 import java.util
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
+import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -120,25 +118,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
     val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
-    var indexProperties: String = ""
-    var indexType = ""
-    if (!properties.isEmpty) {
-      properties.asScala.foreach { case (k, v) =>
-        if (k.equals(SupportsIndex.PROP_TYPE)) {
-          if (v.equalsIgnoreCase("BTREE") || v.equalsIgnoreCase("HASH")) {
-            indexType = s"USING $v"
-          } else {
-            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
-              " The supported Index Types are: BTREE and HASH")
-          }
-        } else {
-          indexProperties = indexProperties + " " + s"$k $v"
-        }
-      }
-    }
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "mysql")
+
     // columnsProperties doesn't apply to MySQL so it is ignored
     s"CREATE INDEX ${quoteIdentifier(indexName)} $indexType ON" +
-      s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")}) $indexProperties"
+      s" ${quoteIdentifier(tableName)} (${columnList.mkString(", ")})" +
+      s" ${indexPropertyList.mkString(" ")}"
   }
 
   // SHOW INDEX syntax
@@ -148,21 +133,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       indexName: String,
       tableName: String,
       options: JDBCOptions): Boolean = {
-    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)}"
-    try {
-      val rs = JdbcUtils.executeQuery(conn, options, sql)
-      while (rs.next()) {
-        val retrievedIndexName = rs.getString("key_name")
-        if (conf.resolver(retrievedIndexName, indexName)) {
-          return true
-        }
-      }
-      false
-    } catch {
-      case _: Exception =>
-        logWarning("Cannot retrieved index info.")
-        false
-    }
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableName)} WHERE key_name = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
   override def dropIndex(indexName: String, tableName: String): String = {

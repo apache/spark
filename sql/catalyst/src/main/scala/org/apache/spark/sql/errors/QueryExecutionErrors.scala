@@ -1909,4 +1909,15 @@ object QueryExecutionErrors {
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
+
+  def writePartitionExceedConfigSizeWhenDynamicPartitionError(
+      numWrittenParts: Int,
+      maxDynamicPartitions: Int,
+      maxDynamicPartitionsKey: String): Throwable = {
+    new SparkException(
+      s"Number of dynamic partitions created is $numWrittenParts" +
+        s", which is more than $maxDynamicPartitions" +
+        s". To solve this try to set $maxDynamicPartitionsKey" +
+        s" to at least $numWrittenParts.")
+  }
 }

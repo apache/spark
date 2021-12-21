@@ -18,7 +18,7 @@
 """
 A wrapper class for Spark DataFrame to behave similar to pandas DataFrame.
 """
-from collections import OrderedDict, defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 from collections.abc import Mapping
 import re
 import warnings
@@ -341,24 +341,6 @@ rectangle    16.0  2.348543e+108
 """
 
 
-if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore[attr-defined]
-
-    # This is a workaround to support variadic generic in DataFrame in Python 3.5+.
-    # See https://github.com/python/typing/issues/193
-    # We wrap the input params by a tuple to mimic variadic generic.
-    old_getitem = GenericMeta.__getitem__
-
-    @no_type_check
-    def new_getitem(self, params):
-        if hasattr(self, "is_dataframe"):
-            return old_getitem(self, create_tuple_for_frame_type(params))
-        else:
-            return old_getitem(self, params)
-
-    GenericMeta.__getitem__ = new_getitem
-
-
 class DataFrame(Frame, Generic[T]):
     """
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
@@ -372,8 +354,6 @@ class DataFrame(Frame, Generic[T]):
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
         or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
         other arguments should not be used.
     index : Index or array-like
@@ -6105,7 +6085,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_values = values[-1]
             else:
                 index_values = values
-            index_map: Dict[str, Optional[Label]] = OrderedDict()
+            index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
                 sdf = sdf.withColumn(colname, SF.lit(index_value))
@@ -9671,7 +9651,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ).with_filter(SF.lit(False))
             )
 
-        column_labels: Union[defaultdict, OrderedDict] = defaultdict(dict)
+        column_labels: Dict[Label, Dict[Any, Column]] = defaultdict(dict)
         index_values = set()
         should_returns_series = False
         for label in self._internal.column_labels:
@@ -9686,7 +9666,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             index_values.add(value)
 
-        column_labels = OrderedDict(sorted(column_labels.items(), key=lambda x: x[0]))
+        column_labels = dict(sorted(column_labels.items(), key=lambda x: x[0]))
 
         index_name = self._internal.column_label_names[-1]
         column_label_names = self._internal.column_label_names[:-1]
@@ -11204,7 +11184,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: Dict[str, List[Column]] = OrderedDict()
+            cols_dict: Dict[str, List[Column]] = {}
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
@@ -12315,19 +12295,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal = this._internal.with_new_columns(applied)
             return DataFrame(internal)
 
-    if sys.version_info >= (3, 7):
-
-        def __class_getitem__(cls, params: Any) -> object:
-            # This is a workaround to support variadic generic in DataFrame in Python 3.7.
-            # See https://github.com/python/typing/issues/193
-            # we always wraps the given type hints by a tuple to mimic the variadic generic.
-            return create_tuple_for_frame_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # This is a workaround to support variadic generic in DataFrame in Python 3.5+
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark DataFrame.
-        is_dataframe = None
+    def __class_getitem__(cls, params: Any) -> object:
+        # This is a workaround to support variadic generic in DataFrame in Python 3.7.
+        # See https://github.com/python/typing/issues/193
+        # we always wraps the given type hints by a tuple to mimic the variadic generic.
+        return create_tuple_for_frame_type(params)
 
 
 def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:

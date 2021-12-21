@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple, cast, overload
 from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
 
 
-class SparkConf(object):
+class SparkConf:
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.
