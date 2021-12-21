@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.File
+import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
@@ -101,13 +102,13 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             METADATA_FILE_PATH -> realF0.toURI.toString,
             METADATA_FILE_NAME -> realF0.getName,
             METADATA_FILE_SIZE -> realF0.length(),
-            METADATA_FILE_MODIFICATION_TIME -> realF0.lastModified()
+            METADATA_FILE_MODIFICATION_TIME -> new Timestamp(realF0.lastModified())
           )
           val f1Metadata = Map(
             METADATA_FILE_PATH -> realF1.toURI.toString,
             METADATA_FILE_NAME -> realF1.getName,
             METADATA_FILE_SIZE -> realF1.length(),
-            METADATA_FILE_MODIFICATION_TIME -> realF1.lastModified()
+            METADATA_FILE_MODIFICATION_TIME -> new Timestamp(realF1.lastModified())
           )
 
           f(df, f0Metadata, f1Metadata)
@@ -158,9 +159,9 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       df.select(
         // substring of file name
         substring(col(METADATA_FILE_NAME), 1, 3),
-        // convert timestamp in millis to unixtime and to date format
-        from_unixtime(col(METADATA_FILE_MODIFICATION_TIME).divide(lit(1000)), "yyyy-MM")
-          .as("_file_modification_date"),
+        // format timestamp
+        date_format(col(METADATA_FILE_MODIFICATION_TIME), "yyyy-MM")
+          .as("_file_modification_year_month"),
         // convert to kb
         col(METADATA_FILE_SIZE).divide(lit(1024)).as("_file_size_kb"),
         // get the file format

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType, TimestampType}
 
 
 /**
@@ -188,7 +188,7 @@ object FileFormat {
     .add(StructField(FILE_PATH, StringType))
     .add(StructField(FILE_NAME, StringType))
     .add(StructField(FILE_SIZE, LongType))
-    .add(StructField(FILE_MODIFICATION_TIME, LongType))
+    .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
 
   // create a file metadata struct col
   def createFileMetadataCol: AttributeReference = MetadataAttribute(METADATA_NAME, METADATA_STRUCT)

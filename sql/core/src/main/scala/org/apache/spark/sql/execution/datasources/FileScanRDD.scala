@@ -45,7 +45,7 @@ import org.apache.spark.util.NextIterator
  * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
- * @param modificationTime The modification time of the input file, in milliseconds.
+ * @param modificationTime The modification time of the input file, in microseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
  */
 case class PartitionedFile(
