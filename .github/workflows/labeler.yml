@@ -29,7 +29,7 @@ on: pull_request_target
 jobs:
   label:
     name: Label pull requests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     # In order to get back the negated matches like in the old config,
     # we need the actinons/labeler concept of `all` and `any` which matches
