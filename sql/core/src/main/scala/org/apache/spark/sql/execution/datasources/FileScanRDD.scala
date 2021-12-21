@@ -29,7 +29,6 @@ import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
@@ -121,18 +120,13 @@ class FileScanRDD(
       // FILE METADATA METHODS //
       ///////////////////////////
 
-      // metadata columns unsafe row, will only be updated when the current file is changed
-      @volatile private var metadataColumnsUnsafeRow: UnsafeRow = _
-      // metadata columns internal row, will only be updated when the current file is changed
+      // a metadata columns internal row, will only be updated when the current file is changed
       @volatile private var metadataColumnsInternalRow: InternalRow = _
-      // an unsafe joiner to join an unsafe row with the metadata unsafe row
-      private lazy val metadataUnsafeRowJoiner =
-        GenerateUnsafeRowJoiner.create(readDataSchema, metadataColumns.toStructType)
-      // metadata columns unsafe row converter
-      private lazy val unsafeRowConverter = {
-        val metadataColumnsDataTypes = metadataColumns.map(_.dataType).toArray
-        val converter = UnsafeProjection.create(metadataColumnsDataTypes)
-        (row: InternalRow) => converter(row)
+      // an unsafe projection to convert a joined internal row to an unsafe row
+      private lazy val projection = {
+        val joinedExpressions =
+          readDataSchema.fields.map(_.dataType) ++ metadataColumns.map(_.dataType)
+        UnsafeProjection.create(joinedExpressions)
       }
 
       /**
@@ -142,7 +136,6 @@ class FileScanRDD(
       private def updateMetadataColumns(): Unit = {
         if (metadataColumns.nonEmpty) {
           if (currentFile == null) {
-            metadataColumnsUnsafeRow = null
             metadataColumnsInternalRow = null
           } else {
             // construct an internal row
@@ -155,8 +148,6 @@ class FileScanRDD(
                 case FILE_MODIFICATION_TIME => currentFile.modificationTime
               }
             )
-            // convert the internal row to an unsafe row
-            metadataColumnsUnsafeRow = unsafeRowConverter(metadataColumnsInternalRow)
           }
         }
       }
@@ -210,7 +201,7 @@ class FileScanRDD(
               new ColumnarBatch(
                 Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
                 c.numRows())
-            case u: UnsafeRow => metadataUnsafeRowJoiner.join(u, metadataColumnsUnsafeRow)
+            case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataColumnsInternalRow))
             case i: InternalRow => new JoinedRow(i, metadataColumnsInternalRow)
           }
         } else {
