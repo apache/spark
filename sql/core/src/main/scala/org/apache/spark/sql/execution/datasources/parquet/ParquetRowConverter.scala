@@ -190,13 +190,13 @@ private[parquet] class ParquetRowConverter(
    */
   def currentRecord: InternalRow = currentRow
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
     datetimeRebaseMode, "Parquet")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Parquet")
 
-  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+  private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
     int96RebaseMode, "Parquet INT96")
 
   // Converters for each field.
