@@ -269,13 +269,14 @@ abstract class SparkFunSuite
     private var _threshold: Level = Level.INFO
 
     override def append(loggingEvent: LogEvent): Unit = {
-      if (loggingEvent.getLevel.isMoreSpecificThan(_threshold)) {
+      val copy_event = loggingEvent.toImmutable
+      if (copy_event.getLevel.isMoreSpecificThan(_threshold)) {
         if (loggingEvents.size >= maxEvents) {
           val loggingInfo = if (msg == "") "." else s" while logging $msg."
           throw new IllegalStateException(
             s"Number of events reached the limit of $maxEvents$loggingInfo")
         }
-        loggingEvents.append(loggingEvent.toImmutable)
+        loggingEvents.append(copy_event)
       }
     }
 
