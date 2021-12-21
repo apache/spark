@@ -85,7 +85,6 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       val logger = LogManager.getRootLogger().asInstanceOf[Logger]
       val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
       logger.removeAppender(fa)
-      fa.stop()
       Utils.tryLogNonFatalError(fa.stop())
       writer.foreach(_.closeWriter())
     } catch {
