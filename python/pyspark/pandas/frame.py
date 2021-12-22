@@ -27,7 +27,7 @@ import json
 import types
 from functools import partial, reduce
 import sys
-from itertools import zip_longest
+from itertools import zip_longest, chain
 from types import TracebackType
 from typing import (
     Any,
@@ -8814,9 +8814,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
-        psser_numeric: List[Column] = []
-        psser_string: List[Column] = []
-        psser_timestamp: List[Column] = []
+        psser_numeric: List[Series] = []
+        psser_string: List[Series] = []
+        psser_timestamp: List[Series] = []
         spark_data_types: List[DataType] = []
         column_labels: Optional[List[Label]] = []
         column_names: List[str] = []
@@ -8904,7 +8904,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ],
             )
             result = DataFrame(internal).astype("float64")
-        elif all_timestamp_cols:
+        elif all_timestamp_cols or any_timestamp_cols:
             column_names = [
                 self._internal.spark_column_name_for(column_label) for column_label in column_labels
             ]
@@ -8913,12 +8913,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Apply stat functions for each column.
             count_exprs = map(F.count, column_names)
             min_exprs = map(F.min, column_names)
-            perc_exprs = reduce(
-                lambda x, y: x + y,
-                [
-                    list(map(F.percentile_approx, column_names, [percentile] * column_length))
+            # Here we try to flat the multiple map into single list that contains each calculated
+            # percentile using `chain`.
+            # e.g. flat the `[<map object at 0x7fc1907dc280>, <map object at 0x7fc1907dcc70>]`
+            # to `[Column<'percentile_approx(A, 0.2, 10000)'>, Column<'percentile_approx(B, 0.2, 10000)'>,
+            # Column<'percentile_approx(A, 0.5, 10000)'>, Column<'percentile_approx(B, 0.5, 10000)'>]`
+            perc_exprs = chain(
+                *[
+                    map(F.percentile_approx, column_names, [percentile] * column_length)
                     for percentile in percentiles
-                ],
+                ]
             )
             max_exprs = map(F.max, column_names)
             mean_exprs = []
@@ -8926,117 +8930,51 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 mean_exprs.append(F.mean(column_name).astype(spark_data_type))
             exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
 
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats_names = ["count", "mean", "min", *formatted_perc, "max"]
+
+            # If not all columns are timestamp type,
+            # we also need to calculate the `std` for numeric columns
+            if any_timestamp_cols:
+                std_exprs = []
+                for label, spark_data_type in zip(column_labels, spark_data_types):
+                    column_name = label[0]
+                    if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                        std_exprs.append(
+                            F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
+                        )
+                        mean_exprs.append(F.mean(column_name).astype(spark_data_type))
+                    else:
+                        std_exprs.append(F.stddev(column_name))
+                        mean_exprs.append(F.mean(column_name))
+                exprs.extend(std_exprs)
+                stats_names.append("std")
+
             # Select stats for all columns at once.
             sdf = self._internal.spark_frame.select(exprs)
             stat_values = sdf.first()
 
-            counts = []
-            means = []
-            mins = []
-            # `percentiles` is variable length according to user input.
-            # Therefore, it cannot be assigned to a fixed variable such as
-            # `percs1`, `percs2`, `percs3`.
-            # So we will create a list of list equal to the length of percentiles,
-            # and store the each percentile value in each list.
-            percs: List[List] = [[] for _ in range(len(percentiles))]
-            maxs = []
-            for i in range(column_length):
-                counts.append(str(stat_values[i]))
-                means.append(str(stat_values[i + column_length]))
-                mins.append(str(stat_values[i + column_length * 2]))
-                # The calculated value of each percentile is stored in
-                # `stat_values[i + column_length * (3 + j)]` as long as the length of
-                # percentiles.
-                for j in range(len(percentiles)):
-                    percs[j].append(str(stat_values[i + column_length * (3 + j)]))
-                # Here, `j` is increased by the length of percentiles.
-                # The result of calculating percentile values were stored in
-                # `stat_values[i + column_length * (3 + j)]`,
-                # so, `stat_values[i + column_length * (3 + j + 1)]` stores
-                # the result of calculating max.
-                maxs.append(str(stat_values[i + column_length * (3 + j + 1)]))
-
-            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
-            stats_names = ["count", "mean", "min", *formatted_perc, "max"]
-            stats = [counts, means, mins, *percs, maxs]
-
-            result: DataFrame = DataFrame(  # type: ignore[no-redef]
-                data=stats,
-                index=stats_names,
-                columns=column_names,
-            )
-
-            return result
-        elif any_timestamp_cols:
-            column_names = [
-                self._internal.spark_column_name_for(column_label) for column_label in column_labels
-            ]
-            column_length = len(column_labels)
-
-            count_exprs = map(F.count, column_names)
-            min_exprs = map(F.min, column_names)
-            perc_exprs = reduce(
-                lambda x, y: x + y,
-                [
-                    list(map(F.percentile_approx, column_names, [percentile] * column_length))
-                    for percentile in percentiles
-                ],
-            )
-            max_exprs = map(F.max, column_names)
-            mean_exprs = []
-            std_exprs = []
-            for label, spark_data_type in zip(column_labels, spark_data_types):
-                column_name = label[0]
-                if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                    std_exprs.append(
-                        F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
+            num_stats = int(len(exprs) / column_length)
+            # `column_name_stats_kv` is key-value store that have column name as key, and the stats are values
+            # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value}]}
+            column_name_stats_kv: Dict[str, List[str]] = dict()
+            for i, column_name in enumerate(column_names):
+                column_name_stats_kv[column_name] = list()
+                for first_stat_idx in range(num_stats):
+                    column_name_stats_kv[column_name].append(
+                        stat_values[(first_stat_idx * column_length) + i]
                     )
-                    mean_exprs.append(F.mean(column_name).astype(spark_data_type))
-                else:
-                    std_exprs.append(F.stddev(column_name))
-                    mean_exprs.append(F.mean(column_name))
-            exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs, *std_exprs]
 
-            sdf = self._internal.spark_frame.select(exprs)
-            stat_values = sdf.first()
-
-            counts = []
-            means = []
-            mins = []
-            percs: List[List] = [[] for _ in range(len(percentiles))]
-            maxs = []
-            stds = []
-            for i, spark_data_type in zip(range(column_length), spark_data_types):
+            # For timestamp type columns, we should cast the column type to string.
+            for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
                 if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                    counts.append(str(stat_values[i]))
-                    means.append(str(stat_values[i + column_length]))
-                    mins.append(str(stat_values[i + column_length * 2]))
-                    for j in range(len(percentiles)):
-                        percs[j].append(str(stat_values[i + column_length * (3 + j)]))
-                    maxs.append(str(stat_values[i + column_length * (3 + j + 1)]))
-                    # `stat_values[i + column_length * (3 + j + 2)]` stores
-                    # the result of calculating std.
-                    stds.append(str(stat_values[i + column_length * (3 + j + 2)]))
-                else:
-                    counts.append(stat_values[i])
-                    means.append(stat_values[i + column_length])
-                    mins.append(stat_values[i + column_length * 2])
-                    for j in range(len(percentiles)):
-                        percs[j].append(stat_values[i + column_length * (3 + j)])
-                    maxs.append(stat_values[i + column_length * (3 + j + 1)])
-                    stds.append(stat_values[i + column_length * (3 + j + 2)])
-
-            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
-            stats_names = ["count", "mean", "min", *formatted_perc, "max", "std"]
-            stats = [counts, means, mins, *percs, maxs, stds]
+                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
 
             result: DataFrame = DataFrame(  # type: ignore[no-redef]
-                data=stats,
+                data=column_name_stats_kv,
                 index=stats_names,
                 columns=column_names,
             )
-
-            return result
         else:
             raise ValueError("Cannot describe a DataFrame without columns")
 
