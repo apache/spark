@@ -44,6 +44,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -131,14 +132,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
-  private val hybridStoreDiskBackend = conf.get(History.HYBRID_STORE_DISK_BACKEND)
+  private val hybridStoreDiskBackend =
+    HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dir = hybridStoreDiskBackend match {
-      case "leveldb" => "listing.ldb"
-      case "rocksdb" => "listing.rdb"
-      case db => throw new IllegalArgumentException(s"$db is not supported.")
+      case LEVELDB => "listing.ldb"
+      case ROCKSDB => "listing.rdb"
     }
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
