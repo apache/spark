@@ -167,7 +167,8 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
     try readData(1, writableColumnVector, data.length)
     catch {
       case e: ParquetDecodingException =>
-        assert("no more values to read, total value count is " + data.length == e.getMessage)
+        // No more values to read. Total values read:  641, total count: 641, trying to read 1 more.
+        assert(e.getMessage.startsWith("No more values to read."))
     }
   }
 
