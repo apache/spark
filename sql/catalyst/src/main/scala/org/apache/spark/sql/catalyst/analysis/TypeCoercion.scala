@@ -966,9 +966,7 @@ object TypeCoercion extends TypeCoercionBase {
       // Implicit cast from/to string
       case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
       case (StringType, target: NumericType) => target
-      case (StringType, DateType) => DateType
-      case (StringType, TimestampType) => TimestampType
-      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (StringType, datetime: DatetimeType) => datetime
       case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType

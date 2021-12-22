@@ -154,7 +154,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     }
   }
 
-  test("Check date time types compatible with each other") {
+  test("SPARK-37707: Check datetime types compatible with each other") {
     val dateTimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
     dateTimeTypes.foreach { t1 =>
       dateTimeTypes.foreach { t2 =>
