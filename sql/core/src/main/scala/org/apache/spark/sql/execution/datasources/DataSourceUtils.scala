@@ -26,10 +26,11 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -109,46 +110,53 @@ object DataSourceUtils extends PredicateHelper {
       case _ => false
     }
 
-  private def getRebaseMode(
+  private def getRebaseSpec(
       lookupFileMeta: String => String,
       modeByConfig: String,
       minVersion: String,
-      metadataKey: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
+      metadataKey: String): RebaseSpec = {
+    val policy = if (Utils.isTesting &&
+      SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else {
+      // If there is no version, we return the mode specified by the config.
+      Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+        // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+        // rebase the datetime values.
+        // Files written by `minVersion` and latter may also need the rebase if they were written
+        // with the "LEGACY" rebase mode.
+        if (version < minVersion || lookupFileMeta(metadataKey) != null) {
+          LegacyBehaviorPolicy.LEGACY
+        } else {
+          LegacyBehaviorPolicy.CORRECTED
+        }
+      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
     }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the datetime values.
-      // Files written by `minVersion` and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < minVersion || lookupFileMeta(metadataKey) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+    policy match {
+      case LegacyBehaviorPolicy.LEGACY =>
+        RebaseSpec(LegacyBehaviorPolicy.LEGACY, Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
+      case _ => RebaseSpec(policy)
+    }
   }
 
   def datetimeRebaseMode(
       lookupFileMeta: String => String,
       modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    getRebaseMode(
+    getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
       "3.0.0",
-      SPARK_LEGACY_DATETIME_METADATA_KEY)
+      SPARK_LEGACY_DATETIME_METADATA_KEY).mode
   }
 
   def int96RebaseMode(
       lookupFileMeta: String => String,
       modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    getRebaseMode(
+    getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
       "3.1.0",
-      SPARK_LEGACY_INT96_METADATA_KEY)
+      SPARK_LEGACY_INT96_METADATA_KEY).mode
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
