@@ -55,15 +55,16 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
       1),
     0)
 
-  // TODO: fix indent
-  private def benchmarkHelper(relationName: String,
-    totalRows: Int,
-    duplicationMultipliers: Seq[Int],
-    keyExpr: Seq[Expression],
-    relationGenerator: (Iterator[InternalRow],
-      Seq[Expression],
-      Int,
-      Option[Int]) => HashedRelation): Unit = {
+  private def benchmarkHelper(
+      relationName: String,
+      totalRows: Int,
+      duplicationMultipliers: Seq[Int],
+      keyExpr: Seq[Expression],
+      relationGenerator: (
+          Iterator[InternalRow],
+          Seq[Expression],
+          Int,
+          Option[Int]) => HashedRelation): Unit = {
 
     val keyGenerator = UnsafeProjection.create(keyExpr)
     val fieldsExpr = Seq(LongType, StringType, IntegerType, DoubleType).zipWithIndex.map {
@@ -121,8 +122,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
     }
     val keyExpr = Seq(BoundReference(0, LongType, nullable = false))
     val totalRows = 1000000
-    // TODO: rethink these numbers
-    val duplicationMultipliers = Array(1, 5, 8, 10, 20)
+    val duplicationMultipliers = Array(1, 5, 8, 10, 20, 500)
     benchmarkHelper("LongHashedRelation", totalRows, duplicationMultipliers, keyExpr,
       relationGenerator)
   }
@@ -136,8 +136,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
     val keyExpr = Seq(BoundReference(0, LongType, nullable = false),
       BoundReference(2, IntegerType, nullable = false))
     val totalRows = 1000000
-    // TODO: rethink these numbers
-    val duplicationMultipliers = Array(1, 5, 8, 10, 20)
+    val duplicationMultipliers = Array(1, 5, 8, 10, 20, 500)
     benchmarkHelper("UnsafeHashedRelation", totalRows, duplicationMultipliers, keyExpr,
       relationGenerator)
   }
