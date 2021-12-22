@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -30,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
@@ -155,7 +154,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     expr.transform {
                       case agg: AggregateExpression =>
                         val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                        val child = newAggChild(aggOutput(ordinal), agg.resultAttribute.dataType)
+                        val child =
+                          addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
                         Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
@@ -189,12 +189,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
                           case max: aggregate.Max =>
-                            max.copy(child = newAggChild(aggAttribute, max.child.dataType))
+                            max.copy(child = addCastIfNeeded(aggAttribute, max.child.dataType))
                           case min: aggregate.Min =>
-                            min.copy(child = newAggChild(aggAttribute, min.child.dataType))
+                            min.copy(child = addCastIfNeeded(aggAttribute, min.child.dataType))
                           case sum: aggregate.Sum =>
-                            sum.copy(child = newAggChild(aggAttribute, sum.child.dataType))
-                          case _: aggregate.Count => aggregate.Sum(aggAttribute)
+                            sum.copy(child = addCastIfNeeded(aggAttribute, sum.child.dataType))
+                          case _: aggregate.Count =>
+                            aggregate.Sum(addCastIfNeeded(aggAttribute, LongType))
                           case other => other
                         }
                       agg.copy(aggregateFunction = aggFunction)
@@ -207,7 +208,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def newAggChild(aggAttribute: AttributeReference, aggDataType: DataType) =
+  private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =
     if (aggAttribute.dataType == aggDataType) {
       aggAttribute
     } else {
