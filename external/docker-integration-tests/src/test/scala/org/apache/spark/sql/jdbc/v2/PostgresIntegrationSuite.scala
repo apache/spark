@@ -84,30 +84,4 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "FILLFACTOR=70"
-
-  test("scan with aggregate push-down: group by with nested column") {
-    val df = sql("select position.x, MAX(employee.SALARY) FROM postgresql.test.employee" +
-      " where dept > 0 group by position.x")
-    checkAggregateRemoved(df)
-    val row = df.collect()
-    assert(row.length === 3)
-    assert(row(0).length === 2)
-    assert(row(0).getDouble(0) === 10000d)
-    assert(row(0).getDouble(1) === 20000d)
-    assert(row(1).getDouble(0) === 2500d)
-    assert(row(1).getDouble(1) === 5000d)
-    assert(row(2).getDouble(0) === 0d)
-    assert(row(2).isNullAt(1))
-  }
-
-  private def checkAggregateRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
-      case agg: Aggregate => agg
-    }
-    if (removed) {
-      assert(aggregates.isEmpty)
-    } else {
-      assert(aggregates.nonEmpty)
-    }
-  }
 }
