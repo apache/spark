@@ -8827,11 +8827,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 psser_numeric.append(psser)
                 column_labels.append(label)
                 spark_data_types.append(spark_data_type)
-            elif isinstance(spark_data_type, TimestampType):
-                psser_timestamp.append(psser)
-                column_labels.append(label)
-                spark_data_types.append(spark_data_type)
-            elif isinstance(spark_data_type, TimestampNTZType):
+            elif isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
                 psser_timestamp.append(psser)
                 column_labels.append(label)
                 spark_data_types.append(spark_data_type)
@@ -8848,14 +8844,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             percentiles = [0.25, 0.5, 0.75]
 
         # Identify the cases
-        only_string_cols = (
+        is_all_string_type = (
             len(psser_numeric) == 0 and len(psser_timestamp) == 0 and len(psser_string) > 0
         )
-        only_numeric_cols = len(psser_numeric) > 0 and len(psser_timestamp) == 0
-        all_timestamp_cols = len(psser_numeric) == 0 and len(psser_timestamp) > 0
-        any_timestamp_cols = len(psser_numeric) > 0 and len(psser_timestamp) > 0
+        is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
+        has_timestamp_type = len(psser_timestamp) > 0
+        has_numeric_type = len(psser_numeric) > 0
 
-        if only_string_cols:
+        if is_all_string_type:
             # Handling string type columns
             # We will retrive the `count`, `unique`, `top` and `freq`.
             exprs_string = [psser.spark.column for psser in psser_string]
@@ -8867,8 +8863,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Get `top` & `freq` for each columns
             tops = []
             freqs = []
-            # TODO: We should do it in single pass since invoking Spark job for every columns
-            #  is too expensive.
+            # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
+            #  for every columns is too expensive.
             for column in exprs_string:
                 top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
                 tops.append(str(top))
@@ -8882,7 +8878,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index=stats_names,
                 columns=column_names,
             )
-        elif only_numeric_cols:
+        elif is_all_numeric_type:
             # Handling numeric columns
             exprs_numeric = [
                 psser._dtype_op.nan_to_null(psser).spark.column for psser in psser_numeric
@@ -8904,7 +8900,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ],
             )
             result = DataFrame(internal).astype("float64")
-        elif all_timestamp_cols or any_timestamp_cols:
+        elif has_timestamp_type:
             column_names = [
                 self._internal.spark_column_name_for(column_label) for column_label in column_labels
             ]
@@ -8935,7 +8931,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             # If not all columns are timestamp type,
             # we also need to calculate the `std` for numeric columns
-            if any_timestamp_cols:
+            if has_numeric_type:
                 std_exprs = []
                 for label, spark_data_type in zip(column_labels, spark_data_types):
                     column_name = label[0]
@@ -8943,10 +8939,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         std_exprs.append(
                             F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
                         )
-                        mean_exprs.append(F.mean(column_name).astype(spark_data_type))
                     else:
                         std_exprs.append(F.stddev(column_name))
-                        mean_exprs.append(F.mean(column_name))
                 exprs.extend(std_exprs)
                 stats_names.append("std")
 
@@ -8955,7 +8949,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             stat_values = sdf.first()
 
             num_stats = int(len(exprs) / column_length)
-            # `column_name_stats_kv` is key-value store that have column name as key, and the stats are values
+            # `column_name_stats_kv` is key-value store that has column name as key, and the stats as values
             # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value}]}
             column_name_stats_kv: Dict[str, List[str]] = dict()
             for i, column_name in enumerate(column_names):
