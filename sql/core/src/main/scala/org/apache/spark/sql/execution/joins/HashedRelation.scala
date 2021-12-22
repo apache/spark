@@ -510,6 +510,8 @@ private[joins] object UnsafeHashedRelation extends Logging {
         // Only 70% of the slots can be used before growing, more capacity help to reduce collision
         (binaryMap.numKeys() * 1.5 + 1).toInt,
         pageSizeBytes)
+      // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
+      // applied to find unique keys
       candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
         val rowIter = candidate.get(key)
         while (rowIter.hasNext) {
