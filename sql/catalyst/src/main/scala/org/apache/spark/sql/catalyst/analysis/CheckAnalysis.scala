@@ -539,11 +539,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !deterministicLateralJoinCond(o) =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in
-                 |Project, Filter, Aggregate or Window, found:
+                 |Project, Filter, Aggregate, Window or LateralSubquery, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
                  |in operator ${operator.simpleString(SQLConf.get.maxToStringFields)}
                """.stripMargin)
@@ -1041,6 +1042,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
+  }
+
+  /**
+   * Check whether a lateral join has deterministic join conditions.
+   */
+  private def deterministicLateralJoinCond(plan: LogicalPlan): Boolean = {
+    lazy val deterministicJoinCond = {
+      val join = plan.asInstanceOf[LateralJoin]
+      join.condition.forall(_.deterministic)
+    }
+    plan.isInstanceOf[LateralJoin] && deterministicJoinCond
   }
 
   /**

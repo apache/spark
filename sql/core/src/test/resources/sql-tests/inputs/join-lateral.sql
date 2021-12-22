@@ -49,6 +49,12 @@ SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2);
 -- expect error: cannot resolve `t2.c1`
 SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b = t2.c1;
 
+-- SPARK-37716: lateral join with non-deterministic expressions.
+SELECT t1.* FROM t1 JOIN LATERAL (SELECT rand(0) + c2 AS c3);
+SELECT t1.* FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE CAST(t1.c1 + rand(0) AS INT) = t2.c1);
+-- Expect failure: lateral join cannot have non-deterministic expressions in its join condition.
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2) s ON t1.c1 + rand(0) = s.c1;
+
 -- multiple lateral joins
 SELECT * FROM t1,
 LATERAL (SELECT c1 + c2 AS a),
