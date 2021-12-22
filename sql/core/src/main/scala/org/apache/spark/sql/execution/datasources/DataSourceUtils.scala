@@ -139,24 +139,24 @@ object DataSourceUtils extends PredicateHelper {
     }
   }
 
-  def datetimeRebaseMode(
+  def datetimeRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+      modeByConfig: String): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
       "3.0.0",
-      SPARK_LEGACY_DATETIME_METADATA_KEY).mode
+      SPARK_LEGACY_DATETIME_METADATA_KEY)
   }
 
-  def int96RebaseMode(
+  def int96RebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
+      modeByConfig: String): RebaseSpec = {
     getRebaseSpec(
       lookupFileMeta,
       modeByConfig,
       "3.1.0",
-      SPARK_LEGACY_INT96_METADATA_KEY).mode
+      SPARK_LEGACY_INT96_METADATA_KEY)
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
@@ -207,14 +207,15 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   def createTimestampRebaseFuncInRead(
-      rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String): Long => Long = rebaseMode match {
+      rebaseSpec: RebaseSpec,
+      format: String): Long => Long = rebaseSpec.mode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
