@@ -164,7 +164,12 @@ object SchemaPruning extends Rule[LogicalPlan] {
       outputRelation: LogicalRelation,
       prunedBaseRelation: HadoopFsRelation) = {
     val prunedOutput = getPrunedOutput(outputRelation.output, prunedBaseRelation.schema)
-    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
+    // also add the metadata output if any
+    // TODO: should be able to prune the metadata schema
+    val metaOutput = outputRelation.output.collect {
+      case MetadataAttribute(attr) => attr
+    }
+    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput ++ metaOutput)
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.

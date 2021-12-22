@@ -2994,8 +2994,8 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:
-        return first_series(pdf).rename().rename(self._psser.name)
+    def _cleanup_and_return(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename().rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
@@ -3011,10 +3011,7 @@ class SeriesGroupBy(GroupBy[Series]):
     # TODO: add keep parameter
     def nsmallest(self, n: int = 5) -> Series:
         """
-        Return the first n rows ordered by columns in ascending order in group.
-
-        Return the first n rows with the smallest values in columns, in ascending order.
-        The columns that are not specified are returned as well, but not used for ordering.
+        Return the smallest `n` elements.
 
         Parameters
         ----------

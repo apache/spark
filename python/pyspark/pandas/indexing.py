@@ -553,7 +553,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
         psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
-            psdf_or_psser = first_series(psdf)
+            psdf_or_psser = cast(Series, first_series(psdf))
             if series_name is not None and series_name != psdf_or_psser.name:
                 psdf_or_psser = psdf_or_psser.rename(series_name)
         else:

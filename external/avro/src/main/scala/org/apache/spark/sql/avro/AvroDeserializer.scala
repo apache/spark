@@ -62,10 +62,10 @@ private[sql] class AvroDeserializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
   private val converter: Any => Option[Any] = try {

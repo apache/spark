@@ -871,7 +871,7 @@ object Assembly {
                                                                => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
                                                                => MergeStrategy.discard
-      case "log4j.properties"                                  => MergeStrategy.discard
+      case "log4j2.properties"                                 => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat

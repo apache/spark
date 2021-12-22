@@ -295,10 +295,12 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val log4jConf = new File(tempDir, "log4j.properties")
     val logOutFile = new File(tempDir, "logs")
     Files.write(
-      s"""log4j.rootCategory=DEBUG,file
-         |log4j.appender.file=org.apache.log4j.FileAppender
-         |log4j.appender.file.file=$logOutFile
-         |log4j.appender.file.layout=org.apache.log4j.PatternLayout
+      s"""rootLogger.level = debug
+         |rootLogger.appenderRef.file.ref = file
+         |appender.file.type = File
+         |appender.file.name = file
+         |appender.file.fileName = $logOutFile
+         |appender.file.layout.type = PatternLayout
          |""".stripMargin,
       log4jConf, StandardCharsets.UTF_8)
     // Since this test is trying to extract log output from the SparkSubmit process itself,
@@ -307,7 +309,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val confDir = new File(tempDir, "conf")
     confDir.mkdir()
     val javaOptsFile = new File(confDir, "java-opts")
-    Files.write(s"-Dlog4j.configuration=file://$log4jConf\n", javaOptsFile, StandardCharsets.UTF_8)
+    Files.write(s"-Dlog4j.configurationFile=file://$log4jConf\n", javaOptsFile,
+      StandardCharsets.UTF_8)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
