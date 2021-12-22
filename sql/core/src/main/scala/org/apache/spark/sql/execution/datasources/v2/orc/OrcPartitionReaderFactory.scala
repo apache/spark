@@ -97,8 +97,9 @@ case class OrcPartitionReaderFactory(
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
-      val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
+      val (requestedColIds, canPruneCols, orcCatalystSchema) = resultedColPruneInfo.get
+      OrcUtils.orcResultSchemaString(
+        canPruneCols, dataSchema, orcCatalystSchema, resultSchema, partitionSchema, conf)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -140,9 +141,9 @@ case class OrcPartitionReaderFactory(
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
+      val (requestedDataColIds, canPruneCols, orcCatalystSchema) = resultedColPruneInfo.get
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+        dataSchema, orcCatalystSchema, resultSchema, partitionSchema, conf)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")

@@ -127,7 +127,12 @@ class OrcDeserializer(
         updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
       case TimestampType => (ordinal, value) =>
-        updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+        if (value.isInstanceOf[OrcTimestamp]) {
+          updater.setLong(ordinal,
+            DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+        } else {
+          updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
+        }
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)
