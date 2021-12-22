@@ -100,26 +100,21 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   }
 
   private def optimize(plan: SparkPlan): SparkPlan = {
-    plan transform {
+    plan transformDown {
       case join: ShuffledJoin if !join.isSkewJoin => optimizeShuffledJoin(join)
     }
   }
 
   /*
    * This method aim to optimize the skewed join with the following steps:
-   * 0. Collect all ShuffledJoin in this plan;
-   * 1. Check whether this plan satisfy the required pattern of optimization algorithm:
-   *    all the nodes under the top level ShuffledJoin MUST have types in a whitelist including:
-   *    JoinExec/AggExec/WindowExec/SortExec/etc;
-   * 2. Collect all ShuffleQueryStages under the top level ShuffledJoin;
-   * 3. Collect all splittable ShuffleQueryStages by the semantics of internal nodes.
+   * 1. Collect all ShuffledJoins/ShuffleQueryStages, and check valid operators;
+   * 2. Collect all splittable ShuffleQueryStages by the semantics of internal nodes.
    *    A ShuffleQueryStages is splittable if it can be split into specs, each spec can be
    *    processed independently, and the original data result can be obtained by union all
    *    the outputs of specs.
    *    Splittable ShuffleQueryStages are collected in this way:
-   *      0, start at the top level ShuffledJoin;
-   *      1, at a Join node, select the splittable paths according to its JoinType;
-   *      2, at a Agg/Window node, skip all its descendants;
+   *      1, at Join node, select the splittable paths according to its JoinType;
+   *      2, at Agg/Window node, stop;
    *      3, all the reached leave are splittable;
    *    For example, in the following stage, ShuffleQueryStages s6/s7/s8 are splittable.
    *                       cross
@@ -134,8 +129,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    *           /   \         /   \      /   \     /   \
    *          s1   s2       s4   s5    s6   s7   s8   s9
    *
-   * 4. Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec;
-   * 5. For each splittable ShuffleQueryStageExec, check whether skew partitions exists, if true,
+   * 3. Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec;
+   * 4. For each splittable ShuffleQueryStageExec, check whether skew partitions exists, if true,
    *    split them into specs. This step also detects and handles Combinatorial Explosion: for
    *    each skew partition, check whether the combination number is too large, if so, re-split the
    *    ShuffleQueryStageExecs.
@@ -143,7 +138,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    *    respectively. Then there are 1M combinations, which is too large, and will cause
    *    performance regression. Given a threshold (1k by default), the numbers of specs will
    *    be optimized to 10/10/10.
-   * 6. Generate final specs. Suppose above splittable ShuffleQueryStages s6/s7/s8 are finally
+   * 5. Generate final specs. Suppose above splittable ShuffleQueryStages s6/s7/s8 are finally
    *    split into 2/2/3 specs, then there will be following 2X2X3=12 combinations:
    *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec0, s8_spec0, s9]
    *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec0, s8_spec1, s9]
@@ -157,76 +152,68 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec0, s9]
    *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec1, s9]
    *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec2, s9]
-   * 7. Generate optimized plan by attaching new specs to ShuffleQueryStageExecs;
+   * 6. Generate optimized plan by attaching new specs to ShuffleQueryStageExecs;
    */
   private def optimizeShuffledJoin(join: ShuffledJoin): SparkPlan = {
     import OptimizeSkewedJoin._
     val logPrefix = s"Optimizing ${join.nodeName} #${join.id}"
 
-    // Step 0: Collect all ShuffledJoins (SMJ/SHJ)
-    def collectShuffledJoins(plan: SparkPlan): Seq[ShuffledJoin] = plan match {
-      case join: ShuffledJoin => Seq(join) ++ join.children.flatMap(collectShuffledJoins)
-      case _ => plan.children.flatMap(collectShuffledJoins)
+    // Step 1: Collect all ShuffledJoins/ShuffleQueryStages, and validate operators.
+    val joins = mutable.ArrayBuffer.empty[ShuffledJoin]
+    val stages = mutable.ArrayBuffer.empty[ShuffleQueryStageExec]
+    val invalids = mutable.ArrayBuffer.empty[SparkPlan]
+
+    join.foreach {
+      // All leave must be QueryStage for now
+      // TODO: support Bucket Join with other types of leaves.
+      case s: ShuffleQueryStageExec if s.isMaterialized => stages.append(s)
+      case b: BroadcastQueryStageExec if b.isMaterialized =>
+
+      case j: SortMergeJoinExec if !j.isSkewJoin => joins.append(j)
+      case j: ShuffledHashJoinExec if !j.isSkewJoin => joins.append(j)
+      case _: BroadcastHashJoinExec =>
+      case _: BroadcastNestedLoopJoinExec =>
+      case _: CartesianProductExec =>
+
+      case a: ObjectHashAggregateExec if !a.isSkew =>
+      case a: HashAggregateExec if !a.isSkew =>
+      case a: SortAggregateExec if !a.isSkew =>
+
+      case w: WindowExec if !w.isSkew =>
+
+      case _: SortExec =>
+      case _: FilterExec =>
+      case _: ProjectExec =>
+      case _: GenerateExec =>
+      case _: CollectMetricsExec =>
+      case _: WholeStageCodegenExec =>
+
+      case _: ColumnarToRowExec =>
+      case _: RowToColumnarExec =>
+
+      case _: DeserializeToObjectExec =>
+      case _: SerializeFromObjectExec =>
+
+      case _: MapElementsExec =>
+      case _: MapPartitionsExec =>
+      case _: MapPartitionsInRWithArrowExec =>
+      case _: MapInPandasExec =>
+      case _: ArrowEvalPythonExec =>
+      case _: BatchEvalPythonExec =>
+
+      // There are more and more physical operators, this check is for data correctness
+      // TODO: support more operators like AggregateInPandasExec/FlatMapCoGroupsInPandasExec/etc
+      case invalid => invalids.append(invalid)
     }
-    val joins = collectShuffledJoins(join)
-    logDebug(s"$logPrefix: ShuffledJoins: ${joins.map(_.nodeName).mkString("[", ", ", "]")}")
-    if (joins.isEmpty || joins.exists(_.isSkewJoin)) return join
 
-    // Step 1: Validate physical operators
-    // There are more and more physical operators, this whitelist is for data correctness
-    // TODO: support more operators like AggregateInPandasExec/FlatMapCoGroupsInPandasExec/etc
-    val invalidOperators = join.collect {
-      case _: ShuffleQueryStageExec => None
-      case _: BroadcastQueryStageExec => None
-
-      case _: SortMergeJoinExec => None
-      case _: ShuffledHashJoinExec => None
-      case _: BroadcastHashJoinExec => None
-      case _: BroadcastNestedLoopJoinExec => None
-      case _: CartesianProductExec => None
-
-      case _: ObjectHashAggregateExec => None
-      case _: HashAggregateExec => None
-      case _: SortAggregateExec => None
-
-      case _: WindowExec => None
-
-      case _: SortExec => None
-      case _: FilterExec => None
-      case _: ProjectExec => None
-      case _: GenerateExec => None
-      case _: CollectMetricsExec => None
-      case _: WholeStageCodegenExec => None
-
-      case _: ColumnarToRowExec => None
-      case _: RowToColumnarExec => None
-
-      case _: DeserializeToObjectExec => None
-      case _: SerializeFromObjectExec => None
-
-      case _: MapElementsExec => None
-      case _: MapPartitionsExec => None
-      case _: MapPartitionsInRWithArrowExec => None
-      case _: MapInPandasExec => None
-      case _: ArrowEvalPythonExec => None
-      case _: BatchEvalPythonExec => None
-
-      case invalid => Some(invalid)
-    }.flatten
-    if (invalidOperators.nonEmpty) {
+    if (invalids.nonEmpty) {
       logDebug(s"$logPrefix: Do NOT support operators " +
-        s"${invalidOperators.map(_.nodeName).mkString("[", ", ", "]")}")
+        s"${invalids.map(_.nodeName).mkString("[", ", ", "]")}")
       return join
     }
-
-    // Step 2: Collect all ShuffleQueryStages
-    // TODO: support Bucket Join with other types of leaves.
-    val leaves = join.collectLeaves()
-    if (leaves.exists(!_.isInstanceOf[QueryStageExec])) return join
-    val stages = leaves.filter(_.isInstanceOf[ShuffleQueryStageExec])
     // for a N-Join stage, there should be N+1 ShuffleQueryStages.
-    if (stages.size != joins.size + 1) return join
-    // stageId -> MapOutputStatistics
+    if (joins.isEmpty || stages.size != joins.size + 1) return join
+
     val stageStats = stages.flatMap {
       case ShuffleStage(stage: ShuffleQueryStageExec) =>
         stage.mapStats.filter(_.bytesByPartitionId.nonEmpty).map(stats => stage.id -> stats)
@@ -238,11 +225,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     val numPartitions = stageStats.head._2.bytesByPartitionId.length
     if (stageStats.exists(_._2.bytesByPartitionId.length != numPartitions)) return join
 
-    // Step 3: Collect all splittable ShuffleQueryStageExecs
+    // Step 2: Collect all splittable ShuffleQueryStageExecs
     // How to determine splittable ShuffleQueryStageExecs:
-    //  0, at Join node, select the splittable paths according to its JoinType;
-    //  1, at Agg/Window node, stop;
-    //  2, all the reached leave are splittable;
+    //  1, at Join node, select the splittable paths according to its JoinType;
+    //  2, at Agg/Window node, stop;
+    //  3, all the reached leave are splittable;
     def collectSplittableStageIds(plan: SparkPlan): Seq[Int] = plan match {
       case stage: ShuffleQueryStageExec => Seq(stage.id)
 
@@ -263,7 +250,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       s"${splittableStageIds.mkString("[", ", ", "]")}")
     if (splittableStageIds.isEmpty || !splittableStageIds.forall(stageStats.contains)) return join
 
-    // Step 4: Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec
+    // Step 3: Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec
     val splittableStageInfos = splittableStageIds.map { stageId =>
       val sizes = stageStats(stageId).bytesByPartitionId
       val medSize = Utils.median(sizes)
@@ -274,7 +261,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       stageId -> (threshold, target)
     }.toMap
 
-    // Step 5: Split skew partitions
+    // Step 4: Split skew partitions
     // within each partition, find and split the splittable skew ShuffleQueryStageExecs
     // (partitionIndex, stageId) -> skew splits
     val skewSpecs = mutable.OpenHashMap.empty[(Int, Int), Seq[PartialReducerPartitionSpec]]
@@ -333,7 +320,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     logDebug(s"$logPrefix: Totally ${skewSpecs.size} skew partitions found")
     if (skewSpecs.isEmpty) return join
 
-    // Step 6: Generate final specs
+    // Step 5: Generate final specs
     // within a partition, split the skew ShuffleQueryStageExecs, and duplicate others
     def createNonSkewSpec(partitionIndex: Int, stageId: Int) = {
       val size = stageStats(stageId).bytesByPartitionId(partitionIndex)
@@ -357,9 +344,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
     val newSpecs = stageIds.zip(buffers.map(_.toSeq)).toMap
 
-    // Step 7: Generate final plan
-    //  0, mark all Join/Agg/Window nodes skew;
-    //  1, attach new specs to ShuffleQueryStageExecs;
+    // Step 6: Generate final plan
+    //  1, mark all Join/Agg/Window nodes skew;
+    //  2, attach new specs to ShuffleQueryStageExecs;
     join transform {
       case smj: SortMergeJoinExec => smj.copy(isSkewJoin = true)
       case shj: ShuffledHashJoinExec => shj.copy(isSkewJoin = true)
@@ -388,18 +375,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       return plan
     }
 
-    val unions = plan.collect { case u: UnionExec => u }
-    // there should be at most one UnionExec in one stage, skip here for safety
-    if (unions.size > 1) return plan
-
-    val optimized = if (unions.size == 1) {
-      plan transform {
-        // TODO: if extra shuffle is NOT allowed, only accept children without shuffle.
-        case u @ UnionExec(children) => u.withNewChildren(children.map(optimize))
-      }
-    } else {
-      optimize(plan)
-    }
+    val optimized = optimize(plan)
     if (optimized.collectFirst { case s: ShuffledJoin if s.isSkewJoin => s }.isEmpty) return plan
 
     val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
