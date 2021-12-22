@@ -60,16 +60,21 @@ private[jdbc] object ConnectionProvider extends Logging {
     require(filteredProviders.size == 1,
       "JDBC connection initiated but not exactly one connection provider found which can handle " +
         s"it. Found active providers: ${filteredProviders.mkString(", ")}")
-    SecurityConfigurationLock.synchronized {
-      // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
-      // makes sure it's untouched
-      val parent = Configuration.getConfiguration
-      try {
-        filteredProviders.head.getConnection(driver, options)
-      } finally {
-        logDebug("Restoring original security configuration")
-        Configuration.setConfiguration(parent)
+    val selectedProvider = filteredProviders.head
+    if (selectedProvider.modifiesSecurityContext(driver, options)) {
+      SecurityConfigurationLock.synchronized {
+        // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
+        // makes sure it's untouched
+        val parent = Configuration.getConfiguration
+        try {
+          selectedProvider.getConnection(driver, options)
+        } finally {
+          logDebug("Restoring original security configuration")
+          Configuration.setConfiguration(parent)
+        }
       }
+    } else {
+      selectedProvider.getConnection(driver, options)
     }
   }
 }
