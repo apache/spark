@@ -139,8 +139,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
   }
 
-  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type"
-    + s"${SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key} is false") {
+  test("ANSI mode: optionally disallow type conversions between Numeric types and Timestamp type") {
     withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "false") {
       import DataTypeTestUtils.numericTypes
       checkInvalidCastFromNumericType(TimestampType)
@@ -156,8 +155,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
   }
 
-  test("ANSI mode: disallow type conversions between Numeric types and Date type"
-    + s"${SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key} is false") {
+  test("ANSI mode: optionally disallow type conversions between Numeric types and Date type") {
     withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "false") {
       import DataTypeTestUtils.numericTypes
       checkInvalidCastFromNumericType(DateType)

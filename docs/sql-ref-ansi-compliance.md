@@ -70,7 +70,7 @@ SELECT abs(-2147483648);
 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 
-Comparing to the default behavior, the ANSI SQL mode also disallows the following type conversions:
+Besides, the ANSI SQL mode disallows the following type conversions which are allowed when ANSI mode is off:
 * Numeric <=> Binary
 * Date <=> Boolean
 * Timestamp <=> Boolean
