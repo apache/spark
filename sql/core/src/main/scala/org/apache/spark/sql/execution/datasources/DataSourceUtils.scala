@@ -171,7 +171,7 @@ object DataSourceUtils {
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
-  def creteDateRebaseFuncInRead(
+  def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -183,7 +183,7 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteDateRebaseFuncInWrite(
+  def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -195,7 +195,7 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteTimestampRebaseFuncInRead(
+  def createTimestampRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
@@ -207,7 +207,7 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
-  def creteTimestampRebaseFuncInWrite(
+  def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
