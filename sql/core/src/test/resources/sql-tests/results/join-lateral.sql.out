@@ -299,7 +299,7 @@ org.apache.spark.sql.AnalysisException
 nondeterministic expressions are only allowed in
 Project, Filter, Aggregate, Window or LateralSubquery, found:
  lateralsubquery(),((CAST(spark_catalog.default.t1.c1 AS DOUBLE) + rand(0)) = CAST(s.c1 AS DOUBLE))
-in operator LateralJoin
+in operator LateralJoin lateral-subquery#x [], Inner, ((cast(c1#x as double) + rand(0)) = cast(c1#x as double))
 
 
 -- !query
