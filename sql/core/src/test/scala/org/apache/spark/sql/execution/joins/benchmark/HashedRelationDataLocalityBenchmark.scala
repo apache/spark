@@ -45,13 +45,14 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
 
   // TODO: fix indent
   private def benchmarkHelper(relationName: String,
+    totalRows: Int,
+    duplicationMultipliers: Seq[Int],
     keyExpr: Seq[Expression],
     relationGenerator: (Iterator[InternalRow],
       Seq[Expression],
       Int,
       Option[Int]) => HashedRelation): Unit = {
 
-    val totalRows: Long = 1000000L
     val keyGenerator = UnsafeProjection.create(keyExpr)
     val fieldsExpr = Seq(LongType, StringType, IntegerType, DoubleType).zipWithIndex.map {
       case (dataType, ordinal) => BoundReference(ordinal, dataType, nullable = false)
@@ -59,18 +60,18 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
     val unsafeProj = UnsafeProjection.create(fieldsExpr)
 
     runBenchmark(s"$relationName MicroBenchmark") {
-      Array(1, 5, 8, 10, 20).foreach { duplicationFactor =>
+      duplicationMultipliers.foreach { duplicationMultiplier =>
         val benchmark = new Benchmark(
-          s"$relationName - duplicationFactor: $duplicationFactor", totalRows,
+          s"$relationName - duplicationMultiplier: $duplicationMultiplier", totalRows,
           output = output)
-        val uniqueRows = totalRows / duplicationFactor
+        val uniqueRows = totalRows / duplicationMultiplier
         val rows = for {
-          _ <- 0 until duplicationFactor
+          _ <- 0 until duplicationMultiplier
           i <- 0 until uniqueRows
         } yield {
           unsafeProj(
             InternalRow(
-              i,
+              i.toLong,
               UTF8String.fromString(s"$i-${Int.MaxValue}-${Long.MaxValue}-${Double.MaxValue}"),
               Int.MaxValue,
               Double.MaxValue)
@@ -81,7 +82,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
         Seq(false, true).foreach { reorderMap =>
           benchmark.addCase(s"Reorder map: $reorderMap, Total rows: $totalRows," +
             s" Unique rows: $uniqueRows", 5) { _ =>
-            val reorderFactor = if (reorderMap) Some(duplicationFactor) else None
+            val reorderFactor = if (reorderMap) Some(duplicationMultiplier) else None
             val hashedRelation = relationGenerator(shuffledRows.iterator, keyExpr,
               Math.toIntExact(uniqueRows), reorderFactor)
 
@@ -107,7 +108,11 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
         reorderFactor = reorderFactor)
     }
     val keyExpr = Seq(BoundReference(0, LongType, nullable = false))
-    benchmarkHelper("LongHashedRelation", keyExpr, relationGenerator)
+    val totalRows = 1000000
+    // TODO: rethink these numbers
+    val duplicationMultipliers = Array(1, 5, 8, 10, 20)
+    benchmarkHelper("LongHashedRelation", totalRows, duplicationMultipliers, keyExpr,
+      relationGenerator)
   }
 
   private def runUnsafeHashedRelationMicroBenchmark(): Unit = {
@@ -117,8 +122,12 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
         reorderFactor = reorderFactor)
     }
     val keyExpr = Seq(BoundReference(0, LongType, nullable = false),
-      BoundReference(1, StringType, nullable = false))
-    benchmarkHelper("UnsafeHashedRelation", keyExpr, relationGenerator)
+      BoundReference(2, IntegerType, nullable = false))
+    val totalRows = 1000000
+    // TODO: rethink these numbers
+    val duplicationMultipliers = Array(1, 5, 8, 10, 20)
+    benchmarkHelper("UnsafeHashedRelation", totalRows, duplicationMultipliers, keyExpr,
+      relationGenerator)
   }
 
   /**

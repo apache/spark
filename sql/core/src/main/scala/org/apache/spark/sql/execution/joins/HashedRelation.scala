@@ -459,7 +459,7 @@ private[joins] object UnsafeHashedRelation extends Logging {
       isNullAware: Boolean = false,
       allowsNullKey: Boolean = false,
       ignoresDuplicatedKey: Boolean = false,
-      reorderFactor: Option[Int] = None): HashedRelation = {
+      reorderFactor: Option[Int]): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
@@ -1096,7 +1096,7 @@ private[joins] object LongHashedRelation extends Logging {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
-      reorderFactor: Option[Int] = None): HashedRelation = {
+      reorderFactor: Option[Int]): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)

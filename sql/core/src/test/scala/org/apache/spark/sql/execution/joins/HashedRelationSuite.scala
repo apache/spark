@@ -71,7 +71,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
 
 
     val buildKey = Seq(BoundReference(0, IntegerType, false))
-    val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1, mm)
+    val hashed = UnsafeHashedRelation(unsafeData.iterator, buildKey, 1, mm,
+      reorderFactor = mapReorderFactor)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
     assert(hashed.get(unsafeData(0)).toArray === Array(unsafeData(0)))
@@ -138,7 +139,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
     val key = Seq(BoundReference(0, LongType, false))
-    val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
+    val longRelation = LongHashedRelation(rows.iterator, key, 10, mm,
+      reorderFactor = mapReorderFactor)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
       val row = longRelation.getValue(i)
@@ -146,7 +148,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       assert(row.getInt(1) === i + 1)
     }
 
-    val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+    val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm,
+      reorderFactor = mapReorderFactor)
         .asInstanceOf[LongHashedRelation]
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
@@ -337,7 +340,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
-    val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+    val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm,
+      reorderFactor = mapReorderFactor)
     val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
@@ -349,7 +353,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
     }
 
     // Testing Kryo serialization of UnsafeHashedRelation
-    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm,
+      reorderFactor = mapReorderFactor)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
     unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
@@ -369,7 +374,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 10000).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
-    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm,
+      reorderFactor = mapReorderFactor)
 
     val os = new ByteArrayOutputStream()
     val thread1 = new Thread {
@@ -414,7 +420,7 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       unsafeRow
     }
 
-    val unsafeRelation = UnsafeHashedRelation(rows, key, 1000, mm)
+    val unsafeRelation = UnsafeHashedRelation(rows, key, 1000, mm, reorderFactor = mapReorderFactor)
     assert(unsafeRelation.estimatedSize > (2L << 30))
     unsafeRelation.close()
 
@@ -423,7 +429,7 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       unsafeRow.setInt(1, i)
       unsafeRow
     }
-    val longRelation = LongHashedRelation(rows2, key, 1000, mm)
+    val longRelation = LongHashedRelation(rows2, key, 1000, mm, reorderFactor = mapReorderFactor)
     assert(longRelation.estimatedSize > (2L << 30))
     longRelation.close()
   }
@@ -440,24 +446,27 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       unsafeRow.setInt(1, i)
       unsafeRow
     }
-    val m = LongHashedRelation(rows, key, 100 << 20, mm)
+    val m = LongHashedRelation(rows, key, 100 << 20, mm, reorderFactor = mapReorderFactor)
     m.close()
   }
 
   test("UnsafeHashedRelation: key set iterator on a contiguous array of keys") {
-    val hashedRelation = UnsafeHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
+    val hashedRelation = UnsafeHashedRelation(contiguousRows.iterator, singleKey, 1, mm,
+      reorderFactor = mapReorderFactor)
     val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
   }
 
   test("UnsafeHashedRelation: key set iterator on a sparse array of keys") {
-    val hashedRelation = UnsafeHashedRelation(sparseRows.iterator, singleKey, 1, mm)
+    val hashedRelation = UnsafeHashedRelation(sparseRows.iterator, singleKey, 1, mm,
+      reorderFactor = mapReorderFactor)
     val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
   }
 
   test("LongHashedRelation: key set iterator on a contiguous array of keys") {
-    val longRelation = LongHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
+    val longRelation = LongHashedRelation(contiguousRows.iterator, singleKey, 1, mm,
+      reorderFactor = mapReorderFactor)
     val keyIterator = longRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
   }
@@ -650,7 +659,8 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
       unsafeProj(InternalRow(k, i)).copy()
     })
     rows = unsafeProj(InternalRow(-1, -1)).copy() +: rows
-    val unsafeRelation = UnsafeHashedRelation(rows.iterator, key, 10, mm, allowsNullKey = true)
+    val unsafeRelation = UnsafeHashedRelation(rows.iterator, key, 10, mm, allowsNullKey = true,
+      reorderFactor = mapReorderFactor)
     val keyIndexToKeyMap = new mutable.HashMap[Int, String]
     val keyIndexToValueMap = new mutable.HashMap[Int, Seq[Int]]
 
@@ -718,12 +728,12 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
   }
 }
 
-// TODO: implement this
 class HashedRelationWithReorderingSuite extends AbstractHashedRelationSuite {
   override def mapReorderFactor: Option[Int] = Some(1)
+
+  // TOOD: add more tests
 }
 
-// TODO: implement this
 class HashedRelationWithoutReorderingSuite extends AbstractHashedRelationSuite {
   override def mapReorderFactor: Option[Int] = None
 }
