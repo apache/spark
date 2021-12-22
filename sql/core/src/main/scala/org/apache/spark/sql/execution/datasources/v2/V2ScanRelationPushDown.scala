@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
@@ -155,7 +155,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     expr.transform {
                       case agg: AggregateExpression =>
                         val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                        val child = newAggOutput(aggOutput(ordinal), agg)
+                        val child = newAggChild(aggOutput(ordinal), agg.resultAttribute.dataType)
                         Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
@@ -185,13 +185,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   plan.transformExpressions {
                     case agg: AggregateExpression =>
                       val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                      val child = newAggOutput(aggOutput(ordinal), agg)
+                      val aggAttribute = aggOutput(ordinal)
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
-                          case max: aggregate.Max => max.copy(child = child)
-                          case min: aggregate.Min => min.copy(child = child)
-                          case sum: aggregate.Sum => sum.copy(child = child)
-                          case _: aggregate.Count => aggregate.Sum(child)
+                          case max: aggregate.Max =>
+                            max.copy(child = newAggChild(aggAttribute, max.child.dataType))
+                          case min: aggregate.Min =>
+                            min.copy(child = newAggChild(aggAttribute, min.child.dataType))
+                          case sum: aggregate.Sum =>
+                            sum.copy(child = newAggChild(aggAttribute, sum.child.dataType))
+                          case _: aggregate.Count => aggregate.Sum(aggAttribute)
                           case other => other
                         }
                       agg.copy(aggregateFunction = aggFunction)
@@ -204,11 +207,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def newAggOutput(aggAttribute: AttributeReference, agg: AggregateExpression) =
-    if (aggAttribute.dataType == agg.resultAttribute.dataType) {
+  private def newAggChild(aggAttribute: AttributeReference, aggDataType: DataType) =
+    if (aggAttribute.dataType == aggDataType) {
       aggAttribute
     } else {
-      Cast(aggAttribute, agg.resultAttribute.dataType)
+      Cast(aggAttribute, aggDataType)
     }
 
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {

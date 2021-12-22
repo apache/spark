@@ -728,17 +728,4 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     checkAnswer(df, Seq(Row(1), Row(2), Row(2)))
   }
-
-  test("scan with aggregate push-down: SUM(NVL) with group by") {
-    val df =
-      sql("SELECT SUM(NVL(SALARY, 0)) FROM h2.test.employee GROUP BY DEPT")
-    checkAggregateRemoved(df, false)
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expected_plan_fragment =
-          "PushedFilters: [], "
-        checkKeywordsExistsInExplain(df, expected_plan_fragment)
-    }
-    checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
-  }
 }
