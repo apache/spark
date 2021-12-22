@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
-import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils.toCatalyst
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
-import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -30,10 +30,12 @@ object DistributionAndOrderingUtils {
   def prepareQuery(write: Write, query: LogicalPlan, conf: SQLConf): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
-      val distribution = write.requiredDistribution match {
-        case d: OrderedDistribution => d.ordering.map(e => toCatalyst(e, query))
-        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query))
-        case _: UnspecifiedDistribution => Array.empty[Expression]
+      val distribution = toCatalystDistribution(write.requiredDistribution(), query) match {
+        case OrderedDistribution(ordering) => ordering
+        case ClusteredDistribution(clustering, _) => clustering
+        case UnspecifiedDistribution => Seq.empty[Expression]
+        case d => throw new IllegalArgumentException("Unexpected distribution type " +
+            s"${d.getClass.getName}")
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
@@ -52,10 +54,7 @@ object DistributionAndOrderingUtils {
         query
       }
 
-      val ordering = write.requiredOrdering.toSeq
-        .map(e => toCatalyst(e, query))
-        .asInstanceOf[Seq[SortOrder]]
-
+      val ordering = toCatalystOrdering(write.requiredOrdering, query)
       val queryWithDistributionAndOrdering = if (ordering.nonEmpty) {
         Sort(ordering, global = false, queryWithDistribution)
       } else {

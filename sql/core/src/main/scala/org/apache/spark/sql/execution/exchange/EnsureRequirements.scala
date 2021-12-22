@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -137,8 +138,16 @@ case class EnsureRequirements(
         Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
+      // Check if 1) all children are of `DataSourcePartitioning` and 2) they are all compatible
+      // with each other. If both are true, skip shuffle.
+      val allCompatible = childrenIndexes.sliding(2).map {
+            case Seq(a, b) =>
+              checkDataSourceSpec(specs(a)) && checkDataSourceSpec(specs(b)) &&
+                  specs(a).isCompatibleWith(specs(b))
+          }.forall(_ == true)
+
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if allCompatible || !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
@@ -175,6 +184,22 @@ case class EnsureRequirements(
     }
 
     children
+  }
+
+  private def checkDataSourceSpec(shuffleSpec: ShuffleSpec): Boolean = {
+    shuffleSpec.isInstanceOf[DataSourceShuffleSpec] && {
+      val spec = shuffleSpec.asInstanceOf[DataSourceShuffleSpec]
+      val attributes = spec.partitioning.expressions.flatMap(_.collectLeaves())
+      val clustering = spec.distribution.clustering
+
+      if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+        attributes.length == clustering.length && attributes.zip(clustering).forall {
+          case (l, r) => l.semanticEquals(r)
+        }
+      } else {
+        true // already validated in `DataSourcePartitioning.satisfies`
+      }
+    }
   }
 
   private def reorder(
@@ -256,6 +281,16 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
+      case (Some(DataSourcePartitioning(clustering, _, _)), _) =>
+        val leafExprs = clustering.flatMap(_.collectLeaves())
+        reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
+            .orElse(reorderJoinKeysRecursively(
+              leftKeys, rightKeys, None, rightPartitioning))
+      case (_, Some(DataSourcePartitioning(clustering, _, _))) =>
+        val leafExprs = clustering.flatMap(_.collectLeaves())
+        reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
+            .orElse(reorderJoinKeysRecursively(
+              leftKeys, rightKeys, leftPartitioning, None))
       case (Some(PartitioningCollection(partitionings)), _) =>
         partitionings.foldLeft(Option.empty[(Seq[Expression], Seq[Expression])]) { (res, p) =>
           res.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, Some(p), rightPartitioning))

@@ -36,4 +36,20 @@ private[spark] object Utils {
     }
     ordering.leastOf(input.asJava, num).iterator.asScala
   }
+
+  /**
+   * Only returns `Some` iff ALL elements in `input` are defined. In this case, it is
+   * equivalent to `Some(input.flatten)`.
+   *
+   * Otherwise, returns `None`.
+   */
+  def sequenceToOption[T](input: Seq[Option[T]]): Option[Seq[T]] = {
+    input.foldLeft(Option(Seq.empty[T])) {
+      (result, opt) =>
+        for {
+          seq <- result
+          v <- opt
+        } yield seq :+ v
+    }
+  }
 }

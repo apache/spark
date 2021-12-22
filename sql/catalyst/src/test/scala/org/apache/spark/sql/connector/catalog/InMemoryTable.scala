@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.partitioning.Partitioning
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -260,7 +261,8 @@ class InMemoryTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics {
+    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
+        with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -276,6 +278,11 @@ class InMemoryTable(
       val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
+    }
+
+    override def outputPartitioning(): Partitioning = new Partitioning {
+      override def distribution(): Distribution = InMemoryTable.this.distribution
+      override def ordering(): Array[SortOrder] = InMemoryTable.this.ordering
     }
 
     override def planInputPartitions(): Array[InputPartition] = data.toArray

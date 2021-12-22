@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -75,6 +76,48 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys === Seq(exprC, exprD))
         assert(rightKeys === Seq(exprA, exprB))
+      case other => fail(other.toString)
+    }
+  }
+
+  test("reorder should handle DataSourcePartitioning") {
+    // partitioning on the left
+    val plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(Seq(
+        years(exprA), bucket(4, exprB), days(exprC)), 4)
+    )
+    val plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(Seq(
+        years(exprB), bucket(4, exprA), days(exprD)), 4)
+    )
+    val smjExec = SortMergeJoinExec(
+      exprB :: exprC :: exprA :: Nil, exprA :: exprD :: exprB :: Nil,
+      Inner, None, plan1, plan2
+    )
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: DataSourcePartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: DataSourcePartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprA, exprB, exprC))
+        assert(rightKeys === Seq(exprB, exprA, exprD))
+      case other => fail(other.toString)
+    }
+
+    // partitioning on the right
+    val plan3 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(Seq(
+        bucket(4, exprD), days(exprA), years(exprC)), 4)
+    )
+    val smjExec2 = SortMergeJoinExec(
+      exprB :: exprD :: exprC :: Nil, exprA :: exprC :: exprD :: Nil,
+      Inner, None, plan1, plan3
+    )
+    EnsureRequirements.apply(smjExec2) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprC, exprB, exprD))
+        assert(rightKeys === Seq(exprD, exprA, exprC))
       case other => fail(other.toString)
     }
   }
@@ -644,5 +687,164 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         }
       }
     }
+  }
+
+  test("Check with DataSourcePartitioning") {
+    // simplest case: identity transforms
+    var plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(exprA :: exprB :: Nil, 5))
+    var plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(exprA :: exprC :: Nil, 5))
+    var smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: DataSourcePartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: DataSourcePartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(exprA, exprB))
+        assert(right.expressions === Seq(exprA, exprC))
+      case other => fail(other.toString)
+    }
+
+    // matching bucket transforms from both sides
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: DataSourcePartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: DataSourcePartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(bucket(4, exprA), bucket(16, exprB)))
+        assert(right.expressions === Seq(bucket(4, exprA), bucket(16, exprC)))
+      case other => fail(other.toString)
+    }
+
+    // bucket + years transforms from both sides
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: years(exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: years(exprC) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: DataSourcePartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: DataSourcePartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(bucket(4, exprA), years(exprB)))
+        assert(right.expressions === Seq(bucket(4, exprA), years(exprC)))
+      case other => fail(other.toString)
+    }
+
+    // by default spark.sql.requireAllClusterKeysForCoPartition is true, so when there isn't
+    // exact match on all partition keys, Spark will fallback to shuffle.
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(4, exprC) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(exprA, exprB, exprB))
+        assert(right.expressions === Seq(exprA, exprC, exprC))
+      case other => fail(other.toString)
+    }
+
+    // after disabling spark.sql.requireAllClusterKeysForCoPartition, Spark should avoid shuffle
+    // even with partial match on partition keys.
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, DummySparkPlan(_, _, left: DataSourcePartitioning, _, _), _),
+        SortExec(_, _, DummySparkPlan(_, _, right: DataSourcePartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(bucket(4, exprA), bucket(4, exprB)))
+        assert(right.expressions === Seq(bucket(4, exprA), bucket(4, exprC)))
+      case other => fail(other.toString)
+    }
+
+    // invalid case: different number of buckets (we don't support coalescing/repartitioning yet
+    // for bucketing)
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(8, exprC) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(exprA, exprB, exprB))
+        assert(right.expressions === Seq(exprA, exprC, exprC))
+      case other => fail(other.toString)
+    }
+
+    // invalid case: different transforms
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(years(exprA) :: bucket(4, exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(days(exprA) :: bucket(4, exprC) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(exprA, exprB, exprB))
+        assert(right.expressions === Seq(exprA, exprC, exprC))
+      case other => fail(other.toString)
+    }
+
+    // invalid case: multiple references in transform
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(
+        years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(
+        years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(exprA, exprB, exprB))
+        assert(right.expressions === Seq(exprA, exprC, exprC))
+      case other => fail(other.toString)
+    }
+  }
+
+  def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
+    DataSourceBucketTransformExpression(numBuckets, BucketFunction, Seq(expr))
+  }
+
+  def buckets(numBuckets: Int, expr: Seq[Expression]): TransformExpression = {
+    DataSourceBucketTransformExpression(numBuckets, BucketFunction, expr)
+  }
+
+  def years(expr: Expression): TransformExpression = {
+    DataSourceTransformExpression(YearsFunction, Seq(expr))
+  }
+
+  def days(expr: Expression): TransformExpression = {
+    DataSourceTransformExpression(DaysFunction, Seq(expr))
   }
 }

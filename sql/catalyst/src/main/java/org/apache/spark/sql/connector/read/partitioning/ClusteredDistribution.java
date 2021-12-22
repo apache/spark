@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.connector.read.partitioning;
 
-import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
  * A concrete implementation of {@link Distribution}. Represents a distribution where records that
  * share the same values for the {@link #clusteredColumns} will be produced by the same
  * {@link PartitionReader}.
+ * <p>
+ * <b>NOTE</b>: this interface is deprecated in favor of
+ * {@link org.apache.spark.sql.connector.distributions.ClusteredDistribution} and is subject to
+ * future removal.
  *
+ * @see org.apache.spark.sql.connector.distributions.ClusteredDistribution
  * @since 3.0.0
  */
-@Evolving
+@Deprecated
 public class ClusteredDistribution implements Distribution {
 
   /**

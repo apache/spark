@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.read.partitioning;
 
-import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
@@ -29,16 +28,20 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  * partition(the output records of a single {@link PartitionReader}).
  * <p>
  * The instance of this interface is created and provided by Spark, then consumed by
- * {@link Partitioning#satisfy(Distribution)}. This means data source developers don't need to
+ * {@link Partitioning}. This means data source developers don't need to
  * implement this interface, but need to catch as more concrete implementations of this interface
- * as possible in {@link Partitioning#satisfy(Distribution)}.
+ * as possible in {@link Partitioning}.
  * <p>
  * Concrete implementations until now:
  * <ul>
  *   <li>{@link ClusteredDistribution}</li>
  * </ul>
  *
+ * <b>NOTE</b>: this interface is deprecated in favor of
+ * {@link org.apache.spark.sql.connector.distributions.Distribution} and is subject to
+ * future removal.
+ *
  * @since 3.0.0
  */
-@Evolving
+@Deprecated
 public interface Distribution {}

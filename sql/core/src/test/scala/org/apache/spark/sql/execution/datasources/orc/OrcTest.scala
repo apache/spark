@@ -121,7 +121,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
+          DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
