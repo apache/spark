@@ -2672,7 +2672,7 @@ object SQLConf {
         s"'${ANSI_ENABLED.key}' is true.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
