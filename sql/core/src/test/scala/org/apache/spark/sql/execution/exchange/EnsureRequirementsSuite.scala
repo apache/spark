@@ -138,7 +138,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: successful compatibility check with HashShuffleSpec") {
+  test("Successful compatibility check with HashShuffleSpec") {
     val plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: Nil, 5))
     val plan2 = DummySparkPlan(
@@ -179,7 +179,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-35703: successful compatibility check with HashShuffleSpec and duplicate keys") {
+  test("Successful compatibility check with HashShuffleSpec and duplicate keys") {
     var plan1 = DummySparkPlan(
       outputPartitioning = HashPartitioning(exprA :: exprB :: Nil, 5))
     var plan2 = DummySparkPlan(
@@ -600,7 +600,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   test("Respect spark.sql.shuffle.partitions with AQE") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> 8.toString,
       SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> 10.toString) {
-      Seq(false).foreach { enable =>
+      Seq(true, false).foreach { enable =>
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enable") {
           val plan1 = DummySparkPlan(
             outputPartitioning = HashPartitioning(exprA :: exprB :: Nil, 9))
