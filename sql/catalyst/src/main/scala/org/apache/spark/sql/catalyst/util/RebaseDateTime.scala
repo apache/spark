@@ -29,6 +29,7 @@ import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.util.Utils
 
 /**
@@ -37,6 +38,13 @@ import org.apache.spark.util.Utils
  * to/from Proleptic Gregorian calendar which is used by Spark since version 3.0. See SPARK-26651.
  */
 object RebaseDateTime {
+
+  // Specification of rebase operation including `mode` and the time zone in which it is performed
+  case class RebaseSpec(mode: LegacyBehaviorPolicy.Value, originTimeZone: Option[String] = None) {
+    // Use the default JVM time zone for backward compatibility
+    def timeZone: String = originTimeZone.getOrElse(TimeZone.getDefault.getID)
+  }
+
   /**
    * Rebases days since the epoch from an original to an target calendar, for instance,
    * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
