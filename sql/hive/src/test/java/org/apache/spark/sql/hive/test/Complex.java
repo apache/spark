@@ -1057,7 +1057,8 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
         oprot.writeFieldBegin(M_STRING_STRING_FIELD_DESC);
         {
           oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(
-									org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, struct.mStringString.size()));
+									org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING,
+									struct.mStringString.size()));
           for (Map.Entry<String, String> _iter16 : struct.mStringString.entrySet())
           {
             oprot.writeString(_iter16.getKey());
