@@ -415,8 +415,7 @@ class ArrayType(DataType):
         return "array<%s>" % self.elementType.simpleString()
 
     def __repr__(self) -> str:
-        return "ArrayType(%s, %s)" % (self.elementType,
-                                      str(self.containsNull))
+        return "ArrayType(%s, %s)" % (self.elementType, str(self.containsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {
@@ -486,8 +485,7 @@ class MapType(DataType):
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
 
     def __repr__(self) -> str:
-        return "MapType(%s, %s, %s)" % (self.keyType, self.valueType,
-                                        str(self.valueContainsNull))
+        return "MapType(%s, %s, %s)" % (self.keyType, self.valueType, str(self.valueContainsNull))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {
@@ -568,8 +566,7 @@ class StructField(DataType):
         return "%s:%s" % (self.name, self.dataType.simpleString())
 
     def __repr__(self) -> str:
-        return "StructField('%s', %s, %s)" % (self.name, self.dataType,
-                                              str(self.nullable))
+        return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
         return {
@@ -752,8 +749,7 @@ class StructType(DataType):
         return "struct<%s>" % (",".join(f.simpleString() for f in self))
 
     def __repr__(self) -> str:
-        return ("StructType([%s])" %
-                ", ".join(str(field) for field in self))
+        return "StructType([%s])" % ", ".join(str(field) for field in self)
 
     def jsonValue(self) -> Dict[str, Any]:
         return {"type": self.typeName(), "fields": [f.jsonValue() for f in self]}
