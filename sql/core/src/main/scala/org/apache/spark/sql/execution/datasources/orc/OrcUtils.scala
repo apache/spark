@@ -235,41 +235,48 @@ object OrcUtils extends Logging {
         // in the physical schema, there is a need to send the
         // entire dataSchema instead of required schema.
         // So pruneCols is not done in this case
-        Some(requiredSchema.fieldNames.map { name =>
+        val (colIds, fields) = requiredSchema.fieldNames.map { name =>
           val index = dataSchema.fieldIndex(name)
-          if (index < orcFieldNames.length) {
+          val colId = if (index < orcFieldNames.length) {
             index
           } else {
             -1
           }
-        }, false, orcCatalystSchema)
+          (colId, orcCatalystSchema(name))
+        }.unzip
+        Some(colIds, false, StructType(fields))
       } else {
         if (isCaseSensitive) {
-          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
-            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+          val (colIds, fields) = requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            val colId = if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
               idx
             } else {
               -1
             }
-          }, true, orcCatalystSchema)
+            (colId, orcCatalystSchema(name))
+          }.unzip
+            Some(colIds, true, StructType(fields))
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
-          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
-            caseInsensitiveOrcFieldMap
-              .get(requiredFieldName.toLowerCase(Locale.ROOT))
-              .map { matchedOrcFields =>
-                if (matchedOrcFields.size > 1) {
-                  // Need to fail if there is ambiguity, i.e. more than one field is matched.
-                  val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                  reader.close()
-                  throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
-                    requiredFieldName, matchedOrcFieldsString)
-                } else {
-                  idx
-                }
-              }.getOrElse(-1)
-          }, true, orcCatalystSchema)
+          val (colIds, fields) = requiredSchema.fieldNames.zipWithIndex.map {
+            case (requiredFieldName, idx) =>
+              val colId = caseInsensitiveOrcFieldMap
+                .get(requiredFieldName.toLowerCase(Locale.ROOT))
+                .map { matchedOrcFields =>
+                  if (matchedOrcFields.size > 1) {
+                    // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                    val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
+                    reader.close()
+                    throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+                      requiredFieldName, matchedOrcFieldsString)
+                  } else {
+                    idx
+                  }
+                }.getOrElse(-1)
+              (colId, orcCatalystSchema(requiredFieldName))
+          }.unzip
+            Some(colIds, true, StructType(fields))
         }
       }
     }
