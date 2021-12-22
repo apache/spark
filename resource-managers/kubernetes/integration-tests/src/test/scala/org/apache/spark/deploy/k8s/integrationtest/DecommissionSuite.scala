@@ -19,8 +19,9 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import com.google.common.io.Files
 import scala.collection.JavaConverters._
+
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.matchers.should.Matchers._
@@ -28,7 +29,6 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.PLUGINS
-import org.apache.spark.util.Utils
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
