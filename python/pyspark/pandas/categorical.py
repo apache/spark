@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps
 
 
-class CategoricalAccessor(object):
+class CategoricalAccessor:
     """
     Accessor object for categorical properties of the Series values.
 
@@ -528,7 +528,7 @@ class CategoricalAccessor(object):
                 FutureWarning,
             )
 
-        categories = set(self._data.drop_duplicates().to_pandas())
+        categories = set(self._data.drop_duplicates()._to_pandas())
         removals = [cat for cat in self.categories if cat not in categories]
         return self.remove_categories(removals=removals, inplace=inplace)
 

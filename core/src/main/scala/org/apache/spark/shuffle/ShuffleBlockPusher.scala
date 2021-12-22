@@ -50,9 +50,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH)
   private[this] val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH)
-  private[this] val maxBytesInFlight =
-    conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
-  private[this] val maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
+  private[this] val maxBytesInFlight = conf.get(REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024
+  private[this] val maxReqsInFlight = conf.get(REDUCER_MAX_REQS_IN_FLIGHT)
   private[this] val maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
   private[this] var bytesInFlight = 0L
   private[this] var reqsInFlight = 0

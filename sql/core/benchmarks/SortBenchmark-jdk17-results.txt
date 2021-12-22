@@ -1,0 +1,16 @@
+================================================================================================
+radix sort
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+reference TimSort key prefix array                12459          12571         158          2.0         498.3       1.0X
+reference Arrays.sort                              2776           2805          42          9.0         111.0       4.5X
+radix sort one byte                                 232            234           1        107.6           9.3      53.6X
+radix sort two bytes                                425            427           1         58.8          17.0      29.3X
+radix sort eight bytes                             1637           1638           1         15.3          65.5       7.6X
+radix sort key prefix array                        2680           2681           2          9.3         107.2       4.6X
+
+

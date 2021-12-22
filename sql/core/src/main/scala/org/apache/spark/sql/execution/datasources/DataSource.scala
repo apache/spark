@@ -128,7 +128,7 @@ case class DataSource(
       .getOrElse(true)
   }
 
-  bucketSpec.map { bucket =>
+  bucketSpec.foreach { bucket =>
     SchemaUtils.checkColumnNameDuplication(
       bucket.bucketColumnNames, "in the bucket definition", equality)
     SchemaUtils.checkColumnNameDuplication(
@@ -579,17 +579,11 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
-  // TODO: Remove the Set below once all the built-in datasources support ANSI interval types
-  private val writeAllowedSources: Set[Class[_]] =
-    Set(classOf[ParquetFileFormat], classOf[CSVFileFormat],
-      classOf[JsonFileFormat], classOf[OrcFileFormat])
-
   private def disallowWritingIntervals(
       dataTypes: Seq[DataType],
       forbidAnsiIntervals: Boolean): Unit = {
-    val isWriteAllowedSource = writeAllowedSources(providingClass)
     dataTypes.foreach(
-      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals || !isWriteAllowedSource) {
+      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
   }

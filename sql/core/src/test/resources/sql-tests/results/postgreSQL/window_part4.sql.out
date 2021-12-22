@@ -501,4 +501,4 @@ FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('nan' AS INT): invalid input syntax for type numeric: nan; line 3 pos 6
+failed to evaluate expression CAST('nan' AS INT): invalid input syntax for type numeric: nan. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 3 pos 6

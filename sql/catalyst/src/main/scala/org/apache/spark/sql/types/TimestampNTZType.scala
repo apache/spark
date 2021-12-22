@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Unstable
  * @since 3.3.0
  */
 @Unstable
-class TimestampNTZType private() extends AtomicType {
+class TimestampNTZType private() extends DatetimeType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000(Unix system time zero)

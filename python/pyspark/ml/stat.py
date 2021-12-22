@@ -24,7 +24,7 @@ from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.functions import lit
 
 
-class ChiSquareTest(object):
+class ChiSquareTest:
     """
     Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
@@ -35,6 +35,7 @@ class ChiSquareTest(object):
     .. versionadded:: 2.2.0
 
     """
+
     @staticmethod
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
@@ -99,7 +100,7 @@ class ChiSquareTest(object):
         return _java2py(sc, javaTestObj.test(*args))
 
 
-class Correlation(object):
+class Correlation:
     """
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
@@ -113,6 +114,7 @@ class Correlation(object):
     which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
     to avoid recomputing the common lineage.
     """
+
     @staticmethod
     def corr(dataset, column, method="pearson"):
         """
@@ -165,7 +167,7 @@ class Correlation(object):
         return _java2py(sc, javaCorrObj.corr(*args))
 
 
-class KolmogorovSmirnovTest(object):
+class KolmogorovSmirnovTest:
     """
     Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
     distribution.
@@ -177,6 +179,7 @@ class KolmogorovSmirnovTest(object):
     .. versionadded:: 2.4.0
 
     """
+
     @staticmethod
     def test(dataset, sampleCol, distName, *params):
         """
@@ -228,11 +231,12 @@ class KolmogorovSmirnovTest(object):
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
         dataset = _py2java(sc, dataset)
         params = [float(param) for param in params]
-        return _java2py(sc, javaTestObj.test(dataset, sampleCol, distName,
-                                             _jvm().PythonUtils.toSeq(params)))
+        return _java2py(
+            sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
+        )
 
 
-class Summarizer(object):
+class Summarizer:
     """
     Tools for vectorized statistics on MLlib Vectors.
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
@@ -277,6 +281,7 @@ class Summarizer(object):
     +--------------+
     <BLANKLINE>
     """
+
     @staticmethod
     @since("2.4.0")
     def mean(col, weightCol=None):
@@ -368,8 +373,11 @@ class Summarizer(object):
     @staticmethod
     def _get_single_metric(col, weightCol, metric):
         col, weightCol = Summarizer._check_param(col, weightCol)
-        return Column(JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer." + metric,
-                                                col._jc, weightCol._jc))
+        return Column(
+            JavaWrapper._new_java_obj(
+                "org.apache.spark.ml.stat.Summarizer." + metric, col._jc, weightCol._jc
+            )
+        )
 
     @staticmethod
     def metrics(*metrics):
@@ -407,8 +415,9 @@ class Summarizer(object):
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
         sc = SparkContext._active_spark_context
-        js = JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer.metrics",
-                                       _to_seq(sc, metrics))
+        js = JavaWrapper._new_java_obj(
+            "org.apache.spark.ml.stat.Summarizer.metrics", _to_seq(sc, metrics)
+        )
         return SummaryBuilder(js)
 
 
@@ -422,6 +431,7 @@ class SummaryBuilder(JavaWrapper):
     .. versionadded:: 2.4.0
 
     """
+
     def __init__(self, jSummaryBuilder):
         super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
@@ -449,7 +459,7 @@ class SummaryBuilder(JavaWrapper):
         return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
 
 
-class MultivariateGaussian(object):
+class MultivariateGaussian:
     """Represents a (mean, cov) tuple
 
     .. versionadded:: 3.0.0
@@ -457,11 +467,13 @@ class MultivariateGaussian(object):
     Examples
     --------
     >>> from pyspark.ml.linalg import DenseMatrix, Vectors
+    >>> from pyspark.ml.stat import MultivariateGaussian
     >>> m = MultivariateGaussian(Vectors.dense([11,12]), DenseMatrix(2, 2, (1.0, 3.0, 5.0, 2.0)))
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
     """
+
     def __init__(self, mean, cov):
         self.mean = mean
         self.cov = cov
@@ -472,22 +484,20 @@ if __name__ == "__main__":
     import numpy
     import pyspark.ml.stat
     from pyspark.sql import SparkSession
+
     try:
         # Numpy 1.14+ changed it's string format.
-        numpy.set_printoptions(legacy='1.13')
+        numpy.set_printoptions(legacy="1.13")
     except TypeError:
         pass
 
     globs = pyspark.ml.stat.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder \
-        .master("local[2]") \
-        .appName("ml.stat tests") \
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.stat tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
 
     failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

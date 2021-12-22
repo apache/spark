@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
+from typing import List
 
-class ResourceInformation(object):
+
+class ResourceInformation:
 
     """
     Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
@@ -38,14 +40,14 @@ class ResourceInformation(object):
     This API is evolving.
     """
 
-    def __init__(self, name, addresses):
+    def __init__(self, name: str, addresses: List[str]):
         self._name = name
         self._addresses = addresses
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
 
     @property
-    def addresses(self):
+    def addresses(self) -> List[str]:
         return self._addresses

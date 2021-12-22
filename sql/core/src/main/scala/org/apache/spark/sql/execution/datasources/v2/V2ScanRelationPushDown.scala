@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -36,7 +37,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan))))
+    applyColumnPruning(
+      applyLimit(pushDownAggregates(pushDownFilters(pushDownSample(createScanBuilder(plan))))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -84,7 +86,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
-            case _: SupportsPushDownAggregates =>
+            case r: SupportsPushDownAggregates =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               var ordinal = 0
               val aggregates = resultExpressions.flatMap { expr =>
@@ -104,7 +106,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
                 groupingExpressions, sHolder.relation.output)
               val pushedAggregates = PushDownUtils.pushAggregates(
-                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
+                r, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
@@ -225,6 +227,61 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       withProjection
   }
 
+  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case sample: Sample => sample.child match {
+      case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
+        val tableSample = TableSampleInfo(
+          sample.lowerBound,
+          sample.upperBound,
+          sample.withReplacement,
+          sample.seed)
+        val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
+        if (pushed) {
+          sHolder.pushedSample = Some(tableSample)
+          sample.child
+        } else {
+          sample
+        }
+
+      case _ => sample
+    }
+  }
+
+  private def pushDownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
+    case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limit)
+      if (limitPushed) {
+        sHolder.pushedLimit = Some(limit)
+      }
+      operation
+    case s @ Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
+      if filter.isEmpty =>
+      val orders = DataSourceStrategy.translateSortOrders(order)
+      if (orders.length == order.length) {
+        val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
+        if (topNPushed) {
+          sHolder.pushedLimit = Some(limit)
+          sHolder.sortOrders = orders
+          operation
+        } else {
+          s
+        }
+      } else {
+        s
+      }
+    case p: Project =>
+      val newChild = pushDownLimit(p.child, limit)
+      p.withNewChildren(Seq(newChild))
+    case other => other
+  }
+
+  def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
+      val newChild = pushDownLimit(child, limitValue)
+      val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
+      globalLimit.withNewChildren(Seq(newLocalLimit))
+  }
+
   private def getWrappedScan(
       scan: Scan,
       sHolder: ScanBuilderHolder,
@@ -236,7 +293,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, pushedFilters, aggregation)
+        val pushedDownOperators = PushedDownOperators(aggregation,
+          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders)
+        V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
   }
@@ -245,13 +304,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode
+    builder: ScanBuilder) extends LeafNode {
+  var pushedLimit: Option[Int] = None
 
-// A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
-// the physical v1 scan node.
+  var sortOrders: Seq[SortOrder] = Seq.empty[SortOrder]
+
+  var pushedSample: Option[TableSampleInfo] = None
+}
+
+
+// A wrapper for v1 scan to carry the translated filters and the handled ones, along with
+// other pushed down operators. This is required by the physical v1 scan node.
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedAggregate: Option[Aggregation]) extends Scan {
+    pushedDownOperators: PushedDownOperators) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

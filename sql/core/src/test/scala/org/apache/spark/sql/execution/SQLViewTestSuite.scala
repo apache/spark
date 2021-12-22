@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.internal.SQLConf._
@@ -376,9 +378,52 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-37219: time travel is unsupported") {
+    val viewName = createView("testView", "SELECT 1 col")
+    withView(viewName) {
+      val e1 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
+      )
+      assert(e1.message.contains("Cannot time travel views"))
+
+      val e2 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
+      )
+      assert(e2.message.contains("Cannot time travel views"))
+    }
+  }
+
+  test("SPARK-37569: view should report correct nullability information for nested fields") {
+    val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+    val viewName = createView("testView", sql)
+    withView(viewName) {
+      val df = spark.sql(sql)
+      val dfFromView = spark.table(viewName)
+      assert(df.schema == dfFromView.schema)
+    }
+  }
 }
 
-class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+abstract class TempViewTestSuite extends SQLViewTestSuite {
+  test("SPARK-37202: temp view should capture the function registered by catalog API") {
+    val funcName = "tempFunc"
+    withUserDefinedFunction(funcName -> true) {
+      val catalogFunction = CatalogFunction(
+        FunctionIdentifier(funcName, None), "org.apache.spark.myFunc", Seq.empty)
+      val functionBuilder = (e: Seq[Expression]) => e.head
+      spark.sessionState.catalog.registerFunction(
+        catalogFunction, overrideIfExists = false, functionBuilder = Some(functionBuilder))
+      val query = s"SELECT $funcName(max(a), min(a)) FROM VALUES (1), (2), (3) t(a)"
+      val viewName = createView("tempView", query)
+      withView(viewName) {
+        checkViewOutput(viewName, sql(query).collect())
+      }
+    }
+  }
+}
+
+class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
@@ -386,7 +431,7 @@ class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 }
 
-class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
@@ -528,6 +573,22 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       spark.sessionState.catalog.reset()
       spark.sessionState.catalogManager.reset()
       spark.sessionState.conf.clear()
+    }
+  }
+
+  test("SPARK-37266: View text can only be SELECT queries") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1")
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+      val dropView = "DROP VIEW v"
+      // Simulate the behavior of hackers
+      val tamperedTable = table.copy(viewText = Some(dropView))
+      spark.sessionState.catalog.alterTable(tamperedTable)
+      val message = intercept[AnalysisException] {
+        sql("SELECT * FROM v")
+      }.getMessage
+      assert(message.contains(s"Invalid view text: $dropView." +
+        s" The view ${table.qualifiedName} may have been tampered with"))
     }
   }
 }

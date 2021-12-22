@@ -306,7 +306,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // decimal type), or that the literal `value` is within range `(min, max)`. For these, we
     // optimize by moving the cast to the literal side.
 
-    val newValue = Cast(Literal(value), fromType).eval()
+    val newValue = Cast(Literal(value), fromType, ansiEnabled = false).eval()
     if (newValue == null) {
       // This means the cast failed, for instance, due to the value is not representable in the
       // narrower type. In this case we simply return the original expression.

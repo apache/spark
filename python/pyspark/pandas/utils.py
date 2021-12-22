@@ -19,7 +19,6 @@ Commonly used utils in pandas-on-Spark.
 """
 
 import functools
-from collections import OrderedDict
 from contextlib import contextmanager
 import os
 from typing import (
@@ -65,6 +64,10 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
+class PandasAPIOnSparkAdviceWarning(Warning):
+    pass
+
+
 def same_anchor(
     this: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
     that: Union["DataFrame", "IndexOpsMixin", "InternalFrame"],
@@ -104,7 +107,7 @@ def combine_frames(
     this: "DataFrame",
     *args: DataFrameOrSeries,
     how: str = "full",
-    preserve_order_column: bool = False
+    preserve_order_column: bool = False,
 ) -> "DataFrame":
     """
     This method combines `this` DataFrame with a different `that` DataFrame or
@@ -155,7 +158,7 @@ def combine_frames(
                     for col in sdf.columns
                     if col not in HIDDEN_COLUMNS
                 ],
-                *HIDDEN_COLUMNS
+                *HIDDEN_COLUMNS,
             )
             return internal.copy(
                 spark_frame=sdf,
@@ -245,7 +248,7 @@ def combine_frames(
                 scol_for(that_sdf, that_internal.spark_column_name_for(label))
                 for label in that_internal.column_labels
             ),
-            *order_column
+            *order_column,
         )
 
         index_spark_columns = [scol_for(joined_df, col) for col in index_column_names]
@@ -437,7 +440,7 @@ def align_diff_frames(
     )
 
     # 3. Restore the names back and deduplicate columns.
-    this_labels = OrderedDict()
+    this_labels: Dict[Label, Label] = {}
     # Add columns in an order of its original frame.
     for this_label in this_column_labels:
         for new_label in applied._internal.column_labels:
@@ -445,7 +448,7 @@ def align_diff_frames(
                 this_labels[new_label[1:]] = new_label
 
     # After that, we will add the rest columns.
-    other_labels = OrderedDict()
+    other_labels: Dict[Label, Label] = {}
     for new_label in applied._internal.column_labels:
         if new_label[1:] not in this_labels:
             other_labels[new_label[1:]] = new_label
@@ -460,20 +463,12 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
-    if conf is None:
-        conf = dict()
+def default_session() -> SparkSession:
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        return spark
 
     builder = SparkSession.builder.appName("pandas-on-Spark")
-    for key, value in conf.items():
-        builder = builder.config(key, value)
-    # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
-    # configuration. This is needed with Spark 3.0+.
-    builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
-
-    if is_testing():
-        builder.config("spark.executor.allowSparkContext", False)
-
     return builder.getOrCreate()
 
 
@@ -956,6 +951,15 @@ def compare_allow_null(
     comp: Callable[[Column, Column], Column],
 ) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
+
+
+def log_advice(message: str) -> None:
+    """
+    Display advisory logs for functions to be aware of when using pandas API on Spark
+    for the existing pandas/PySpark users who may not be familiar with distributed environments
+    or the behavior of pandas.
+    """
+    warnings.warn(message, PandasAPIOnSparkAdviceWarning)
 
 
 def _test() -> None:

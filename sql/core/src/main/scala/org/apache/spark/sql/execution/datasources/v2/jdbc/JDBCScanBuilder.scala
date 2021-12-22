@@ -20,10 +20,12 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -36,6 +38,9 @@ case class JDBCScanBuilder(
     with SupportsPushDownFilters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
+    with SupportsPushDownLimit
+    with SupportsPushDownTableSample
+    with SupportsPushDownTopN
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
@@ -43,6 +48,12 @@ case class JDBCScanBuilder(
   private var pushedFilter = Array.empty[Filter]
 
   private var finalSchema = schema
+
+  private var tableSample: Option[TableSampleInfo] = None
+
+  private var pushedLimit = 0
+
+  private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -65,8 +76,8 @@ case class JDBCScanBuilder(
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)
-    if (compiledAgg.isEmpty) return false
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate(_))
+    if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val groupByCols = aggregation.groupByColumns.map { col =>
       if (col.fieldNames.length != 1) return false
@@ -77,7 +88,7 @@ case class JDBCScanBuilder(
     // e.g. "DEPT","NAME",MAX("SALARY"),MIN("BONUS") =>
     // SELECT "DEPT","NAME",MAX("SALARY"),MIN("BONUS") FROM "test"."employee"
     //   GROUP BY "DEPT", "NAME"
-    val selectList = groupByCols ++ compiledAgg.get
+    val selectList = groupByCols ++ compiledAggs
     val groupByClause = if (groupByCols.isEmpty) {
       ""
     } else {
@@ -96,6 +107,36 @@ case class JDBCScanBuilder(
         logError("Failed to push down aggregation to JDBC", e)
         false
     }
+  }
+
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): Boolean = {
+    if (jdbcOptions.pushDownTableSample &&
+      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
+      return true
+    }
+    false
+  }
+
+  override def pushLimit(limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit) {
+      pushedLimit = limit
+      return true
+    }
+    false
+  }
+
+  override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit) {
+      pushedLimit = limit
+      sortOrders = orders
+      return true
+    }
+    false
   }
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -123,6 +164,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols)
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
   }
 }

@@ -260,9 +260,9 @@ private object RowToColumnConverter {
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
       case ShortType => ShortConverter
-      case IntegerType | DateType => IntConverter
+      case IntegerType | DateType | _: YearMonthIntervalType => IntConverter
       case FloatType => FloatConverter
-      case LongType | TimestampType => LongConverter
+      case LongType | TimestampType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
       case CalendarIntervalType => CalendarConverter
@@ -535,8 +535,8 @@ case class ApplyColumnarRulesAndInsertTransitions(
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
       insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar) {
-      // `outputsColumnar` is false but the plan outputs columnar format, so add a
+    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
       // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
@@ -548,11 +548,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
 
   def apply(plan: SparkPlan): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
-    columnarRules.foreach((r : ColumnarRule) =>
-      preInsertPlan = r.preColumnarTransitions(preInsertPlan))
+    columnarRules.foreach(r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
     var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
-    columnarRules.reverse.foreach((r : ColumnarRule) =>
-      postInsertPlan = r.postColumnarTransitions(postInsertPlan))
+    columnarRules.reverse.foreach(r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
   }
 }

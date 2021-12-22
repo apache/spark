@@ -198,7 +198,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -345,7 +346,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -387,7 +388,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -416,7 +418,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -456,7 +459,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -485,7 +489,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
@@ -515,7 +520,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     var stageId = 0
     def twoStageJob(jobId: Int): Unit = {
@@ -654,7 +660,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      Map.empty))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
@@ -662,7 +669,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      Map.empty))
 
     // Stop execution 2 before execution 1
     time += 1
@@ -678,7 +686,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      Map.empty))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
   }
@@ -713,7 +722,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       "test",
       df.queryExecution.toString,
       oldPlan,
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -854,9 +864,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val metrics = statusStore.executionMetrics(execId)
     val expectedMetric = physicalPlan.metrics("custom_metric")
     val expectedValue = "custom_metric: 12345, 12345"
-
+    val innerMetric = physicalPlan.metrics("inner_metric")
+    val expectedInnerValue = "inner_metric: 54321, 54321"
     assert(metrics.contains(expectedMetric.id))
     assert(metrics(expectedMetric.id) === expectedValue)
+    assert(metrics.contains(innerMetric.id))
+    assert(metrics(innerMetric.id) === expectedInnerValue)
   }
 
   test("SPARK-36030: Report metrics from Datasource v2 write") {
@@ -882,7 +895,9 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val execId = statusStore.executionsList().last.executionId
       val metrics = statusStore.executionMetrics(execId)
       val customMetric = metrics.find(_._2 == "custom_metric: 12345, 12345")
+      val innerMetric = metrics.find(_._2 == "inner_metric: 54321, 54321")
       assert(customMetric.isDefined)
+      assert(innerMetric.isDefined)
     }
   }
 }
@@ -960,6 +975,16 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
   }
 }
 
+object Outer {
+  class InnerCustomMetric extends CustomMetric {
+    override def name(): String = "inner_metric"
+    override def description(): String = "a simple custom metric in an inner class"
+    override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+      s"inner_metric: ${taskMetrics.mkString(", ")}"
+    }
+  }
+}
+
 class SimpleCustomMetric extends CustomMetric {
   override def name(): String = "custom_metric"
   override def description(): String = "a simple custom metric"
@@ -989,7 +1014,11 @@ object CustomMetricReaderFactory extends PartitionReaderFactory {
           override def name(): String = "custom_metric"
           override def value(): Long = 12345
         }
-        Array(metric)
+        val innerMetric = new CustomTaskMetric {
+          override def name(): String = "inner_metric"
+          override def value(): Long = 54321;
+        }
+        Array(metric, innerMetric)
       }
     }
   }
@@ -1001,7 +1030,7 @@ class CustomMetricScanBuilder extends SimpleScanBuilder {
   }
 
   override def supportedCustomMetrics(): Array[CustomMetric] = {
-    Array(new SimpleCustomMetric)
+    Array(new SimpleCustomMetric, new Outer.InnerCustomMetric)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
@@ -1013,7 +1042,11 @@ class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWrit
       override def name(): String = "custom_metric"
       override def value(): Long = 12345
     }
-    Array(metric)
+    val innerMetric = new CustomTaskMetric {
+      override def name(): String = "inner_metric"
+      override def value(): Long = 54321;
+    }
+    Array(metric, innerMetric)
   }
 }
 
@@ -1055,7 +1088,7 @@ class CustomMetricsDataSource extends SimpleWritableDataSource {
         }
 
         override def supportedCustomMetrics(): Array[CustomMetric] = {
-          Array(new SimpleCustomMetric)
+          Array(new SimpleCustomMetric, new Outer.InnerCustomMetric)
         }
       }
     }

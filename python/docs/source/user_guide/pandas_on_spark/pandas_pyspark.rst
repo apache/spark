@@ -107,7 +107,7 @@ Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> sdf.to_pandas_on_spark()
+   >>> sdf.pandas_api()
       id
    0   6
    1   7
@@ -127,7 +127,7 @@ to use as an index when possible.
    >>> # Call Spark APIs
    ... sdf = sdf.filter("id > 5")
    >>> # Uses the explicit index to avoid to create default index.
-   ... sdf.to_pandas_on_spark(index_col='index')
+   ... sdf.pandas_api(index_col='index')
           id
    index
    6       6

@@ -82,16 +82,16 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
   private val int96RebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE))
 
-  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     int96RebaseMode, "Parquet INT96")
 
   override def init(configuration: Configuration): WriteContext = {
@@ -222,6 +222,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               val millis = DateTimeUtils.microsToMillis(timestampRebaseFunc(micros))
               recordConsumer.addLong(millis)
         }
+
+      case TimestampNTZType =>
+        // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
+        // MICROS time unit.
+        (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>

@@ -22,7 +22,7 @@ A collections of builtin avro functions
 
 from typing import Dict, Optional, TYPE_CHECKING
 from pyspark import SparkContext
-from pyspark.sql.column import Column, _to_java_column  # type: ignore[attr-defined]
+from pyspark.sql.column import Column, _to_java_column
 from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
 
 if TYPE_CHECKING:
@@ -73,10 +73,12 @@ def from_avro(
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
 
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
-            _to_java_column(data), jsonFormatSchema, options or {})
+            _to_java_column(data), jsonFormatSchema, options or {}
+        )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Avro", "avro", "avro", sc.version)
@@ -117,13 +119,15 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     [Row(suite=bytearray(b'\\x02\\x00'))]
     """
 
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     try:
         if jsonFormatSchema == "":
             jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
         else:
             jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(
-                _to_java_column(data), jsonFormatSchema)
+                _to_java_column(data), jsonFormatSchema
+            )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Avro", "avro", "avro", sc.version)
@@ -135,13 +139,15 @@ def _test() -> None:
     import os
     import sys
     from pyspark.testing.utils import search_jar
+
     avro_jar = search_jar("external/avro", "spark-avro", "spark-avro")
     if avro_jar is None:
         print(
             "Skipping all Avro Python tests as the optional Avro project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pavro package' or "
-            "'build/mvn -Pavro package' before running this test.")
+            "'build/mvn -Pavro package' before running this test."
+        )
         sys.exit(0)
     else:
         existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
@@ -151,15 +157,17 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.avro.functions
+
     globs = pyspark.sql.avro.functions.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.avro.functions tests")\
-        .getOrCreate()
-    globs['spark'] = spark
+    spark = (
+        SparkSession.builder.master("local[4]").appName("sql.avro.functions tests").getOrCreate()
+    )
+    globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.avro.functions, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        pyspark.sql.avro.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

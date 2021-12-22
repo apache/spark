@@ -20,22 +20,22 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode, TableSpec}
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
-  import CreateTablePartitioningValidationSuite._
 
   test("CreateTableAsSelect: fail missing top-level column") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "does_not_exist") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -46,12 +46,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing top-level column nested reference") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "does_not_exist.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -62,12 +63,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing nested column") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "point.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -78,12 +80,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail with multiple errors") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "does_not_exist", "point.z") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -95,12 +98,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success with top-level column") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "id") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -108,12 +112,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using nested column") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "point.x") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 
@@ -121,12 +126,13 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using complex column") {
+    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+      None, None, None, false)
     val plan = CreateTableAsSelect(
-      catalog,
-      Identifier.of(Array(), "table_name"),
+      UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
       Expressions.bucket(4, "point") :: Nil,
       TestRelation2,
-      Map.empty,
+      tableSpec,
       Map.empty,
       ignoreIfExists = false)
 

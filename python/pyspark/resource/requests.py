@@ -14,11 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import overload, Optional, Dict
 
-from pyspark.util import _parse_memory
+from py4j.java_gateway import JavaObject, JVMView
+
+from pyspark.util import _parse_memory  # type: ignore[attr-defined]
 
 
-class ExecutorResourceRequest(object):
+class ExecutorResourceRequest:
     """
     An Executor resource request. This is used in conjunction with the ResourceProfile to
     programmatically specify the resources needed for an RDD that will be applied at the
@@ -61,30 +64,37 @@ class ExecutorResourceRequest(object):
     -----
     This API is evolving.
     """
-    def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
+
+    def __init__(
+        self,
+        resourceName: str,
+        amount: int,
+        discoveryScript: str = "",
+        vendor: str = "",
+    ):
         self._name = resourceName
         self._amount = amount
         self._discovery_script = discoveryScript
         self._vendor = vendor
 
     @property
-    def resourceName(self):
+    def resourceName(self) -> str:
         return self._name
 
     @property
-    def amount(self):
+    def amount(self) -> int:
         return self._amount
 
     @property
-    def discoveryScript(self):
+    def discoveryScript(self) -> str:
         return self._discovery_script
 
     @property
-    def vendor(self):
+    def vendor(self) -> str:
         return self._vendor
 
 
-class ExecutorResourceRequests(object):
+class ExecutorResourceRequests:
 
     """
     A set of Executor resource requests. This is used in conjunction with the
@@ -97,18 +107,37 @@ class ExecutorResourceRequests(object):
     -----
     This API is evolving.
     """
+
     _CORES = "cores"
     _MEMORY = "memory"
     _OVERHEAD_MEM = "memoryOverhead"
     _PYSPARK_MEM = "pyspark.memory"
     _OFFHEAP_MEM = "offHeap"
 
-    def __init__(self, _jvm=None, _requests=None):
+    @overload
+    def __init__(self, _jvm: JVMView):
+        ...
+
+    @overload
+    def __init__(
+        self,
+        _jvm: None = ...,
+        _requests: Optional[Dict[str, ExecutorResourceRequest]] = ...,
+    ):
+        ...
+
+    def __init__(
+        self,
+        _jvm: Optional[JVMView] = None,
+        _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
+    ):
         from pyspark import SparkContext
-        _jvm = _jvm or SparkContext._jvm
+
+        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
-            self._java_executor_resource_requests = \
+            self._java_executor_resource_requests = (
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
+            )
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._MEMORY:
@@ -120,74 +149,88 @@ class ExecutorResourceRequests(object):
                     elif k == self._CORES:
                         self._java_executor_resource_requests.cores(v.amount)
                     else:
-                        self._java_executor_resource_requests.resource(v.resourceName, v.amount,
-                                                                       v.discoveryScript, v.vendor)
+                        self._java_executor_resource_requests.resource(
+                            v.resourceName, v.amount, v.discoveryScript, v.vendor
+                        )
         else:
             self._java_executor_resource_requests = None
-            self._executor_resources = {}
+            self._executor_resources: Dict[str, ExecutorResourceRequest] = {}
 
-    def memory(self, amount):
+    def memory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memory(amount)
         else:
-            self._executor_resources[self._MEMORY] = ExecutorResourceRequest(self._MEMORY,
-                                                                             _parse_memory(amount))
+            self._executor_resources[self._MEMORY] = ExecutorResourceRequest(
+                self._MEMORY, _parse_memory(amount)
+            )
         return self
 
-    def memoryOverhead(self, amount):
+    def memoryOverhead(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memoryOverhead(amount)
         else:
-            self._executor_resources[self._OVERHEAD_MEM] = \
-                ExecutorResourceRequest(self._OVERHEAD_MEM, _parse_memory(amount))
+            self._executor_resources[self._OVERHEAD_MEM] = ExecutorResourceRequest(
+                self._OVERHEAD_MEM, _parse_memory(amount)
+            )
         return self
 
-    def pysparkMemory(self, amount):
+    def pysparkMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.pysparkMemory(amount)
         else:
-            self._executor_resources[self._PYSPARK_MEM] = \
-                ExecutorResourceRequest(self._PYSPARK_MEM, _parse_memory(amount))
+            self._executor_resources[self._PYSPARK_MEM] = ExecutorResourceRequest(
+                self._PYSPARK_MEM, _parse_memory(amount)
+            )
         return self
 
-    def offheapMemory(self, amount):
+    def offheapMemory(self, amount: str) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.offHeapMemory(amount)
         else:
-            self._executor_resources[self._OFFHEAP_MEM] = \
-                ExecutorResourceRequest(self._OFFHEAP_MEM, _parse_memory(amount))
+            self._executor_resources[self._OFFHEAP_MEM] = ExecutorResourceRequest(
+                self._OFFHEAP_MEM, _parse_memory(amount)
+            )
         return self
 
-    def cores(self, amount):
+    def cores(self, amount: int) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.cores(amount)
         else:
             self._executor_resources[self._CORES] = ExecutorResourceRequest(self._CORES, amount)
         return self
 
-    def resource(self, resourceName, amount, discoveryScript="", vendor=""):
+    def resource(
+        self,
+        resourceName: str,
+        amount: int,
+        discoveryScript: str = "",
+        vendor: str = "",
+    ) -> "ExecutorResourceRequests":
         if self._java_executor_resource_requests is not None:
-            self._java_executor_resource_requests.resource(resourceName, amount, discoveryScript,
-                                                           vendor)
+            self._java_executor_resource_requests.resource(
+                resourceName, amount, discoveryScript, vendor
+            )
         else:
-            self._executor_resources[resourceName] = \
-                ExecutorResourceRequest(resourceName, amount, discoveryScript, vendor)
+            self._executor_resources[resourceName] = ExecutorResourceRequest(
+                resourceName, amount, discoveryScript, vendor
+            )
         return self
 
     @property
-    def requests(self):
+    def requests(self) -> Dict[str, ExecutorResourceRequest]:
         if self._java_executor_resource_requests is not None:
             result = {}
             execRes = self._java_executor_resource_requests.requestsJMap()
             for k, v in execRes.items():
-                result[k] = ExecutorResourceRequest(v.resourceName(), v.amount(),
-                                                    v.discoveryScript(), v.vendor())
+                result[k] = ExecutorResourceRequest(
+                    v.resourceName(), v.amount(), v.discoveryScript(), v.vendor()
+                )
             return result
         else:
             return self._executor_resources
 
 
-class TaskResourceRequest(object):
+class TaskResourceRequest:
     """
     A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
@@ -210,20 +253,21 @@ class TaskResourceRequest(object):
     -----
     This API is evolving.
     """
-    def __init__(self, resourceName, amount):
+
+    def __init__(self, resourceName: str, amount: float):
         self._name = resourceName
         self._amount = float(amount)
 
     @property
-    def resourceName(self):
+    def resourceName(self) -> str:
         return self._name
 
     @property
-    def amount(self):
+    def amount(self) -> float:
         return self._amount
 
 
-class TaskResourceRequests(object):
+class TaskResourceRequests:
 
     """
     A set of task resource requests. This is used in conjunction with the
@@ -239,12 +283,33 @@ class TaskResourceRequests(object):
 
     _CPUS = "cpus"
 
-    def __init__(self, _jvm=None, _requests=None):
+    @overload
+    def __init__(self, _jvm: JVMView):
+        ...
+
+    @overload
+    def __init__(
+        self,
+        _jvm: None = ...,
+        _requests: Optional[Dict[str, TaskResourceRequest]] = ...,
+    ):
+        ...
+
+    def __init__(
+        self,
+        _jvm: Optional[JVMView] = None,
+        _requests: Optional[Dict[str, TaskResourceRequest]] = None,
+    ):
         from pyspark import SparkContext
-        _jvm = _jvm or SparkContext._jvm
+
+        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
-            self._java_task_resource_requests = \
-                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()
+            assert SparkContext._jvm is not None
+            self._java_task_resource_requests: Optional[
+                JavaObject
+            ] = (
+                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()  # type: ignore[attr-defined]
+            )
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:
@@ -253,16 +318,16 @@ class TaskResourceRequests(object):
                         self._java_task_resource_requests.resource(v.resourceName, v.amount)
         else:
             self._java_task_resource_requests = None
-            self._task_resources = {}
+            self._task_resources: Dict[str, TaskResourceRequest] = {}
 
-    def cpus(self, amount):
+    def cpus(self, amount: int) -> "TaskResourceRequests":
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.cpus(amount)
         else:
             self._task_resources[self._CPUS] = TaskResourceRequest(self._CPUS, amount)
         return self
 
-    def resource(self, resourceName, amount):
+    def resource(self, resourceName: str, amount: float) -> "TaskResourceRequests":
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.resource(resourceName, float(amount))
         else:
@@ -270,7 +335,7 @@ class TaskResourceRequests(object):
         return self
 
     @property
-    def requests(self):
+    def requests(self) -> Dict[str, TaskResourceRequest]:
         if self._java_task_resource_requests is not None:
             result = {}
             taskRes = self._java_task_resource_requests.requestsJMap()
