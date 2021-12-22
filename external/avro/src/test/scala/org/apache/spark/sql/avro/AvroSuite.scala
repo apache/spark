@@ -2069,7 +2069,8 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+  test("SPARK-33163, SPARK-37705: write the metadata key 'org.apache.spark.legacyDateTime' " +
+    "and 'org.apache.spark.timeZone'") {
     def saveTs(dir: java.io.File): Unit = {
       Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
         .repartition(1)
@@ -2081,6 +2082,7 @@ abstract class AvroSuite
       withTempPath { dir =>
         saveTs(dir)
         checkMetaData(dir, SPARK_LEGACY_DATETIME, "")
+        checkMetaData(dir, SPARK_TIMEZONE_METADATA_KEY, SQLConf.get.sessionLocalTimeZone)
       }
     }
     Seq(CORRECTED, EXCEPTION).foreach { mode =>
@@ -2088,6 +2090,7 @@ abstract class AvroSuite
         withTempPath { dir =>
           saveTs(dir)
           checkMetaData(dir, SPARK_LEGACY_DATETIME, null)
+          checkMetaData(dir, SPARK_TIMEZONE_METADATA_KEY, null)
         }
       }
     }

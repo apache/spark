@@ -57,7 +57,8 @@ package object sql {
 
   /**
    * The metadata key which is used to write the current session time zone into:
-   *  - Parquet file metadata
+   * - Parquet file metadata
+   * - Avro file metadata
    */
   private[sql] val SPARK_TIMEZONE_METADATA_KEY = "org.apache.spark.timeZone"
 
