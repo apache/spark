@@ -43,26 +43,26 @@ import java.util.BitSet;
 public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields>,
 				java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC
-					= new org.apache.thrift.protocol.TStruct("Complex");
+          = new org.apache.thrift.protocol.TStruct("Complex");
 
   private static final org.apache.thrift.protocol.TField AINT_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("aint",
-					org.apache.thrift.protocol.TType.I32, (short)1);
+          = new org.apache.thrift.protocol.TField("aint",
+          org.apache.thrift.protocol.TType.I32, (short)1);
   private static final org.apache.thrift.protocol.TField A_STRING_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("aString",
-					org.apache.thrift.protocol.TType.STRING, (short)2);
+          = new org.apache.thrift.protocol.TField("aString",
+          org.apache.thrift.protocol.TType.STRING, (short)2);
   private static final org.apache.thrift.protocol.TField LINT_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("lint",
-					org.apache.thrift.protocol.TType.LIST, (short)3);
+          = new org.apache.thrift.protocol.TField("lint",
+          org.apache.thrift.protocol.TType.LIST, (short)3);
   private static final org.apache.thrift.protocol.TField L_STRING_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("lString",
-					org.apache.thrift.protocol.TType.LIST, (short)4);
+          = new org.apache.thrift.protocol.TField("lString",
+          org.apache.thrift.protocol.TType.LIST, (short)4);
   private static final org.apache.thrift.protocol.TField LINT_STRING_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("lintString",
-					org.apache.thrift.protocol.TType.LIST, (short)5);
+          = new org.apache.thrift.protocol.TField("lintString",
+          org.apache.thrift.protocol.TType.LIST, (short)5);
   private static final org.apache.thrift.protocol.TField M_STRING_STRING_FIELD_DESC
-					= new org.apache.thrift.protocol.TField("mStringString",
-					org.apache.thrift.protocol.TType.MAP, (short)6);
+          = new org.apache.thrift.protocol.TField("mStringString",
+          org.apache.thrift.protocol.TType.MAP, (short)6);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<>();
   static {
@@ -162,34 +162,34 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<>(_Fields.class);
     tmpMap.put(_Fields.AINT, new org.apache.thrift.meta_data.FieldMetaData("aint",
-						org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
+            org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     tmpMap.put(_Fields.A_STRING, new org.apache.thrift.meta_data.FieldMetaData("aString",
-						org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.FieldValueMetaData(
-								org.apache.thrift.protocol.TType.STRING)));
+            org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.FieldValueMetaData(
+                    org.apache.thrift.protocol.TType.STRING)));
     tmpMap.put(_Fields.LINT, new org.apache.thrift.meta_data.FieldMetaData("lint",
-						org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
-            new org.apache.thrift.meta_data.FieldValueMetaData(
-										org.apache.thrift.protocol.TType.I32))));
+            org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
+                    new org.apache.thrift.meta_data.FieldValueMetaData(
+                            org.apache.thrift.protocol.TType.I32))));
     tmpMap.put(_Fields.L_STRING, new org.apache.thrift.meta_data.FieldMetaData("lString",
-						org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
-            new org.apache.thrift.meta_data.FieldValueMetaData(
-										org.apache.thrift.protocol.TType.STRING))));
+            org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
+                    new org.apache.thrift.meta_data.FieldValueMetaData(
+                            org.apache.thrift.protocol.TType.STRING))));
     tmpMap.put(_Fields.LINT_STRING, new org.apache.thrift.meta_data.FieldMetaData("lintString",
-						org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
-            new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT,
-										IntString.class))));
+            org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST,
+                    new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT,
+                            IntString.class))));
     tmpMap.put(_Fields.M_STRING_STRING, new org.apache.thrift.meta_data.FieldMetaData(
-						"mStringString", org.apache.thrift.TFieldRequirementType.DEFAULT,
-        new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP,
-            new org.apache.thrift.meta_data.FieldValueMetaData(
-										org.apache.thrift.protocol.TType.STRING),
-            new org.apache.thrift.meta_data.FieldValueMetaData(
-										org.apache.thrift.protocol.TType.STRING))));
+            "mStringString", org.apache.thrift.TFieldRequirementType.DEFAULT,
+            new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP,
+                    new org.apache.thrift.meta_data.FieldValueMetaData(
+                            org.apache.thrift.protocol.TType.STRING),
+                    new org.apache.thrift.meta_data.FieldValueMetaData(
+                            org.apache.thrift.protocol.TType.STRING))));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(Complex.class, metaDataMap);
   }
@@ -1057,8 +1057,8 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
         oprot.writeFieldBegin(M_STRING_STRING_FIELD_DESC);
         {
           oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(
-									org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING,
-									struct.mStringString.size()));
+                  org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING,
+                  struct.mStringString.size()));
           for (Map.Entry<String, String> _iter16 : struct.mStringString.entrySet())
           {
             oprot.writeString(_iter16.getKey());
@@ -1167,7 +1167,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(2)) {
         {
           org.apache.thrift.protocol.TList _list21 = new org.apache.thrift.protocol.TList(
-									org.apache.thrift.protocol.TType.I32, iprot.readI32());
+                  org.apache.thrift.protocol.TType.I32, iprot.readI32());
           struct.lint = new ArrayList<>(_list21.size);
           for (int _i22 = 0; _i22 < _list21.size; ++_i22)
           {
@@ -1181,7 +1181,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(3)) {
         {
           org.apache.thrift.protocol.TList _list24 = new org.apache.thrift.protocol.TList(
-									org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+                  org.apache.thrift.protocol.TType.STRING, iprot.readI32());
           struct.lString = new ArrayList<>(_list24.size);
           for (int _i25 = 0; _i25 < _list24.size; ++_i25)
           {
@@ -1195,7 +1195,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(4)) {
         {
           org.apache.thrift.protocol.TList _list27 = new org.apache.thrift.protocol.TList(
-									org.apache.thrift.protocol.TType.STRUCT, iprot.readI32());
+                  org.apache.thrift.protocol.TType.STRUCT, iprot.readI32());
           struct.lintString = new ArrayList<>(_list27.size);
           for (int _i28 = 0; _i28 < _list27.size; ++_i28)
           {
