@@ -151,7 +151,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   // For test only.
   public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
-    this(null, "CORRECTED", "UTC", "LEGACY", java.time.ZoneId.systemDefault().getId(),useOffHeap, capacity);
+    this(
+        null,
+        "CORRECTED",
+        "UTC",
+        "LEGACY",
+        ZoneId.systemDefault().getId(),
+        useOffHeap,
+        capacity);
   }
 
   /**
