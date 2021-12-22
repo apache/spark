@@ -268,7 +268,7 @@ abstract class SparkFunSuite
     val loggingEvents = new ArrayBuffer[LogEvent]()
     private var _threshold: Level = Level.INFO
 
-    override def append(loggingEvent: LogEvent): Unit = {
+    override def append(loggingEvent: LogEvent): Unit = loggingEvent.synchronized {
       val copy_event = loggingEvent.toImmutable
       if (copy_event.getLevel.isMoreSpecificThan(_threshold)) {
         if (loggingEvents.size >= maxEvents) {
