@@ -323,7 +323,9 @@ case class ParquetPartitionReaderFactory(
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull,
       datetimeRebaseSpec.mode.toString,
+      datetimeRebaseSpec.timeZone,
       int96RebaseSpec.mode.toString,
+      int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && taskContext.isDefined,
       capacity)
     val iter = new RecordReaderIterator(vectorizedReader)

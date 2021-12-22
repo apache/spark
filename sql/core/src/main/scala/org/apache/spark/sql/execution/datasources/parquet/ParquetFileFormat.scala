@@ -324,7 +324,9 @@ class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
           datetimeRebaseSpec.mode.toString,
+          datetimeRebaseSpec.timeZone,
           int96RebaseSpec.mode.toString,
+          int96RebaseSpec.timeZone,
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
         // SPARK-37089: We cannot register a task completion listener to close this iterator here
