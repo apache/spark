@@ -211,8 +211,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
         s"${invalids.map(_.nodeName).mkString("[", ", ", "]")}")
       return join
     }
-    // for a N-Join stage, there should be N+1 ShuffleQueryStages.
-    if (joins.isEmpty || stages.size != joins.size + 1) return join
+    if (joins.isEmpty || joins.size != stages.size - 1) {
+      return join
+    }
 
     val stageStats = stages.flatMap {
       case ShuffleStage(stage: ShuffleQueryStageExec) =>
@@ -366,17 +367,14 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
       return plan
     }
-
-    val shuffledJoins = plan.collect { case s: ShuffledJoin => s }
-    if (shuffledJoins.isEmpty || shuffledJoins.exists(_.isSkewJoin)) return plan
-    if (shuffledJoins.size > conf.getConf(SQLConf.SKEW_JOIN_MAX_JOINS)) {
-      logDebug(s"${shuffledJoins.size} ShuffledJoins in ${plan.nodeName} " +
-        s"exceeds threshold ${conf.getConf(SQLConf.SKEW_JOIN_MAX_JOINS)}")
+    if (plan.collectFirst { case s: ShuffledJoin if !s.isSkewJoin => s }.isEmpty) {
       return plan
     }
 
     val optimized = optimize(plan)
-    if (optimized.collectFirst { case s: ShuffledJoin if s.isSkewJoin => s }.isEmpty) return plan
+    if (optimized.collectFirst { case s: ShuffledJoin if s.isSkewJoin => s }.isEmpty) {
+      return plan
+    }
     val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
       ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
     } else {
