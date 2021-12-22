@@ -189,7 +189,8 @@ properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
   -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
-  -Dlog4j.logger.org.apache.spark=DEBUG
+  -Dlogger.spark.name=org.apache.spark
+  -Dlogger.spark.level=debug
 )
 
 (
