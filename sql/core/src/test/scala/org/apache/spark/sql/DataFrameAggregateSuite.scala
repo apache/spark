@@ -1443,6 +1443,27 @@ class DataFrameAggregateSuite extends QueryTest
     val res = df.select($"d".cast("decimal(12, 2)").as("d")).agg(avg($"d").cast("string"))
     checkAnswer(res, Row("9999999999.990000"))
   }
+
+  test("SPARK-37682: Vector Size larger than 64") {
+    val df = (1 to 200).toDF("value")
+    df.createOrReplaceTempView("testData200")
+
+    val ifFilterFormat = "count(distinct case when value > %d then value end) " +
+      "filter (where value < %d) as %s,\n"
+    val sqlFormat =
+      """select
+        |%s
+        |from testData200
+        |""".stripMargin
+    val sb = new StringBuilder
+    for (i <- 1 to 100) {
+      sb.append(ifFilterFormat.format(i, 200 - i, "col_" + i))
+    }
+    sb.setLength(sb.size - 2)
+    val sqlText = sqlFormat.format(sb.toString())
+
+    checkAnswer(sql(sqlText), Row.fromSeq(Range(197, 0, -2) :+ 0))
+  }
 }
 
 case class B(c: Option[Double])
