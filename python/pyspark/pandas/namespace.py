@@ -105,6 +105,7 @@ __all__ = [
     "read_html",
     "to_datetime",
     "date_range",
+    "to_timedelta",
     "timedelta_range",
     "get_dummies",
     "concat",
@@ -1885,6 +1886,96 @@ def date_range(
             )
         ),
     )
+
+
+@no_type_check
+def to_timedelta(
+    arg,
+    unit: Optional[str] = None,
+    errors: str = "raise",
+):
+    """
+    Convert argument to timedelta.
+
+    Parameters
+    ----------
+    arg : str, timedelta, list-like or Series
+        The data to be converted to timedelta.
+    unit : str, optional
+        Denotes the unit of the arg for numeric `arg`. Defaults to ``"ns"``.
+
+        Possible values:
+        * 'W'
+        * 'D' / 'days' / 'day'
+        * 'hours' / 'hour' / 'hr' / 'h'
+        * 'm' / 'minute' / 'min' / 'minutes' / 'T'
+        * 'S' / 'seconds' / 'sec' / 'second'
+        * 'ms' / 'milliseconds' / 'millisecond' / 'milli' / 'millis' / 'L'
+        * 'us' / 'microseconds' / 'microsecond' / 'micro' / 'micros' / 'U'
+        * 'ns' / 'nanoseconds' / 'nano' / 'nanos' / 'nanosecond' / 'N'
+
+        Must not be specified when `arg` context strings and ``errors="raise"``.
+    errors : {'ignore', 'raise', 'coerce'}, default 'raise'
+        - If 'raise', then invalid parsing will raise an exception.
+        - If 'coerce', then invalid parsing will be set as NaT.
+        - If 'ignore', then invalid parsing will return the input.
+
+    Returns
+    -------
+    ret : timedelta64, TimedeltaIndex or Series of timedelta64 if parsing succeeded.
+
+    See Also
+    --------
+    DataFrame.astype : Cast argument to a specified dtype.
+    to_datetime : Convert argument to datetime.
+
+    Notes
+    -----
+    If the precision is higher than nanoseconds, the precision of the duration is
+    truncated to nanoseconds for string inputs.
+
+    Examples
+    --------
+    Parsing a single string to a Timedelta:
+
+    >>> ps.to_timedelta('1 days 06:05:01.00003')
+    Timedelta('1 days 06:05:01.000030')
+    >>> ps.to_timedelta('15.5us')
+    Timedelta('0 days 00:00:00.000015500')
+
+    Parsing a list or array of strings:
+
+    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 06:05:01.000030', '0 days 00:00:00.000015500', NaT],
+                   dtype='timedelta64[ns]', freq=None)
+
+    Converting numbers by specifying the `unit` keyword argument:
+
+    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['0 days 00:00:00', '0 days 00:00:01', '0 days 00:00:02',
+                    '0 days 00:00:03', '0 days 00:00:04'],
+                   dtype='timedelta64[ns]', freq=None)
+    >>> ps.to_timedelta(np.arange(5), unit='d')  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['0 days', '1 days', '2 days', '3 days', '4 days'],
+                   dtype='timedelta64[ns]', freq=None)
+    """
+
+    def pandas_to_timedelta(pser: pd.Series) -> np.timedelta64:
+        return pd.to_timedelta(
+            arg=pser,
+            unit=unit,
+            errors=errors,
+        )
+
+    if isinstance(arg, Series):
+        return arg.transform(pandas_to_timedelta)
+
+    else:
+        return pd.to_timedelta(
+            arg=arg,
+            unit=unit,
+            errors=errors,
+        )
 
 
 def timedelta_range(
