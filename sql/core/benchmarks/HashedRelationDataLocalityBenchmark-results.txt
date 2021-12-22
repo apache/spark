@@ -1,0 +1,40 @@
+================================================================================================
+LongHashedRelation MicroBenchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_312-bre_2021_10_20_23_15-b00 on Mac OS X 12.1
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+LongHashedRelation - duplicationMultiplier: 1:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Reorder map: false, Total rows: 100000, Unique rows: 100000             36             38           1          2.8         357.2       1.0X
+Reorder map: true, Total rows: 100000, Unique rows: 100000              66             67           1          1.5         658.2       0.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_312-bre_2021_10_20_23_15-b00 on Mac OS X 12.1
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+LongHashedRelation - duplicationMultiplier: 5:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Reorder map: false, Total rows: 100000, Unique rows: 20000            107            111           5          0.9        1066.0       1.0X
+Reorder map: true, Total rows: 100000, Unique rows: 20000              89             90           1          1.1         888.8       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_312-bre_2021_10_20_23_15-b00 on Mac OS X 12.1
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+LongHashedRelation - duplicationMultiplier: 8:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Reorder map: false, Total rows: 100000, Unique rows: 12500            124            126           1          0.8        1243.2       1.0X
+Reorder map: true, Total rows: 100000, Unique rows: 12500             105            110           4          1.0        1049.0       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_312-bre_2021_10_20_23_15-b00 on Mac OS X 12.1
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+LongHashedRelation - duplicationMultiplier: 10:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Reorder map: false, Total rows: 100000, Unique rows: 10000            152            153           1          0.7        1515.9       1.0X
+Reorder map: true, Total rows: 100000, Unique rows: 10000             122            144          23          0.8        1216.1       1.2X
+
+OpenJDK 64-Bit Server VM 1.8.0_312-bre_2021_10_20_23_15-b00 on Mac OS X 12.1
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+LongHashedRelation - duplicationMultiplier: 20:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Reorder map: false, Total rows: 100000, Unique rows: 5000            273            283          17          0.4        2726.5       1.0X
+Reorder map: true, Total rows: 100000, Unique rows: 5000             184            186           2          0.5        1839.1       1.5X
+
+

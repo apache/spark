@@ -31,6 +31,18 @@ import org.apache.spark.sql.execution.joins.{HashedRelation, LongHashedRelation,
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Synthetic Benchmark for HashedRelation re-ordering.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
+ *      Results will be written to "benchmarks/HashedRelationDataLocalityBenchmark-results.txt".
+ * }}}
+ */
 object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Logging {
 
   private val random = new Random(1234567L)
