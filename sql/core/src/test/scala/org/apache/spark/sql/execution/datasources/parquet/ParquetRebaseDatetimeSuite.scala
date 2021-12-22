@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
-import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96, SPARK_TIMEZONE_METADATA_KEY}
+import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
@@ -355,14 +355,14 @@ abstract class ParquetRebaseDatetimeSuite
     withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
-        assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
+        assert(getMetaData(dir)(SPARK_LEGACY_INT96_METADATA_KEY) === "")
         assert(getMetaData(dir)(SPARK_TIMEZONE_METADATA_KEY) === SQLConf.get.sessionLocalTimeZone)
       }
     }
     withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         saveTs(dir)
-        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96_METADATA_KEY).isEmpty)
         assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
       }
     }
@@ -372,7 +372,7 @@ abstract class ParquetRebaseDatetimeSuite
     withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir =>
         saveTs(dir, "2020-10-22 01:02:03")
-        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96_METADATA_KEY).isEmpty)
         assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
       }
     }
