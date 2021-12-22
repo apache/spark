@@ -377,15 +377,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
     val optimized = optimize(plan)
     if (optimized.collectFirst { case s: ShuffledJoin if s.isSkewJoin => s }.isEmpty) return plan
-
     val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
       ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
     } else {
       ValidateRequirements.validate(optimized)
     }
-    // Two cases we will apply the skewed join optimization:
-    //   1. optimize the skew join without extra shuffle
-    //   2. optimize the skew join with extra shuffle but the force-apply config is true.
     if (requirementSatisfied) {
       optimized.transform {
         case SkewJoinChildWrapper(child) => child
