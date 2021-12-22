@@ -136,7 +136,6 @@ if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.series import Series
 
-
 # These regular expression patterns are complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ and _repr_html_ in DataFrame.
 # Two patterns basically seek the footer string from Pandas'
@@ -144,7 +143,6 @@ REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) co
 REPR_HTML_PATTERN = re.compile(
     r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
 )
-
 
 _flex_doc_FRAME = """
 Get {desc} of dataframe and other, element-wise (binary operator `{op_name}`).
@@ -8814,12 +8812,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
-        exprs_numeric = []
-        exprs_non_numeric = []
-        column_labels = []
+        exprs_numeric: List[Column] = []
+        exprs_non_numeric: List[Column] = []
+        column_labels: Optional[List[Label]] = []
         # For storing the name of non-numeric type columns
-        column_names = []
-        is_timestamp_types = []
+        column_names: List[str] = []
+        exprs_timestamp: List[
+            Union[Tuple[bool, Union[NumericType, TimestampType, TimestampNTZType]]]
+        ] = []
         for label in self._internal.column_labels:
             psser = self._psser_for(label)
             spark_data_type = psser.spark.data_type
@@ -8828,7 +8828,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 column_labels.append(label)
                 # For checking if the column has timestamp type.
                 # We should handle the timestamp type differently from numeric type.
-                is_timestamp_types.append(
+                exprs_timestamp.append(
                     (
                         isinstance(spark_data_type, (TimestampType, TimestampNTZType)),
                         spark_data_type,
@@ -8846,74 +8846,31 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             percentiles = [0.25, 0.5, 0.75]
 
-        if len(exprs_numeric) == 0:
-            if len(exprs_non_numeric) == 0:
-                raise ValueError("Cannot describe a DataFrame without columns")
-
-            # Handling non-numeric type columns
-            # We will retrive the `count`, `unique`, `top` and `freq`.
-            sdf = self._internal.spark_frame.select(*exprs_non_numeric)
-
-            # Get `count` & `unique` for each columns
-            counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
-
-            # Get `top` & `freq` for each columns
-            tops = []
-            freqs = []
-            for column in exprs_non_numeric:
-                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
-                tops.append(str(top))
-                freqs.append(str(freq))
-
-            stats = [counts, uniques, tops, freqs]
-            stats_names = ["count", "unique", "top", "freq"]
-
-            result: DataFrame = DataFrame(
-                data=stats,
-                index=stats_names,
-                columns=column_names,
-            )
-        elif any(map(lambda bool_and_type: bool_and_type[0], is_timestamp_types)):
-            # Handling numeric & timestamp type columns
-            # If DataFrame has timestamp type column, we cannot use `summary`
-            # so should manually calculate the stats for each column.
-            column_names = list(map(lambda x: x[0], column_labels))
+        def describe_all_timestamp_cols() -> DataFrame:
+            """
+            Nested function to handle the case when the DataFrame has only timestamp type columns.
+            In this case, we don't need to compute `std`.
+            """
+            column_names = [
+                self._internal.spark_column_name_for(column_label) for column_label in column_labels
+            ]
             column_length = len(column_labels)
-
-            # If DataFrame has only timestamp column, we don't need to compute `std`.
-            is_all_timestamp_types = all(
-                map(lambda bool_and_type: bool_and_type[0], is_timestamp_types)
-            )
 
             # Apply stat functions for each column.
             count_exprs = map(F.count, column_names)
             min_exprs = map(F.min, column_names)
-            perc_expr_list = [
-                map(F.percentile_approx, column_names, [percentile] * column_length)
-                for percentile in percentiles
-            ]
-            perc_exprs: List[Column] = []
-            for perc_expr in perc_expr_list:
-                perc_exprs += perc_expr
+            perc_exprs = reduce(
+                lambda x, y: x + y,
+                [
+                    list(map(F.percentile_approx, column_names, [percentile] * column_length))
+                    for percentile in percentiles
+                ],
+            )
             max_exprs = map(F.max, column_names)
-            if is_all_timestamp_types:
-                mean_exprs = []
-                for column_name, is_timestamp_type in zip(column_names, is_timestamp_types):
-                    mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
-                exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
-            else:
-                mean_exprs = []
-                std_exprs = []
-                for column_name, is_timestamp_type in zip(column_names, is_timestamp_types):
-                    if is_timestamp_type[0]:
-                        std_exprs.append(
-                            F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
-                        )
-                        mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
-                    else:
-                        std_exprs.append(F.stddev(column_name))
-                        mean_exprs.append(F.mean(column_name))
-                exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs, *std_exprs]
+            mean_exprs = []
+            for column_name, is_timestamp_type in zip(column_names, exprs_timestamp):
+                mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
+            exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
 
             # Select stats for all columns at once.
             sdf = self._internal.spark_frame.select(exprs)
@@ -8929,9 +8886,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # and store the each percentile value in each list.
             percs: List[List] = [[] for _ in range(len(percentiles))]
             maxs = []
-            if not is_all_timestamp_types:
-                stds = []
-            for i, is_timestamp_type in zip(range(column_length), is_timestamp_types):
+            for i, is_timestamp_type in zip(range(column_length), exprs_timestamp):
                 if is_timestamp_type[0]:
                     counts.append(str(stat_values[i]))
                     means.append(str(stat_values[i + column_length]))
@@ -8945,12 +8900,82 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     # The result of calculating percentile values were stored in
                     # `stat_values[i + column_length * (3 + j)]`,
                     # so, `stat_values[i + column_length * (3 + j + 1)]` stores
-                    # the result of calculating max,
+                    # the result of calculating max.
                     maxs.append(str(stat_values[i + column_length * (3 + j + 1)]))
-                    # and `stat_values[i + column_length * (3 + j + 2)]` stores
+                else:
+                    counts.append(stat_values[i])
+                    means.append(stat_values[i + column_length])
+                    mins.append(stat_values[i + column_length * 2])
+                    for j in range(len(percentiles)):
+                        percs[j].append(stat_values[i + column_length * (3 + j)])
+                    maxs.append(stat_values[i + column_length * (3 + j + 1)])
+
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats_names = ["count", "mean", "min", *formatted_perc, "max"]
+            stats = [counts, means, mins, *percs, maxs]
+
+            result: DataFrame = DataFrame(  # type: ignore[no-redef]
+                data=stats,
+                index=stats_names,
+                columns=column_names,
+            )
+
+            return result
+
+        def describe_any_timestamp_cols() -> DataFrame:
+            """
+            Nested function to handle the case when the DataFrame has numeric & timestamp type columns.
+            If DataFrame has timestamp type column, we cannot use `summary`, so should manually calculate
+            the stats for each column.
+            """
+            column_names = [
+                self._internal.spark_column_name_for(column_label) for column_label in column_labels
+            ]
+            column_length = len(column_labels)
+
+            count_exprs = map(F.count, column_names)
+            min_exprs = map(F.min, column_names)
+            perc_exprs = reduce(
+                lambda x, y: x + y,
+                [
+                    list(map(F.percentile_approx, column_names, [percentile] * column_length))
+                    for percentile in percentiles
+                ],
+            )
+            max_exprs = map(F.max, column_names)
+            mean_exprs = []
+            std_exprs = []
+            for column_name, is_timestamp_type in zip(column_names, exprs_timestamp):
+                if is_timestamp_type[0]:
+                    std_exprs.append(
+                        F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
+                    )
+                    mean_exprs.append(F.mean(column_name).astype(is_timestamp_type[1]))
+                else:
+                    std_exprs.append(F.stddev(column_name))
+                    mean_exprs.append(F.mean(column_name))
+            exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs, *std_exprs]
+
+            sdf = self._internal.spark_frame.select(exprs)
+            stat_values = sdf.first()
+
+            counts = []
+            means = []
+            mins = []
+            percs: List[List] = [[] for _ in range(len(percentiles))]
+            maxs = []
+            stds = []
+            for i, is_timestamp_type in zip(range(column_length), exprs_timestamp):
+                if is_timestamp_type[0]:
+                    counts.append(str(stat_values[i]))
+                    means.append(str(stat_values[i + column_length]))
+                    mins.append(str(stat_values[i + column_length * 2]))
+                    for j in range(len(percentiles)):
+                        percs[j].append(str(stat_values[i + column_length * (3 + j)]))
+                    maxs.append(str(stat_values[i + column_length * (3 + j + 1)]))
+                    # `stat_values[i + column_length * (3 + j + 2)]` stores
                     # the result of calculating std.
-                    if not is_all_timestamp_types:
-                        stds.append(str(stat_values[i + column_length * (3 + j + 2)]))
+                    stds.append(str(stat_values[i + column_length * (3 + j + 2)]))
                 else:
                     counts.append(stat_values[i])
                     means.append(stat_values[i + column_length])
@@ -8961,19 +8986,48 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     stds.append(stat_values[i + column_length * (3 + j + 2)])
 
             formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
-            if is_all_timestamp_types:
-                stats_names = ["count", "mean", "min", *formatted_perc, "max"]
-                stats = [counts, means, mins, *percs, maxs]
-            else:
-                stats_names = ["count", "mean", "min", *formatted_perc, "max", "std"]
-                stats = [counts, means, mins, *percs, maxs, stds]
+            stats_names = ["count", "mean", "min", *formatted_perc, "max", "std"]
+            stats = [counts, means, mins, *percs, maxs, stds]
 
             result: DataFrame = DataFrame(  # type: ignore[no-redef]
                 data=stats,
                 index=stats_names,
                 columns=column_names,
             )
-        else:
+
+            return result
+
+        if len(exprs_numeric) == 0 and len(exprs_non_numeric) > 0:
+            # Handling non-numeric type columns
+            # We will retrive the `count`, `unique`, `top` and `freq`.
+            sdf = self._internal.spark_frame.select(*exprs_non_numeric)
+
+            # Get `count` & `unique` for each columns
+            counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
+
+            # Get `top` & `freq` for each columns
+            tops = []
+            freqs = []
+            # TODO: We should do it in single pass since invoking Spark job for every columns
+            #  is too expensive.
+            for column in exprs_non_numeric:
+                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
+                tops.append(str(top))
+                freqs.append(str(freq))
+
+            stats = [counts, uniques, tops, freqs]
+            stats_names = ["count", "unique", "top", "freq"]
+
+            result: DataFrame = DataFrame(
+                data=stats,
+                index=stats_names,
+                columns=column_names,
+            )
+        elif exprs_timestamp and all(map(lambda bool_and_type: bool_and_type[0], exprs_timestamp)):
+            result = describe_all_timestamp_cols()
+        elif any(map(lambda bool_and_type: bool_and_type[0], exprs_timestamp)):
+            result = describe_any_timestamp_cols()
+        elif len(exprs_numeric) > 1:
             # Handling numeric columns
             formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
             stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
@@ -8992,6 +9046,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ],
             )
             result = DataFrame(internal).astype("float64")
+        else:
+            raise ValueError("Cannot describe a DataFrame without columns")
 
         return result
 
