@@ -220,11 +220,13 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
         stage.mapStats.filter(_.bytesByPartitionId.nonEmpty).map(stats => stage.id -> stats)
       case _ => None
     }.toMap
-    if (stageStats.size != joins.size + 1) return join
+    if (stageStats.size != stages.size ||
+      stageStats.values.map(_.bytesByPartitionId.length).toSet.size != 1) {
+      return join
+    }
     val stageIds = stageStats.keysIterator.toArray
     logDebug(s"$logPrefix: ShuffleQueryStages: ${stageIds.mkString("[", ", ", "]")}")
     val numPartitions = stageStats.head._2.bytesByPartitionId.length
-    if (stageStats.exists(_._2.bytesByPartitionId.length != numPartitions)) return join
 
     // Step 2: Collect all splittable ShuffleQueryStageExecs
     // How to determine splittable ShuffleQueryStageExecs:
@@ -249,7 +251,10 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     val splittableStageIds = collectSplittableStageIds(join)
     logDebug(s"$logPrefix: Splittable ShuffleQueryStages: " +
       s"${splittableStageIds.mkString("[", ", ", "]")}")
-    if (splittableStageIds.isEmpty || !splittableStageIds.forall(stageStats.contains)) return join
+    if (splittableStageIds.isEmpty ||
+      !splittableStageIds.forall(stageStats.contains)) {
+      return join
+    }
 
     // Step 3: Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec
     val splittableStageInfos = splittableStageIds.map { stageId =>
