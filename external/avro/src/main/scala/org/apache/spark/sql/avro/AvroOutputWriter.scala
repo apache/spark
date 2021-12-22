@@ -29,7 +29,7 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.SPARK_VERSION_SHORT
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.internal.SQLConf
@@ -60,7 +60,7 @@ private[avro] class AvroOutputWriter(
     val fileMeta = Map(SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
         Map(
-          SPARK_LEGACY_DATETIME -> "",
+          SPARK_LEGACY_DATETIME_METADATA_KEY -> "",
           SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
         Map.empty

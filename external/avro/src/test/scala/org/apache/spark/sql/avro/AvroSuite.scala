@@ -2081,7 +2081,7 @@ abstract class AvroSuite
     withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
-        checkMetaData(dir, SPARK_LEGACY_DATETIME, "")
+        checkMetaData(dir, SPARK_LEGACY_DATETIME_METADATA_KEY, "")
         checkMetaData(dir, SPARK_TIMEZONE_METADATA_KEY, SQLConf.get.sessionLocalTimeZone)
       }
     }
@@ -2089,7 +2089,7 @@ abstract class AvroSuite
       withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> mode.toString) {
         withTempPath { dir =>
           saveTs(dir)
-          checkMetaData(dir, SPARK_LEGACY_DATETIME, null)
+          checkMetaData(dir, SPARK_LEGACY_DATETIME_METADATA_KEY, null)
           checkMetaData(dir, SPARK_TIMEZONE_METADATA_KEY, null)
         }
       }

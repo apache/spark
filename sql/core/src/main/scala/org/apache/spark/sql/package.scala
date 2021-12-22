@@ -66,7 +66,7 @@ package object sql {
    * Parquet/Avro file metadata key to indicate that the file was written with legacy datetime
    * values.
    */
-  private[sql] val SPARK_LEGACY_DATETIME = "org.apache.spark.legacyDateTime"
+  private[sql] val SPARK_LEGACY_DATETIME_METADATA_KEY = "org.apache.spark.legacyDateTime"
 
   /**
    * Parquet file metadata key to indicate that the file with INT96 column type was written

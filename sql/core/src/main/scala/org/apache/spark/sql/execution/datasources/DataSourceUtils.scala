@@ -26,7 +26,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
@@ -121,7 +121,7 @@ object DataSourceUtils extends PredicateHelper {
       // rebase the datetime values.
       // Files written by Spark 3.0 and latter may also need the rebase if they were written with
       // the "LEGACY" rebase mode.
-      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME) != null) {
+      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME_METADATA_KEY) != null) {
         LegacyBehaviorPolicy.LEGACY
       } else {
         LegacyBehaviorPolicy.CORRECTED

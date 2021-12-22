@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
-import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_TIMEZONE_METADATA_KEY}
+import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
@@ -323,7 +323,7 @@ abstract class ParquetRebaseDatetimeSuite
             .parquet(dir.getAbsolutePath)
           val metaData = getMetaData(dir)
           val expected = if (exists) Some("") else None
-          assert(metaData.get(SPARK_LEGACY_DATETIME) === expected)
+          assert(metaData.get(SPARK_LEGACY_DATETIME_METADATA_KEY) === expected)
           val expectedTz = if (exists) Some(SQLConf.get.sessionLocalTimeZone) else None
           assert(metaData.get(SPARK_TIMEZONE_METADATA_KEY) === expectedTz)
         }
