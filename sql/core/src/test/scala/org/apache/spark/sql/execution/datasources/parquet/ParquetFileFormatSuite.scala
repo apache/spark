@@ -97,7 +97,7 @@ abstract class ParquetFileFormatSuite
         Seq(
           Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
           Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
-          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> false,
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> false
         ).foreach { case (schema, expected) =>
           assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
         }
