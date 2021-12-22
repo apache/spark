@@ -8950,7 +8950,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             num_stats = int(len(exprs) / column_length)
             # `column_name_stats_kv` is key-value store that has column name as key, and the stats as values
-            # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value}]}
+            # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value} ...]}
             column_name_stats_kv: Dict[str, List[str]] = dict()
             for i, column_name in enumerate(column_names):
                 column_name_stats_kv[column_name] = list()
