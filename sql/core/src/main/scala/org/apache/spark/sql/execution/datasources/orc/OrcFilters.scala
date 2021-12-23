@@ -142,11 +142,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
     case ByteType | ShortType | IntegerType | LongType |
-         _: AnsiIntervalType => PredicateLeaf.Type.LONG
+         _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
     case StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
-    case TimestampType | TimestampNTZType => PredicateLeaf.Type.TIMESTAMP
+    case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
     case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
   }

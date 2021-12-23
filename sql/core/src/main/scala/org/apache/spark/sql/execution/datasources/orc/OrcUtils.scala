@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -38,8 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, NANOS_PER_MICROS}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -200,7 +198,7 @@ object OrcUtils extends Logging {
       dataSchema: StructType,
       requiredSchema: StructType,
       reader: Reader,
-      conf: Configuration): Option[(Array[Int], Boolean, StructType)] = {
+      conf: Configuration): Option[(Array[Int], Boolean)] = {
     def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
         case (TimestampType, TimestampNTZType) =>
@@ -213,8 +211,7 @@ object OrcUtils extends Logging {
     }
 
     val orcSchema = reader.getSchema
-    val orcCatalystSchema = toCatalystSchema(orcSchema)
-    checkTimestampCompatibility(orcCatalystSchema, dataSchema)
+    checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
     val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
@@ -235,48 +232,41 @@ object OrcUtils extends Logging {
         // in the physical schema, there is a need to send the
         // entire dataSchema instead of required schema.
         // So pruneCols is not done in this case
-        val (colIds, fields) = requiredSchema.fieldNames.map { name =>
+        Some(requiredSchema.fieldNames.map { name =>
           val index = dataSchema.fieldIndex(name)
-          val colId = if (index < orcFieldNames.length) {
+          if (index < orcFieldNames.length) {
             index
           } else {
             -1
           }
-          (colId, orcCatalystSchema(name))
-        }.unzip
-        Some(colIds, false, StructType(fields))
+        }, false)
       } else {
         if (isCaseSensitive) {
-          val (colIds, fields) = requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
-            val colId = if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
               idx
             } else {
               -1
             }
-            (colId, orcCatalystSchema(name))
-          }.unzip
-            Some(colIds, true, StructType(fields))
+          }, true)
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
           val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
-          val (colIds, fields) = requiredSchema.fieldNames.zipWithIndex.map {
-            case (requiredFieldName, idx) =>
-              val colId = caseInsensitiveOrcFieldMap
-                .get(requiredFieldName.toLowerCase(Locale.ROOT))
-                .map { matchedOrcFields =>
-                  if (matchedOrcFields.size > 1) {
-                    // Need to fail if there is ambiguity, i.e. more than one field is matched.
-                    val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                    reader.close()
-                    throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
-                      requiredFieldName, matchedOrcFieldsString)
-                  } else {
-                    idx
-                  }
-                }.getOrElse(-1)
-              (colId, orcCatalystSchema(requiredFieldName))
-          }.unzip
-            Some(colIds, true, StructType(fields))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
+            caseInsensitiveOrcFieldMap
+              .get(requiredFieldName.toLowerCase(Locale.ROOT))
+              .map { matchedOrcFields =>
+                if (matchedOrcFields.size > 1) {
+                  // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                  val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
+                  reader.close()
+                  throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+                    requiredFieldName, matchedOrcFieldsString)
+                } else {
+                  idx
+                }
+              }.getOrElse(-1)
+          }, true)
         }
       }
     }
@@ -293,10 +283,36 @@ object OrcUtils extends Logging {
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
-  def orcTypeDescriptionString(dt: DataType, ordDt: DataType): String = (dt, ordDt) match {
+  def orcTypeDescriptionString(dt: DataType): String = dt match {
+    case s: StructType =>
+      val fieldTypes = s.fields.map { f =>
+        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+      }
+      s"struct<${fieldTypes.mkString(",")}>"
+    case a: ArrayType =>
+      s"array<${orcTypeDescriptionString(a.elementType)}>"
+    case m: MapType =>
+      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
+    case _: DayTimeIntervalType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
+    case _ => dt.catalogString
+  }
+
+  /**
+   * Given two `StructType` object, this methods converts it to corresponding string representation
+   * in ORC. The second `StructType` used to change the `TimestampNTZType` as LongType in result
+   * schema string when reading `TimestampNTZ` as `TimestampLTZ`.
+   */
+  def orcTypeDescriptionString(dt: DataType, orcDt: DataType): String = (dt, orcDt) match {
     case (s1: StructType, s2: StructType) =>
-      val fieldTypes = s1.fields.zip(s2.fields).map { f =>
-        s"${quoteIdentifier(f._1.name)}:${orcTypeDescriptionString(f._1.dataType, f._2.dataType)}"
+      val fieldTypes = s1.fields.map { f =>
+        val idx = s2.fieldNames.indexWhere(caseSensitiveResolution(_, f.name))
+        if (idx == -1) {
+          s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+        } else {
+          s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType, s2(idx).dataType)}"
+        }
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case (a1: ArrayType, a2: ArrayType) =>
@@ -381,8 +397,8 @@ object OrcUtils extends Logging {
   def orcResultSchemaString(
       canPruneCols: Boolean,
       dataSchema: StructType,
-      orcCatalystSchema: StructType,
       resultSchema: StructType,
+      orcCatalystSchema: StructType,
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
@@ -541,17 +557,4 @@ object OrcUtils extends Logging {
       resultRow
     }
   }
-
-  def fromOrcNTZ(ts: Timestamp): Long = {
-    DateTimeUtils.millisToMicros(ts.getTime) +
-      (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-  }
-
-//  def toOrcNTZ(micros: Long): OrcTimestamp = {
-//    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
-//    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
-//    val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
-//    result.setNanos(nanos.toInt)
-//    result
-//  }
 }

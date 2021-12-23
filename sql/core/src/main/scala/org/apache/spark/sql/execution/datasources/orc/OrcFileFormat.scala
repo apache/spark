@@ -142,10 +142,10 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val resultedColPruneInfo =
+      val (resultedColPruneInfo, reader) =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
-          OrcUtils.requestedColumnIds(
-            isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+          (OrcUtils.requestedColumnIds(
+            isCaseSensitive, dataSchema, requiredSchema, reader, conf), reader)
         }
 
       if (resultedColPruneInfo.isEmpty) {
@@ -160,9 +160,10 @@ class OrcFileFormat
           }
         }
 
-        val (requestedColIds, canPruneCols, orcCatalystSchema) = resultedColPruneInfo.get
+        val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
+        val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-          dataSchema, orcCatalystSchema, resultSchema, partitionSchema, conf)
+          dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

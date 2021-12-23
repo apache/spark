@@ -88,18 +88,19 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val resultedColPruneInfo =
+    val (resultedColPruneInfo, reader) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+        (OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf), reader)
       }
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
-      val (requestedColIds, canPruneCols, orcCatalystSchema) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(
-        canPruneCols, dataSchema, orcCatalystSchema, resultSchema, partitionSchema, conf)
+      val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
+      val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
+      OrcUtils.orcResultSchemaString(canPruneCols,
+        dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -132,18 +133,19 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val resultedColPruneInfo =
+    val (resultedColPruneInfo, reader) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf)
+        (OrcUtils.requestedColumnIds(
+          isCaseSensitive, dataSchema, readDataSchema, reader, conf), reader)
       }
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
     } else {
-      val (requestedDataColIds, canPruneCols, orcCatalystSchema) = resultedColPruneInfo.get
+      val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
+      val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, orcCatalystSchema, resultSchema, partitionSchema, conf)
+        dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
       assert(requestedColIds.length == resultSchema.length,
         "[BUG] requested column IDs do not match required schema")
