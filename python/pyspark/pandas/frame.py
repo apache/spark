@@ -3988,9 +3988,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 '"column" should be a scalar value or tuple that contains scalar values'
             )
 
+        # TODO(SPARK-37723): Support tuple for non-MultiIndex column name.
         if is_name_like_tuple(column):
             if self._internal.column_labels_level > 1:
-                if len(column) != len(self.columns.levels):
+                if len(column) != len(self.columns.levels):  # type: ignore[attr-defined]
                     # To be consistent with pandas
                     raise ValueError('"column" must have length equal to number of column levels.')
             else:
