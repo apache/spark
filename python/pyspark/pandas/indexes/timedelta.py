@@ -18,7 +18,7 @@ from typing import cast, no_type_check, Any
 from functools import partial
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue

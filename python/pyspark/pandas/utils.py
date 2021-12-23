@@ -40,7 +40,7 @@ import warnings
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
