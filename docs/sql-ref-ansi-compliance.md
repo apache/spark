@@ -70,23 +70,21 @@ SELECT abs(-2147483648);
 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 
-The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
- straightforward type conversions which are disallowed as per the ANSI standard:
-* NumericType <=> BooleanType
-* StringType <=> BinaryType
-* ArrayType => String
-* MapType => String
-* StructType => String
+Besides, the ANSI SQL mode disallows the following type conversions which are allowed when ANSI mode is off:
+* Numeric <=> Binary
+* Date <=> Boolean
+* Timestamp <=> Boolean
+* Date => Numeric
 
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | <span style="color:red">**Y**</span> | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
 | Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
 | Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
 | Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
@@ -97,6 +95,8 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 In the table above, all the `CAST`s that can cause runtime exceptions are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
+* CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
