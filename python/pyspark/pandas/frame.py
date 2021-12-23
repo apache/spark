@@ -8825,7 +8825,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spark_data_types: List[DataType] = []
         column_labels: Optional[List[Label]] = []
         column_names: List[str] = []
-        null_columns: List[str] = []
         for label in self._internal.column_labels:
             psser = self._psser_for(label)
             spark_data_type = psser.spark.data_type
@@ -8837,8 +8836,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 psser_timestamp.append(psser)
                 column_labels.append(label)
                 spark_data_types.append(spark_data_type)
-            elif isinstance(spark_data_type, NullType):
-                null_columns.append(self._internal.spark_column_name_for(label))
             else:
                 psser_string.append(psser)
                 column_names.append(self._internal.spark_column_name_for(label))
@@ -8858,7 +8855,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
         has_timestamp_type = len(psser_timestamp) > 0
         has_numeric_type = len(psser_numeric) > 0
-        has_null_columns = len(null_columns) > 0
 
         if is_all_string_type:
             # Handling string type columns
@@ -8871,6 +8867,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             # Get `count` & `unique` for each columns
             counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
+            # Handling Empty DataFrame
+            if len(counts) == 0 or counts[0] == "0":
+                data = dict()
+                for psser in psser_string:
+                    data[psser.name] = [0, 0, np.nan, np.nan]
+                return DataFrame(data, index=["count", "unique", "top", "freq"])
 
             # Get `top` & `freq` for each columns
             tops = []
@@ -8949,9 +8951,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 for label, spark_data_type in zip(column_labels, spark_data_types):
                     column_name = label[0]
                     if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                        std_exprs.append(
-                            F.lit(str(pd.NaT)).alias("stddev_samp({})".format(column_name))
-                        )
+                        std_exprs.append(F.lit(None).alias("stddev_samp({})".format(column_name)))
                     else:
                         std_exprs.append(F.stddev(column_name))
                 exprs.extend(std_exprs)
@@ -8981,12 +8981,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index=stats_names,
                 columns=column_names,
             )
-        elif has_null_columns:
-            # Empty DataFrame with columns
-            data = dict()
-            for null_column_name in null_columns:
-                data[null_column_name] = [0, 0, np.nan, np.nan]
-            result = DataFrame(data, index=["count", "unique", "top", "freq"])
         else:
             # Empty DataFrame without column
             raise ValueError("Cannot describe a DataFrame without columns")
