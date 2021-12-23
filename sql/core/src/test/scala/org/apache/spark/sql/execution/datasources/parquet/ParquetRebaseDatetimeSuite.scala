@@ -37,8 +37,8 @@ abstract class ParquetRebaseDatetimeSuite
   import testImplicits._
 
   // It generates input files for the test below:
-  // "SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps"
-  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4") {
+  // "SPARK-31159, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
+  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4/3.2") {
     val resourceDir = "sql/core/src/test/resources/test-data"
     val version = "2_4_5"
     val N = 8
@@ -62,7 +62,10 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString,
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
         save(
           (1 to N).map(i => ("1001-01-01", s"1001-01-0$i")),
           "date",
@@ -119,7 +122,7 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+  test("SPARK-31159, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
     def checkReadMixedFiles[T](
@@ -133,25 +136,25 @@ abstract class ParquetRebaseDatetimeSuite
         inReadConf: String = SQLConf.PARQUET_REBASE_MODE_IN_READ.key): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
-        val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
-        val path3_0 = paths(0).getCanonicalPath
-        val path3_0_rebase = paths(1).getCanonicalPath
+        val oldPath = getResourceParquetFilePath("test-data/" + fileName)
+        val path3_x = paths(0).getCanonicalPath
+        val path3_x_rebase = paths(1).getCanonicalPath
         val df = Seq.tabulate(N)(rowFunc).toDF("dict", "plain")
           .select($"dict".cast(catalystType), $"plain".cast(catalystType))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
-          checkDefaultLegacyRead(path2_4)
+          checkDefaultLegacyRead(oldPath)
           withSQLConf(inWriteConf -> CORRECTED.toString) {
-            df.write.mode("overwrite").parquet(path3_0)
+            df.write.mode("overwrite").parquet(path3_x)
           }
           withSQLConf(inWriteConf -> LEGACY.toString) {
-            df.write.parquet(path3_0_rebase)
+            df.write.parquet(path3_x_rebase)
           }
         }
         // For Parquet files written by Spark 3.0, we know the writer info and don't need the
         // config to guide the rebase behavior.
         runInMode(inReadConf, Seq(LEGACY)) { options =>
           checkAnswer(
-            spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase),
+            spark.read.format("parquet").options(options).load(oldPath, path3_x, path3_x_rebase),
             (0 until N).flatMap { i =>
               val (dictS, plainS) = rowFunc(i)
               Seq.tabulate(3) { _ =>
@@ -170,7 +173,8 @@ abstract class ParquetRebaseDatetimeSuite
       // By default we should fail to read ancient datetime values when parquet files don't
       // contain Spark version.
       "2_4_5" -> failInRead _,
-      "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
+      "2_4_6" -> successInRead _,
+      "3_2_2" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         checkReadMixedFiles(
           s"before_1582_date_v$version.snappy.parquet",
