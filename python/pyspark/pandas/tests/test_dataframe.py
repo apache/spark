@@ -223,6 +223,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             "loc must be int",
             lambda: psdf.insert((1,), "b", 10),
         )
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Assigning column name as tuple is only supported for MultiIndex columns for now.",
+            lambda: psdf.insert(0, ("e",), 10),
+        )
+
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
         self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))
@@ -246,6 +252,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assertRaisesRegex(
             ValueError, "cannot insert d, already exists", lambda: psdf.insert(4, "d", 11)
+        )
+        self.assertRaisesRegex(
+            ValueError,
+            r"cannot insert \('x', 'a', 'b'\), already exists",
+            lambda: psdf.insert(4, ("x", "a", "b"), 11),
         )
         self.assertRaisesRegex(
             ValueError,
