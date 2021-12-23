@@ -1361,7 +1361,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser1.update(pser2)
         psser1.update(psser2)
-        self.assert_eq(psser1, pser1)
+        self.assert_eq(psser1.sort_index(), pser1)
 
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
