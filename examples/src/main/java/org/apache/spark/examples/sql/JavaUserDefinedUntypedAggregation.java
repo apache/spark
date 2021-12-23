@@ -108,7 +108,7 @@ public class JavaUserDefinedUntypedAggregation {
 
     // $example on:untyped_custom_aggregation$
     // Register the function to access it
-    spark.udf().register("myAverage", functions.udaf(new MyAverage(), Encoders.LONG()));
+    spark.udf().register("myAverage", functions.udf(new MyAverage(), Encoders.LONG()));
 
     Dataset<Row> df = spark.read().json("examples/src/main/resources/employees.json");
     df.createOrReplaceTempView("employees");
