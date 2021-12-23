@@ -114,8 +114,8 @@ Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
    2   8
    3   9
 
-However, note that a new default index is created when a pandas-on-Spark DataFrame is created from
-a Spark DataFrame. See `Default Index Type <options.rst#default-index-type>`_. In order to avoid this overhead, specify the column
+However, note that a new default index is created when pandas-on-Spark DataFrame is created from
+Spark DataFrame. See `Default Index Type <options.rst#default-index-type>`_. In order to avoid this overhead, specify the column
 to use as an index when possible.
 
 .. code-block:: python
