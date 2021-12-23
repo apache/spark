@@ -644,7 +644,7 @@ class PandasOnSparkFrameMethods:
                 self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
+                    self_applied, func, return_schema, retain_index=True  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -709,7 +709,7 @@ class PandasOnSparkFrameMethods:
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=should_retain_index
+                    self_applied, func, return_schema, retain_index=should_retain_index  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 

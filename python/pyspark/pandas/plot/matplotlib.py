@@ -23,7 +23,7 @@ from matplotlib.axes._base import _process_plot_format
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
 
-from pandas.plotting._matplotlib import (
+from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,
     HistPlot as PandasHistPlot,
@@ -46,7 +46,7 @@ from pyspark.pandas.plot import (
     KdePlotBase,
 )
 
-_all_kinds = PlotAccessor._all_kinds
+_all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):

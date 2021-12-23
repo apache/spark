@@ -561,7 +561,7 @@ class SparkConversionMixin:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype  # type: ignore[attr-defined]
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types
