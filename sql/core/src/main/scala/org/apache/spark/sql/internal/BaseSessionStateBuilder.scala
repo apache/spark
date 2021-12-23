@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.internal
 
+import java.io.Serializable
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe
 
@@ -33,13 +35,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlan, SparkPlanner, SparkSqlParser}
-import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaAggregator, ScalaUDAF}
+import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
-import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -423,25 +426,25 @@ class SparkUDFExpressionBuilder extends FunctionExpressionBuilder {
           clazz.getCanonicalName)
       }
       val aggregator =
-        noParameterConstructor.get.newInstance().asInstanceOf[Aggregator[Any, Any, Any]]
+        noParameterConstructor.get.newInstance().asInstanceOf[Aggregator[Serializable, Any, Any]]
 
       // Construct the input encoder
       val mirror = universe.runtimeMirror(clazz.getClassLoader)
       val classType = mirror.classSymbol(clazz)
-      val baseClassType = universe.typeOf[Aggregator[_, _, _]].typeSymbol.asClass
+      val baseClassType = universe.typeOf[Aggregator[Serializable, Any, Any]].typeSymbol.asClass
       val baseType = universe.internal.thisType(classType).baseType(baseClassType)
       val tpe = baseType.typeArgs.head
-      val cls = mirror.runtimeClass(tpe)
       val serializer = ScalaReflection.serializerForType(tpe)
       val deserializer = ScalaReflection.deserializerForType(tpe)
-      val inputEncoder = new ExpressionEncoder[Any](serializer, deserializer, ClassTag(cls))
+      val cls = mirror.runtimeClass(tpe)
+      val inputEncoder =
+        new ExpressionEncoder[Serializable](serializer, deserializer, ClassTag(cls))
 
-      val expr = ScalaAggregator[Any, Any, Any](
-        input,
-        aggregator,
-        inputEncoder,
-        aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[Any]],
-        aggregatorName = Some(name))
+      val udf: UserDefinedFunction = udaf[Serializable, Any, Any](aggregator, inputEncoder)
+      assert(udf.isInstanceOf[UserDefinedAggregator[_, _, _]])
+      val udfAgg: UserDefinedAggregator[_, _, _] = udf.asInstanceOf[UserDefinedAggregator[_, _, _]]
+
+      val expr = udfAgg.scalaAggregator(input)
       // Check input argument size
       if (expr.inputTypes.size != input.size) {
         throw QueryCompilationErrors.invalidFunctionArgumentsError(
