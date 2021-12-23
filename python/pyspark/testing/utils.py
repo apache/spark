@@ -22,8 +22,8 @@ import sys
 import unittest
 from time import time, sleep
 
-from pyspark.find_spark_home import _find_spark_home
 from pyspark import SparkContext, SparkConf
+from pyspark.find_spark_home import _find_spark_home
 
 
 have_scipy = False
@@ -153,7 +153,7 @@ class ByteArrayOutput:
 def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
     # vary for SBT or Maven specifically. See also SPARK-26856
-    project_full_path = os.path.join(os.environ["SPARK_HOME"], project_relative_path)
+    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
 
     # We should ignore the following jars
     ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
