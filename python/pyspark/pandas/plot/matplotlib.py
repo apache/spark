@@ -375,6 +375,7 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
+            label = self._mark_right_label(label, index=i)
             kwds["label"] = label
 
             style, kwds = self._apply_style_colors(colors, kwds, i, label)
@@ -383,7 +384,7 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            self._add_legend_handle(artists[0], label, index=i)
+            self._append_legend_handles_labels(artists[0], label)
 
     @classmethod
     def _plot(cls, ax, y, style=None, bins=None, bottom=0, column_num=0, stacking_id=None, **kwds):
@@ -466,6 +467,7 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
+            label = self._mark_right_label(label, index=i)
             kwds["label"] = label
 
             style, kwds = self._apply_style_colors(colors, kwds, i, label)
@@ -474,7 +476,7 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            self._add_legend_handle(artists[0], label, index=i)
+            self._append_legend_handles_labels(artists[0], label)
 
     def _get_ind(self, y):
         return KdePlotBase.get_ind(y, self.ind)
