@@ -1719,22 +1719,23 @@ object QueryExecutionErrors {
   }
 
   def cannotBroadcastTableOverMaxTableRowsError(
-      maxBroadcastTableRows: Long, numRows: Long): Throwable = {
+      maxBroadcastTableRows: Long, numRows: Long, runId: String): Throwable = {
     new SparkException(
-      s"Cannot broadcast the table over $maxBroadcastTableRows rows: $numRows rows")
+      s"Cannot broadcast the table over $maxBroadcastTableRows rows: $numRows rows runId: $runId")
   }
 
   def cannotBroadcastTableOverMaxTableBytesError(
-      maxBroadcastTableBytes: Long, dataSize: Long): Throwable = {
+      maxBroadcastTableBytes: Long, dataSize: Long, runId: String): Throwable = {
     new SparkException("Cannot broadcast the table that is larger than" +
-      s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB")
+      s" ${maxBroadcastTableBytes >> 30}GB: ${dataSize >> 30} GB; runId: $runId")
   }
 
-  def notEnoughMemoryToBuildAndBroadcastTableError(oe: OutOfMemoryError): Throwable = {
+  def notEnoughMemoryToBuildAndBroadcastTableError(
+      oe: OutOfMemoryError, runId: String): Throwable = {
     new OutOfMemoryError("Not enough memory to build and broadcast the table to all " +
       "worker nodes. As a workaround, you can either disable broadcast by setting " +
       s"${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1 or increase the spark " +
-      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value.")
+      s"driver memory by setting ${SparkLauncher.DRIVER_MEMORY} to a higher value. runId: $runId")
       .initCause(oe.getCause)
   }
 

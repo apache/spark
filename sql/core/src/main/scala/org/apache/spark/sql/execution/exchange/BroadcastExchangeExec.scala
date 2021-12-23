@@ -128,7 +128,10 @@ case class BroadcastExchangeExec(
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       session, BroadcastExchangeExec.executionContext) {
+          val oldName = Thread.currentThread().getName
           try {
+            // so that we can tell which log lines belong to which BHJ
+            Thread.currentThread().setName(s"$oldName-$runId")
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
               interruptOnCancel = true)
@@ -138,7 +141,7 @@ case class BroadcastExchangeExec(
             longMetric("numOutputRows") += numRows
             if (numRows >= maxBroadcastRows) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(
-                maxBroadcastRows, numRows)
+                maxBroadcastRows, numRows, runId.toString)
             }
 
             val beforeBuild = System.nanoTime()
@@ -160,7 +163,7 @@ case class BroadcastExchangeExec(
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
-                MAX_BROADCAST_TABLE_BYTES, dataSize)
+                MAX_BROADCAST_TABLE_BYTES, dataSize, runId.toString)
             }
 
             val beforeBroadcast = System.nanoTime()
@@ -180,7 +183,8 @@ case class BroadcastExchangeExec(
             // will catch this exception and re-throw the wrapped fatal throwable.
             case oe: OutOfMemoryError =>
               val ex = new SparkFatalException(
-                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(oe))
+                QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(
+                  oe, runId.toString))
               promise.tryFailure(ex)
               throw ex
             case e if !NonFatal(e) =>
@@ -190,6 +194,8 @@ case class BroadcastExchangeExec(
             case e: Throwable =>
               promise.tryFailure(e)
               throw e
+          } finally {
+            Thread.currentThread().setName(oldName)
           }
     }
   }
