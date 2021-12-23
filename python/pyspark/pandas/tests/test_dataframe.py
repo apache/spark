@@ -5783,10 +5783,16 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # numeric columns
         self.assert_eq(psdf.describe(), pdf.describe())
+        psdf.a += psdf.a
+        pdf.a += pdf.a
+        self.assert_eq(psdf.describe(), pdf.describe())
 
         # string columns
         psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
         pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        psdf.A += psdf.A
+        pdf.A += pdf.A
         self.assert_eq(psdf.describe(), pdf.describe().astype(str))
 
         # timestamp columns
@@ -5835,6 +5841,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.describe().loc[["count", "mean", "min", "max"]],
             pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
         )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         # Numeric & timestamp columns
         psdf = ps.DataFrame(
@@ -5849,15 +5861,27 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             }
         )
         pdf = psdf.to_pandas()
-        pandas_on_spark_result = psdf.describe()
         pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
         self.assert_eq(
-            pandas_on_spark_result.A.loc[["count", "mean", "min", "max"]],
-            pandas_result.A.loc[["count", "mean", "min", "max"]],
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
         )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
         self.assert_eq(
-            pandas_on_spark_result.B.loc[["count", "mean", "min", "max"]],
-            pandas_result.B.astype(str).loc[["count", "mean", "min", "max"]],
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
+
+        # Empty DataFrame
+        psdf = ps.DataFrame(columns=["A", "B"])
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe(),
+            pdf.describe().astype(float),
         )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"

@@ -68,6 +68,7 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DoubleType,
+    NullType,
     NumericType,
     Row,
     StringType,
@@ -8820,6 +8821,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spark_data_types: List[DataType] = []
         column_labels: Optional[List[Label]] = []
         column_names: List[str] = []
+        null_columns: List[str] = []
         for label in self._internal.column_labels:
             psser = self._psser_for(label)
             spark_data_type = psser.spark.data_type
@@ -8831,9 +8833,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 psser_timestamp.append(psser)
                 column_labels.append(label)
                 spark_data_types.append(spark_data_type)
+            elif isinstance(spark_data_type, NullType):
+                null_columns.append(self._internal.spark_column_name_for(label))
             else:
                 psser_string.append(psser)
-                column_names.append(label[0])
+                column_names.append(self._internal.spark_column_name_for(label))
 
         if percentiles is not None:
             if any((p < 0.0) or (p > 1.0) for p in percentiles):
@@ -8850,12 +8854,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
         has_timestamp_type = len(psser_timestamp) > 0
         has_numeric_type = len(psser_numeric) > 0
+        has_null_columns = len(null_columns) > 0
 
         if is_all_string_type:
             # Handling string type columns
             # We will retrive the `count`, `unique`, `top` and `freq`.
-            exprs_string = [psser.spark.column for psser in psser_string]
-            sdf = self._internal.spark_frame.select(*exprs_string)
+            internal = self._internal.resolved_copy
+            exprs_string = [
+                internal.spark_column_for(psser._column_label) for psser in psser_string
+            ]
+            sdf = internal.spark_frame.select(*exprs_string)
 
             # Get `count` & `unique` for each columns
             counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
@@ -8901,8 +8909,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             result = DataFrame(internal).astype("float64")
         elif has_timestamp_type:
+            internal = self._internal.resolved_copy
             column_names = [
-                self._internal.spark_column_name_for(column_label) for column_label in column_labels
+                internal.spark_column_name_for(column_label) for column_label in column_labels
             ]
             column_length = len(column_labels)
 
@@ -8945,15 +8954,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 stats_names.append("std")
 
             # Select stats for all columns at once.
-            sdf = self._internal.spark_frame.select(exprs)
+            sdf = internal.spark_frame.select(exprs)
             stat_values = sdf.first()
 
             num_stats = int(len(exprs) / column_length)
             # `column_name_stats_kv` is key-value store that has column name as key, and the stats as values
             # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value} ...]}
-            column_name_stats_kv: Dict[str, List[str]] = dict()
+            column_name_stats_kv: Dict[str, List[str]] = defaultdict(list)
             for i, column_name in enumerate(column_names):
-                column_name_stats_kv[column_name] = list()
                 for first_stat_idx in range(num_stats):
                     column_name_stats_kv[column_name].append(
                         stat_values[(first_stat_idx * column_length) + i]
@@ -8969,7 +8977,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index=stats_names,
                 columns=column_names,
             )
+        elif has_null_columns:
+            # Empty DataFrame with columns
+            data = dict()
+            for null_column_name in null_columns:
+                data[null_column_name] = [0, 0, np.nan, np.nan]
+            result = DataFrame(data, index=["count", "unique", "top", "freq"])
         else:
+            # Empty DataFrame without column
             raise ValueError("Cannot describe a DataFrame without columns")
 
         return result
