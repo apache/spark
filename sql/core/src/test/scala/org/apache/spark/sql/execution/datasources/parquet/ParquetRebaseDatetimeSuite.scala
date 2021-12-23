@@ -212,7 +212,7 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-31159: rebasing timestamps in write") {
+  test("SPARK-31159, SPARK-37705: rebasing timestamps in write") {
     val N = 8
     Seq(false, true).foreach { dictionaryEncoding =>
       Seq(
@@ -236,34 +236,39 @@ abstract class ParquetRebaseDatetimeSuite
           SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key
         )
       ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
-        withClue(s"output type $outType") {
-          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
-            withTempPath { dir =>
-              val path = dir.getAbsolutePath
-              withSQLConf(inWriteConf -> LEGACY.toString) {
-                Seq.tabulate(N)(_ => tsStr).toDF("tsS")
-                  .select($"tsS".cast("timestamp").as("ts"))
-                  .repartition(1)
-                  .write
-                  .option("parquet.enable.dictionary", dictionaryEncoding)
-                  .parquet(path)
-              }
+        // Ignore the default JVM time zone and use the session time zone instead of it in rebasing.
+        DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.JST) {
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
+            withClue(s"output type $outType") {
+              withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+                withTempPath { dir =>
+                  val path = dir.getAbsolutePath
+                  withSQLConf(inWriteConf -> LEGACY.toString) {
+                    Seq.tabulate(N)(_ => tsStr).toDF("tsS")
+                      .select($"tsS".cast("timestamp").as("ts"))
+                      .repartition(1)
+                      .write
+                      .option("parquet.enable.dictionary", dictionaryEncoding)
+                      .parquet(path)
+                  }
 
-              withAllParquetReaders {
-                // The file metadata indicates if it needs rebase or not, so we can always get the
-                // correct result regardless of the "rebase mode" config.
-                runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
-                  checkAnswer(
-                    spark.read.options(options).parquet(path),
-                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
-                }
+                  withAllParquetReaders {
+                    // The file metadata indicates if it needs rebase or not, so we can always get
+                    // the correct result regardless of the "rebase mode" config.
+                    runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+                      checkAnswer(
+                        spark.read.options(options).parquet(path).select($"ts".cast("string")),
+                        Seq.tabulate(N)(_ => Row(tsStr)))
+                    }
 
-                // Force to not rebase to prove the written datetime values are rebased
-                // and we will get wrong result if we don't rebase while reading.
-                withSQLConf("spark.test.forceNoRebase" -> "true") {
-                  checkAnswer(
-                    spark.read.parquet(path),
-                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(nonRebased))))
+                    // Force to not rebase to prove the written datetime values are rebased
+                    // and we will get wrong result if we don't rebase while reading.
+                    withSQLConf("spark.test.forceNoRebase" -> "true") {
+                      checkAnswer(
+                        spark.read.parquet(path).select($"ts".cast("string")),
+                        Seq.tabulate(N)(_ => Row(nonRebased)))
+                    }
+                  }
                 }
               }
             }
