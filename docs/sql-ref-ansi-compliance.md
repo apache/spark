@@ -309,20 +309,19 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
 
-### SQL Keywords
+### SQL Keywords (optional, disabled by default)
 
-When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
-In this mode, Spark SQL has two kinds of keywords:
-* Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
+When both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are true, Spark SQL will use the ANSI mode parser.
+
+With the ANSI mode parser, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `EXPLAIN SELECT ...` is a command, but EXPLAIN can be used as identifiers in other places.
+* Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
 
-When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
+With the default parser, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
-
-By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
+By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are false.
 
 Below is a list of all the keywords in Spark SQL.
 

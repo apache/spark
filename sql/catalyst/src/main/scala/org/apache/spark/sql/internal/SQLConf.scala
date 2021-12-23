@@ -2663,7 +2663,7 @@ object SQLConf {
       "and/or identifiers for table, view, function, etc.")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
     buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
