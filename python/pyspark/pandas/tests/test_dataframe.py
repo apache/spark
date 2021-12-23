@@ -255,7 +255,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assertRaisesRegex(
             ValueError,
-            "cannot insert \('x', 'a', 'b'\), already exists",
+            r"cannot insert \('x', 'a', 'b'\), already exists",
             lambda: psdf.insert(4, ("x", "a", "b"), 11),
         )
         self.assertRaisesRegex(
