@@ -5884,6 +5884,73 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             pdf.describe().astype(float),
         )
 
+        # Explicit empty DataFrame numeric only
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string only
+        psdf = ps.DataFrame({"a": ["a", "b", "c"], "b": ["q", "w", "e"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame timestamp only
+        psdf = ps.DataFrame(
+            {
+                "a": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True),
+        )
+
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 2, 3],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "c": [None, None, None],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe(datetime_is_numeric=True))
+
+        # Explicit empty DataFrame numeric & timestamp
+        psdf = ps.DataFrame(
+            {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True),
+        )
+
+        # Explicit empty DataFrame numeric & string
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string & timestamp
+        psdf = ps.DataFrame(
+            {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True),
+        )
+
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe(percentiles=[1.1])
