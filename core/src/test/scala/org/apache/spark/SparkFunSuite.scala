@@ -26,8 +26,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
-import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
-import org.apache.log4j.spi.LoggingEvent
+import org.apache.logging.log4j._
+import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.{LogEvent, Logger}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -228,44 +229,62 @@ abstract class SparkFunSuite
    * appender and restores the log level if necessary.
    */
   protected def withLogAppender(
-      appender: Appender,
+      appender: AbstractAppender,
       loggerNames: Seq[String] = Seq.empty,
       level: Option[Level] = None)(
       f: => Unit): Unit = {
     val loggers = if (loggerNames.nonEmpty) {
-      loggerNames.map(Logger.getLogger)
+      loggerNames.map(LogManager.getLogger)
     } else {
-      Seq(Logger.getRootLogger)
+      Seq(LogManager.getRootLogger)
+    }
+    if (loggers.size == 0) {
+      throw new SparkException(s"Cannot get any logger to add the appender")
     }
     val restoreLevels = loggers.map(_.getLevel)
     loggers.foreach { logger =>
-      logger.addAppender(appender)
-      if (level.isDefined) {
-        logger.setLevel(level.get)
+      logger match {
+        case logger: Logger =>
+          logger.addAppender(appender)
+          appender.start()
+          if (level.isDefined) {
+            logger.setLevel(level.get)
+            logger.get().setLevel(level.get)
+          }
+        case _ =>
+          throw new SparkException(s"Cannot add appender to logger ${logger.getName}")
       }
     }
     try f finally {
-      loggers.foreach(_.removeAppender(appender))
+      loggers.foreach(_.asInstanceOf[Logger].removeAppender(appender))
+      appender.stop()
       if (level.isDefined) {
         loggers.zipWithIndex.foreach { case (logger, i) =>
-          logger.setLevel(restoreLevels(i))
+          logger.asInstanceOf[Logger].setLevel(restoreLevels(i))
+          logger.asInstanceOf[Logger].get().setLevel(restoreLevels(i))
         }
       }
     }
   }
 
-  class LogAppender(msg: String = "", maxEvents: Int = 1000) extends AppenderSkeleton {
-    val loggingEvents = new ArrayBuffer[LoggingEvent]()
+  class LogAppender(msg: String = "", maxEvents: Int = 1000)
+      extends AbstractAppender("logAppender", null, null) {
+    val loggingEvents = new ArrayBuffer[LogEvent]()
+    private var _threshold: Level = Level.INFO
 
-    override def append(loggingEvent: LoggingEvent): Unit = {
-      if (loggingEvents.size >= maxEvents) {
-        val loggingInfo = if (msg == "") "." else s" while logging $msg."
-        throw new IllegalStateException(
-          s"Number of events reached the limit of $maxEvents$loggingInfo")
+    override def append(loggingEvent: LogEvent): Unit = {
+      if (loggingEvent.getLevel.isMoreSpecificThan(_threshold)) {
+        if (loggingEvents.size >= maxEvents) {
+          val loggingInfo = if (msg == "") "." else s" while logging $msg."
+          throw new IllegalStateException(
+            s"Number of events reached the limit of $maxEvents$loggingInfo")
+        }
+        loggingEvents.append(loggingEvent.toImmutable)
       }
-      loggingEvents.append(loggingEvent)
     }
-    override def close(): Unit = {}
-    override def requiresLayout(): Boolean = false
+
+    def setThreshold(threshold: Level): Unit = {
+      _threshold = threshold
+    }
   }
 }

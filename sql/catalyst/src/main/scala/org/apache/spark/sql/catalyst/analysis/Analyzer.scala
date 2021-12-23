@@ -972,7 +972,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         p.copy(
           projectList = p.metadataOutput ++ p.projectList,

@@ -22,6 +22,7 @@ pandas instances during the type conversion.
 from typing import Optional, TYPE_CHECKING
 
 from pyspark.sql.types import (
+    cast,
     BooleanType,
     ByteType,
     ShortType,
@@ -234,7 +235,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
 
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64tz_dtype
+    from pandas.api.types import is_datetime64tz_dtype  # type: ignore[attr-defined]
 
     tz = timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
@@ -266,7 +267,7 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype  # type: ignore[attr-defined]
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
@@ -332,7 +333,7 @@ def _check_series_convert_timestamps_localize(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype  # type: ignore[attr-defined]
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()
@@ -341,10 +342,15 @@ def _check_series_convert_timestamps_localize(
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return s.apply(
-            lambda ts: ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
-            if ts is not pd.NaT
-            else pd.NaT
+        return cast(
+            "PandasSeriesLike",
+            s.apply(
+                lambda ts: ts.tz_localize(from_tz, ambiguous=False)
+                .tz_convert(to_tz)
+                .tz_localize(None)
+                if ts is not pd.NaT
+                else pd.NaT
+            ),
         )
     else:
         return s
@@ -397,7 +403,7 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of lists of (key, value) pairs
     :return: pandas.Series of dictionaries
     """
-    return s.apply(lambda m: None if m is None else {k: v for k, v in m})
+    return cast("PandasSeriesLike", s.apply(lambda m: None if m is None else {k: v for k, v in m}))
 
 
 def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -407,4 +413,4 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of dictionaries
     :return: pandas.Series of lists of (key, value) pairs
     """
-    return s.apply(lambda d: list(d.items()) if d is not None else None)
+    return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))

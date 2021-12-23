@@ -84,7 +84,7 @@ class BaseReadWrite:
         Returns the user-specified Spark Session or the default.
         """
         if self._sparkSession is None:
-            self._sparkSession = SparkSession.builder.getOrCreate()
+            self._sparkSession = SparkSession._getActiveSessionOrCreate()
         return self._sparkSession
 
     @property
@@ -366,7 +366,7 @@ class DefaultParamsWritable(MLWritable):
             return DefaultParamsWriter(self)
         else:
             raise TypeError(
-                "Cannot use DefautParamsWritable with type %s because it does not "
+                "Cannot use DefaultParamsWritable with type %s because it does not "
                 + " extend Params.",
                 type(self),
             )

@@ -151,11 +151,10 @@ class SparkContext:
     ValueError: ...
     """
 
-    # set assignment ignore temporarily to prevent errors from other files
-    _gateway: ClassVar[JavaGateway] = None  # type: ignore[assignment]
-    _jvm: ClassVar[JVMView] = None  # type: ignore[assignment]
+    _gateway: ClassVar[Optional[JavaGateway]] = None
+    _jvm: ClassVar[Optional[JVMView]] = None
     _next_accum_id = 0
-    _active_spark_context: ClassVar["SparkContext"] = None  # type: ignore[assignment]
+    _active_spark_context: ClassVar[Optional["SparkContext"]] = None
     _lock = RLock()
     _python_includes: Optional[
         List[str]
@@ -288,9 +287,11 @@ class SparkContext:
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
+        assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
         self._accumulatorServer = accumulators._start_update_server(auth_token)  # type: ignore[attr-defined]
         (host, port) = self._accumulatorServer.server_address
+        assert self._jvm is not None
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
@@ -344,6 +345,7 @@ class SparkContext:
                     )
 
         # Create a temporary directory inside spark.local.dir:
+        assert self._jvm is not None
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
             local_dir, "pyspark"
@@ -395,6 +397,7 @@ class SparkContext:
         """
         Initialize SparkContext in function to allow subclass specific initialization
         """
+        assert self._jvm is not None
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
@@ -494,6 +497,7 @@ class SparkContext:
         must be invoked before instantiating SparkContext.
         """
         SparkContext._ensure_initialized()
+        assert SparkContext._jvm is not None
         SparkContext._jvm.java.lang.System.setProperty(key, value)
 
     @property
@@ -657,9 +661,11 @@ class SparkContext:
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 
         def reader_func(temp_filename: str) -> JavaObject:
+            assert self._jvm is not None
             return self._jvm.PythonRDD.readRDDFromFile(self._jsc, temp_filename, numSlices)
 
         def createRDDServer() -> JavaObject:
+            assert self._jvm is not None
             return self._jvm.PythonParallelizeServer(self._jsc.sc(), numSlices)
 
         jrdd = self._serialize_to_jvm(c, serializer, reader_func, createRDDServer)
@@ -847,6 +853,7 @@ class SparkContext:
         return RDD(self._jsc.binaryRecords(path, recordLength), self, NoOpSerializer())
 
     def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
+        assert self._jvm is not None
         jm = self._jvm.java.util.HashMap()
         if not d:
             d = {}
@@ -895,6 +902,7 @@ class SparkContext:
             Java object. (default 0, choose batchSize automatically)
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.sequenceFile(
             self._jsc,
             path,
@@ -953,6 +961,7 @@ class SparkContext:
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(
             self._jsc,
             path,
@@ -1005,6 +1014,7 @@ class SparkContext:
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(
             self._jsc,
             inputFormatClass,
@@ -1059,6 +1069,7 @@ class SparkContext:
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.hadoopFile(
             self._jsc,
             path,
@@ -1111,6 +1122,7 @@ class SparkContext:
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.hadoopRDD(
             self._jsc,
             inputFormatClass,
@@ -1151,7 +1163,9 @@ class SparkContext:
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):  # type: ignore[attr-defined]
             rdds = [x._reserialize() for x in rdds]  # type: ignore[attr-defined]
         gw = SparkContext._gateway
+        assert gw is not None
         jvm = SparkContext._jvm
+        assert jvm is not None
         jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
         jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
         jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
@@ -1276,7 +1290,7 @@ class SparkContext:
         """
         if not isinstance(storageLevel, StorageLevel):
             raise TypeError("storageLevel must be of type pyspark.StorageLevel")
-
+        assert self._jvm is not None
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(
             storageLevel.useDisk,
@@ -1423,6 +1437,7 @@ class SparkContext:
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
+        assert self._jvm is not None
         sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)  # type: ignore[attr-defined]
         return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))  # type: ignore[attr-defined]
 

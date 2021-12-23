@@ -80,4 +80,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
   }
 
   override def supportsTableSample: Boolean = true
+
+  override def supportsIndex: Boolean = true
+
+  override def indexOptions: String = "FILLFACTOR=70"
 }

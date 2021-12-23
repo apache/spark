@@ -396,11 +396,6 @@ abstract class JdbcDialect extends Serializable with Logging{
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
 
-  /**
-   * returns whether the dialect supports limit or not
-   */
-  def supportsLimit(): Boolean = true
-
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =

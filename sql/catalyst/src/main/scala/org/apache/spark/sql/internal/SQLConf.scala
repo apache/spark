@@ -1781,6 +1781,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_AGGREGATE_CODEGEN =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
     buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
       .internal()

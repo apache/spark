@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.types.{DoubleType, FloatType}
+import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_NAME
+import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -212,7 +213,19 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
-      val outputAttributes = readDataColumns ++ partitionColumns
+      val metadataStructOpt = requiredAttributes.collectFirst {
+        case MetadataAttribute(attr) => attr
+      }
+
+      // TODO (yaohua): should be able to prune the metadata struct only containing what needed
+      val metadataColumns = metadataStructOpt.map { metadataStruct =>
+        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
+          MetadataAttribute(field.name, field.dataType)
+        }.toSeq
+      }.getOrElse(Seq.empty)
+
+      // outputAttributes should also include the metadata columns at the very end
+      val outputAttributes = readDataColumns ++ partitionColumns ++ metadataColumns
 
       val scan =
         FileSourceScanExec(
@@ -225,8 +238,18 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           dataFilters,
           table.map(_.identifier))
 
+      // extra Project node: wrap flat metadata columns to a metadata struct
+      val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
+        val metadataAlias =
+          Alias(CreateStruct(metadataColumns), METADATA_NAME)(exprId = metadataStruct.exprId)
+        execution.ProjectExec(
+          scan.output.dropRight(metadataColumns.length) :+ metadataAlias, scan)
+      }.getOrElse(scan)
+
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
-      val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
+      val withFilter = afterScanFilter
+        .map(execution.FilterExec(_, withMetadataProjections))
+        .getOrElse(withMetadataProjections)
       val withProjections = if (projects == withFilter.output) {
         withFilter
       } else {

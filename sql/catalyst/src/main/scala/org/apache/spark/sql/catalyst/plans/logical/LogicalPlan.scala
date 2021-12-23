@@ -277,3 +277,10 @@ object LogicalPlanIntegrity {
     checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
   }
 }
+
+/**
+ * A logical plan node that can generate metadata columns
+ */
+trait ExposesMetadataColumns extends LogicalPlan {
+  def withMetadataColumns(): LogicalPlan
+}

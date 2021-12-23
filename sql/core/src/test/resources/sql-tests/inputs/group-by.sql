@@ -7,6 +7,9 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
+CREATE OR REPLACE TEMPORARY VIEW testRegression AS SELECT * FROM VALUES
+(1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
+AS testRegression(k, y, x);
 
 -- Aggregate with empty GroupBy expressions.
 SELECT a, COUNT(b) FROM testData;
@@ -204,3 +207,23 @@ FROM VALUES
  (21), (22), (23), (24), (25), (26), (27), (28), (29), (30),
  (31), (32), (33), (34), (35), (3), (37), (38), (39), (40),
  (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col);
+
+-- SPARK-37613: Support ANSI Aggregate Function: regr_count
+SELECT regr_count(y, x) FROM testRegression;
+SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL;
+SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k;
+SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k;
+
+-- SPARK-27974: Support ANSI Aggregate Function: array_agg
+SELECT
+  collect_list(col),
+  array_agg(col)
+FROM VALUES
+  (1), (2), (1) AS tab(col);
+SELECT
+  a,
+  collect_list(b),
+  array_agg(b)
+FROM VALUES
+  (1,4),(2,3),(1,4),(2,4) AS v(a,b)
+GROUP BY a;
