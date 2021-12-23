@@ -8872,7 +8872,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             tops = []
             freqs = []
             # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
-            #  for every columns is too expensive.
+            #   for every columns is too expensive.
             for column in exprs_string:
                 top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
                 tops.append(str(top))
