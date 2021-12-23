@@ -258,6 +258,14 @@ object QueryCompilationErrors {
       t.origin.line, t.origin.startPosition)
   }
 
+  def expectPersistentFunc(
+      name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(
+      s"$name is a built-in/temporary function. '$cmd' expects a persistent function.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
   def permanentViewNotSupportedByStreamingReadingAPIError(quoted: String): Throwable = {
     new AnalysisException(s"$quoted is a permanent view, which is not supported by " +
       "streaming reading API such as `DataStreamReader.table` yet.")
@@ -1374,8 +1382,8 @@ object QueryCompilationErrors {
     new AnalysisException(s"Cannot partition by nested column: $reference")
   }
 
-  def cannotUseCatalogError(plugin: CatalogPlugin, msg: String): Throwable = {
-    new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
+  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+    new AnalysisException(s"Catalog ${plugin.name} does not support $ability")
   }
 
   def identifierHavingMoreThanTwoNamePartsError(
@@ -1387,8 +1395,8 @@ object QueryCompilationErrors {
     new AnalysisException("multi-part identifier cannot be empty.")
   }
 
-  def functionUnsupportedInV2CatalogError(): Throwable = {
-    new AnalysisException("function is only supported in v1 catalog")
+  def unsupportedOperationInV2CatalogError(operation: String): Throwable = {
+    new AnalysisException(s"$operation is only supported in v1 catalog.")
   }
 
   def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
@@ -1758,6 +1766,21 @@ object QueryCompilationErrors {
     new AnalysisException(s"Table or view not found: $table")
   }
 
+  def noSuchFunctionError(
+      rawName: Seq[String],
+      t: TreeNode[_],
+      fullName: Option[Seq[String]] = None): Throwable = {
+    if (rawName.length == 1 && fullName.isDefined) {
+      new AnalysisException(s"Undefined function: ${rawName.head}. " +
+        "This function is neither a built-in/temporary function, nor a persistent " +
+        s"function that is qualified as ${fullName.get.quoted}.",
+        t.origin.line, t.origin.startPosition)
+    } else {
+      new AnalysisException(s"Undefined function: ${rawName.quoted}",
+        t.origin.line, t.origin.startPosition)
+    }
+  }
+
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
     new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
   }
@@ -1827,13 +1850,8 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
-  def cannotDropNativeFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot drop native function '$functionName'")
+  def cannotDropBuiltinFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop built-in function '$functionName'")
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
