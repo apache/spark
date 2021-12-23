@@ -227,11 +227,9 @@ struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
 -- !query
 select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon")
 -- !query schema
-struct<>
+struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', 'Mon')' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2015-07-23 12:12:12'' is of timestamp_ntz type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+2015-07-27
 
 
 -- !query

@@ -137,7 +137,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.2</parquet.version>
-    <orc.version>1.7.1</orc.version>
+    <orc.version>1.7.2</orc.version>
     <jetty.version>9.4.43.v20210629</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -817,7 +817,81 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.68.Final</version>
+        <version>4.1.72.Final</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-dns</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-haproxy</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-memcache</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-mqtt</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-redis</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-smtp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-socks</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-stomp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-xml</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler-proxy</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-resolver-dns</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-resolver-dns-classes-macos</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-resolver-dns-native-macos</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-rxtx</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-sctp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-udt</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -2824,7 +2898,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -2876,7 +2950,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
             <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -3315,7 +3389,7 @@
             </goals>
             <configuration>
               <excludes>
-                <exclude>log4j.properties</exclude>
+                <exclude>log4j2.properties</exclude>
               </excludes>
             </configuration>
           </execution>

@@ -189,7 +189,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("implicit type cast - DateType") {
     val checkedType = DateType
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType, TimestampType))
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -197,7 +197,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("implicit type cast - TimestampType") {
     val checkedType = TimestampType
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType, DateType))
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -1706,7 +1706,7 @@ object TypeCoercionSuite {
   val fractionalTypes: Seq[DataType] =
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
-  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType)
+  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType)
   val atomicTypes: Seq[DataType] =
     numericTypes ++ datetimeTypes ++ Seq(BinaryType, BooleanType, StringType)
   val complexTypes: Seq[DataType] =

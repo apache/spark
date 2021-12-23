@@ -1960,7 +1960,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_apply_negative(self):
         def func(_) -> ps.Series[int]:
-            return pd.Series([1])
+            return pd.Series([1])  # type: ignore[return-value]
 
         with self.assertRaisesRegex(TypeError, "Series as a return type hint at frame groupby"):
             ps.range(10).groupby("id").apply(func)

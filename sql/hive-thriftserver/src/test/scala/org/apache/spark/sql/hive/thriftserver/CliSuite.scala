@@ -633,4 +633,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
   }
+
+  test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
+    runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
+      "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
+  }
 }

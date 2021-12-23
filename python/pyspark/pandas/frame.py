@@ -51,7 +51,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, is_dict_like, is_scalar
+from pandas.api.types import is_list_like, is_dict_like, is_scalar  # type: ignore[attr-defined]
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
@@ -2446,7 +2446,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         should_retain_index = should_infer_schema
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
+            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
             if isinstance(pdf_or_pser, pd.Series):
                 return pdf_or_pser.to_frame()
             else:
@@ -2464,7 +2464,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = pdf.apply(func, axis=axis, args=args, **kwds)
+            applied = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
             psser_or_psdf = ps.from_pandas(applied)
             if len(pdf) <= limit:
                 return psser_or_psdf
@@ -2708,7 +2708,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
-            transformed = pdf.transform(func, axis, *args, **kwargs)
+            transformed = pdf.transform(func, axis, *args, **kwargs)  # type: ignore[arg-type]
             psdf: DataFrame = DataFrame(transformed)
             if len(pdf) <= limit:
                 return psdf
@@ -5763,8 +5763,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'last' only supports a DatetimeIndex")
 
-        offset = to_offset(offset)
-        from_date = self.index.max() - offset
+        offset_: Optional[DateOffset] = to_offset(offset)
+        assert offset_ is not None
+
+        from_date = cast(datetime.datetime, self.index.max()) - offset_  # type: ignore[operator]
 
         return cast(DataFrame, self.loc[from_date:])
 
@@ -5818,10 +5820,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'first' only supports a DatetimeIndex")
 
-        offset = to_offset(offset)
-        to_date = self.index.min() + offset
+        offset_: Optional[DateOffset] = to_offset(offset)
+        assert offset_ is not None
 
-        return cast(DataFrame, self.loc[:to_date])
+        to_date = cast(datetime.datetime, self.index.min()) + offset_  # type: ignore[operator]
+
+        return cast(DataFrame, self.loc[:to_date])  # type: ignore[misc]
 
     def pivot_table(
         self,
@@ -6106,7 +6110,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf_columns = psdf.columns
         if isinstance(psdf_columns, pd.MultiIndex):
             psdf.columns = psdf_columns.set_levels(
-                psdf_columns.levels[-1].astype(
+                psdf_columns.levels[-1].astype(  # type: ignore[index]
                     spark_type_to_pandas_dtype(self._psser_for(columns).spark.data_type)
                 ),
                 level=-1,
@@ -6624,7 +6628,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
         else:
             psdf = self.copy()
-            psdf.columns = psdf.columns.droplevel(level)
+            psdf.columns = psdf.columns.droplevel(level)  # type: ignore[arg-type]
             return psdf
 
     def drop(
@@ -8579,7 +8583,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     applied.append(col)
         else:
             for col_name, col in self.items():
-                applied.append(col.astype(dtype=dtype))
+                applied.append(col.astype(dtype=cast(Union[str, Dtype], dtype)))
         return DataFrame(self._internal.with_new_columns(applied))
 
     def add_prefix(self, prefix: str) -> "DataFrame":
@@ -11049,7 +11053,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
-                    self,
+                    self,  # type: ignore[arg-type]
                     verbose=verbose,
                     buf=buf,
                     max_cols=max_cols,
@@ -11913,7 +11917,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             right = combined["that"]
 
             if right_is_series:
-                right = first_series(right).rename(other.name)
+                right = first_series(cast(DataFrame[Any], right)).rename(other.name)
 
         if (
             axis is None or axis == 1
@@ -12016,7 +12020,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_1   3   2   1   0
         row_2  10  20  30  40
         """
-        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
+        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))  # type: ignore[arg-type]
 
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(
@@ -12047,7 +12051,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return self._internal.to_pandas_frame
 
-    def _get_or_create_repr_pandas_cache(self, n: int) -> pd.DataFrame:
+    def _get_or_create_repr_pandas_cache(self, n: int) -> Union[pd.DataFrame, pd.Series]:
         if not hasattr(self, "_repr_pandas_cache") or n not in self._repr_pandas_cache:
             object.__setattr__(
                 self, "_repr_pandas_cache", {n: self.head(n + 1)._to_internal_pandas()}
@@ -12059,9 +12063,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if max_display_count is None:
             return self._to_internal_pandas().to_string()
 
-        pdf = self._get_or_create_repr_pandas_cache(max_display_count)
+        pdf = cast("DataFrame", self._get_or_create_repr_pandas_cache(max_display_count))
         pdf_length = len(pdf)
-        pdf = pdf.iloc[:max_display_count]
+        pdf = cast("DataFrame", pdf.iloc[:max_display_count])
         if pdf_length > max_display_count:
             repr_string = pdf.to_string(show_dimensions=True)
             match = REPR_PATTERN.search(repr_string)

@@ -147,7 +147,7 @@ private[spark] object Config extends Logging {
       .createWithDefault(0)
 
   object ExecutorRollPolicy extends Enumeration {
-    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, FAILED_TASKS = Value
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -160,6 +160,7 @@ private[spark] object Config extends Logging {
         "ADD_TIME policy chooses an executor with the smallest add-time. " +
         "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
         "TOTAL_DURATION policy chooses an executor with the biggest total task time. " +
+        "AVERAGE_DURATION policy chooses an executor with the biggest average task time. " +
         "FAILED_TASKS policy chooses an executor with the most number of failed tasks.")
       .version("3.3.0")
       .stringConf
