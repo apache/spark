@@ -83,12 +83,13 @@ case class EnsureRequirements(
           requiredDist.asInstanceOf[ClusteredDistribution])
       }).toMap
 
-      // Find out the shuffle spec that gives better parallelism.
+      // Find out the shuffle spec that gives better parallelism. Currently this is done by
+      // picking the spec with the largest number of partitions.
       //
       // NOTE: this is not optimal for the case when there are more than 2 children. Consider:
       //   (10, 10, 11)
-      // it's better to pick 10 in this case since we only need to shuffle one side - we'd need to
-      // shuffle two sides if we pick 11.
+      // where the number represent the number of partitions for each child, it's better to pick 10
+      // here since we only need to shuffle one side - we'd need to shuffle two sides if we pick 11.
       //
       // However this should be sufficient for now since in Spark nodes with multiple children
       // always have exactly 2 children.
@@ -97,21 +98,24 @@ case class EnsureRequirements(
       // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
       // consider the minimum parallelism iff ALL children need to be re-shuffled.
       //
-      // A child is considered to be re-shuffled iff:
-      //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false.
-      //   2. It already has `ShuffleExchangeLike`.
+      // A child needs to be re-shuffled iff either one of below is true:
+      //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false
+      //      (as for the case of `RangePartitioning`), therefore it needs to be re-shuffled
+      //      according to other shuffle spec.
+      //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
+      //      introducing extra shuffle.
       //
       // On the other hand, in scenarios such as:
       //   HashPartitioning(5) <-> HashPartitioning(6)
       // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
       // HashPartitioning(6).
-      val canIgnoreMinPartitions = specs.exists(p =>
-        p._2.canCreatePartitioning && !children(p._1).isInstanceOf[ShuffleExchangeLike]
+      val shouldConsiderMinParallelism = specs.forall(p =>
+        !p._2.canCreatePartitioning || children(p._1).isInstanceOf[ShuffleExchangeLike]
       )
       // Choose all the specs that can be used to shuffle other children
       val candidateSpecs = specs
           .filter(_._2.canCreatePartitioning)
-          .filter(p => canIgnoreMinPartitions ||
+          .filter(p => !shouldConsiderMinParallelism ||
               children(p._1).outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions)
       val bestSpecOpt = if (candidateSpecs.isEmpty) {
         None
