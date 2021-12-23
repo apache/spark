@@ -68,7 +68,6 @@ from pyspark.sql.types import (
     BooleanType,
     DataType,
     DoubleType,
-    NullType,
     NumericType,
     Row,
     StringType,
