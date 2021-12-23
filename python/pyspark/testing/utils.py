@@ -22,6 +22,7 @@ import sys
 import unittest
 from time import time, sleep
 
+from pyspark.find_spark_home import _find_spark_home
 from pyspark import SparkContext, SparkConf
 
 
@@ -43,7 +44,7 @@ except ImportError:
     pass
 
 
-SPARK_HOME = os.environ["SPARK_HOME"]
+SPARK_HOME = _find_spark_home()
 
 
 def read_int(b):
