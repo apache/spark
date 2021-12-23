@@ -1057,6 +1057,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-37722: Escape dots in partition names") {
+    withTable("escapeDots") {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql("CREATE TABLE escapeDots (key int) USING parquet PARTITIONED BY (value string);")
+        sql("INSERT INTO TABLE escapeDots PARTITION(value = '.') VALUES (1)")
+        sql("INSERT INTO TABLE escapeDots PARTITION(value = 'a.') VALUES (2)")
+        sql("INSERT INTO TABLE escapeDots VALUES (3, 'b.c.');")
+        sql("INSERT INTO TABLE escapeDots VALUES (4, '.');")
+        sql("INSERT INTO TABLE escapeDots VALUES (5, '%2E.');")
+
+        // Check raw partition values
+        checkAnswer(
+          sql("SHOW PARTITIONS escapeDots;"),
+          Seq(Row("value=%2E"), Row("value=a%2E"), Row("value=b%2Ec%2E"), Row("value=%252E%2E")))
+
+        // Check all values
+        checkAnswer(
+          sql("SELECT * FROM escapeDots;"),
+          Seq(Row(1, "."), Row(2, "a."), Row(3, "b.c."), Row(4, "."), Row(5, "%2E.")))
+
+        // Check values filtered by partition with "."
+        checkAnswer(
+          sql("SELECT * FROM escapeDots WHERE value = '.';"),
+          Seq(Row(1, "."), Row(4, ".")))
+      }
+    }
+  }
+
   test("SPARK-36980: Insert support query with CTE") {
     withTable("t") {
       sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")

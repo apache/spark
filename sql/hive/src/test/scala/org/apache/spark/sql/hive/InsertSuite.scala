@@ -225,32 +225,6 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
   }
 
-  test("SPARK-37722: Escape dots in partition names") {
-    withTable("escapeDots") {
-      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-        sql("CREATE TABLE escapeDots (key int) PARTITIONED BY (value string);")
-        sql("INSERT INTO TABLE escapeDots VALUES (1, 'text.');")
-        sql("INSERT INTO TABLE escapeDots VALUES (2, '.');")
-        sql("INSERT INTO TABLE escapeDots VALUES (3, '.text.');")
-
-        // Check raw partition values
-        checkAnswer(
-          sql("SHOW PARTITIONS escapeDots;"),
-          Seq(Row("value=%2E"), Row("value=text%2E"), Row("value=%2Etext%2E")))
-
-        // Check all values
-        checkAnswer(
-          sql("SELECT * FROM escapeDots;"),
-          Seq(Row(1, "text."), Row(2, "."), Row(3, ".text.")))
-
-        // Check values filtered by partition with "."
-        checkAnswer(
-          sql("SELECT * FROM escapeDots WHERE value = '.';"),
-          Seq(Row(2, ".")))
-      }
-    }
-  }
-
   test("Insert ArrayType.containsNull == false") {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
