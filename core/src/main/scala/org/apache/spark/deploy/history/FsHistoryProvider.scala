@@ -583,11 +583,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       //
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
-      val stale = listing.view(classOf[LogInfo])
-        .index("lastProcessed")
-        .last(newLastScanTime - 1)
-        .asScala
-        .toList
+      val stale = listing.synchronized {
+        listing.view(classOf[LogInfo])
+          .index("lastProcessed")
+          .last(newLastScanTime - 1)
+          .asScala
+          .toList
+      }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
         .foreach { log =>
@@ -720,7 +722,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], rootPath.toString)
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], rootPath.toString)
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -833,7 +837,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
             if (!fs.isFile(new Path(inProgressLog))) {
-              listing.delete(classOf[LogInfo], inProgressLog)
+              listing.synchronized {
+                listing.delete(classOf[LogInfo], inProgressLog)
+              }
             }
           } catch {
             case _: NoSuchElementException =>
