@@ -100,6 +100,18 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(metadata.getAnnotations.get(annotationKey) === "test-features-value")
   }
 
+  test("configure volcano feature step") {
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone()
+      .set(userFeatureStepsConf.key,
+        "org.apache.spark.deploy.k8s.features.scheduler.VolcanoFeatureStep")
+      .set(templateFileConf.key, "template-file.yaml")
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+    val annotation = pod.pod.getMetadata.getAnnotations
+    assert(annotation.get("scheduling.k8s.io/group-name") === s"appId-podgroup")
+  }
+
   test("complain about misconfigured pod template") {
     val client = mockKubernetesClient(
       new PodBuilder()

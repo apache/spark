@@ -23,6 +23,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Config extends Logging {
 
@@ -653,6 +654,17 @@ private[spark] object Config extends Logging {
       .intConf
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
+
+  val KUBERNETES_JOB_MIN_MEMORY = ConfigBuilder("spark.kubernetes.job.min.memory")
+    .doc("The minimum memory for running the job, in MiB unless otherwise specified.")
+    .version("3.3.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("3g")
+  val KUBERNETES_JOB_MIN_CPU = ConfigBuilder("spark.kubernetes.job.min.cpu")
+    .doc("The minimum CPU for running the job.")
+    .version("3.3.0")
+    .doubleConf
+    .createWithDefault(2.0)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
