@@ -178,7 +178,7 @@ class JDBCSuite extends QueryTest
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
-      "AS SELECT '1999-01-08 04:05:06.123456789-08:00'")
+      "AS SELECT '1999-01-08 04:05:06.543543543-08:00'")
       .executeUpdate()
     conn.commit()
 
@@ -670,7 +670,7 @@ class JDBCSuite extends QueryTest
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
     assert(cal.get(Calendar.MILLISECOND) === 543)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543544000)
   }
 
   test("SPARK-34357: test TIME types") {
@@ -1072,7 +1072,7 @@ class JDBCSuite extends QueryTest
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
-      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543544"))
   }
 
   test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
@@ -1084,7 +1084,7 @@ class JDBCSuite extends QueryTest
       val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
       assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
       // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
-      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
+      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543544Z"))
     }
   }
 
@@ -1383,7 +1383,7 @@ class JDBCSuite extends QueryTest
     e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
     }.getMessage
-    assert(e.contains("Unsupported type ARRAY"))
+    assert(e.contains(Integer.toString(ErrorCode.SYNTAX_ERROR_2)))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
