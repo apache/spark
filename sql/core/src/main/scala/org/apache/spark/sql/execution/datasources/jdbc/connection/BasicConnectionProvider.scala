@@ -48,4 +48,12 @@ private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with 
     logDebug(s"JDBC connection initiated with URL: ${jdbcOptions.url} and properties: $properties")
     driver.connect(jdbcOptions.url, properties)
   }
+
+  override def modifiesSecurityContext(
+    driver: Driver,
+    options: Map[String, String]
+  ): Boolean = {
+    // BasicConnectionProvider is the default unsecure connection provider, so just return false
+    false
+  }
 }
