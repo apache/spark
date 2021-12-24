@@ -280,49 +280,40 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Given a `StructType` object, this methods converts it to corresponding string representation
-   * in ORC.
-   */
-  def orcTypeDescriptionString(dt: DataType): String = dt match {
-    case s: StructType =>
-      val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
-      }
-      s"struct<${fieldTypes.mkString(",")}>"
-    case a: ArrayType =>
-      s"array<${orcTypeDescriptionString(a.elementType)}>"
-    case m: MapType =>
-      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
-    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
-    case _: DayTimeIntervalType => LongType.catalogString
-    case _: YearMonthIntervalType => IntegerType.catalogString
-    case _ => dt.catalogString
-  }
-
-  /**
    * Given two `StructType` object, this methods converts it to corresponding string representation
    * in ORC. The second `StructType` used to change the `TimestampNTZType` as LongType in result
    * schema string when reading `TimestampNTZ` as `TimestampLTZ`.
    */
-  def orcTypeDescriptionString(dt: DataType, orcDt: DataType): String = (dt, orcDt) match {
-    case (s1: StructType, s2: StructType) =>
+  def orcTypeDescriptionString(
+      dt: DataType, orcDt: Option[DataType] = None): String = (dt, orcDt) match {
+    case (s1: StructType, Some(s2: StructType)) =>
       val fieldTypes = s1.fields.map { f =>
         val idx = s2.fieldNames.indexWhere(caseSensitiveResolution(_, f.name))
         if (idx == -1) {
           s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
         } else {
-          s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType, s2(idx).dataType)}"
+          s"${quoteIdentifier(f.name)}:" +
+            s"${orcTypeDescriptionString(f.dataType, Some(s2(idx).dataType))}"
         }
       }
       s"struct<${fieldTypes.mkString(",")}>"
-    case (a1: ArrayType, a2: ArrayType) =>
-      s"array<${orcTypeDescriptionString(a1.elementType, a2.elementType)}>"
-    case (m1: MapType, m2: MapType) =>
-      s"map<${orcTypeDescriptionString(m1.keyType, m2.keyType)}," +
-        s"${orcTypeDescriptionString(m1.valueType, m2.valueType)}>"
+    case (s: StructType, None) =>
+      val fieldTypes = s.fields.map { f =>
+        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+      }
+      s"struct<${fieldTypes.mkString(",")}>"
+    case (a1: ArrayType, Some(a2: ArrayType)) =>
+      s"array<${orcTypeDescriptionString(a1.elementType, Some(a2.elementType))}>"
+    case (a: ArrayType, None) =>
+      s"array<${orcTypeDescriptionString(a.elementType)}>"
+    case (m1: MapType, Some(m2: MapType)) =>
+      s"map<${orcTypeDescriptionString(m1.keyType, Some(m2.keyType))}," +
+        s"${orcTypeDescriptionString(m1.valueType, Some(m2.valueType))}>"
+    case (m: MapType, None) =>
+      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
     case (_: DayTimeIntervalType | _: TimestampNTZType, _) => LongType.catalogString
     case (_: YearMonthIntervalType, _) => IntegerType.catalogString
-    case (TimestampType, TimestampNTZType) => LongType.catalogString
+    case (TimestampType, Some(TimestampNTZType)) => LongType.catalogString
     case _ => dt.catalogString
   }
 
@@ -402,10 +393,10 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.orcTypeDescriptionString(resultSchema, orcCatalystSchema)
+      OrcUtils.orcTypeDescriptionString(resultSchema, Some(orcCatalystSchema))
     } else {
       OrcUtils.orcTypeDescriptionString(
-        StructType(dataSchema.fields ++ partitionSchema.fields), orcCatalystSchema)
+        StructType(dataSchema.fields ++ partitionSchema.fields), Some(orcCatalystSchema))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
