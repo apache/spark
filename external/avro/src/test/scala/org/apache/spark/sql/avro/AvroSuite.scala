@@ -1787,8 +1787,8 @@ abstract class AvroSuite
   }
 
   // It generates input files for the test below:
-  // "SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps"
-  ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4") {
+  // "SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
+  ignore("SPARK-31855: generate test files for checking compatibility with Spark 2.4/3.2") {
     val resourceDir = "external/avro/src/test/resources"
     val version = "2_4_6"
     def save(
@@ -1857,8 +1857,8 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps") {
-    // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
+  test("SPARK-31183, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps") {
+    // test reading the existing 2.4/3.2 files and new 3.x files (with rebase on/off) together.
     def checkReadMixedFiles(
         fileName: String,
         dt: String,
@@ -1866,26 +1866,26 @@ abstract class AvroSuite
         checkDefaultLegacyRead: String => Unit): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
-        val path2_4 = getResourceAvroFilePath(fileName)
-        val path3_0 = paths(0).getCanonicalPath
-        val path3_0_rebase = paths(1).getCanonicalPath
+        val oldPath = getResourceAvroFilePath(fileName)
+        val path3_x = paths(0).getCanonicalPath
+        val path3_x_rebase = paths(1).getCanonicalPath
         if (dt == "date") {
           val df = Seq(dataStr).toDF("str").select($"str".cast("date").as("dt"))
 
-          checkDefaultLegacyRead(path2_4)
+          checkDefaultLegacyRead(oldPath)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
-            df.write.format("avro").mode("overwrite").save(path3_0)
+            df.write.format("avro").mode("overwrite").save(path3_x)
           }
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-            df.write.format("avro").save(path3_0_rebase)
+            df.write.format("avro").save(path3_x_rebase)
           }
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
           runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(oldPath, path3_x, path3_x_rebase),
               1.to(3).map(_ => Row(java.sql.Date.valueOf(dataStr))))
           }
         } else {
@@ -1902,23 +1902,23 @@ abstract class AvroSuite
 
           // By default we should fail to write ancient datetime values.
           val e = intercept[SparkException] {
-            df.write.format("avro").option("avroSchema", avroSchema).save(path3_0)
+            df.write.format("avro").option("avroSchema", avroSchema).save(path3_x)
           }
           assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          checkDefaultLegacyRead(path2_4)
+          checkDefaultLegacyRead(oldPath)
 
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
-            df.write.format("avro").option("avroSchema", avroSchema).mode("overwrite").save(path3_0)
+            df.write.format("avro").option("avroSchema", avroSchema).mode("overwrite").save(path3_x)
           }
           withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-            df.write.format("avro").option("avroSchema", avroSchema).save(path3_0_rebase)
+            df.write.format("avro").option("avroSchema", avroSchema).save(path3_x_rebase)
           }
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
           runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(oldPath, path3_x, path3_x_rebase),
               1.to(3).map(_ => Row(java.sql.Timestamp.valueOf(dataStr))))
           }
         }
@@ -1934,7 +1934,8 @@ abstract class AvroSuite
       // By default we should fail to read ancient datetime values when parquet files don't
       // contain Spark version.
       "2_4_5" -> failInRead _,
-      "2_4_6" -> successInRead _
+      "2_4_6" -> successInRead _,
+      "3_2_2" -> successInRead _
     ).foreach { case (version, checkDefaultRead) =>
       checkReadMixedFiles(
         s"before_1582_date_v$version.avro",
