@@ -33,10 +33,10 @@ import org.apache.spark.sql.types.StructType
  * @param catalystSchema Catalyst schema of the rows to be constructed
  * @param schemaConverter A Parquet-Catalyst schema converter that helps initializing row converters
  * @param convertTz the optional time zone to convert to int96 data
- * @param datetimeRebaseSpec the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
- *                           calendar
- * @param int96RebaseSpec the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
- *                           calendar
+ * @param datetimeRebaseSpec the specification of rebasing date/timestamp from Julian to Proleptic
+ *                           Gregorian calendar: mode + optional original time zone
+ * @param int96RebaseSpec the specification of rebasing INT96 timestamp from Julian to Proleptic
+ *                        Gregorian calendar
  */
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
