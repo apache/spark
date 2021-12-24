@@ -5790,17 +5790,199 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.astype({"c": float})
 
     def test_describe(self):
-        psdf = self.psdf
+        pdf, psdf = self.df_pair
+
+        # numeric columns
+        self.assert_eq(psdf.describe(), pdf.describe())
+        psdf.a += psdf.a
+        pdf.a += pdf.a
+        self.assert_eq(psdf.describe(), pdf.describe())
+
+        # string columns
+        psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+
+        # timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [
+                    pd.Timestamp("2020-10-20"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2022-07-11"),
+                ],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # NOTE: Set `datetime_is_numeric=True` for pandas:
+        # FutureWarning: Treating datetime data as categorical rather than numeric in `.describe` is deprecated
+        # and will be removed in a future version of pandas. Specify `datetime_is_numeric=True` to silence this
+        # warning and adopt the future behavior now.
+        # NOTE: Compare the result except percentiles, since we use approximate percentile
+        # so the result is different from pandas.
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+
+        # String & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": ["a", "b", "b", "c"],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+
+        # Numeric & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [1, 2, 2, 3],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
+
+        # Include None column
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 2, 3],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "c": [None, None, None],
+            }
+        )
+        pdf = psdf.to_pandas()
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.b = pandas_result.b.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe(percentiles=[1.1])
 
-        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
-
+        psdf = ps.DataFrame()
         msg = "Cannot describe a DataFrame without columns"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
+
+    def test_describe_empty(self):
+        # Empty DataFrame
+        psdf = ps.DataFrame(columns=["A", "B"])
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe(),
+            pdf.describe().astype(float),
+        )
+
+        # Explicit empty DataFrame numeric only
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string only
+        psdf = ps.DataFrame({"a": ["a", "b", "c"], "b": ["q", "w", "e"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe().astype(float),
+        )
+
+        # Explicit empty DataFrame timestamp only
+        psdf = ps.DataFrame(
+            {
+                "a": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # For timestamp type, we should convert NaT to None in pandas result
+        # since pandas API on Spark doesn't support the NaT for object type.
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
+
+        # Explicit empty DataFrame numeric & timestamp
+        psdf = ps.DataFrame(
+            {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result,
+        )
+
+        # Explicit empty DataFrame numeric & string
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string & timestamp
+        psdf = ps.DataFrame(
+            {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
 
     def test_getitem_with_none_key(self):
         psdf = self.psdf
