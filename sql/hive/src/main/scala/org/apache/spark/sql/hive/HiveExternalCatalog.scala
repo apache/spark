@@ -202,7 +202,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case NonFatal(exception) =>
         if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
           && exception.getMessage.contains(s"Database $db is not empty.")) {
-          throw new AnalysisException(s"Cannot drop a non-empty database: $db")
+          throw new AnalysisException(s"Cannot drop a non-empty database: $db.")
         } else throw exception
     }
   }
