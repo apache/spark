@@ -452,10 +452,12 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
 
     // out-of-order
-    val expected1 = Map("id" -> "BIGINT", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
+    val expected1 =
+      Map("id" -> "BIGINT", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
     testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), id BIGINT, city CHAR(20)", expected1)
     // partial schema
-    val expected2 = Map("id" -> "INTEGER", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
+    val expected2 =
+      Map("id" -> "INTEGER", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
     testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), city CHAR(20)", expected2)
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
