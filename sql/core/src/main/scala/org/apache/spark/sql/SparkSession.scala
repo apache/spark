@@ -1075,7 +1075,11 @@ object SparkSession extends Logging {
 
     otherConfs.foreach { case (k, v) => conf.setConfString(k, v) }
 
-    if (staticConfs.nonEmpty || otherConfs.nonEmpty) {
+    // Note that other runtime SQL options, for example, for other third-party datasource
+    // can be marked as an ignored configuration here.
+    val maybeIgnoredConfs = otherConfs.filterNot { case (k, _) => conf.isModifiable(k) }
+
+    if (staticConfs.nonEmpty || maybeIgnoredConfs.nonEmpty) {
       logWarning(
         "Using an existing Spark session; only runtime SQL configurations will take effect.")
     }
@@ -1083,14 +1087,13 @@ object SparkSession extends Logging {
       logDebug("Ignored static SQL configurations:\n  " +
         conf.redactOptions(staticConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
     }
-    if (otherConfs.nonEmpty) {
+    if (maybeIgnoredConfs.nonEmpty) {
       // Only print out non-static and non-runtime SQL configurations.
       // Note that this might show core configurations or source specific
       // options defined in the third-party datasource.
       logDebug("Configurations that might not take effect:\n  " +
-        conf
-          .redactOptions(otherConfs.filterNot { case (k, _) => conf.isModifiable(k) })
-          .toSeq.map(p => s"${p._1}=${p._2}").mkString("\n  "))
+        conf.redactOptions(
+          maybeIgnoredConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
     }
   }
 
