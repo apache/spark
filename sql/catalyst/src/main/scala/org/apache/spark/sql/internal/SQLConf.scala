@@ -2663,7 +2663,7 @@ object SQLConf {
       "and/or identifiers for table, view, function, etc.")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
