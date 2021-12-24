@@ -122,7 +122,8 @@ object PushDownUtils extends PredicateHelper {
       case _ => None
     }
 
-    val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+    val translatedAggregates = aggregates.flatMap(
+      DataSourceStrategy.translateAggregate(_, scanBuilder.supportCompletePushDown()))
     val translatedGroupBys = groupBy.flatMap(columnAsString)
 
     if (translatedAggregates.length != aggregates.length ||

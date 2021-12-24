@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -702,7 +702,8 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  protected[sql] def translateAggregate(agg: AggregateExpression): Option[AggregateFunc] = {
+  protected[sql] def translateAggregate(
+      agg: AggregateExpression, complete: Boolean): Option[AggregateFunc] = {
     if (agg.filter.isEmpty) {
       agg.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
@@ -717,8 +718,27 @@ object DataSourceStrategy
               Some(new Count(FieldReference(name), agg.isDistinct))
             case _ => None
           }
-        case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
+        case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Sum(FieldReference(name), agg.isDistinct))
+        case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) if complete =>
+          Some(new Average(FieldReference(name)))
+        case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) if complete =>
+          Some(new VarPop(FieldReference(name)))
+        case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) if complete =>
+          Some(new VarSamp(FieldReference(name)))
+        case aggregate.StddevPop(PushableColumnWithoutNestedColumn(name), _) if complete =>
+          Some(new StddevPop(FieldReference(name)))
+        case aggregate.StddevSamp(PushableColumnWithoutNestedColumn(name), _) if complete =>
+          Some(new StddevSamp(FieldReference(name)))
+        case aggregate.CovPopulation(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right), _) if complete =>
+          Some(new CovarPop(FieldReference(left), FieldReference(right)))
+        case aggregate.CovSample(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right), _) if complete =>
+          Some(new CovarSamp(FieldReference(left), FieldReference(right)))
+        case aggregate.Corr(PushableColumnWithoutNestedColumn(x),
+        PushableColumnWithoutNestedColumn(y), _) if complete =>
+          Some(new Corr(FieldReference(x), FieldReference(y)))
         case _ => None
       }
     } else {
