@@ -218,6 +218,14 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(driverConf.schedulerName === "driverScheduler")
   }
 
+  test("SPARK-36059: access appId in KubernetesConf") {
+    val sparkConf = new SparkConf(false)
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val driverConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(driverConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+    assert(execConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+  }
+
   test("SPARK-36566: get app name label") {
     assert(KubernetesConf.getAppNameLabel(" Job+Spark-Pi 2021") === "job-spark-pi-2021")
     assert(KubernetesConf.getAppNameLabel("a" * 63) === "a" * 63)
