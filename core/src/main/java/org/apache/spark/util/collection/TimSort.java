@@ -579,7 +579,7 @@ class TimSort<K, Buffer> {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0) {   // int overflow
-            // ofs = maxOfs;
+            ofs = maxOfs;
           }
         }
         if (ofs > maxOfs) {
