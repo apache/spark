@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 abstract class TypeCoercionBase {
   /**
@@ -876,13 +877,15 @@ object TypeCoercion extends TypeCoercionBase {
     case _ => false
   }
 
+
   /**
    * This function determines the target type of a comparison operator when one operand
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
   def findCommonTypeForBinaryComparison(
-      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+      ep1: Expression, ep2: Expression, conf: SQLConf): Option[DataType] =
+    (ep1.dataType, ep2.dataType) match {
     case (StringType, DateType)
       => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
     case (DateType, StringType)
@@ -904,6 +907,13 @@ object TypeCoercion extends TypeCoercionBase {
     // See SPARK-22469 for details.
     case (n: DecimalType, s: StringType) => Some(DoubleType)
     case (s: StringType, n: DecimalType) => Some(DoubleType)
+
+    case (n: StringType, s: IntegerType) if (ep1.isInstanceOf[Literal] &&
+      ep1.asInstanceOf[Literal].value.asInstanceOf[UTF8String].toLongExact > Int.MaxValue) =>
+      Some(LongType)
+    case (n: IntegerType, s: StringType) if (ep2.isInstanceOf[Literal] &&
+      ep2.asInstanceOf[Literal].value.asInstanceOf[UTF8String].toLongExact > Int.MaxValue) =>
+      Some(LongType)
 
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
@@ -1083,8 +1093,8 @@ object TypeCoercion extends TypeCoercionBase {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
+          if findCommonTypeForBinaryComparison(left, right, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left, right, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }

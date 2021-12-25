@@ -1696,6 +1696,22 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       }
     }
   }
+
+  test("SPARK-37736: Comparison between string(great than Int.MaxValue) and int") {
+    val rule = TypeCoercion.PromoteStrings
+    ruleTest(rule,
+      GreaterThan(Literal("2147483648"), Literal(1)),
+      GreaterThan(Cast(Literal("2147483648"), LongType), Literal(1)))
+    ruleTest(rule,
+      LessThan(Literal("2147483648"), Literal(1)),
+      LessThan(Cast(Literal("2147483648"), LongType), Literal(1)))
+    ruleTest(rule,
+      GreaterThan(Literal(1), Literal("2147483648")),
+      GreaterThan(Literal(1), Cast(Literal("2147483648"), LongType)))
+    ruleTest(rule,
+      LessThan(Literal(1), Literal("2147483648")),
+      LessThan(Literal(1), Cast(Literal("2147483648"), LongType)))
+  }
 }
 
 
