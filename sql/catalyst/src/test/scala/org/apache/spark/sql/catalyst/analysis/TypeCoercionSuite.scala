@@ -1701,16 +1701,16 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     val rule = TypeCoercion.PromoteStrings
     ruleTest(rule,
       GreaterThan(Literal("2147483648"), Literal(1)),
-      GreaterThan(Cast(Literal("2147483648"), LongType), Literal(1)))
+      GreaterThan(Cast(Literal("2147483648"), LongType), Cast(Literal(1), LongType)))
     ruleTest(rule,
       LessThan(Literal("2147483648"), Literal(1)),
-      LessThan(Cast(Literal("2147483648"), LongType), Literal(1)))
+      LessThan(Cast(Literal("2147483648"), LongType), Cast(Literal(1), LongType)))
     ruleTest(rule,
       GreaterThan(Literal(1), Literal("2147483648")),
-      GreaterThan(Literal(1), Cast(Literal("2147483648"), LongType)))
+      GreaterThan(Cast(Literal(1), LongType), Cast(Literal("2147483648"), LongType)))
     ruleTest(rule,
       LessThan(Literal(1), Literal("2147483648")),
-      LessThan(Literal(1), Cast(Literal("2147483648"), LongType)))
+      LessThan(Cast(Literal(1), LongType), Cast(Literal("2147483648"), LongType)))
   }
 }
 
