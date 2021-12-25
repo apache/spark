@@ -122,7 +122,7 @@ class TimSort<K, Buffer> {
     int nRemaining  = hi - lo;
     if (nRemaining < 2) {
       return;  // Arrays of size 0 and 1 are always sorted
-	}
+    }
 
     // If array is small, do a "mini-TimSort" with no merges
     if (nRemaining < MIN_MERGE) {
@@ -227,7 +227,7 @@ class TimSort<K, Buffer> {
       // Switch is just an optimization for arraycopy in default case
       switch (n) {
         case 2:  s.copyElement(a, left + 1, a, left + 2);
-          // fallthrough
+        // fallthrough
         case 1:  s.copyElement(a, left, a, left + 1);
           break;
         default: s.copyRange(a, left, a, left + 1, n);
