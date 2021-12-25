@@ -350,11 +350,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'with'(line 1, pos 18)
+DataType baz is not supported.(line 1, pos 23)
 
 == SQL ==
 create table foo (with baz)
-------------------^^^
+-----------------------^^^
 
 
 -- !query
@@ -364,11 +364,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'with'(line 1, pos 18)
+DataType ordinality is not supported.(line 1, pos 23)
 
 == SQL ==
 create table foo (with ordinality)
-------------------^^^
+-----------------------^^^
 
 
 -- !query
