@@ -190,7 +190,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         df = self.spark.range(10).selectExpr("id", "id as v")
 
         def plus_one(v: Union[pd.Series, pd.DataFrame]) -> pd.Series:
-            return v + 1
+            return v + 1  # type: ignore[return-value]
 
         plus_one = pandas_udf("long")(plus_one)
         actual = df.select(plus_one(df.v).alias("plus_one"))

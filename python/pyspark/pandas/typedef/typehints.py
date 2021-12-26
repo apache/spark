@@ -37,7 +37,7 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype
+from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
 extension_dtypes: Tuple[type, ...]
@@ -664,7 +664,7 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     new_class: Type[NameTypeHolder]
     if isinstance(param, ExtensionDtype):
         new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
-        new_class.tpe = param
+        new_class.tpe = param  # type: ignore[assignment]
     else:
         new_class = param.type if isinstance(param, np.dtype) else param
 
@@ -815,7 +815,7 @@ def _new_type_holders(
             )
             new_param.name = param.start
             if isinstance(param.stop, ExtensionDtype):
-                new_param.tpe = param.stop
+                new_param.tpe = param.stop  # type: ignore[assignment]
             else:
                 # When the given argument is a numpy's dtype instance.
                 new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
@@ -829,7 +829,7 @@ def _new_type_holders(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
             if isinstance(param, ExtensionDtype):
-                new_type.tpe = param
+                new_type.tpe = param  # type: ignore[assignment]
             else:
                 new_type.tpe = param.type if isinstance(param, np.dtype) else param
             new_types.append(new_type)

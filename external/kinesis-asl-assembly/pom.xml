@@ -205,7 +205,7 @@
                 <resource>reference.conf</resource>
               </transformer>
               <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                <resource>log4j.properties</resource>
+                <resource>log4j2.properties</resource>
               </transformer>
               <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
               <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>

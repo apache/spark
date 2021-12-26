@@ -1065,18 +1065,35 @@ object SparkSession extends Logging {
   private[sql] def applyModifiableSettings(
       session: SparkSession,
       options: java.util.HashMap[String, String]): Unit = {
+    // Lazy val to avoid an unnecessary session state initialization
+    lazy val conf = session.sessionState.conf
+
+    val dedupOptions = if (options.isEmpty) Map.empty[String, String] else (
+      options.asScala.toSet -- conf.getAllConfs.toSet).toMap
     val (staticConfs, otherConfs) =
-      options.asScala.partition(kv => SQLConf.isStaticConfigKey(kv._1))
+      dedupOptions.partition(kv => SQLConf.isStaticConfigKey(kv._1))
 
-    otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+    otherConfs.foreach { case (k, v) => conf.setConfString(k, v) }
 
-    if (staticConfs.nonEmpty) {
-      logWarning("Using an existing SparkSession; the static sql configurations will not take" +
-        " effect.")
+    // Note that other runtime SQL options, for example, for other third-party datasource
+    // can be marked as an ignored configuration here.
+    val maybeIgnoredConfs = otherConfs.filterNot { case (k, _) => conf.isModifiable(k) }
+
+    if (staticConfs.nonEmpty || maybeIgnoredConfs.nonEmpty) {
+      logWarning(
+        "Using an existing Spark session; only runtime SQL configurations will take effect.")
     }
-    if (otherConfs.nonEmpty) {
-      logWarning("Using an existing SparkSession; some spark core configurations may not take" +
-        " effect.")
+    if (staticConfs.nonEmpty) {
+      logDebug("Ignored static SQL configurations:\n  " +
+        conf.redactOptions(staticConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
+    }
+    if (maybeIgnoredConfs.nonEmpty) {
+      // Only print out non-static and non-runtime SQL configurations.
+      // Note that this might show core configurations or source specific
+      // options defined in the third-party datasource.
+      logDebug("Configurations that might not take effect:\n  " +
+        conf.redactOptions(
+          maybeIgnoredConfs).toSeq.map { case (k, v) => s"$k=$v" }.mkString("\n  "))
     }
   }
 
