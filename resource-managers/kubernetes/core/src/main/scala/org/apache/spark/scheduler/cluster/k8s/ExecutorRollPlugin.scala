@@ -108,7 +108,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       case ExecutorRollPolicy.TOTAL_DURATION =>
         listWithoutDriver.sortBy(_.totalDuration).reverse
       case ExecutorRollPolicy.AVERAGE_DURATION =>
-        listWithoutDriver.sortBy(e => e.totalDuration.toFloat / e.totalTasks).reverse
+        listWithoutDriver.sortBy(e => e.totalDuration.toFloat / Math.max(1, e.totalTasks)).reverse
       case ExecutorRollPolicy.FAILED_TASKS =>
         listWithoutDriver.sortBy(_.failedTasks).reverse
     }
