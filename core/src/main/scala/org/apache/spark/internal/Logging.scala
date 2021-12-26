@@ -126,11 +126,14 @@ trait Logging {
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     if (Logging.isLog4j2()) {
-      // If Log4j is used but is not initialized, load a default properties file
-      val log4j2Initialized = !LogManager.getRootLogger
-        .asInstanceOf[org.apache.logging.log4j.core.Logger].getAppenders.isEmpty
+      val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+      // If Log4j 2 is used but is initialized by default configuration,
+      // load a default properties file
+      // (see org.apache.logging.log4j.core.config.DefaultConfiguration)
+      val needToInitializeLog4j2 = rootLogger.getAppenders.isEmpty ||
+        (rootLogger.getAppenders.size() == 1 && rootLogger.getLevel == Level.ERROR)
       // scalastyle:off println
-      if (!log4j2Initialized) {
+      if (needToInitializeLog4j2) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
         Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
@@ -145,8 +148,6 @@ trait Logging {
         }
       }
 
-      val rootLogger = LogManager.getRootLogger()
-        .asInstanceOf[org.apache.logging.log4j.core.Logger]
       if (Logging.defaultRootLevel == null) {
         Logging.defaultRootLevel = rootLogger.getLevel()
       }
