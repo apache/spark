@@ -18,6 +18,7 @@
 import itertools
 
 import pandas as pd
+import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.namespace import _get_index_map, read_delta
@@ -233,6 +234,32 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assertRaises(
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, freq="N")
+        )
+
+    def test_to_timedelta(self):
+        self.assert_eq(
+            ps.to_timedelta("1 days 06:05:01.00003"),
+            pd.to_timedelta("1 days 06:05:01.00003"),
+        )
+        self.assert_eq(
+            ps.to_timedelta("15.5us"),
+            pd.to_timedelta("15.5us"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(["1 days 06:05:01.00003", "15.5us", "nan"]),
+            pd.to_timedelta(["1 days 06:05:01.00003", "15.5us", "nan"]),
+        )
+        self.assert_eq(
+            ps.to_timedelta(np.arange(5), unit="s"),
+            pd.to_timedelta(np.arange(5), unit="s"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(ps.Series([1, 2]), unit="d"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+        )
+        self.assert_eq(
+            ps.to_timedelta(pd.Series([1, 2]), unit="d"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
         )
 
     def test_timedelta_range(self):

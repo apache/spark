@@ -68,7 +68,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   // The biggest totalDuration
   val execWithBiggestTotalDuration = new ExecutorSummary("4", "host:port", true, 1,
     10, 10, 1, 1, 1,
-    0, 0, 1, 400,
+    0, 0, 4, 400,
     1, 100, 100,
     10, false, 20, new Date(1639300003000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
@@ -83,8 +83,18 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
 
+  // The biggest average duration (= totalDuration / totalTask)
+  val execWithBiggestAverageDuration = new ExecutorSummary("6", "host:port", true, 1,
+    10, 10, 1, 1, 1,
+    0, 0, 2, 300,
+    1, 100, 100,
+    10, false, 20, new Date(1639300003000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+    false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
-    execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks)
+    execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
+    execWithBiggestAverageDuration)
 
   test("Empty executor list") {
     ExecutorRollPolicy.values.foreach { value =>
@@ -124,5 +134,11 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Policy: FAILED_TASKS") {
     assertEquals(Some("5"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.FAILED_TASKS)))
+  }
+
+  test("Policy: AVERAGE_DURATION") {
+    assertEquals(
+      Some("6"),
+      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.AVERAGE_DURATION)))
   }
 }

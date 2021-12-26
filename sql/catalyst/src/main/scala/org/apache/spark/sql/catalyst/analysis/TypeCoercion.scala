@@ -959,15 +959,13 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: NumericType, target: NumericType) => target
 
       // Implicit cast between date time types
-      case (DateType, TimestampType) => TimestampType
-      case (DateType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (TimestampType | TimestampNTZType, DateType) => DateType
+      case (_: DatetimeType, d: DatetimeType) => d
+      case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
       case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
       case (StringType, target: NumericType) => target
-      case (StringType, DateType) => DateType
-      case (StringType, TimestampType) => TimestampType
+      case (StringType, datetime: DatetimeType) => datetime
       case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.

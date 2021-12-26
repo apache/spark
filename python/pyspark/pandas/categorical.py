@@ -18,7 +18,7 @@ from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
 import warnings
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
+from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like  # type: ignore[attr-defined]
 
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
