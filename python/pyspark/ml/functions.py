@@ -65,6 +65,7 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     StructField(oldVec,ArrayType(FloatType,false),false)]
     """
     sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype)
     )
@@ -101,6 +102,7 @@ def array_to_vector(col: Column) -> Column:
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
     sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
