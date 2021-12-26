@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
+import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
@@ -131,7 +132,10 @@ trait Logging {
       // load a default properties file
       // (see org.apache.logging.log4j.core.config.DefaultConfiguration)
       val needToInitializeLog4j2 = rootLogger.getAppenders.isEmpty ||
-        (rootLogger.getAppenders.size() == 1 && rootLogger.getLevel == Level.ERROR)
+        (rootLogger.getAppenders.size() == 1 &&
+          rootLogger.getLevel == Level.ERROR &&
+          LogManager.getContext.asInstanceOf[LoggerContext]
+            .getConfiguration.isInstanceOf[DefaultConfiguration])
       // scalastyle:off println
       if (needToInitializeLog4j2) {
         Logging.defaultSparkLog4jConfig = true
