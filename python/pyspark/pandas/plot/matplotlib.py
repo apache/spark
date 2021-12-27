@@ -49,29 +49,6 @@ from pyspark.pandas.plot import (
 _all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
 
 
-class _PandasOnSparkKdeHistCommon:
-    # Makes plotting compatible with pandas < 1.3
-    def _mark_right_label(self, label, index):
-        """
-        Append ``(right)`` to the label of a line if it's plotted on the right axis.
-
-        Note that ``(right)`` is only appended when ``subplots=False``.
-        """
-        if not self.subplots and self.mark_right and self.on_right(index):
-            label += " (right)"
-        return label
-
-    # Makes plotting compatible with pandas < 1.3
-    def _append_legend_handles_labels(self, handle, label):
-        """
-        Append current handle and label to ``legend_handles`` and ``legend_labels``.
-
-        These will be used to make the legend.
-        """
-        self.legend_handles.append(handle)
-        self.legend_labels.append(label)
-
-
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
@@ -376,7 +353,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         )
 
 
-class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase, _PandasOnSparkKdeHistCommon):
+class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
     def _args_adjust(self):
         if is_list_like(self.bottom):
             self.bottom = np.array(self.bottom)
@@ -470,7 +447,7 @@ class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
         super()._make_plot()
 
 
-class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase, _PandasOnSparkKdeHistCommon):
+class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
     def _compute_plot_data(self):
         self.data = KdePlotBase.prepare_kde_data(self.data)
 
