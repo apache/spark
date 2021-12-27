@@ -72,6 +72,9 @@ case class JDBCScanBuilder(
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
+  override def supportCompletePushDown: Boolean =
+    jdbcOptions.numPartitions.map(_ == 1).getOrElse(true)
+
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 

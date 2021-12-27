@@ -134,10 +134,10 @@ def _auto_patch_pandas() -> None:
     if sys.version_info >= (3, 7):
         # Just in case pandas implements '__class_getitem__' later.
         if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = lambda params: DataFrame.__class_getitem__(params)
+            pd.DataFrame.__class_getitem__ = lambda params: DataFrame.__class_getitem__(params)  # type: ignore[assignment,attr-defined]
 
         if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = lambda params: Series.__class_getitem__(params)
+            pd.Series.__class_getitem__ = lambda params: Series.__class_getitem__(params)  # type: ignore[assignment,attr-defined]
 
 
 _auto_patch_spark()

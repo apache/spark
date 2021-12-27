@@ -135,11 +135,6 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       SinglePartition,
-      HashClusteredDistribution(Seq($"a", $"b", $"c")),
-      true)
-
-    checkSatisfied(
-      SinglePartition,
       OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
       true)
 
@@ -170,23 +165,6 @@ class DistributionSuite extends SparkFunSuite {
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
       ClusteredDistribution(Seq($"d", $"e")),
-      false)
-
-    // HashPartitioning can satisfy HashClusteredDistribution iff its hash expressions are exactly
-    // same with the required hash clustering expressions.
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      HashClusteredDistribution(Seq($"a", $"b", $"c")),
-      true)
-
-    checkSatisfied(
-      HashPartitioning(Seq($"c", $"b", $"a"), 10),
-      HashClusteredDistribution(Seq($"a", $"b", $"c")),
-      false)
-
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b"), 10),
-      HashClusteredDistribution(Seq($"a", $"b", $"c")),
       false)
 
     // HashPartitioning cannot satisfy OrderedDistribution
@@ -269,12 +247,6 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"c", $"d")),
       false)
-
-    // RangePartitioning cannot satisfy HashClusteredDistribution
-    checkSatisfied(
-      RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      HashClusteredDistribution(Seq($"a", $"b", $"c")),
-      false)
   }
 
   test("Partitioning.numPartitions must match Distribution.requiredNumPartitions to satisfy it") {
@@ -284,18 +256,8 @@ class DistributionSuite extends SparkFunSuite {
       false)
 
     checkSatisfied(
-      SinglePartition,
-      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
-      false)
-
-    checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
       ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
-      false)
-
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
       false)
 
     checkSatisfied(

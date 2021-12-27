@@ -44,14 +44,14 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table
+    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 else:
     from pandas.core.base import SelectionMixin
 
-    _builtin_table = SelectionMixin._builtin_table
+    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
@@ -314,7 +314,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if relabeling:
             psdf = psdf[order]
-            psdf.columns = columns
+            psdf.columns = columns  # type: ignore[assignment]
         return psdf
 
     agg = aggregate

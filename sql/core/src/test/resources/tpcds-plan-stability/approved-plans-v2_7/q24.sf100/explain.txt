@@ -273,34 +273,37 @@ Arguments: [c_last_name#15 ASC NULLS FIRST, c_first_name#14 ASC NULLS FIRST, s_s
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 46 Hosting Expression = Subquery scalar-subquery#48, [id=#49]
-* HashAggregate (76)
-+- Exchange (75)
-   +- * HashAggregate (74)
-      +- * HashAggregate (73)
-         +- Exchange (72)
-            +- * HashAggregate (71)
-               +- * Project (70)
-                  +- * SortMergeJoin Inner (69)
-                     :- * Sort (66)
-                     :  +- Exchange (65)
-                     :     +- * Project (64)
-                     :        +- * SortMergeJoin Inner (63)
-                     :           :- * Sort (57)
-                     :           :  +- Exchange (56)
-                     :           :     +- * Project (55)
-                     :           :        +- * BroadcastHashJoin Inner BuildLeft (54)
-                     :           :           :- ReusedExchange (49)
-                     :           :           +- * Project (53)
-                     :           :              +- * Filter (52)
-                     :           :                 +- * ColumnarToRow (51)
-                     :           :                    +- Scan parquet default.store_sales (50)
-                     :           +- * Sort (62)
-                     :              +- Exchange (61)
-                     :                 +- * Filter (60)
-                     :                    +- * ColumnarToRow (59)
-                     :                       +- Scan parquet default.item (58)
-                     +- * Sort (68)
-                        +- ReusedExchange (67)
+* HashAggregate (79)
++- Exchange (78)
+   +- * HashAggregate (77)
+      +- * HashAggregate (76)
+         +- Exchange (75)
+            +- * HashAggregate (74)
+               +- * Project (73)
+                  +- * SortMergeJoin Inner (72)
+                     :- * Sort (65)
+                     :  +- * Project (64)
+                     :     +- * SortMergeJoin Inner (63)
+                     :        :- * Sort (57)
+                     :        :  +- Exchange (56)
+                     :        :     +- * Project (55)
+                     :        :        +- * BroadcastHashJoin Inner BuildLeft (54)
+                     :        :           :- ReusedExchange (49)
+                     :        :           +- * Project (53)
+                     :        :              +- * Filter (52)
+                     :        :                 +- * ColumnarToRow (51)
+                     :        :                    +- Scan parquet default.store_sales (50)
+                     :        +- * Sort (62)
+                     :           +- Exchange (61)
+                     :              +- * Filter (60)
+                     :                 +- * ColumnarToRow (59)
+                     :                    +- Scan parquet default.item (58)
+                     +- * Sort (71)
+                        +- Exchange (70)
+                           +- * Project (69)
+                              +- * Filter (68)
+                                 +- * ColumnarToRow (67)
+                                    +- Scan parquet default.store_returns (66)
 
 
 (49) ReusedExchange [Reuses operator id: 17]
@@ -372,60 +375,75 @@ Join condition: None
 Output [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
 Input [14]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_item_sk#24, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
 
-(65) Exchange
-Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
-Arguments: hashpartitioning(ss_ticket_number#21, ss_item_sk#18, 5), ENSURE_REQUIREMENTS, [id=#53]
-
-(66) Sort [codegen id : 9]
+(65) Sort [codegen id : 8]
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
 Arguments: [ss_ticket_number#21 ASC NULLS FIRST, ss_item_sk#18 ASC NULLS FIRST], false, 0
 
-(67) ReusedExchange [Reuses operator id: 36]
-Output [2]: [sr_item_sk#32, sr_ticket_number#33]
+(66) Scan parquet default.store_returns
+Output [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
-(68) Sort [codegen id : 11]
+(67) ColumnarToRow [codegen id : 9]
+Input [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
+
+(68) Filter [codegen id : 9]
+Input [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
+Condition : (isnotnull(sr_ticket_number#33) AND isnotnull(sr_item_sk#32))
+
+(69) Project [codegen id : 9]
+Output [2]: [sr_item_sk#32, sr_ticket_number#33]
+Input [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
+
+(70) Exchange
+Input [2]: [sr_item_sk#32, sr_ticket_number#33]
+Arguments: hashpartitioning(sr_item_sk#32, 5), ENSURE_REQUIREMENTS, [id=#53]
+
+(71) Sort [codegen id : 10]
 Input [2]: [sr_item_sk#32, sr_ticket_number#33]
 Arguments: [sr_ticket_number#33 ASC NULLS FIRST, sr_item_sk#32 ASC NULLS FIRST], false, 0
 
-(69) SortMergeJoin [codegen id : 12]
+(72) SortMergeJoin [codegen id : 11]
 Left keys [2]: [ss_ticket_number#21, ss_item_sk#18]
 Right keys [2]: [sr_ticket_number#33, sr_item_sk#32]
 Join condition: None
 
-(70) Project [codegen id : 12]
+(73) Project [codegen id : 11]
 Output [11]: [ss_net_paid#22, s_store_name#2, s_state#4, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29, c_first_name#14, c_last_name#15, ca_state#8]
 Input [15]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29, sr_item_sk#32, sr_ticket_number#33]
 
-(71) HashAggregate [codegen id : 12]
+(74) HashAggregate [codegen id : 11]
 Input [11]: [ss_net_paid#22, s_store_name#2, s_state#4, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29, c_first_name#14, c_last_name#15, ca_state#8]
 Keys [10]: [c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#22))]
 Aggregate Attributes [1]: [sum#54]
 Results [11]: [c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26, sum#55]
 
-(72) Exchange
+(75) Exchange
 Input [11]: [c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26, sum#55]
 Arguments: hashpartitioning(c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26, 5), ENSURE_REQUIREMENTS, [id=#56]
 
-(73) HashAggregate [codegen id : 13]
+(76) HashAggregate [codegen id : 12]
 Input [11]: [c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26, sum#55]
 Keys [10]: [c_last_name#15, c_first_name#14, s_store_name#2, ca_state#8, s_state#4, i_color#27, i_current_price#25, i_manager_id#29, i_units#28, i_size#26]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#22))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#22))#39]
 Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#22))#39,17,2) AS netpaid#40]
 
-(74) HashAggregate [codegen id : 13]
+(77) HashAggregate [codegen id : 12]
 Input [1]: [netpaid#40]
 Keys: []
 Functions [1]: [partial_avg(netpaid#40)]
 Aggregate Attributes [2]: [sum#57, count#58]
 Results [2]: [sum#59, count#60]
 
-(75) Exchange
+(78) Exchange
 Input [2]: [sum#59, count#60]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#61]
 
-(76) HashAggregate [codegen id : 14]
+(79) HashAggregate [codegen id : 13]
 Input [2]: [sum#59, count#60]
 Keys: []
 Functions [1]: [avg(netpaid#40)]
