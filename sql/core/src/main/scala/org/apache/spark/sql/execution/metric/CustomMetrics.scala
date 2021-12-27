@@ -25,7 +25,7 @@ object CustomMetrics {
 
   private[spark] val NUM_ROWS_PER_UPDATE = 100
 
-  private[spark] val builtInOutputMetrics = Set("bytesWritten", "recordsWritten")
+  private[spark] val BUILTIN_OUTPUT_METRICS = Set("bytesWritten", "recordsWritten")
 
   /**
    * Given a class name, builds and returns a metric type for a V2 custom metric class
@@ -59,11 +59,12 @@ object CustomMetrics {
       val metricValue = metric.value()
       customMetrics.get(metricName).map(_.set(metricValue))
 
-      if (builtInOutputMetrics.contains(metricName)) {
+      if (BUILTIN_OUTPUT_METRICS.contains(metricName)) {
         Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
           metricName match {
             case "bytesWritten" => outputMetrics.setBytesWritten(metricValue)
             case "recordsWritten" => outputMetrics.setRecordsWritten(metricValue)
+            case _ => // no-op
           }
         }
       }
