@@ -24,7 +24,6 @@ import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
 
-import org.h2.api.ErrorCode
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -182,7 +181,7 @@ class JDBCSuite extends QueryTest
       .executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE test.array_table (ar INTEGER ARRAY) " +
+    conn.prepareStatement("CREATE TABLE test.array_table (ar Integer ARRAY) " +
       "AS SELECT ARRAY[1, 2, 3]")
       .executeUpdate()
     conn.commit()
@@ -1374,9 +1373,9 @@ class JDBCSuite extends QueryTest
     }.getMessage
     assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
     e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
+      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
     }.getMessage
-    assert(e.contains(Integer.toString(ErrorCode.SYNTAX_ERROR_2)))
+    assert(e.contains("Unsupported type ARRAY"))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
