@@ -25,7 +25,6 @@ import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 import scala.collection.JavaConverters._
 
 import org.h2.api.ErrorCode
-import org.h2.jdbc.JdbcSQLSyntaxErrorException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -55,7 +54,8 @@ class JDBCSuite extends QueryTest
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
-  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
+  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
+    Array.fill(15)(0.toByte)
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
@@ -163,7 +163,7 @@ class JDBCSuite extends QueryTest
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP)"
+    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
@@ -182,15 +182,10 @@ class JDBCSuite extends QueryTest
       .executeUpdate()
     conn.commit()
 
-    try {
-      conn.prepareStatement("CREATE TABLE test.array (ar ARRAY) " +
-        "AS SELECT '(1, 2, 3)'")
-        .executeUpdate()
-      conn.commit()
-    } catch {
-      case e: JdbcSQLSyntaxErrorException =>
-        assert(e.getMessage.contains(Integer.toString(ErrorCode.SYNTAX_ERROR_2)))
-    }
+    conn.prepareStatement("CREATE TABLE test.array_table (ar INTEGER ARRAY) " +
+      "AS SELECT ARRAY[1, 2, 3]")
+      .executeUpdate()
+    conn.commit()
 
     conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
@@ -641,12 +636,10 @@ class JDBCSuite extends QueryTest
 
   test("H2 string types") {
     val rows = sql("SELECT * FROM strtypes").collect()
-    // TODO [99, -122, -121, -56, -51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-//    assert(rows(0).getAs[Array[Byte]](0).sameElements(testBytes))
+    assert(rows(0).getAs[Array[Byte]](0).sameElements(testBytes))
     assert(rows(0).getString(1).equals("Sensitive"))
     assert(rows(0).getString(2).equals("Insensitive"))
-    // TODO "Twenty-byte CHAR    "
-//    assert(rows(0).getString(3).equals("Twenty-byte CHAR"))
+    assert(rows(0).getString(3).equals("Twenty-byte CHAR    "))
     assert(rows(0).getAs[Array[Byte]](4).sameElements(testBytes))
     assert(rows(0).getString(5).equals("I am a clob!"))
   }
@@ -670,7 +663,7 @@ class JDBCSuite extends QueryTest
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
     assert(cal.get(Calendar.MILLISECOND) === 543)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543544000)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
   test("SPARK-34357: test TIME types") {
@@ -1072,7 +1065,7 @@ class JDBCSuite extends QueryTest
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
-      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543544"))
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 
   test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
@@ -1084,7 +1077,7 @@ class JDBCSuite extends QueryTest
       val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
       assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
       // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
-      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543544Z"))
+      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
     }
   }
 
