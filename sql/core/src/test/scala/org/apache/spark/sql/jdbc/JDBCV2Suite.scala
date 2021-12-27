@@ -671,10 +671,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: AVG with filter and group by") {
     val df = sql("select AVG(SaLaRY) FROM h2.test.employee where dept > 0" +
       " group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -690,10 +687,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: VAR_POP VAR_SAMP with filter and group by") {
     val df = sql("select VAR_POP(bonus), VAR_SAMP(bonus) FROM h2.test.employee where dept > 0" +
       " group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -709,10 +703,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: STDDEV_POP STDDEV_SAMP with filter and group by") {
     val df = sql("select STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM h2.test.employee" +
       " where dept > 0 group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -728,10 +719,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: COVAR_POP COVAR_SAMP with filter and group by") {
     val df = sql("select COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
       " FROM h2.test.employee where dept > 0 group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df, false)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -745,10 +733,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: CORR with filter and group by") {
     val df = sql("select CORR(bonus, bonus) FROM h2.test.employee where dept > 0" +
       " group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df, false)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
