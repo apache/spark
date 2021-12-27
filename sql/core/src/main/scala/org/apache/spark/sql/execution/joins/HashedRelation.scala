@@ -505,24 +505,40 @@ private[joins] object UnsafeHashedRelation extends Logging {
     if (reorderMap) {
       logInfo(s"Reordering BytesToBytesMap, uniqueKeys: ${binaryMap.numKeys()}, " +
         s"totalNumValues: ${binaryMap.numValues()}")
-      val newBinaryMap = new BytesToBytesMap(
-        taskMemoryManager,
-        // Only 70% of the slots can be used before growing, more capacity help to reduce collision
-        (binaryMap.numKeys() * 1.5 + 1).toInt,
-        pageSizeBytes)
-      // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
-      // applied to find unique keys
-      candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
-        val rowIter = candidate.get(key)
-        while (rowIter.hasNext) {
-          val row = rowIter.next().asInstanceOf[UnsafeRow]
-          val unsafeKey = keyGenerator(row)
-          mapAppendHelper(unsafeKey, row, newBinaryMap)
-        }
+      val allocationTry = scala.util.Try {
+        new BytesToBytesMap(
+          taskMemoryManager,
+          // Only 70% of the slots can be used before growing, more capacity help to reduce
+          // collision
+          (binaryMap.numKeys() * 1.5 + 1).toInt,
+          pageSizeBytes)
       }
-      candidate.close()
-      logInfo("BytesToBytesMap reordered")
-      new UnsafeHashedRelation(key.size, numFields, newBinaryMap)
+
+      if (allocationTry.isSuccess) {
+        allocationTry.map { compactMap =>
+          // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
+          // applied to find unique keys
+          candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
+            val rowIter = candidate.get(key)
+            while (rowIter.hasNext) {
+              val row = rowIter.next().asInstanceOf[UnsafeRow]
+              val unsafeKey = keyGenerator(row)
+              mapAppendHelper(unsafeKey, row, compactMap)
+            }
+          }
+          candidate.close()
+          logInfo("BytesToBytesMap reordered")
+          new UnsafeHashedRelation(key.size, numFields, compactMap)
+        }.recover { case e =>
+          logWarning("Reordering BytesToBytesMap failed", e)
+          allocationTry.map(_.free())
+          candidate
+        }.get
+      } else {
+        logWarning("Reordering BytesToBytesMap failed during initialization, " +
+          "try increasing driver memory to mitigate it")
+        candidate
+      }
     } else {
       candidate
     }
@@ -1127,8 +1143,7 @@ private[joins] object LongHashedRelation extends Logging {
         new LongToUnsafeRowMap(taskMemoryManager, Math.toIntExact(map.numTotalValues))
       }
       if (allocationTry.isSuccess) {
-        val compactMap = allocationTry.get
-        scala.util.Try {
+        allocationTry.map { compactMap =>
           map.keys().foreach { rowKey =>
             val key = rowKey.getLong(0)
             map.get(key, resultRow).foreach { row =>
@@ -1138,11 +1153,11 @@ private[joins] object LongHashedRelation extends Logging {
           map.free()
           logInfo("LongToUnsafeRowMap reordered")
           compactMap
-        }.getOrElse {
-          logWarning("Reordering LongToUnsafeRowMap failed")
-          compactMap.free()
+        }.recover { case e =>
+          logWarning("Reordering LongToUnsafeRowMap failed", e)
+          allocationTry.foreach(_.free())
           map
-        }
+        }.get
       } else {
         logWarning("Reordering LongToUnsafeRowMap failed during initialization, " +
           "try increasing driver memory to mitigate it")

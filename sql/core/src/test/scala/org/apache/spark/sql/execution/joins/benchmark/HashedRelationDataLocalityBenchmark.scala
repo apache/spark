@@ -116,7 +116,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
 
   private def runLongHashedRelationMicroBenchmark(): Unit = {
     val relationGenerator = (rowItr: Iterator[InternalRow], keyExpr: Seq[Expression],
-      sizeEstimate: Int, reorderFactor: Option[Int]) => {
+      sizeEstimate: Int, reorderFactor: Option[Double]) => {
       LongHashedRelation(rowItr, keyExpr, sizeEstimate, taskMemoryManager,
         reorderFactor = reorderFactor)
     }
@@ -129,7 +129,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
 
   private def runUnsafeHashedRelationMicroBenchmark(): Unit = {
     val relationGenerator = (rowItr: Iterator[InternalRow], keyExpr: Seq[Expression],
-      sizeEstimate: Int, reorderFactor: Option[Int]) => {
+      sizeEstimate: Int, reorderFactor: Option[Double]) => {
       UnsafeHashedRelation(rowItr, keyExpr, sizeEstimate, taskMemoryManager,
         reorderFactor = reorderFactor)
     }
