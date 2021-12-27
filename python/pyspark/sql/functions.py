@@ -2217,7 +2217,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
 
-    days = days if isinstance(days, Column) else lit(days)
+    days = lit(days) if isinstance(days, int) else days
 
     return Column(
         sc._jvm.functions.date_add(
@@ -2243,7 +2243,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
 
-    days = days if isinstance(days, Column) else lit(days)
+    days = lit(days) if isinstance(days, int) else days
 
     return Column(
         sc._jvm.functions.date_sub(
@@ -2286,7 +2286,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
 
-    months = months if isinstance(months, Column) else lit(months)
+    months = lit(months) if isinstance(months, int) else months
 
     return Column(
         sc._jvm.functions.add_months(
