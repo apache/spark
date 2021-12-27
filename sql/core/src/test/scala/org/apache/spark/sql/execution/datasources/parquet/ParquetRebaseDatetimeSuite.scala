@@ -174,7 +174,7 @@ abstract class ParquetRebaseDatetimeSuite
       // contain Spark version.
       "2_4_5" -> failInRead _,
       "2_4_6" -> successInRead _,
-      "3_2_2" -> successInRead _).foreach { case (version, checkDefaultRead) =>
+      "3_2_0" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         checkReadMixedFiles(
           s"before_1582_date_v$version.snappy.parquet",
