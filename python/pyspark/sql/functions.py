@@ -2228,8 +2228,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.date_add(
-            _to_java_column(start),
-            days if isinstance(days, int) else _to_java_column(days)
+            _to_java_column(start), days if isinstance(days, int) else _to_java_column(days)
         )
     )
 
@@ -2262,8 +2261,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.date_sub(
-            _to_java_column(start),
-            days if isinstance(days, int) else _to_java_column(days)
+            _to_java_column(start), days if isinstance(days, int) else _to_java_column(days)
         )
     )
 
@@ -2313,8 +2311,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.add_months(
-            _to_java_column(start),
-            months if isinstance(months, int) else _to_java_column(months)
+            _to_java_column(start), months if isinstance(months, int) else _to_java_column(months)
         )
     )
 
