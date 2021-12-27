@@ -36,9 +36,9 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
-abstract class AbstractHashedRelationSuite extends SharedSparkSession {
+abstract class BaseHashedRelationSuite extends SharedSparkSession {
 
-  def mapReorderFactor: Option[Int]
+  def mapReorderFactor: Option[Double]
 
   val mm = new TaskMemoryManager(
     new UnifiedMemoryManager(
@@ -728,12 +728,12 @@ abstract class AbstractHashedRelationSuite extends SharedSparkSession {
   }
 }
 
-class HashedRelationWithReorderingSuite extends AbstractHashedRelationSuite {
-  override def mapReorderFactor: Option[Int] = Some(1)
+class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
+  override def mapReorderFactor: Option[Double] = Some(1)
 
   // TOOD: add more tests
 }
 
-class HashedRelationWithoutReorderingSuite extends AbstractHashedRelationSuite {
-  override def mapReorderFactor: Option[Int] = None
+class HashedRelationWithoutReorderingSuite extends BaseHashedRelationSuite {
+  override def mapReorderFactor: Option[Double] = None
 }

@@ -64,7 +64,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
           Iterator[InternalRow],
           Seq[Expression],
           Int,
-          Option[Int]) => HashedRelation): Unit = {
+          Option[Double]) => HashedRelation): Unit = {
 
     val keyGenerator = UnsafeProjection.create(keyExpr)
     val fieldsExpr = Seq(LongType, StringType, IntegerType, DoubleType).zipWithIndex.map {
@@ -95,7 +95,7 @@ object HashedRelationDataLocalityBenchmark extends SqlBasedBenchmark with Loggin
         Seq(false, true).foreach { reorderMap =>
           benchmark.addCase(s"Reorder map: $reorderMap, Total rows: $totalRows," +
             s" Unique rows: $uniqueRows", 5) { _ =>
-            val reorderFactor = if (reorderMap) Some(duplicationMultiplier) else None
+            val reorderFactor = if (reorderMap) Some(duplicationMultiplier: Double) else None
             val hashedRelation = relationGenerator(shuffledRows.iterator, keyExpr,
               Math.toIntExact(uniqueRows), reorderFactor)
 
