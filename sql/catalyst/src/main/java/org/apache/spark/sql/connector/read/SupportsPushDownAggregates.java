@@ -46,6 +46,14 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
+   * Whether the datasource support complete aggregation push-down. Spark could avoid partial-agg
+   * and final-agg when the aggregation operation can be pushed down to the datasource completely.
+   *
+   * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
+   */
+  default boolean supportCompletePushDown() { return false; }
+
+  /**
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should
    * be: grouping columns, aggregate columns (in the same order as the aggregate functions in
    * the given Aggregation).

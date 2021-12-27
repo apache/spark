@@ -28,7 +28,7 @@ Spark provides three locations to configure the system:
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
-* [Logging](#configuring-logging) can be configured through `log4j.properties`.
+* [Logging](#configuring-logging) can be configured through `log4j2.properties`.
 
 # Spark Properties
 
@@ -422,7 +422,7 @@ of the most common options to set are:
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
   <td>
     The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
-    it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
+    it uses the layout for the first appender defined in log4j2.properties. If that is also not configured, driver logs
     use the default layout.
   </td>
   <td>3.0.0</td>
@@ -3080,7 +3080,7 @@ Note: When running Spark on YARN in `cluster` mode, environment variables need t
 # Configuring Logging
 
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
-`log4j.properties` file in the `conf` directory. One way to start is to copy the existing
+`log4j2.properties` file in the `conf` directory. One way to start is to copy the existing
 `log4j2.properties.template` located there.
 
 By default, Spark adds 1 record to the MDC (Mapped Diagnostic Context): `mdc.taskName`, which shows something
@@ -3092,7 +3092,7 @@ The key in MDC will be the string of "mdc.$name".
 # Overriding configuration directory
 
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
-you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j2.properties, etc)
 from this directory.
 
 # Inheriting Hadoop Cluster Configuration

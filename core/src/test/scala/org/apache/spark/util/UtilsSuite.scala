@@ -690,8 +690,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     try {
       Utils.setLogLevel(org.apache.logging.log4j.Level.ALL)
       assert(rootLogger.getLevel == org.apache.logging.log4j.Level.ALL)
+      assert(log.isInfoEnabled())
       Utils.setLogLevel(org.apache.logging.log4j.Level.ERROR)
       assert(rootLogger.getLevel == org.apache.logging.log4j.Level.ERROR)
+      assert(!log.isInfoEnabled())
+      assert(log.isErrorEnabled())
     } finally {
       // Best effort at undoing changes this test made.
       Utils.setLogLevel(current)
