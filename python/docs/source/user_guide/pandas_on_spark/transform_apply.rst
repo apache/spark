@@ -76,7 +76,7 @@ The example above calculates the summation of each row as a pandas Series. See b
   :align: center
   :width: 600
 
-In the examples above, the type hints were not used for simplicity but it is encouraged to use to avoid performance penalty.
+In the examples above, the type hints were not used for simplicity but it is encouraged to use them to avoid performance penalty.
 Please refer the API documentations.
 
 
@@ -85,7 +85,7 @@ Please refer the API documentations.
 
 In :func:`DataFrame.pandas_on_spark.transform_batch`, :func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.transform_batch`, etc., the ``batch``
 postfix means each chunk in pandas-on-Spark DataFrame or Series. The APIs slice the pandas-on-Spark DataFrame or Series, and
-then applies the given function with pandas DataFrame or Series as input and output. See the examples below:
+then apply the given function with pandas DataFrame or Series as input and output. See the examples below:
 
 .. code-block:: python
 
@@ -107,10 +107,10 @@ The functions in both examples take a pandas DataFrame as a chunk of pandas-on-S
 Pandas API on Spark combines the pandas DataFrames as a pandas-on-Spark DataFrame.
 
 Note that :func:`DataFrame.pandas_on_spark.transform_batch` has the length restriction - the length of input and output should be
-the same whereas :func:`DataFrame.pandas_on_spark.apply_batch` does not.  However, it is important to know that
+the same - whereas :func:`DataFrame.pandas_on_spark.apply_batch` does not.  However, it is important to know that
 the output belongs to the same DataFrame when :func:`DataFrame.pandas_on_spark.transform_batch` returns a Series, and
 you can avoid a shuffle by the operations between different DataFrames. In case of :func:`DataFrame.pandas_on_spark.apply_batch`, its output is always
-treated that it belongs to a new different DataFrame. See also
+treated as though it belongs to a new different DataFrame. See also
 `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
 .. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply3.png

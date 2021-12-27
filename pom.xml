@@ -201,7 +201,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>6.0.0</arrow.version>
+    <arrow.version>6.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>5.10.1</kubernetes-client.version>
@@ -779,7 +779,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.0-4</version>
+        <version>1.5.1-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

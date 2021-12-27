@@ -81,7 +81,7 @@ if possible, it is recommended to use pandas API on Spark or PySpark APIs instea
 PySpark
 -------
 
-PySpark users can access to full PySpark APIs by calling :func:`DataFrame.to_spark`.
+PySpark users can access the full PySpark APIs by calling :func:`DataFrame.to_spark`.
 pandas-on-Spark DataFrame and Spark DataFrame are virtually interchangeable.
 
 For example, if you need to call ``spark_df.filter(...)`` of Spark DataFrame, you can do

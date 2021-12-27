@@ -97,15 +97,9 @@ true
 -- !query
 select current_date() = current_date()
 -- !query schema
-struct<>
+struct<(current_date() = current_date()):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'current_date'(line 1, pos 7)
-
-== SQL ==
-select current_date() = current_date()
--------^^^
+true
 
 
 -- !query
