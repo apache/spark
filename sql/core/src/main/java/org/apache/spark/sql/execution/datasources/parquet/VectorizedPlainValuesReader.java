@@ -223,8 +223,8 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       } else {
         for (int i = 0; i < total; i += 1) {
           c.putLong(
-              rowId + i,
-              RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, buffer.getLong()));
+            rowId + i,
+            RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, buffer.getLong()));
         }
       }
     } else {

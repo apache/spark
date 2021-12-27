@@ -155,9 +155,9 @@ public class ParquetVectorUpdaterFactory {
               return new BinaryToSQLTimestampConvertTzUpdater(convertTz);
             } else {
               return new BinaryToSQLTimestampConvertTzRebaseUpdater(
-                  failIfRebase,
-                  convertTz,
-                  int96RebaseTz);
+                failIfRebase,
+                convertTz,
+                int96RebaseTz);
             }
           }
         }

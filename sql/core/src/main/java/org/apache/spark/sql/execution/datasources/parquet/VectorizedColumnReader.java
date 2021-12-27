@@ -101,12 +101,12 @@ public class VectorizedColumnReader {
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.updaterFactory = new ParquetVectorUpdaterFactory(
-        logicalTypeAnnotation,
-        convertTz,
-        datetimeRebaseMode,
-        datetimeRebaseTz,
-        int96RebaseMode,
-        int96RebaseTz);
+      logicalTypeAnnotation,
+      convertTz,
+      datetimeRebaseMode,
+      datetimeRebaseTz,
+      int96RebaseMode,
+      int96RebaseTz);
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
