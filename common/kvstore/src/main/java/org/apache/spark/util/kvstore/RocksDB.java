@@ -71,6 +71,7 @@ public class RocksDB implements KVStore {
   private static final BlockBasedTableConfig tableFormatConfig = new BlockBasedTableConfig()
     .setFilterPolicy(fullFilter)
     .setEnableIndexCompression(false)
+    .setIndexBlockRestartInterval(8)
     .setFormatVersion(5);
 
   /**
