@@ -459,7 +459,7 @@ private[joins] object UnsafeHashedRelation extends Logging {
       isNullAware: Boolean = false,
       allowsNullKey: Boolean = false,
       ignoresDuplicatedKey: Boolean = false,
-      reorderFactor: Option[Int]): HashedRelation = {
+      reorderFactor: Option[Double]): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
@@ -1096,7 +1096,7 @@ private[joins] object LongHashedRelation extends Logging {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
-      reorderFactor: Option[Int]): HashedRelation = {
+      reorderFactor: Option[Double]): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
@@ -1122,16 +1122,32 @@ private[joins] object LongHashedRelation extends Logging {
       logInfo(s"Reordering LongToUnsafeRowMap, numKeys: ${map.numUniqueKeys}, " +
         s"totalValue: ${map.numTotalValues}")
       val resultRow = new UnsafeRow(numFields)
-      val compactMap = new LongToUnsafeRowMap(taskMemoryManager, map.numUniqueKeys.toInt)
-      map.keys().foreach { rowKey =>
-        val key = rowKey.getLong(0)
-        map.get(key, resultRow).foreach { row =>
-          compactMap.append(key, row)
-        }
+
+      val allocationTry = scala.util.Try {
+        new LongToUnsafeRowMap(taskMemoryManager, Math.toIntExact(map.numTotalValues))
       }
-      map.free()
-      logInfo("LongToUnsafeRowMap reordered")
-      compactMap
+      if (allocationTry.isSuccess) {
+        val compactMap = allocationTry.get
+        scala.util.Try {
+          map.keys().foreach { rowKey =>
+            val key = rowKey.getLong(0)
+            map.get(key, resultRow).foreach { row =>
+              compactMap.append(key, row)
+            }
+          }
+          map.free()
+          logInfo("LongToUnsafeRowMap reordered")
+          compactMap
+        }.getOrElse {
+          logWarning("Reordering LongToUnsafeRowMap failed")
+          compactMap.free()
+          map
+        }
+      } else {
+        logWarning("Reordering LongToUnsafeRowMap failed during initialization, " +
+          "try increasing driver memory to mitigate it")
+        map
+      }
     } else {
       map
     }

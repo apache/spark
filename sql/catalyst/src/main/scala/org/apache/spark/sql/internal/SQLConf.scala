@@ -3387,7 +3387,7 @@ object SQLConf {
       "spatial locality. This provides a performance boost while iterating over the rows for a " +
       "given key due to increased cache hits")
     .version("3.3.0")
-    .intConf
+    .doubleConf
     .checkValue(_ > 1, "The value must be greater than 1.")
     .createOptional
 
@@ -3882,7 +3882,7 @@ class SQLConf extends Serializable with Logging {
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
-  def hashedRelationReorderFactor: Option[Int] = getConf(HASHED_RELATION_REORDER_FACTOR)
+  def hashedRelationReorderFactor: Option[Double] = getConf(HASHED_RELATION_REORDER_FACTOR)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
