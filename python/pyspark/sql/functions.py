@@ -2219,11 +2219,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     days = lit(days) if isinstance(days, int) else days
 
-    return Column(
-        sc._jvm.functions.date_add(
-            _to_java_column(start), _to_java_column(days)
-        )
-    )
+    return Column(sc._jvm.functions.date_add(_to_java_column(start), _to_java_column(days)))
 
 
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
@@ -2245,11 +2241,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     days = lit(days) if isinstance(days, int) else days
 
-    return Column(
-        sc._jvm.functions.date_sub(
-            _to_java_column(start), _to_java_column(days)
-        )
-    )
+    return Column(sc._jvm.functions.date_sub(_to_java_column(start), _to_java_column(days)))
 
 
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
@@ -2288,11 +2280,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
 
     months = lit(months) if isinstance(months, int) else months
 
-    return Column(
-        sc._jvm.functions.add_months(
-            _to_java_column(start), _to_java_column(months)
-        )
-    )
+    return Column(sc._jvm.functions.add_months(_to_java_column(start), _to_java_column(months)))
 
 
 def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:
