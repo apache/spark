@@ -257,9 +257,9 @@ case class ConcatWs(children: Seq[Expression])
 // scalastyle:on line.size.limit
 case class Elt(
     children: Seq[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression {
+    failOnError: Boolean = SQLConf.get.ansiFailOnElementNotExists) extends Expression {
 
-  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiFailOnElementNotExists)
 
   private lazy val indexExpr = children.head
   private lazy val inputExprs = children.tail.toArray

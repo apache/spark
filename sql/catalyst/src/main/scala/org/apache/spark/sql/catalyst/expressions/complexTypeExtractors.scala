@@ -233,7 +233,7 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiFailOnElementNotExists)
   extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
 
   def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
@@ -439,7 +439,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 case class GetMapValue(
     child: Expression,
     key: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiFailOnElementNotExists)
   extends GetMapValueUtil with ExtractValue {
 
   def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)

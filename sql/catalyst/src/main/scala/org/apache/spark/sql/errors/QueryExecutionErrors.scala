@@ -165,17 +165,19 @@ object QueryExecutionErrors {
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(index.toString, numElements.toString,
+        SQLConf.ANSI_FAIL_ON_ELEMENT_NOT_EXISTS.key))
   }
 
   def invalidInputIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_INPUT_INDEX",
-      messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(index.toString, stringLength.toString,
+        SQLConf.ANSI_FAIL_ON_ELEMENT_NOT_EXISTS.key))
   }
 
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(key.toString, SQLConf.ANSI_FAIL_ON_ELEMENT_NOT_EXISTS.key))
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {

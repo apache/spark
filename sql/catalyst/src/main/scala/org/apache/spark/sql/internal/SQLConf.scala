@@ -2665,6 +2665,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ANSI_FAIL_ON_ELEMENT_NOT_EXISTS = buildConf("spark.sql.ansi.failOnElementNotExists")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, Spark will throw an exception on array " +
+      "out of bound, or map key not exists when accessing complex types via [] operator or " +
+      "function element_at()/elt(). Otherwise, Spark will return a null result.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -4129,6 +4137,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def ansiFailOnElementNotExists: Boolean = ansiEnabled && getConf(ANSI_FAIL_ON_ELEMENT_NOT_EXISTS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

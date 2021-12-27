@@ -2049,10 +2049,11 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiFailOnElementNotExists)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.ansiFailOnElementNotExists)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
