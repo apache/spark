@@ -2200,16 +2200,6 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     return Column(jc)
 
 
-@overload
-def date_add(start: "ColumnOrName", days: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def date_add(start: "ColumnOrName", days: int) -> Column:
-    ...
-
-
 def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days after `start`
@@ -2231,16 +2221,6 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
             _to_java_column(start), days if isinstance(days, int) else _to_java_column(days)
         )
     )
-
-
-@overload
-def date_sub(start: "ColumnOrName", days: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def date_sub(start: "ColumnOrName", days: int) -> Column:
-    ...
 
 
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
@@ -2281,16 +2261,6 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
-
-
-@overload
-def add_months(start: "ColumnOrName", months: "ColumnOrName") -> Column:
-    ...
-
-
-@overload
-def add_months(start: "ColumnOrName", months: int) -> Column:
-    ...
 
 
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
