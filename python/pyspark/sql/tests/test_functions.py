@@ -286,6 +286,45 @@ class FunctionsTests(ReusedSQLTestCase):
         row = df.select(dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
 
+    def test_date_add_function(self):
+        from pyspark.sql.functions import date_add, col
+
+        dt = datetime.date(2021, 12, 27)
+        df = self.spark.createDataFrame([Row(date=dt, add=2)])
+        # default number in Python gets converted to LongType column
+        df = df.withColumn("add", col("add").cast("integer"))
+
+        row_via_col_addition = df.select(date_add(df.date, df.add)).first()
+        self.assertEqual(row_via_col_addition[0], datetime.date(2021, 12, 29))
+        row_via_scalar_addition = df.select(date_add(df.date, 3)).first()
+        self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 30))
+
+    def test_date_sub_function(self):
+        from pyspark.sql.functions import date_sub, col
+
+        dt = datetime.date(2021, 12, 27)
+        df = self.spark.createDataFrame([Row(date=dt, add=2)])
+        # default number in Python gets converted to LongType column
+        df = df.withColumn("add", col("add").cast("integer"))
+
+        row_via_col_addition = df.select(date_sub(df.date, df.add)).first()
+        self.assertEqual(row_via_col_addition[0], datetime.date(2021, 12, 25))
+        row_via_scalar_addition = df.select(date_sub(df.date, 3)).first()
+        self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 24))
+
+    def test_add_months_function(self):
+        from pyspark.sql.functions import add_months, col
+
+        dt = datetime.date(2021, 12, 27)
+        df = self.spark.createDataFrame([Row(date=dt, add=2)])
+        # default number in Python gets converted to LongType column
+        df = df.withColumn("add", col("add").cast("integer"))
+
+        row_via_col_addition = df.select(add_months(df.date, df.add)).first()
+        self.assertEqual(row_via_col_addition[0], datetime.date(2022, 2, 27))
+        row_via_scalar_addition = df.select(add_months(df.date, 3)).first()
+        self.assertEqual(row_via_scalar_addition[0], datetime.date(2022, 3, 27))
+
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
         df = self.spark.createDataFrame([(2020, 6, 26)], ["Y", "M", "D"])
