@@ -904,7 +904,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   test("SPARK-37578: Update output metrics from Datasource v2") {
     withTempDir { dir =>
       val statusStore = spark.sharedState.statusStore
-      val oldCount = statusStore.executionsList().size
+      val oldCount = statusStore.executionsCount()
 
       val bytesWritten = new ArrayBuffer[Long]()
       val recordsWritten = new ArrayBuffer[Long]()
@@ -924,7 +924,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
         // Wait until the new execution is started and being tracked.
         eventually(timeout(10.seconds), interval(10.milliseconds)) {
-          assert(statusStore.executionsCount() >= oldCount)
+          assert(statusStore.executionsCount() > oldCount)
         }
 
         // Wait for listener to finish computing the metrics for the execution.
