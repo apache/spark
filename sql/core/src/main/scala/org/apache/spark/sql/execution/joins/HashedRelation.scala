@@ -501,10 +501,11 @@ private[joins] object UnsafeHashedRelation extends Logging {
       }
     }
 
-    // reorganize the hash map so that nodes of a given linked list are next to each other in memory
-    val candidate = new UnsafeHashedRelation(key.size, numFields, binaryMap)
+    val relation = new UnsafeHashedRelation(key.size, numFields, binaryMap)
     val reorderMap = reorderFactor.exists(_ * binaryMap.numKeys() <= binaryMap.numValues())
     if (reorderMap) {
+      // Reorganize the hash map so that nodes of a given linked list are next to each other in
+      // memory.
       logInfo(s"Reordering BytesToBytesMap, uniqueKeys: ${binaryMap.numKeys()}, " +
         s"totalNumValues: ${binaryMap.numValues()}")
       // An exception due to insufficient memory can occur either during initialization or while
@@ -522,16 +523,16 @@ private[joins] object UnsafeHashedRelation extends Logging {
           // collision
           (binaryMap.numKeys() * 1.5 + 1).toInt,
           pageSizeBytes)
-        // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
+        // relation.keys() returns all keys and not just distinct keys thus distinct operation is
         // applied to find unique keys
-        candidate.keys().map(_.copy()).toSeq.distinct.foreach { key =>
-          candidate.get(key).foreach { row =>
+        relation.keys().map(_.copy()).toSeq.distinct.foreach { key =>
+          relation.get(key).foreach { row =>
             val unsafeRow = row.asInstanceOf[UnsafeRow]
             val unsafeKey = keyGenerator(unsafeRow)
             mapAppendHelper(unsafeKey, unsafeRow, compactMap)
           }
         }
-        candidate.close()
+        relation.close()
         logInfo("BytesToBytesMap reordered")
         new UnsafeHashedRelation(key.size, numFields, compactMap)
       } catch {
@@ -539,13 +540,13 @@ private[joins] object UnsafeHashedRelation extends Logging {
           logWarning("Reordering BytesToBytesMap failed, " +
             "try increasing the driver memory to mitigate it", e)
           if (throwExceptionOnReorderFailure) {
-            candidate.close()
+            relation.close()
             throw e
           }
-          candidate
+          relation
       }
     } else {
-      candidate
+      relation
     }
   }
 }
@@ -647,10 +648,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       require(capacity < 512000000, "Cannot broadcast 512 million or more rows")
       var n = 1
       while (n < capacity) n *= 2
-      // n is estimated number of rows, to the next power of 2
-      // the below assumes (because we don't know yet) that the keys are unique.
-      // check that we have enough memory for both the key array (2 longs per entry)
-      // plus the page (which will start off as 1M bytes)
       ensureAcquireMemory(n * 2L * 8 + (1 << 20))
       array = new Array[Long](n * 2)
       mask = n * 2 - 2
@@ -1139,9 +1136,10 @@ private[joins] object LongHashedRelation extends Logging {
       }
     }
 
-    // reorganize the hash map so that nodes of a given linked list are next to each other in memory
     val reorderMap = reorderFactor.exists(_ * map.numUniqueKeys <= map.numTotalValues)
-    val mapToUse = if (reorderMap) {
+    val finalMap = if (reorderMap) {
+      // reorganize the hash map so that nodes of a given linked list are next to each other in
+      // memory.
       logInfo(s"Reordering LongToUnsafeRowMap, numUniqueKeys: ${map.numUniqueKeys}, " +
         s"numTotalValues: ${map.numTotalValues}")
       // An exception due to insufficient memory can occur either during initialization or while
@@ -1180,8 +1178,8 @@ private[joins] object LongHashedRelation extends Logging {
     } else {
       map
     }
-    mapToUse.optimize()
-    new LongHashedRelation(numFields, mapToUse)
+    finalMap.optimize()
+    new LongHashedRelation(numFields, finalMap)
   }
 }
 
