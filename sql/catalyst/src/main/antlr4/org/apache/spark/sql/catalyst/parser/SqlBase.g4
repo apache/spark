@@ -888,6 +888,8 @@ primaryExpression
        FROM srcStr=valueExpression ')'                                                         #trim
     | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
+    | PERCENTILE_CONT '(' percentage=valueExpression ')'
+      WITHIN GROUP '(' ORDER BY sortItem ')'                                                   #percentile
     ;
 
 constant
@@ -1475,6 +1477,7 @@ nonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PERCENTILE_CONT
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -1570,6 +1573,7 @@ nonReserved
     | WHERE
     | WINDOW
     | WITH
+    | WITHIN
     | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
@@ -1747,6 +1751,7 @@ OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
+PERCENTILE_CONT: 'PERCENTILE_CONT';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
 PLACING: 'PLACING';
@@ -1847,6 +1852,7 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
+WITHIN: 'WITHIN';
 YEAR: 'YEAR';
 ZONE: 'ZONE';
 //--SPARK-KEYWORD-LIST-END
