@@ -354,7 +354,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readLongsWithRebase(
-      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
