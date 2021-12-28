@@ -139,10 +139,7 @@ class InMemoryCatalog(
     if (catalog.contains(db)) {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
-        if (catalog(db).tables.nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
-        }
-        if (catalog(db).functions.nonEmpty) {
+        if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
           throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
       }
