@@ -460,6 +460,7 @@ private[joins] object UnsafeHashedRelation extends Logging {
       allowsNullKey: Boolean = false,
       ignoresDuplicatedKey: Boolean = false,
       reorderFactor: Option[Double],
+      // Exposed for testing
       throwExceptionOnReorderFailure: Boolean = Utils.isTesting): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
@@ -508,20 +509,19 @@ private[joins] object UnsafeHashedRelation extends Logging {
         s"totalNumValues: ${binaryMap.numValues()}")
       // An exception due to insufficient memory can occur either during initialization or while
       // adding rows to the map.
-      // 1. Failure occurs during initialization i.e. in LongToUnsafeRowMap.init:
-      // release of the partially allocated memory is already taken care of in the
-      // LongToUnsafeRowMap.ensureAcquireMemory method thus further action is required.
-      // 2. Failure occurs while adding rows to the map: the partially allocated memory
-      // is not cleaned up, thus LongToUnsafeRowMap.free is invoked in the catch clause.
-      var maybeCompactMap: Option[BytesToBytesMap] = None
+      // 1. Failure occurs during initialization i.e. in BytesToBytesMap.allocate:
+      // release of the partially allocated memory is already taken care of through
+      // MemoryConsumer.allocateArray method thus no further action is required.
+      // 2. Failure occurs while adding rows to the map: mapAppendHelper invokes
+      // BytesToBytesMap.free method when a row cannot be appended to the map, thereby cleaning the
+      // partially allocated memory.
       try {
-        maybeCompactMap = Some(new BytesToBytesMap(
+        val compactMap = new BytesToBytesMap(
           taskMemoryManager,
           // Only 70% of the slots can be used before growing, more capacity help to reduce
           // collision
           (binaryMap.numKeys() * 1.5 + 1).toInt,
-          pageSizeBytes))
-        val compactMap = maybeCompactMap.get
+          pageSizeBytes)
         // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
         // applied to find unique keys
         candidate.keys().map(_.copy()).toSeq.distinct.foreach { key =>
@@ -538,7 +538,6 @@ private[joins] object UnsafeHashedRelation extends Logging {
         case e: SparkOutOfMemoryError =>
           logWarning("Reordering BytesToBytesMap failed, " +
             "try increasing the driver memory to mitigate it", e)
-          maybeCompactMap.foreach(_.free())
           if (throwExceptionOnReorderFailure) {
             candidate.close()
             throw e
@@ -1119,6 +1118,7 @@ private[joins] object LongHashedRelation extends Logging {
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
       reorderFactor: Option[Double],
+      // Exposed for testing
       throwExceptionOnReorderFailure: Boolean = Utils.isTesting): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
@@ -1148,7 +1148,7 @@ private[joins] object LongHashedRelation extends Logging {
       // adding rows to the map.
       // 1. Failure occurs during initialization i.e. in LongToUnsafeRowMap.init:
       // release of the partially allocated memory is already taken care of in the
-      // LongToUnsafeRowMap.ensureAcquireMemory method thus further action is required.
+      // LongToUnsafeRowMap.ensureAcquireMemory method thus no further action is required.
       // 2. Failure occurs while adding rows to the map: the partially allocated memory
       // is not cleaned up, thus LongToUnsafeRowMap.free is invoked in the catch clause.
       var maybeCompactMap: Option[LongToUnsafeRowMap] = None
