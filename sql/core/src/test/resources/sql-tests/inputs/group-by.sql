@@ -288,3 +288,16 @@ SELECT
 FROM aggr
 GROUP BY k
 ORDER BY k;
+
+-- SPARK-37691: Support ANSI Aggregation Function: percentile_disc
+SELECT
+ percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+ percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr;
+SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr
+GROUP BY k
+ORDER BY k;

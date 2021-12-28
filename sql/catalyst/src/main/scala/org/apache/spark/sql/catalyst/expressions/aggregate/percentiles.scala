@@ -30,71 +30,12 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
-/**
- * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
- * the given percentage(s) with value range in [0.0, 1.0].
- *
- * Because the number of elements and their partial order cannot be determined in advance.
- * Therefore we have to store all the elements in memory, and so notice that too many elements can
- * cause GC paused and eventually OutOfMemory Errors.
- *
- * @param child child expression that produce numeric column value with `child.eval(inputRow)`
- * @param percentageExpression Expression that represents a single percentage value or an array of
- *                             percentage values. Each percentage value must be in the range
- *                             [0.0, 1.0].
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage =
-    """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ansi interval column `col` at the given percentage. The value of percentage must be
-       between 0.0 and 1.0. The value of frequency should be positive integral
+abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
+  with ImplicitCastInputTypes with TernaryLike[Expression] {
 
-      _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
-      percentile value array of numeric column `col` at the given percentage(s). Each value
-      of the percentage array must be between 0.0 and 1.0. The value of frequency should be
-      positive integral
-
-      """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
-       3.0
-      > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
-       [2.5,7.5]
-      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       5.0
-      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
-       [2000000.0,5000000.0]
-  """,
-  group = "agg_funcs",
-  since = "2.1.0")
-// scalastyle:on line.size.limit
-case class Percentile(
-    child: Expression,
-    percentageExpression: Expression,
-    frequencyExpression : Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes
-  with TernaryLike[Expression] {
-
-  def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(1L), 0, 0)
-  }
-
-  def this(child: Expression, percentageExpression: Expression, frequency: Expression) = {
-    this(child, percentageExpression, frequency, 0, 0)
-  }
-
-  override def prettyName: String = "percentile"
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Percentile =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+  val child: Expression
+  val percentageExpression: Expression
+  val frequencyExpression : Expression
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   @transient
@@ -151,7 +92,7 @@ case class Percentile(
     }
   }
 
-  private def toDoubleValue(d: Any): Double = d match {
+  protected def toDoubleValue(d: Any): Double = d match {
     case d: Decimal => d.toDouble
     case n: Number => n.doubleValue
   }
@@ -231,36 +172,12 @@ case class Percentile(
    * This function has been based upon similar function from HIVE
    * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  private def getPercentile(aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
-    // We may need to do linear interpolation to get the exact percentile
-    val lower = position.floor.toLong
-    val higher = position.ceil.toLong
-
-    // Use binary search to find the lower and the higher position.
-    val countsArray = aggreCounts.map(_._2).toArray[Long]
-    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
-    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
-
-    val lowerKey = aggreCounts(lowerIndex)._1
-    if (higher == lower) {
-      // no interpolation needed because position does not have a fraction
-      return toDoubleValue(lowerKey)
-    }
-
-    val higherKey = aggreCounts(higherIndex)._1
-    if (higherKey == lowerKey) {
-      // no interpolation needed because lower position and higher position has the same key
-      return toDoubleValue(lowerKey)
-    }
-
-    // Linear interpolation to get the exact percentile
-    (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
-  }
+  protected def getPercentile(aggreCounts: Seq[(AnyRef, Long)], position: Double): Double
 
   /**
    * use a binary search to find the index of the position closest to the current value.
    */
-  private def binarySearchCount(
+  protected def binarySearchCount(
       countsArray: Array[Long], start: Int, end: Int, value: Long): Int = {
     util.Arrays.binarySearch(countsArray, 0, end, value) match {
       case ix if ix < 0 => -(ix + 1)
@@ -317,9 +234,160 @@ case class Percentile(
       bis.close()
     }
   }
+}
+
+/**
+ * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
+ * the given percentage(s) with value range in [0.0, 1.0].
+ *
+ * Because the number of elements and their partial order cannot be determined in advance.
+ * Therefore we have to store all the elements in memory, and so notice that too many elements can
+ * cause GC paused and eventually OutOfMemory Errors.
+ *
+ * @param child child expression that produce numeric column value with `child.eval(inputRow)`
+ * @param percentageExpression Expression that represents a single percentage value or an array of
+ *                             percentage values. Each percentage value must be in the range
+ *                             [0.0, 1.0].
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    """
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
+       or ansi interval column `col` at the given percentage. The value of percentage must be
+       between 0.0 and 1.0. The value of frequency should be positive integral
+
+      _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
+      percentile value array of numeric column `col` at the given percentage(s). Each value
+      of the percentage array must be between 0.0 and 1.0. The value of frequency should be
+      positive integral
+
+      """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
+       3.0
+      > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
+       [2.5,7.5]
+      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       5.0
+      > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
+       [2000000.0,5000000.0]
+  """,
+  group = "agg_funcs",
+  since = "2.1.0")
+// scalastyle:on line.size.limit
+case class Percentile(
+    child: Expression,
+    percentageExpression: Expression,
+    frequencyExpression : Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends PercentileBase {
+
+  def this(child: Expression, percentageExpression: Expression) = {
+    this(child, percentageExpression, Literal(1L), 0, 0)
+  }
+
+  def this(child: Expression, percentageExpression: Expression, frequency: Expression) = {
+    this(child, percentageExpression, frequency, 0, 0)
+  }
+
+  override def prettyName: String = "percentile"
+
+  override protected def getPercentile(
+      aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+    // We may need to do linear interpolation to get the exact percentile
+    val lower = position.floor.toLong
+    val higher = position.ceil.toLong
+
+    // Use binary search to find the lower and the higher position.
+    val countsArray = aggreCounts.map(_._2).toArray[Long]
+    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
+    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
+
+    val lowerKey = aggreCounts(lowerIndex)._1
+    if (higher == lower) {
+      // no interpolation needed because position does not have a fraction
+      return toDoubleValue(lowerKey)
+    }
+
+    val higherKey = aggreCounts(higherIndex)._1
+    if (higherKey == lowerKey) {
+      // no interpolation needed because lower position and higher position has the same key
+      return toDoubleValue(lowerKey)
+    }
+
+    // Linear interpolation to get the exact percentile
+    (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+  }
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Percentile =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
+    child = newFirst,
+    percentageExpression = newSecond,
+    frequencyExpression = newThird
+  )
+}
+
+case class PercentileDisc(
+    child: Expression,
+    percentageExpression: Expression,
+    frequencyExpression : Expression,
+    reverse: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends PercentileBase {
+
+  def this(child: Expression, percentageExpression: Expression) = {
+    this(child, percentageExpression, Literal(1L), false, 0, 0)
+  }
+
+  def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
+    this(child, percentageExpression, Literal(1L), reverse, 0, 0)
+  }
+
+  override def prettyName: String = "percentile_disc"
+
+  override protected def getPercentile(
+      aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+    var lower = position.floor.toLong
+    val factor = position - lower
+    var higher = 0L
+    if (factor.signum == 0) {
+      higher = lower
+    } else {
+      higher = lower + 1
+      if (factor.compareTo(0.5) > 0) {
+        lower = higher
+      } else {
+        higher = lower
+      }
+    }
+
+    if (reverse) {
+      val count = aggreCounts.length
+      lower = count - 1 - lower
+      higher = count - 1 - higher
+    }
+    val countsArray = aggreCounts.map(_._2).toArray[Long]
+    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
+    val lowerKey = aggreCounts(lowerIndex)._1
+    toDoubleValue(lowerKey)
+  }
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PercentileDisc =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): PercentileDisc =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): PercentileDisc = copy(
     child = newFirst,
     percentageExpression = newSecond,
     frequencyExpression = newThird

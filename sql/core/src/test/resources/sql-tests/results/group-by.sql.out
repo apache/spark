@@ -1032,3 +1032,32 @@ struct<k:int,percentile_cont(v, 0.25):double,percentile_cont(v, (1 - 0.25)):doub
 2	17.5	26.25
 3	60.0	60.0
 4	NULL	NULL
+
+
+-- !query
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr
+-- !query schema
+struct<percentile_disc(v, 0.25, 1):double,percentile_disc(v, 0.25, 1):double>
+-- !query output
+10.0	10.0
+
+
+-- !query
+SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:int,percentile_disc(v, 0.25, 1):double,percentile_disc(v, 0.25, 1):double>
+-- !query output
+0	10.0	30.0
+1	10.0	20.0
+2	20.0	25.0
+3	60.0	60.0
+4	NULL	NULL
