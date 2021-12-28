@@ -330,6 +330,9 @@ jobs:
         # TODO(SPARK-36361): Install coverage in Python 3.9 and PyPy 3 in the base image
         python3.9 -m pip install coverage
         pypy3 -m pip install coverage
+        # TODO(SPARK-37761): Install matplotlib in Python 3.9 and PyPy 3 in the base image
+        python3.9 -m pip install matplotlib
+        pypy3 -m pip install matplotlib
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
