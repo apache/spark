@@ -289,6 +289,7 @@ class FunctionsTests(ReusedSQLTestCase):
         row = df.select(dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
 
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
@@ -300,6 +301,7 @@ class FunctionsTests(ReusedSQLTestCase):
         row_via_scalar_addition = df.select(date_add(df.date, 3)).first()
         self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 30))
 
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_sub_function(self):
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
@@ -311,6 +313,7 @@ class FunctionsTests(ReusedSQLTestCase):
         row_via_scalar_addition = df.select(date_sub(df.date, 3)).first()
         self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 24))
 
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_add_months_function(self):
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
