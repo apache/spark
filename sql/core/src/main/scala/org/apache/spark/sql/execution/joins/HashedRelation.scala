@@ -506,6 +506,13 @@ private[joins] object UnsafeHashedRelation extends Logging {
     if (reorderMap) {
       logInfo(s"Reordering BytesToBytesMap, uniqueKeys: ${binaryMap.numKeys()}, " +
         s"totalNumValues: ${binaryMap.numValues()}")
+      // An exception due to insufficient memory can occur either during initialization or while
+      // adding rows to the map.
+      // 1. Failure occurs during initialization i.e. in LongToUnsafeRowMap.init:
+      // release of the partially allocated memory is already taken care of in the
+      // LongToUnsafeRowMap.ensureAcquireMemory method thus further action is required.
+      // 2. Failure occurs while adding rows to the map: the partially allocated memory
+      // is not cleaned up, thus LongToUnsafeRowMap.free is invoked in the catch clause.
       var maybeCompactMap: Option[BytesToBytesMap] = None
       try {
         maybeCompactMap = Some(new BytesToBytesMap(
@@ -517,12 +524,11 @@ private[joins] object UnsafeHashedRelation extends Logging {
         val compactMap = maybeCompactMap.get
         // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
         // applied to find unique keys
-        candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
-          val rowIter = candidate.get(key)
-          while (rowIter.hasNext) {
-            val row = rowIter.next().asInstanceOf[UnsafeRow]
-            val unsafeKey = keyGenerator(row)
-            mapAppendHelper(unsafeKey, row, compactMap)
+        candidate.keys().map(_.copy()).toSeq.distinct.foreach { key =>
+          candidate.get(key).foreach { row =>
+            val unsafeRow = row.asInstanceOf[UnsafeRow]
+            val unsafeKey = keyGenerator(unsafeRow)
+            mapAppendHelper(unsafeKey, unsafeRow, compactMap)
           }
         }
         candidate.close()
@@ -1136,8 +1142,15 @@ private[joins] object LongHashedRelation extends Logging {
     // reorganize the hash map so that nodes of a given linked list are next to each other in memory
     val reorderMap = reorderFactor.exists(_ * map.numUniqueKeys <= map.numTotalValues)
     val mapToUse = if (reorderMap) {
-      logInfo(s"Reordering LongToUnsafeRowMap, numKeys: ${map.numUniqueKeys}, " +
-        s"totalValue: ${map.numTotalValues}")
+      logInfo(s"Reordering LongToUnsafeRowMap, numUniqueKeys: ${map.numUniqueKeys}, " +
+        s"numTotalValues: ${map.numTotalValues}")
+      // An exception due to insufficient memory can occur either during initialization or while
+      // adding rows to the map.
+      // 1. Failure occurs during initialization i.e. in LongToUnsafeRowMap.init:
+      // release of the partially allocated memory is already taken care of in the
+      // LongToUnsafeRowMap.ensureAcquireMemory method thus further action is required.
+      // 2. Failure occurs while adding rows to the map: the partially allocated memory
+      // is not cleaned up, thus LongToUnsafeRowMap.free is invoked in the catch clause.
       var maybeCompactMap: Option[LongToUnsafeRowMap] = None
       try {
         maybeCompactMap = Some(new LongToUnsafeRowMap(taskMemoryManager,
