@@ -539,7 +539,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            // Lateral join is checked in checkSubqueryExpression.
+            !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in
@@ -752,6 +754,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
+        val join = plan.asInstanceOf[LateralJoin]
+        // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
+        // cannot be decorrelated. Otherwise it may produce incorrect results.
+        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
+          expr.failAnalysis(
+            s"Non-deterministic lateral subqueries are not supported when joining with " +
+              s"outer relations that produce more than one row\n${expr.plan}")
+        }
+        // Check if the lateral join's join condition is deterministic.
+        if (join.condition.exists(!_.deterministic)) {
+          join.failAnalysis(
+            s"Lateral join condition cannot be non-deterministic: ${join.condition.get.sql}")
+        }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
         checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
