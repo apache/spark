@@ -21,8 +21,7 @@ import java.math.BigDecimal
 import java.text.{DecimalFormat, NumberFormat, ParsePosition}
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -35,6 +34,8 @@ object NumberUtils {
   private val minusSign = '-'
   private val letterMinusSign = 'S'
   private val dollarSign = '$'
+
+  private val commaSignStr = commaSign.toString
 
   private def normalize(format: String): String = {
     var notFindDecimalPoint = true
@@ -54,7 +55,7 @@ object NumberUtils {
     // If the comma is at the beginning or end of number format, then DecimalFormat will be invalid.
     // For example, "##,###," or ",###,###" for DecimalFormat is invalid, so we must use "##,###"
     // or "###,###".
-    UTF8String.fromString(normalizedFormat).trim(UTF8String.fromString(commaSign.toString)).toString
+    normalizedFormat.stripPrefix(commaSignStr).stripSuffix(commaSignStr)
   }
 
   private def isSign(c: Char): Boolean = {
@@ -70,9 +71,6 @@ object NumberUtils {
     }
   }
 
-  private def fail(message: String, numberFormat: String) =
-    throw new AnalysisException(s"Multiple $message in $numberFormat")
-
   private def check(normalizedFormat: String, numberFormat: String) = {
     def invalidSignPosition(format: String, c: Char): Boolean = {
       val signIndex = format.indexOf(c)
@@ -80,16 +78,19 @@ object NumberUtils {
     }
 
     if (normalizedFormat.count(_ == pointSign) > 1) {
-      fail(s"'$letterPointSign' or '$pointSign'", numberFormat)
+      throw QueryCompilationErrors.multipleSignInNumberFormatError(
+        s"'$letterPointSign' or '$pointSign'", numberFormat)
     } else if (normalizedFormat.count(_ == minusSign) > 1) {
-      fail(s"'$letterMinusSign' or '$minusSign'", numberFormat)
+      throw QueryCompilationErrors.multipleSignInNumberFormatError(
+        s"'$letterMinusSign' or '$minusSign'", numberFormat)
     } else if (normalizedFormat.count(_ == dollarSign) > 1) {
-      fail(s"'$dollarSign'", numberFormat)
+      throw QueryCompilationErrors.multipleSignInNumberFormatError(s"'$dollarSign'", numberFormat)
     } else if (invalidSignPosition(normalizedFormat, minusSign)) {
-      throw new AnalysisException(
-        s"'$letterMinusSign' or '$minusSign' must be the first or last char")
+      throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
+        s"'$letterMinusSign' or '$minusSign'", numberFormat)
     } else if (invalidSignPosition(normalizedFormat, dollarSign)) {
-      throw new AnalysisException(s"'$dollarSign' must be the first or last char")
+      throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
+        s"'$dollarSign'", numberFormat)
     }
   }
 
