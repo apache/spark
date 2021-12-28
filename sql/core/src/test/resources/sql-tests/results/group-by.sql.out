@@ -1042,7 +1042,7 @@ FROM aggr
 -- !query schema
 struct<percentile_disc(v, 0.25, 1):double,percentile_disc(v, 0.25, 1):double>
 -- !query output
-10.0	10.0
+10.0	30.0
 
 
 -- !query
@@ -1058,6 +1058,6 @@ struct<k:int,percentile_disc(v, 0.25, 1):double,percentile_disc(v, 0.25, 1):doub
 -- !query output
 0	10.0	30.0
 1	10.0	20.0
-2	20.0	25.0
+2	10.0	30.0
 3	60.0	60.0
 4	NULL	NULL

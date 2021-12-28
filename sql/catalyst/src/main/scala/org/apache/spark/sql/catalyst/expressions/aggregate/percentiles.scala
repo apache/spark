@@ -42,7 +42,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages = percentageExpression.eval() match {
+  protected lazy val percentages = percentageExpression.eval() match {
     case null => null
     case num: Double => Array(num)
     case arrayData: ArrayData => arrayData.toDoubleArray()
@@ -146,14 +146,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
       case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
     }
     val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
-    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
-      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
-    }.tail
-    val maxPosition = accumulatedCounts.last._2 - 1
-
-    percentages.map { percentile =>
-      getPercentile(accumulatedCounts, maxPosition * percentile)
-    }
+    getPercentiles(sortedCounts)
   }
 
   private def generateOutput(results: Seq[Double]): Any = {
@@ -172,7 +165,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
    * This function has been based upon similar function from HIVE
    * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  protected def getPercentile(aggreCounts: Seq[(AnyRef, Long)], position: Double): Double
+  protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double]
 
   /**
    * use a binary search to find the index of the position closest to the current value.
@@ -294,8 +287,19 @@ case class Percentile(
 
   override def prettyName: String = "percentile"
 
-  override protected def getPercentile(
-      aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+  override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
+    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
+      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
+    }.tail
+    val maxPosition = accumulatedCounts.last._2 - 1
+
+    percentages.map { percentile =>
+      getPercentile(accumulatedCounts, maxPosition, percentile)
+    }
+  }
+  private def getPercentile(
+      aggreCounts: Seq[(AnyRef, Long)], maxPosition: Long, percentile: Double): Double = {
+    val position = maxPosition * percentile
     // We may need to do linear interpolation to get the exact percentile
     val lower = position.floor.toLong
     val higher = position.ceil.toLong
@@ -353,8 +357,22 @@ case class PercentileDisc(
 
   override def prettyName: String = "percentile_disc"
 
-  override protected def getPercentile(
-      aggreCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+  override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
+    val passedSortedCounts = if (reverse) {
+      sortedCounts.reverse
+    } else {
+      sortedCounts
+    }
+    val maxPosition = passedSortedCounts.last._2 - 1
+
+    percentages.map { percentile =>
+      getPercentile(passedSortedCounts, maxPosition, percentile)
+    }
+  }
+
+  private def getPercentile(
+      sortedCounts: Seq[(AnyRef, Long)], maxPosition: Long, percentile: Double): Double = {
+    val position = maxPosition * percentile
     var lower = position.floor.toLong
     val factor = position - lower
     var higher = 0L
@@ -369,14 +387,22 @@ case class PercentileDisc(
       }
     }
 
-    if (reverse) {
-      val count = aggreCounts.length
-      lower = count - 1 - lower
-      higher = count - 1 - higher
+    var acc = 0L
+    val idxs = sortedCounts.zipWithIndex.map { x =>
+      acc = acc + x._1._2
+      (x._2, acc)
     }
-    val countsArray = aggreCounts.map(_._2).toArray[Long]
-    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
-    val lowerKey = aggreCounts(lowerIndex)._1
+    val countsArray = sortedCounts.map(_._2).toArray[Long]
+    var lowerIndex = binarySearchCount(countsArray, 0, sortedCounts.size, lower)
+    val n = countsArray.reduce(_ + _)
+    var index = idxs(lowerIndex)._2
+    var cumeDist = index / n.toDouble
+    while (cumeDist < percentile) {
+      lowerIndex = lowerIndex + 1
+      index = idxs(lowerIndex)._2
+      cumeDist = index / n.toDouble
+    }
+    val lowerKey = sortedCounts(lowerIndex)._1
     toDoubleValue(lowerKey)
   }
 
