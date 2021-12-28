@@ -45,6 +45,7 @@ from pyspark.sql.session import SparkSession
 from pyspark.sql.column import Column
 from pyspark.sql.catalog import Catalog
 from pyspark.sql.dataframe import DataFrame, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.dynamic_dataframe import DynamicDataFrame
 from pyspark.sql.group import GroupedData
 from pyspark.sql.observation import Observation
 from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
