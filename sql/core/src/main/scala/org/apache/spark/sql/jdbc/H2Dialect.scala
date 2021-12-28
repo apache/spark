@@ -22,7 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Average, StddevPop, StddevSamp, VarPop, VarSamp}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, StddevPop, StddevSamp, VarPop, VarSamp}
 
 private object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
@@ -31,9 +31,6 @@ private object H2Dialect extends JdbcDialect {
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
-        case avg: Average =>
-          if (avg.column.fieldNames.length != 1) return None
-          Some(s"AVG(${quoteIdentifier(avg.column.fieldNames.head)})")
         case varPop: VarPop =>
           if (varPop.column.fieldNames.length != 1) return None
           Some(s"VAR_POP(${quoteIdentifier(varPop.column.fieldNames.head)})")
