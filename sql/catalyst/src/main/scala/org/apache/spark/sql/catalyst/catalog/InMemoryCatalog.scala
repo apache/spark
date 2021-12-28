@@ -140,10 +140,10 @@ class InMemoryCatalog(
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db, "tables")
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
         if (catalog(db).functions.nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db, "functions")
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
       }
       // Remove the database.

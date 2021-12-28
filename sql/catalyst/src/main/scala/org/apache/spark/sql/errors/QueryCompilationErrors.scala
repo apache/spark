@@ -540,14 +540,14 @@ object QueryCompilationErrors {
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
 
-  def cannotDropNonemptyDatabaseError(db: String, details: String): Throwable = {
+  def cannotDropNonemptyDatabaseError(db: String): Throwable = {
     new AnalysisException(s"Cannot drop a non-empty database: $db. " +
-      s"One or more $details exist. Use CASCADE option to drop a non-empty database.")
+      "Use CASCADE option to drop a non-empty database.")
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
     new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-        "Use CASCADE option to drop a non-empty namespace.")
+      "Use CASCADE option to drop a non-empty namespace.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
