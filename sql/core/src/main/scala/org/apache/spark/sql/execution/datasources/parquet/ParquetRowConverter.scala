@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
+import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, Type}
+import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
 
@@ -34,10 +35,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -126,10 +127,10 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
  * @param convertTz the optional time zone to convert to int96 data
- * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
- *                           calendar
- * @param int96RebaseMode the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
- *                           calendar
+ * @param datetimeRebaseSpec the specification of rebasing date/timestamp from Julian to Proleptic
+ *                           Gregorian calendar: mode + optional original time zone
+ * @param int96RebaseSpec the specification of rebasing INT96 timestamp from Julian to Proleptic
+ *                        Gregorian calendar
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
@@ -137,8 +138,8 @@ private[parquet] class ParquetRowConverter(
     parquetType: GroupType,
     catalystType: StructType,
     convertTz: Option[ZoneId],
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-    int96RebaseMode: LegacyBehaviorPolicy.Value,
+    datetimeRebaseSpec: RebaseSpec,
+    int96RebaseSpec: RebaseSpec,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -189,14 +190,14 @@ private[parquet] class ParquetRowConverter(
    */
   def currentRecord: InternalRow = currentRow
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-    datetimeRebaseMode, "Parquet")
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
+    datetimeRebaseSpec.mode, "Parquet")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-    datetimeRebaseMode, "Parquet")
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
+    datetimeRebaseSpec, "Parquet")
 
-  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-    int96RebaseMode, "Parquet INT96")
+  private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
+    int96RebaseSpec, "Parquet INT96")
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
@@ -369,6 +370,23 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater)
+
+      case TimestampNTZType
+        if canReadAsTimestampNTZ(parquetType) &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MILLIS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(micros)
+          }
+        }
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
@@ -425,8 +443,8 @@ private[parquet] class ParquetRowConverter(
           parquetType.asGroupType(),
           t,
           convertTz,
-          datetimeRebaseMode,
-          int96RebaseMode,
+          datetimeRebaseSpec,
+          int96RebaseSpec,
           wrappedUpdater)
 
       case t =>
@@ -434,6 +452,16 @@ private[parquet] class ParquetRowConverter(
           t, parquetType.toString)
     }
   }
+
+
+  // Only INT64 column with Timestamp logical annotation `isAdjustedToUTC=false`
+  // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
+  // values.
+  private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
+    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+      !parquetType.getLogicalTypeAnnotation
+        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
@@ -609,7 +637,13 @@ private[parquet] class ParquetRowConverter(
       //
       // If the element type does not match the Catalyst type and the underlying repeated type
       // does not belong to the legacy LIST type, then it is case 1; otherwise, it is case 2.
-      val guessedElementType = schemaConverter.convertField(repeatedType)
+      //
+      // Since `convertField` method requires a Parquet `ColumnIO` as input, here we first create
+      // a dummy message type which wraps the given repeated type, and then convert it to the
+      // `ColumnIO` using Parquet API.
+      val messageType = Types.buildMessage().addField(repeatedType).named("foo")
+      val column = new ColumnIOFactory().getColumnIO(messageType)
+      val guessedElementType = schemaConverter.convertField(column.getChild(0)).sparkType
       val isLegacy = schemaConverter.isElementType(repeatedType, parquetSchema.getName)
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType) || isLegacy) {

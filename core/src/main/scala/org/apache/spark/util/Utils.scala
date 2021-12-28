@@ -57,6 +57,8 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.LoggerContext
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -1962,6 +1964,11 @@ private[spark] object Utils extends Logging {
   val isMac = SystemUtils.IS_OS_MAC_OSX
 
   /**
+   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
+   */
+  val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
+
+  /**
    * Pattern for matching a Windows drive, which contains only a single alphabet character.
    */
   val windowsDrive = "([a-zA-Z])".r
@@ -2418,9 +2425,13 @@ private[spark] object Utils extends Logging {
   /**
    * configure a new log4j level
    */
-  def setLogLevel(l: org.apache.log4j.Level): Unit = {
-    val rootLogger = org.apache.log4j.Logger.getRootLogger()
-    rootLogger.setLevel(l)
+  def setLogLevel(l: Level): Unit = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    val config = ctx.getConfiguration()
+    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    loggerConfig.setLevel(l)
+    ctx.updateLoggers()
+
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
   }

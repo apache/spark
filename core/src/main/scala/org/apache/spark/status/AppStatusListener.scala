@@ -603,8 +603,8 @@ private[spark] class AppStatusListener(
       if (event.taskInfo.speculative) {
         stage.speculationStageSummary.numActiveTasks += 1
         stage.speculationStageSummary.numTasks += 1
+        update(stage.speculationStageSummary, now)
       }
-      maybeUpdate(stage.speculationStageSummary, now)
 
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
@@ -753,17 +753,12 @@ private[spark] class AppStatusListener(
         maybeUpdate(esummary, now)
       }
 
-      val speculationStageSummary = stage.speculationStageSummary
       if (event.taskInfo.speculative) {
-        speculationStageSummary.numActiveTasks -= 1
-        speculationStageSummary.numCompletedTasks += completedDelta
-        speculationStageSummary.numFailedTasks += failedDelta
-        speculationStageSummary.numKilledTasks += killedDelta
-      }
-      if (isLastTask && event.taskInfo.speculative) {
-        update(speculationStageSummary, now)
-      } else {
-        maybeUpdate(speculationStageSummary, now)
+        stage.speculationStageSummary.numActiveTasks -= 1
+        stage.speculationStageSummary.numCompletedTasks += completedDelta
+        stage.speculationStageSummary.numFailedTasks += failedDelta
+        stage.speculationStageSummary.numKilledTasks += killedDelta
+        update(stage.speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {

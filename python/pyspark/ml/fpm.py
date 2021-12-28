@@ -33,34 +33,39 @@ class _FPGrowthParams(HasPredictionCol):
     .. versionadded:: 3.0.0
     """
 
-    itemsCol = Param(Params._dummy(), "itemsCol",
-                     "items column name", typeConverter=TypeConverters.toString)
+    itemsCol = Param(
+        Params._dummy(), "itemsCol", "items column name", typeConverter=TypeConverters.toString
+    )
     minSupport = Param(
         Params._dummy(),
         "minSupport",
-        "Minimal support level of the frequent pattern. [0.0, 1.0]. " +
-        "Any pattern that appears more than (minSupport * size-of-the-dataset) " +
-        "times will be output in the frequent itemsets.",
-        typeConverter=TypeConverters.toFloat)
+        "Minimal support level of the frequent pattern. [0.0, 1.0]. "
+        + "Any pattern that appears more than (minSupport * size-of-the-dataset) "
+        + "times will be output in the frequent itemsets.",
+        typeConverter=TypeConverters.toFloat,
+    )
     numPartitions = Param(
         Params._dummy(),
         "numPartitions",
-        "Number of partitions (at least 1) used by parallel FP-growth. " +
-        "By default the param is not set, " +
-        "and partition number of the input dataset is used.",
-        typeConverter=TypeConverters.toInt)
+        "Number of partitions (at least 1) used by parallel FP-growth. "
+        + "By default the param is not set, "
+        + "and partition number of the input dataset is used.",
+        typeConverter=TypeConverters.toInt,
+    )
     minConfidence = Param(
         Params._dummy(),
         "minConfidence",
-        "Minimal confidence for generating Association Rule. [0.0, 1.0]. " +
-        "minConfidence will not affect the mining for frequent itemsets, " +
-        "but will affect the association rules generation.",
-        typeConverter=TypeConverters.toFloat)
+        "Minimal confidence for generating Association Rule. [0.0, 1.0]. "
+        + "minConfidence will not affect the mining for frequent itemsets, "
+        + "but will affect the association rules generation.",
+        typeConverter=TypeConverters.toFloat,
+    )
 
     def __init__(self, *args):
         super(_FPGrowthParams, self).__init__(*args)
-        self._setDefault(minSupport=0.3, minConfidence=0.8,
-                         itemsCol="items", predictionCol="prediction")
+        self._setDefault(
+            minSupport=0.3, minConfidence=0.8, itemsCol="items", predictionCol="prediction"
+        )
 
     def getItemsCol(self):
         """
@@ -224,9 +229,17 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
     True
     """
+
     @keyword_only
-    def __init__(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
-                 predictionCol="prediction", numPartitions=None):
+    def __init__(
+        self,
+        *,
+        minSupport=0.3,
+        minConfidence=0.8,
+        itemsCol="items",
+        predictionCol="prediction",
+        numPartitions=None,
+    ):
         """
         __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                  predictionCol="prediction", numPartitions=None)
@@ -238,8 +251,15 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
-                  predictionCol="prediction", numPartitions=None):
+    def setParams(
+        self,
+        *,
+        minSupport=0.3,
+        minConfidence=0.8,
+        itemsCol="items",
+        predictionCol="prediction",
+        numPartitions=None,
+    ):
         """
         setParams(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                   predictionCol="prediction", numPartitions=None)
@@ -327,45 +347,72 @@ class PrefixSpan(JavaParams):
     ...
     """
 
-    minSupport = Param(Params._dummy(), "minSupport", "The minimal support level of the " +
-                       "sequential pattern. Sequential pattern that appears more than " +
-                       "(minSupport * size-of-the-dataset) times will be output. Must be >= 0.",
-                       typeConverter=TypeConverters.toFloat)
+    minSupport = Param(
+        Params._dummy(),
+        "minSupport",
+        "The minimal support level of the "
+        + "sequential pattern. Sequential pattern that appears more than "
+        + "(minSupport * size-of-the-dataset) times will be output. Must be >= 0.",
+        typeConverter=TypeConverters.toFloat,
+    )
 
-    maxPatternLength = Param(Params._dummy(), "maxPatternLength",
-                             "The maximal length of the sequential pattern. Must be > 0.",
-                             typeConverter=TypeConverters.toInt)
+    maxPatternLength = Param(
+        Params._dummy(),
+        "maxPatternLength",
+        "The maximal length of the sequential pattern. Must be > 0.",
+        typeConverter=TypeConverters.toInt,
+    )
 
-    maxLocalProjDBSize = Param(Params._dummy(), "maxLocalProjDBSize",
-                               "The maximum number of items (including delimiters used in the " +
-                               "internal storage format) allowed in a projected database before " +
-                               "local processing. If a projected database exceeds this size, " +
-                               "another iteration of distributed prefix growth is run. " +
-                               "Must be > 0.",
-                               typeConverter=TypeConverters.toInt)
+    maxLocalProjDBSize = Param(
+        Params._dummy(),
+        "maxLocalProjDBSize",
+        "The maximum number of items (including delimiters used in the "
+        + "internal storage format) allowed in a projected database before "
+        + "local processing. If a projected database exceeds this size, "
+        + "another iteration of distributed prefix growth is run. "
+        + "Must be > 0.",
+        typeConverter=TypeConverters.toInt,
+    )
 
-    sequenceCol = Param(Params._dummy(), "sequenceCol", "The name of the sequence column in " +
-                        "dataset, rows with nulls in this column are ignored.",
-                        typeConverter=TypeConverters.toString)
+    sequenceCol = Param(
+        Params._dummy(),
+        "sequenceCol",
+        "The name of the sequence column in "
+        + "dataset, rows with nulls in this column are ignored.",
+        typeConverter=TypeConverters.toString,
+    )
 
     @keyword_only
-    def __init__(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
-                 sequenceCol="sequence"):
+    def __init__(
+        self,
+        *,
+        minSupport=0.1,
+        maxPatternLength=10,
+        maxLocalProjDBSize=32000000,
+        sequenceCol="sequence",
+    ):
         """
         __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                  sequenceCol="sequence")
         """
         super(PrefixSpan, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
-        self._setDefault(minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
-                         sequenceCol="sequence")
+        self._setDefault(
+            minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, sequenceCol="sequence"
+        )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.4.0")
-    def setParams(self, *, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000,
-                  sequenceCol="sequence"):
+    def setParams(
+        self,
+        *,
+        minSupport=0.1,
+        maxPatternLength=10,
+        maxLocalProjDBSize=32000000,
+        sequenceCol="sequence",
+    ):
         """
         setParams(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                   sequenceCol="sequence")
@@ -460,24 +507,24 @@ if __name__ == "__main__":
     import doctest
     import pyspark.ml.fpm
     from pyspark.sql import SparkSession
+
     globs = pyspark.ml.fpm.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("ml.fpm tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("ml.fpm tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
+    globs["sc"] = sc
+    globs["spark"] = spark
     import tempfile
+
     temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
+    globs["temp_path"] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree
+
         try:
             rmtree(temp_path)
         except OSError:

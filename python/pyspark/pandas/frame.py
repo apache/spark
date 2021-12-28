@@ -18,9 +18,8 @@
 """
 A wrapper class for Spark DataFrame to behave similar to pandas DataFrame.
 """
-from collections import OrderedDict, defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 from collections.abc import Mapping
-from distutils.version import LooseVersion
 import re
 import warnings
 import inspect
@@ -28,7 +27,7 @@ import json
 import types
 from functools import partial, reduce
 import sys
-from itertools import zip_longest
+from itertools import zip_longest, chain
 from types import TracebackType
 from typing import (
     Any,
@@ -52,16 +51,13 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, is_dict_like, is_scalar
+from pandas.api.types import is_list_like, is_dict_like, is_scalar  # type: ignore[attr-defined]
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
-if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-    from pandas.core.dtypes.common import infer_dtype_from_object
-else:
-    from pandas.core.dtypes.common import _get_dtype_from_object as infer_dtype_from_object
+from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
@@ -77,6 +73,9 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    DecimalType,
+    TimestampType,
+    TimestampNTZType,
 )
 from pyspark.sql.window import Window
 
@@ -103,6 +102,7 @@ from pyspark.pandas.utils import (
     validate_how,
     validate_mode,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -343,24 +343,6 @@ rectangle    16.0  2.348543e+108
 """
 
 
-if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore[attr-defined]
-
-    # This is a workaround to support variadic generic in DataFrame in Python 3.5+.
-    # See https://github.com/python/typing/issues/193
-    # We wrap the input params by a tuple to mimic variadic generic.
-    old_getitem = GenericMeta.__getitem__
-
-    @no_type_check
-    def new_getitem(self, params):
-        if hasattr(self, "is_dataframe"):
-            return old_getitem(self, create_tuple_for_frame_type(params))
-        else:
-            return old_getitem(self, params)
-
-    GenericMeta.__getitem__ = new_getitem
-
-
 class DataFrame(Frame, Generic[T]):
     """
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
@@ -374,8 +356,6 @@ class DataFrame(Frame, Generic[T]):
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
         or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
         other arguments should not be used.
     index : Index or array-like
@@ -598,7 +578,7 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> "Series":
         """
         Applies sfun to each column and returns a pd.Series where the number of rows equal the
@@ -2468,7 +2448,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         should_retain_index = should_infer_schema
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
+            pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
             if isinstance(pdf_or_pser, pd.Series):
                 return pdf_or_pser.to_frame()
             else:
@@ -2480,9 +2460,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = pdf.apply(func, axis=axis, args=args, **kwds)
+            applied = pdf.apply(func, axis=axis, args=args, **kwds)  # type: ignore[arg-type]
             psser_or_psdf = ps.from_pandas(applied)
             if len(pdf) <= limit:
                 return psser_or_psdf
@@ -2720,9 +2704,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = self.head(limit + 1)._to_internal_pandas()
-            transformed = pdf.transform(func, axis, *args, **kwargs)
+            transformed = pdf.transform(func, axis, *args, **kwargs)  # type: ignore[arg-type]
             psdf: DataFrame = DataFrame(transformed)
             if len(pdf) <= limit:
                 return psdf
@@ -3118,17 +3106,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-
-            @no_type_check
-            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
-                return pdf.at_time(time, asof).reset_index()
-
-        else:
-
-            @no_type_check
-            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
-                return pdf.at_time(time, asof, axis).reset_index()
+        @no_type_check
+        def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
+            return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
         # a default index, which will never be used. So use "distributed" index as a dummy
@@ -4010,13 +3990,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 '"column" should be a scalar value or tuple that contains scalar values'
             )
 
+        # TODO(SPARK-37723): Support tuple for non-MultiIndex column name.
         if is_name_like_tuple(column):
-            if len(column) != len(self.columns.levels):
-                # To be consistent with pandas
-                raise ValueError('"column" must have length equal to number of column levels.')
+            if self._internal.column_labels_level > 1:
+                if len(column) != len(self.columns.levels):  # type: ignore[attr-defined]
+                    # To be consistent with pandas
+                    raise ValueError('"column" must have length equal to number of column levels.')
+            else:
+                raise NotImplementedError(
+                    "Assigning column name as tuple is only supported for MultiIndex columns for now."
+                )
 
         if column in self.columns:
-            raise ValueError("cannot insert %s, already exists" % column)
+            raise ValueError("cannot insert %s, already exists" % str(column))
 
         psdf = self.copy()
         psdf[column] = value
@@ -4528,8 +4514,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_table`, "
+                "the existing index is lost when converting to table."
+            )
         mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
@@ -4541,7 +4532,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a Delta Lake table.
@@ -4603,6 +4594,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.to_delta('%s/to_delta/bar' % path,
         ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_delta`, "
+                "the existing index is lost when converting to Delta."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4623,7 +4619,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> None:
         """
         Write the DataFrame out as a Parquet file or directory.
@@ -4680,6 +4676,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_parquet`, "
+                "the existing index is lost when converting to Parquet."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
 
@@ -4697,7 +4698,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """
         Write the DataFrame out as a ORC file or directory.
@@ -4752,6 +4753,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     mode = 'overwrite',
         ...     partition_cols=['date', 'country'])
         """
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_orc`, "
+                "the existing index is lost when converting to ORC."
+            )
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore[assignment]
 
@@ -4772,7 +4778,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> None:
         """An alias for :func:`DataFrame.spark.to_spark_io`.
         See :meth:`pyspark.pandas.spark.accessors.SparkFrameMethods.to_spark_io`.
@@ -4786,9 +4792,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
 
     def to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
-        return self.spark.frame(index_col)
+        if index_col is None:
+            log_advice(
+                "If `index_col` is not specified for `to_spark`, "
+                "the existing index is lost when converting to Spark DataFrame."
+            )
+        return self._to_spark(index_col)
 
     to_spark.__doc__ = SparkFrameMethods.__doc__
+
+    def _to_spark(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+        """
+        Same as `to_spark()`, without issueing the advice log when `index_col` is not specified
+        for internal usage.
+        """
+        return self.spark.frame(index_col)
 
     def to_pandas(self) -> pd.DataFrame:
         """
@@ -4807,6 +4825,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1   0.0   0.6
         2   0.6   0.0
         3   0.2   0.1
+        """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas DataFrame is expected to be small."
+        )
+        return self._to_pandas()
+
+    def _to_pandas(self) -> pd.DataFrame:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
         """
         return self._internal.to_pandas_frame.copy()
 
@@ -5738,8 +5766,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'last' only supports a DatetimeIndex")
 
-        offset = to_offset(offset)
-        from_date = self.index.max() - offset
+        offset_: Optional[DateOffset] = to_offset(offset)
+        assert offset_ is not None
+
+        from_date = cast(datetime.datetime, self.index.max()) - offset_  # type: ignore[operator]
 
         return cast(DataFrame, self.loc[from_date:])
 
@@ -5793,10 +5823,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'first' only supports a DatetimeIndex")
 
-        offset = to_offset(offset)
-        to_date = self.index.min() + offset
+        offset_: Optional[DateOffset] = to_offset(offset)
+        assert offset_ is not None
 
-        return cast(DataFrame, self.loc[:to_date])
+        to_date = cast(datetime.datetime, self.index.min()) + offset_  # type: ignore[operator]
+
+        return cast(DataFrame, self.loc[:to_date])  # type: ignore[misc]
 
     def pivot_table(
         self,
@@ -6065,7 +6097,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 index_values = values[-1]
             else:
                 index_values = values
-            index_map: Dict[str, Optional[Label]] = OrderedDict()
+            index_map: Dict[str, Optional[Label]] = {}
             for i, index_value in enumerate(index_values):
                 colname = SPARK_INDEX_NAME_FORMAT(i)
                 sdf = sdf.withColumn(colname, SF.lit(index_value))
@@ -6081,7 +6113,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf_columns = psdf.columns
         if isinstance(psdf_columns, pd.MultiIndex):
             psdf.columns = psdf_columns.set_levels(
-                psdf_columns.levels[-1].astype(
+                psdf_columns.levels[-1].astype(  # type: ignore[index]
                     spark_type_to_pandas_dtype(self._psser_for(columns).spark.data_type)
                 ),
                 level=-1,
@@ -6599,7 +6631,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
         else:
             psdf = self.copy()
-            psdf.columns = psdf.columns.droplevel(level)
+            psdf.columns = psdf.columns.droplevel(level)  # type: ignore[arg-type]
             return psdf
 
     def drop(
@@ -8207,6 +8239,194 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = self._internal.with_new_sdf(sdf, data_fields=data_fields)
         self._update_internal_frame(internal, requires_same_anchor=False)
 
+    # TODO: ddof should be implemented.
+    def cov(self, min_periods: Optional[int] = None) -> "DataFrame":
+        """
+        Compute pairwise covariance of columns, excluding NA/null values.
+
+        Compute the pairwise covariance among the series of a DataFrame.
+        The returned data frame is the `covariance matrix
+        <https://en.wikipedia.org/wiki/Covariance_matrix>`__ of the columns
+        of the DataFrame.
+
+        Both NA and null values are automatically excluded from the
+        calculation. (See the note below about bias from missing values.)
+        A threshold can be set for the minimum number of
+        observations for each value created. Comparisons with observations
+        below this threshold will be returned as ``NaN``.
+
+        This method is generally used for the analysis of time series data to
+        understand the relationship between different measures
+        across time.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        min_periods : int, optional
+            Minimum number of observations required per pair of columns
+            to have a valid result.
+
+        Returns
+        -------
+        DataFrame
+            The covariance matrix of the series of the DataFrame.
+
+        See Also
+        --------
+        Series.cov : Compute covariance with another Series.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame([(1, 2), (0, 3), (2, 0), (1, 1)],
+        ...                   columns=['dogs', 'cats'])
+        >>> df.cov()
+                  dogs      cats
+        dogs  0.666667 -1.000000
+        cats -1.000000  1.666667
+
+        >>> np.random.seed(42)
+        >>> df = ps.DataFrame(np.random.randn(1000, 5),
+        ...                   columns=['a', 'b', 'c', 'd', 'e'])
+        >>> df.cov()
+                  a         b         c         d         e
+        a  0.998438 -0.020161  0.059277 -0.008943  0.014144
+        b -0.020161  1.059352 -0.008543 -0.024738  0.009826
+        c  0.059277 -0.008543  1.010670 -0.001486 -0.000271
+        d -0.008943 -0.024738 -0.001486  0.921297 -0.013692
+        e  0.014144  0.009826 -0.000271 -0.013692  0.977795
+
+        **Minimum number of periods**
+
+        This method also supports an optional ``min_periods`` keyword
+        that specifies the required minimum number of non-NA observations for
+        each column pair in order to have a valid result:
+
+        >>> np.random.seed(42)
+        >>> df = pd.DataFrame(np.random.randn(20, 3),
+        ...                   columns=['a', 'b', 'c'])
+        >>> df.loc[df.index[:5], 'a'] = np.nan
+        >>> df.loc[df.index[5:10], 'b'] = np.nan
+        >>> sdf = ps.from_pandas(df)
+        >>> sdf.cov(min_periods=12)
+                  a         b         c
+        a  0.316741       NaN -0.150812
+        b       NaN  1.248003  0.191417
+        c -0.150812  0.191417  0.895202
+        """
+        min_periods = 1 if min_periods is None else min_periods
+
+        # Only compute covariance for Boolean and Numeric except Decimal
+        psdf = self[
+            [
+                col
+                for col in self.columns
+                if isinstance(self[col].spark.data_type, BooleanType)
+                or (
+                    isinstance(self[col].spark.data_type, NumericType)
+                    and not isinstance(self[col].spark.data_type, DecimalType)
+                )
+            ]
+        ]
+
+        num_cols = len(psdf.columns)
+        cov = np.zeros([num_cols, num_cols])
+
+        if num_cols == 0:
+            return DataFrame()
+
+        if len(psdf) < min_periods:
+            cov.fill(np.nan)
+            return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
+
+        data_cols = psdf._internal.data_spark_column_names
+        cov_scols = []
+        count_not_null_scols = []
+
+        # Count number of null row between two columns
+        # Example:
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a           b             c
+        # a  count(a, a) count(a, b) count(a, c)
+        # b              count(b, b) count(b, c)
+        # c                          count(c, c)
+        #
+        # count_not_null_scols =
+        # [F.count(a, a), F.count(a, b), F.count(a, c), F.count(b, b), F.count(b, c), F.count(c, c)]
+        for r in range(0, num_cols):
+            for c in range(r, num_cols):
+                count_not_null_scols.append(
+                    F.count(
+                        F.when(F.col(data_cols[r]).isNotNull() & F.col(data_cols[c]).isNotNull(), 1)
+                    )
+                )
+
+        count_not_null = (
+            psdf._internal.spark_frame.replace(float("nan"), None)
+            .select(*count_not_null_scols)
+            .head(1)[0]
+        )
+
+        # Calculate covariance between two columns
+        # Example:
+        # with min_periods = 3
+        #    a   b   c
+        # 0  1   1   1
+        # 1  NaN 2   2
+        # 2  3   NaN 3
+        # 3  4   4   4
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
+        #
+        # cov_scols = [F.cov(a, a), None, F.cov(a, c), F.cov(b, b), F.cov(b, c), F.cov(c, c)]
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                cov_scols.append(
+                    F.covar_samp(
+                        F.col(data_cols[r]).cast("double"), F.col(data_cols[c]).cast("double")
+                    )
+                    if count_not_null[r * num_cols + c - step] >= min_periods
+                    else F.lit(None)
+                )
+
+        pair_cov = psdf._internal.spark_frame.select(*cov_scols).head(1)[0]
+
+        # Convert from row to 2D array
+        # Example:
+        # pair_cov = [cov(a, a), None, cov(a, c), cov(b, b), cov(b, c), cov(c, c)]
+        #
+        # cov =
+        #
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b            cov(b, b) cov(b, c)
+        # c                      cov(c, c)
+        step = 0
+        for r in range(0, num_cols):
+            step += r
+            for c in range(r, num_cols):
+                cov[r][c] = pair_cov[r * num_cols + c - step]
+
+        # Copy values
+        # Example:
+        # cov =
+        #    a         b         c
+        # a  cov(a, a) None      cov(a, c)
+        # b  None      cov(b, b) cov(b, c)
+        # c  cov(a, c) cov(b, c) cov(c, c)
+        cov = cov + cov.T - np.diag(np.diag(cov))
+        return DataFrame(cov, columns=psdf.columns, index=psdf.columns)
+
     def sample(
         self,
         n: Optional[int] = None,
@@ -8366,7 +8586,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     applied.append(col)
         else:
             for col_name, col in self.items():
-                applied.append(col.astype(dtype=dtype))
+                applied.append(col.astype(dtype=cast(Union[str, Dtype], dtype)))
         return DataFrame(self._internal.with_new_columns(applied))
 
     def add_prefix(self, prefix: str) -> "DataFrame":
@@ -8494,7 +8714,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         For numeric data, the result's index will include ``count``,
         ``mean``, ``std``, ``min``, ``25%``, ``50%``, ``75%``, ``max``.
 
-        Currently only numeric data is supported.
+        For object data (e.g. strings or timestamps), the result’s index will include
+        ``count``, ``unique``, ``top``, and ``freq``.
+        The ``top`` is the most common value. The ``freq`` is the most common value’s frequency.
+        Timestamps also include the ``first`` and ``last`` items.
 
         Examples
         --------
@@ -8601,16 +8824,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
-        exprs = []
-        column_labels = []
+        psser_numeric: List[Series] = []
+        psser_string: List[Series] = []
+        psser_timestamp: List[Series] = []
+        spark_data_types: List[DataType] = []
+        column_labels: Optional[List[Label]] = []
+        column_names: List[str] = []
         for label in self._internal.column_labels:
             psser = self._psser_for(label)
-            if isinstance(psser.spark.data_type, NumericType):
-                exprs.append(psser._dtype_op.nan_to_null(psser).spark.column)
+            spark_data_type = psser.spark.data_type
+            if isinstance(spark_data_type, NumericType):
+                psser_numeric.append(psser)
                 column_labels.append(label)
-
-        if len(exprs) == 0:
-            raise ValueError("Cannot describe a DataFrame without columns")
+                spark_data_types.append(spark_data_type)
+            elif isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                psser_timestamp.append(psser)
+                column_labels.append(label)
+                spark_data_types.append(spark_data_type)
+            else:
+                psser_string.append(psser)
+                column_names.append(self._internal.spark_column_name_for(label))
 
         if percentiles is not None:
             if any((p < 0.0) or (p > 1.0) for p in percentiles):
@@ -8620,22 +8853,144 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             percentiles = [0.25, 0.5, 0.75]
 
-        formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
-        stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
-
-        sdf = self._internal.spark_frame.select(*exprs).summary(*stats)
-        sdf = sdf.replace("stddev", "std", subset=["summary"])
-
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, "summary")],
-            column_labels=column_labels,
-            data_spark_columns=[
-                scol_for(sdf, self._internal.spark_column_name_for(label))
-                for label in column_labels
-            ],
+        # Identify the cases
+        is_all_string_type = (
+            len(psser_numeric) == 0 and len(psser_timestamp) == 0 and len(psser_string) > 0
         )
-        return DataFrame(internal).astype("float64")
+        is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
+        has_timestamp_type = len(psser_timestamp) > 0
+        has_numeric_type = len(psser_numeric) > 0
+
+        if is_all_string_type:
+            # Handling string type columns
+            # We will retrive the `count`, `unique`, `top` and `freq`.
+            internal = self._internal.resolved_copy
+            exprs_string = [
+                internal.spark_column_for(psser._column_label) for psser in psser_string
+            ]
+            sdf = internal.spark_frame.select(*exprs_string)
+
+            # Get `count` & `unique` for each columns
+            counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
+            # Handling Empty DataFrame
+            if len(counts) == 0 or counts[0] == "0":
+                data = dict()
+                for psser in psser_string:
+                    data[psser.name] = [0, 0, np.nan, np.nan]
+                return DataFrame(data, index=["count", "unique", "top", "freq"])
+
+            # Get `top` & `freq` for each columns
+            tops = []
+            freqs = []
+            # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
+            #   for every columns is too expensive.
+            for column in exprs_string:
+                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
+                tops.append(str(top))
+                freqs.append(str(freq))
+
+            stats = [counts, uniques, tops, freqs]
+            stats_names = ["count", "unique", "top", "freq"]
+
+            result: DataFrame = DataFrame(
+                data=stats,
+                index=stats_names,
+                columns=column_names,
+            )
+        elif is_all_numeric_type:
+            # Handling numeric columns
+            exprs_numeric = [
+                psser._dtype_op.nan_to_null(psser).spark.column for psser in psser_numeric
+            ]
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
+
+            # In this case, we can simply use `summary` to calculate the stats.
+            sdf = self._internal.spark_frame.select(*exprs_numeric).summary(*stats)
+            sdf = sdf.replace("stddev", "std", subset=["summary"])
+
+            internal = InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[scol_for(sdf, "summary")],
+                column_labels=column_labels,
+                data_spark_columns=[
+                    scol_for(sdf, self._internal.spark_column_name_for(label))
+                    for label in column_labels
+                ],
+            )
+            result = DataFrame(internal).astype("float64")
+        elif has_timestamp_type:
+            internal = self._internal.resolved_copy
+            column_names = [
+                internal.spark_column_name_for(column_label) for column_label in column_labels
+            ]
+            column_length = len(column_labels)
+
+            # Apply stat functions for each column.
+            count_exprs = map(F.count, column_names)
+            min_exprs = map(F.min, column_names)
+            # Here we try to flat the multiple map into single list that contains each calculated
+            # percentile using `chain`.
+            # e.g. flat the `[<map object at 0x7fc1907dc280>, <map object at 0x7fc1907dcc70>]`
+            # to `[Column<'percentile_approx(A, 0.2, 10000)'>, Column<'percentile_approx(B, 0.2, 10000)'>,
+            # Column<'percentile_approx(A, 0.5, 10000)'>, Column<'percentile_approx(B, 0.5, 10000)'>]`
+            perc_exprs = chain(
+                *[
+                    map(F.percentile_approx, column_names, [percentile] * column_length)
+                    for percentile in percentiles
+                ]
+            )
+            max_exprs = map(F.max, column_names)
+            mean_exprs = []
+            for column_name, spark_data_type in zip(column_names, spark_data_types):
+                mean_exprs.append(F.mean(column_name).astype(spark_data_type))
+            exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
+
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats_names = ["count", "mean", "min", *formatted_perc, "max"]
+
+            # If not all columns are timestamp type,
+            # we also need to calculate the `std` for numeric columns
+            if has_numeric_type:
+                std_exprs = []
+                for label, spark_data_type in zip(column_labels, spark_data_types):
+                    column_name = label[0]
+                    if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                        std_exprs.append(F.lit(None).alias("stddev_samp({})".format(column_name)))
+                    else:
+                        std_exprs.append(F.stddev(column_name))
+                exprs.extend(std_exprs)
+                stats_names.append("std")
+
+            # Select stats for all columns at once.
+            sdf = internal.spark_frame.select(exprs)
+            stat_values = sdf.first()
+
+            num_stats = int(len(exprs) / column_length)
+            # `column_name_stats_kv` is key-value store that has column name as key, and the stats as values
+            # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value} ...]}
+            column_name_stats_kv: Dict[str, List[str]] = defaultdict(list)
+            for i, column_name in enumerate(column_names):
+                for first_stat_idx in range(num_stats):
+                    column_name_stats_kv[column_name].append(
+                        stat_values[(first_stat_idx * column_length) + i]
+                    )
+
+            # For timestamp type columns, we should cast the column type to string.
+            for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
+                if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
+
+            result: DataFrame = DataFrame(  # type: ignore[no-redef]
+                data=column_name_stats_kv,
+                index=stats_names,
+                columns=column_names,
+            )
+        else:
+            # Empty DataFrame without column
+            raise ValueError("Cannot describe a DataFrame without columns")
+
+        return result
 
     def drop_duplicates(
         self,
@@ -9443,7 +9798,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ).with_filter(SF.lit(False))
             )
 
-        column_labels: Union[defaultdict, OrderedDict] = defaultdict(dict)
+        column_labels: Dict[Label, Dict[Any, Column]] = defaultdict(dict)
         index_values = set()
         should_returns_series = False
         for label in self._internal.column_labels:
@@ -9458,7 +9813,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             index_values.add(value)
 
-        column_labels = OrderedDict(sorted(column_labels.items(), key=lambda x: x[0]))
+        column_labels = dict(sorted(column_labels.items(), key=lambda x: x[0]))
 
         index_name = self._internal.column_label_names[-1]
         column_label_names = self._internal.column_label_names[:-1]
@@ -10833,10 +11188,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
                 self.count = (  # type: ignore[assignment]
-                    lambda: count_func().to_pandas()  # type: ignore[assignment, misc, union-attr]
+                    lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
-                    self,
+                    self,  # type: ignore[arg-type]
                     verbose=verbose,
                     buf=buf,
                     max_cols=max_cols,
@@ -10976,7 +11331,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: Dict[str, List[Column]] = OrderedDict()
+            cols_dict: Dict[str, List[Column]] = {}
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
@@ -11700,7 +12055,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             right = combined["that"]
 
             if right_is_series:
-                right = first_series(right).rename(other.name)
+                right = first_series(cast(DataFrame[Any], right)).rename(other.name)
 
         if (
             axis is None or axis == 1
@@ -11803,7 +12158,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_1   3   2   1   0
         row_2  10  20  30  40
         """
-        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
+        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))  # type: ignore[arg-type]
 
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(
@@ -11834,7 +12189,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return self._internal.to_pandas_frame
 
-    def _get_or_create_repr_pandas_cache(self, n: int) -> pd.DataFrame:
+    def _get_or_create_repr_pandas_cache(self, n: int) -> Union[pd.DataFrame, pd.Series]:
         if not hasattr(self, "_repr_pandas_cache") or n not in self._repr_pandas_cache:
             object.__setattr__(
                 self, "_repr_pandas_cache", {n: self.head(n + 1)._to_internal_pandas()}
@@ -11846,9 +12201,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if max_display_count is None:
             return self._to_internal_pandas().to_string()
 
-        pdf = self._get_or_create_repr_pandas_cache(max_display_count)
+        pdf = cast("DataFrame", self._get_or_create_repr_pandas_cache(max_display_count))
         pdf_length = len(pdf)
-        pdf = pdf.iloc[:max_display_count]
+        pdf = cast("DataFrame", pdf.iloc[:max_display_count])
         if pdf_length > max_display_count:
             repr_string = pdf.to_string(show_dimensions=True)
             match = REPR_PATTERN.search(repr_string)
@@ -11863,17 +12218,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _repr_html_(self) -> str:
         max_display_count = get_option("display.max_rows")
-        # pandas 0.25.1 has a regression about HTML representation so 'bold_rows'
-        # has to be set as False explicitly. See https://github.com/pandas-dev/pandas/issues/28204
-        bold_rows = not (LooseVersion("0.25.1") == LooseVersion(pd.__version__))
         if max_display_count is None:
-            return self._to_internal_pandas().to_html(notebook=True, bold_rows=bold_rows)
+            return self._to_internal_pandas().to_html(notebook=True)
 
         pdf = self._get_or_create_repr_pandas_cache(max_display_count)
         pdf_length = len(pdf)
         pdf = pdf.iloc[:max_display_count]
         if pdf_length > max_display_count:
-            repr_html = pdf.to_html(show_dimensions=True, notebook=True, bold_rows=bold_rows)
+            repr_html = pdf.to_html(show_dimensions=True, notebook=True)
             match = REPR_HTML_PATTERN.search(repr_html)
             if match is not None:
                 nrows = match.group("rows")
@@ -11884,7 +12236,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "{by} {cols} columns</p>\n</div>".format(rows=nrows, by=by, cols=ncols)
                 )
                 return REPR_HTML_PATTERN.sub(footer, repr_html)
-        return pdf.to_html(notebook=True, bold_rows=bold_rows)
+        return pdf.to_html(notebook=True)
 
     def __getitem__(self, key: Any) -> Any:
         from pyspark.pandas.series import Series
@@ -12090,19 +12442,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             internal = this._internal.with_new_columns(applied)
             return DataFrame(internal)
 
-    if sys.version_info >= (3, 7):
-
-        def __class_getitem__(cls, params: Any) -> object:
-            # This is a workaround to support variadic generic in DataFrame in Python 3.7.
-            # See https://github.com/python/typing/issues/193
-            # we always wraps the given type hints by a tuple to mimic the variadic generic.
-            return create_tuple_for_frame_type(params)
-
-    elif (3, 5) <= sys.version_info < (3, 7):
-        # This is a workaround to support variadic generic in DataFrame in Python 3.5+
-        # The implementation is in its metaclass so this flag is needed to distinguish
-        # pandas-on-Spark DataFrame.
-        is_dataframe = None
+    def __class_getitem__(cls, params: Any) -> object:
+        # This is a workaround to support variadic generic in DataFrame in Python 3.7.
+        # See https://github.com/python/typing/issues/193
+        # we always wraps the given type hints by a tuple to mimic the variadic generic.
+        return create_tuple_for_frame_type(params)
 
 
 def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:

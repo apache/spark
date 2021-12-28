@@ -23,6 +23,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
@@ -71,6 +72,14 @@ class SparkSqlParserSuite extends AnalysisTest {
       }
       assertEqual(s"RESET ${config.key}", ResetCommand(Some(config.key)))
     }
+  }
+
+  test("SET with comment") {
+    assertEqual(s"SET my_path = /a/b/*", SetCommand(Some("my_path" -> Some("/a/b/*"))))
+    val e1 = intercept[ParseException](parser.parsePlan("SET k=`v` /*"))
+    assert(e1.getMessage.contains(s"Unclosed bracketed comment"))
+    val e2 = intercept[ParseException](parser.parsePlan("SET `k`=`v` /*"))
+    assert(e2.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("Report Error for invalid usage of SET command") {

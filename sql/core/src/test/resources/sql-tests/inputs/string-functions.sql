@@ -91,10 +91,10 @@ SELECT hex(rpad(unhex('aabbcc'), 6, unhex('')));
 SELECT hex(rpad(unhex('aabbcc'), 2, unhex('ff')));
 
 -- lpad/rpad with mixed STRING and BINARY input
-SELECT lpad('abc', 5, x'12');
-SELECT lpad(x'12', 5, 'abc');
-SELECT rpad('abc', 5, x'12');
-SELECT rpad(x'12', 5, 'abc');
+SELECT lpad('abc', 5, x'57');
+SELECT lpad(x'57', 5, 'abc');
+SELECT rpad('abc', 5, x'57');
+SELECT rpad(x'57', 5, 'abc');
 
 -- decode
 select decode();
@@ -105,3 +105,23 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- contains
+SELECT CONTAINS(null, 'Spark');
+SELECT CONTAINS('Spark SQL', null);
+SELECT CONTAINS(null, null);
+SELECT CONTAINS('Spark SQL', 'Spark');
+SELECT CONTAINS('Spark SQL', 'SQL');
+SELECT CONTAINS('Spark SQL', 'SPARK');
+
+SELECT startswith('Spark SQL', 'ark');
+SELECT startswith('Spark SQL', 'Spa');
+SELECT startswith(null, 'Spark');
+SELECT startswith('Spark', null);
+SELECT startswith(null, null);
+
+SELECT endswith('Spark SQL', 'QL');
+SELECT endswith('Spark SQL', 'Spa');
+SELECT endswith(null, 'Spark');
+SELECT endswith('Spark', null);
+SELECT endswith(null, null);

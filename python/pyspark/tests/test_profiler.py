@@ -26,12 +26,11 @@ from pyspark.testing.utils import PySparkTestCase
 
 
 class ProfilerTests(PySparkTestCase):
-
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile", "true")
-        self.sc = SparkContext('local[4]', class_name, conf=conf)
+        self.sc = SparkContext("local[4]", class_name, conf=conf)
 
     def test_profiler(self):
         self.do_computation()
@@ -88,11 +87,13 @@ class ProfilerTests2(unittest.TestCase):
             self.assertRaisesRegex(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
-                lambda: sc.show_profiles())
+                lambda: sc.show_profiles(),
+            )
             self.assertRaisesRegex(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
-                lambda: sc.dump_profiles("/tmp/abc"))
+                lambda: sc.dump_profiles("/tmp/abc"),
+            )
         finally:
             sc.stop()
 
@@ -102,7 +103,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

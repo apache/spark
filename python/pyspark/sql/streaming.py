@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
 
-class StreamingQuery(object):
+class StreamingQuery:
     """
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
@@ -83,8 +83,7 @@ class StreamingQuery(object):
     @property  # type: ignore[misc]
     @since(2.0)
     def isActive(self) -> bool:
-        """Whether this streaming query is currently active or not.
-        """
+        """Whether this streaming query is currently active or not."""
         return self._jsq.isActive()
 
     @since(2.0)
@@ -159,8 +158,7 @@ class StreamingQuery(object):
 
     @since(2.0)
     def stop(self) -> None:
-        """Stop this streaming query.
-        """
+        """Stop this streaming query."""
         self._jsq.stop()
 
     def explain(self, extended: bool = False) -> None:
@@ -206,14 +204,14 @@ class StreamingQuery(object):
         """
         if self._jsq.exception().isDefined():
             je = self._jsq.exception().get()
-            msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
-            stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
+            msg = je.toString().split(": ", 1)[1]  # Drop the Java StreamingQueryException type info
+            stackTrace = "\n\t at ".join(map(lambda x: x.toString(), je.getStackTrace()))
             return StreamingQueryException(msg, stackTrace, je.getCause())
         else:
             return None
 
 
-class StreamingQueryManager(object):
+class StreamingQueryManager:
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
     .. versionadded:: 2.0.0
@@ -324,6 +322,7 @@ class DataStreamReader(OptionUtils):
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
         from pyspark.sql.dataframe import DataFrame
+
         return DataFrame(jdf, self._spark)
 
     def format(self, source: str) -> "DataStreamReader":
@@ -372,7 +371,8 @@ class DataStreamReader(OptionUtils):
         >>> s = spark.readStream.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
-        spark = SparkSession.builder.getOrCreate()
+
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
@@ -420,7 +420,7 @@ class DataStreamReader(OptionUtils):
         path: Optional[str] = None,
         format: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> "DataFrame":
         """Loads a data stream from a data source and returns it as a
         :class:`DataFrame <pyspark.sql.DataFrame>`.
@@ -460,8 +460,10 @@ class DataStreamReader(OptionUtils):
         self.options(**options)
         if path is not None:
             if type(path) != str or len(path.strip()) == 0:
-                raise ValueError("If the path is provided for stream, it needs to be a " +
-                                 "non-empty string. List of paths are not supported.")
+                raise ValueError(
+                    "If the path is provided for stream, it needs to be a "
+                    + "non-empty string. List of paths are not supported."
+                )
             return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
@@ -533,16 +535,28 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            schema=schema, primitivesAsString=primitivesAsString, prefersDecimal=prefersDecimal,
-            allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
-            allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
+            schema=schema,
+            primitivesAsString=primitivesAsString,
+            prefersDecimal=prefersDecimal,
+            allowComments=allowComments,
+            allowUnquotedFieldNames=allowUnquotedFieldNames,
+            allowSingleQuotes=allowSingleQuotes,
+            allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
-            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
-            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
-            allowNonNumericNumbers=allowNonNumericNumbers)
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            multiLine=multiLine,
+            allowUnquotedControlChars=allowUnquotedControlChars,
+            lineSep=lineSep,
+            locale=locale,
+            dropFieldIfAllNull=dropFieldIfAllNull,
+            encoding=encoding,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers,
+        )
         if isinstance(path, str):
             return self._df(self._jreader.json(path))
         else:
@@ -579,7 +593,7 @@ class DataStreamReader(OptionUtils):
         self._set_opts(
             mergeSchema=mergeSchema,
             pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup
+            recursiveFileLookup=recursiveFileLookup,
         )
         if isinstance(path, str):
             return self._df(self._jreader.orc(path))
@@ -627,7 +641,7 @@ class DataStreamReader(OptionUtils):
             pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup,
             datetimeRebaseMode=datetimeRebaseMode,
-            int96RebaseMode=int96RebaseMode
+            int96RebaseMode=int96RebaseMode,
         )
         if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
@@ -679,8 +693,11 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup)
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
         if isinstance(path, str):
             return self._df(self._jreader.text(path))
         else:
@@ -758,18 +775,37 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
-            header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
-            ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
-            nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
+            schema=schema,
+            sep=sep,
+            encoding=encoding,
+            quote=quote,
+            escape=escape,
+            comment=comment,
+            header=header,
+            inferSchema=inferSchema,
+            ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+            ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
+            nullValue=nullValue,
+            nanValue=nanValue,
+            positiveInf=positiveInf,
+            negativeInf=negativeInf,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
-            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
-            emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
-            unescapedQuoteHandling=unescapedQuoteHandling)
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
+            enforceSchema=enforceSchema,
+            emptyValue=emptyValue,
+            locale=locale,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            unescapedQuoteHandling=unescapedQuoteHandling,
+        )
         if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
@@ -804,7 +840,7 @@ class DataStreamReader(OptionUtils):
             raise TypeError("tableName can be only a single string")
 
 
-class DataStreamWriter(object):
+class DataStreamWriter:
     """
     Interface used to write a streaming :class:`DataFrame <pyspark.sql.DataFrame>` to external
     storage systems (e.g. file systems, key-value stores, etc).
@@ -825,6 +861,7 @@ class DataStreamWriter(object):
 
     def _sq(self, jsq: JavaObject) -> StreamingQuery:
         from pyspark.sql.streaming import StreamingQuery
+
         return StreamingQuery(jsq)
 
     def outputMode(self, outputMode: str) -> "DataStreamWriter":
@@ -851,7 +888,7 @@ class DataStreamWriter(object):
         >>> writer = sdf.writeStream.outputMode('append')
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
-            raise ValueError('The output mode must be a non-empty string. Got: %s' % outputMode)
+            raise ValueError("The output mode must be a non-empty string. Got: %s" % outputMode)
         self._jwrite = self._jwrite.outputMode(outputMode)
         return self
 
@@ -928,8 +965,7 @@ class DataStreamWriter(object):
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        self._jwrite = self._jwrite.partitionBy(
-            _to_seq(self._spark._sc, cols))
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
@@ -953,7 +989,7 @@ class DataStreamWriter(object):
         >>> writer = sdf.writeStream.queryName('streaming_query')
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
-            raise ValueError('The queryName must be a non-empty string. Got: %s' % queryName)
+            raise ValueError("The queryName must be a non-empty string. Got: %s" % queryName)
         self._jwrite = self._jwrite.queryName(queryName)
         return self
 
@@ -969,12 +1005,17 @@ class DataStreamWriter(object):
     def trigger(self, *, continuous: str) -> "DataStreamWriter":
         ...
 
+    @overload
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
+        ...
+
     def trigger(
         self,
         *,
         processingTime: Optional[str] = None,
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
+        availableNow: Optional[bool] = None,
     ) -> "DataStreamWriter":
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
@@ -994,6 +1035,9 @@ class DataStreamWriter(object):
             a time interval as a string, e.g. '5 seconds', '1 minute'.
             Set a trigger that runs a continuous query with a given checkpoint
             interval. Only one trigger can be set.
+        availableNow : bool, optional
+            if set to True, set a trigger that processes all available data in multiple
+            batches then terminates the query. Only one trigger can be set.
 
         Notes
         -----
@@ -1007,41 +1051,49 @@ class DataStreamWriter(object):
         >>> writer = sdf.writeStream.trigger(once=True)
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
+        >>> # trigger the query for reading all available data with multiple batches
+        >>> writer = sdf.writeStream.trigger(availableNow=True)
         """
-        params = [processingTime, once, continuous]
+        params = [processingTime, once, continuous, availableNow]
 
-        if params.count(None) == 3:
-            raise ValueError('No trigger provided')
-        elif params.count(None) < 2:
-            raise ValueError('Multiple triggers not allowed.')
+        if params.count(None) == 4:
+            raise ValueError("No trigger provided")
+        elif params.count(None) < 3:
+            raise ValueError("Multiple triggers not allowed.")
 
         jTrigger = None
+        assert self._spark._sc._jvm is not None
         if processingTime is not None:
             if type(processingTime) != str or len(processingTime.strip()) == 0:
-                raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
-                                 processingTime)
+                raise ValueError(
+                    "Value for processingTime must be a non empty string. Got: %s" % processingTime
+                )
             interval = processingTime.strip()
-            jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
-                ._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(interval)
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(  # type: ignore[attr-defined]
+                interval
             )
 
         elif once is not None:
             if once is not True:
-                raise ValueError('Value for once must be True. Got: %s' % once)
+                raise ValueError("Value for once must be True. Got: %s" % once)
             jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
-                ._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+                self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()  # type: ignore[attr-defined]
             )
 
-        else:
+        elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
-                raise ValueError('Value for continuous must be a non empty string. Got: %s' %
-                                 continuous)
+                raise ValueError(
+                    "Value for continuous must be a non empty string. Got: %s" % continuous
+                )
             interval = continuous.strip()
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(  # type: ignore[attr-defined]
+                interval
+            )
+        else:
+            if availableNow is not True:
+                raise ValueError("Value for availableNow must be True. Got: %s" % availableNow)
             jTrigger = (
-                self._spark._sc  # type: ignore[attr-defined]
-                ._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(interval)
+                self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.AvailableNow()  # type: ignore[attr-defined]
             )
 
         self._jwrite = self._jwrite.trigger(jTrigger)
@@ -1149,7 +1201,7 @@ class DataStreamWriter(object):
         """
 
         from pyspark.rdd import _wrap_function  # type: ignore[attr-defined]
-        from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -1168,24 +1220,27 @@ class DataStreamWriter(object):
             # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
             # 'close(error)' methods.
 
-            if not hasattr(f, 'process'):
+            if not hasattr(f, "process"):
                 raise AttributeError("Provided object does not have a 'process' method")
 
-            if not callable(getattr(f, 'process')):
+            if not callable(getattr(f, "process")):
                 raise TypeError("Attribute 'process' in provided object is not callable")
 
             def doesMethodExist(method_name: str) -> bool:
                 exists = hasattr(f, method_name)
                 if exists and not callable(getattr(f, method_name)):
                     raise TypeError(
-                        "Attribute '%s' in provided object is not callable" % method_name)
+                        "Attribute '%s' in provided object is not callable" % method_name
+                    )
                 return exists
 
-            open_exists = doesMethodExist('open')
-            close_exists = doesMethodExist('close')
+            open_exists = doesMethodExist("open")
+            close_exists = doesMethodExist("close")
 
             def func_with_open_process_close(partition_id: Any, iterator: Iterator) -> Iterator:
-                epoch_id = TaskContext.get().getLocalProperty('streaming.sql.batchId')
+                epoch_id = cast(TaskContext, TaskContext.get()).getLocalProperty(
+                    "streaming.sql.batchId"
+                )
                 if epoch_id:
                     int_epoch_id = int(epoch_id)
                 else:
@@ -1194,7 +1249,7 @@ class DataStreamWriter(object):
                 # Check if the data should be processed
                 should_process = True
                 if open_exists:
-                    should_process = f.open(partition_id, int_epoch_id)   # type: ignore[union-attr]
+                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
 
                 error = None
 
@@ -1214,19 +1269,18 @@ class DataStreamWriter(object):
 
             func = func_with_open_process_close  # type: ignore[assignment]
 
-        serializer = AutoBatchedSerializer(PickleSerializer())
+        serializer = AutoBatchedSerializer(CPickleSerializer())
         wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
+        assert self._spark._sc._jvm is not None
         jForeachWriter = (
-            self._spark._sc    # type: ignore[attr-defined]
-            ._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
-                wrapped_func, self._df._jdf.schema())
+            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
+                wrapped_func, self._df._jdf.schema()
+            )
         )
         self._jwrite.foreach(jForeachWriter)
         return self
 
-    def foreachBatch(
-        self, func: Callable[["DataFrame", int], None]
-    ) -> "DataStreamWriter":
+    def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
         function. This is supported only the in the micro-batch execution modes (that is, when the
@@ -1252,7 +1306,9 @@ class DataStreamWriter(object):
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
-        gw = self._spark._sc._gateway  # type: ignore[attr-defined]
+
+        gw = self._spark._sc._gateway
+        assert gw is not None
         java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
 
         wrapped_func = ForeachBatchFunction(self._spark, func)
@@ -1345,7 +1401,7 @@ class DataStreamWriter(object):
         outputMode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
         queryName: Optional[str] = None,
-        **options: "OptionalPrimitiveType"
+        **options: "OptionalPrimitiveType",
     ) -> StreamingQuery:
         """
         Starts the execution of the streaming query, which will continually output results to the
@@ -1428,24 +1484,24 @@ def _test() -> None:
 
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except Py4JError:  # noqa: F821
         spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
 
-    globs['tempfile'] = tempfile
-    globs['os'] = os
-    globs['spark'] = spark
-    globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
-    globs['sdf'] = \
-        spark.readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sdf_schema'] = StructType([StructField("data", StringType(), True)])
-    globs['df'] = \
-        globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
+    globs["tempfile"] = tempfile
+    globs["os"] = os
+    globs["spark"] = spark
+    globs["sqlContext"] = SQLContext.getOrCreate(spark.sparkContext)
+    globs["sdf"] = spark.readStream.format("text").load("python/test_support/sql/streaming")
+    globs["sdf_schema"] = StructType([StructField("data", StringType(), True)])
+    globs["df"] = globs["spark"].readStream.format("text").load("python/test_support/sql/streaming")
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.streaming, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['spark'].stop()
+        pyspark.sql.streaming,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    globs["spark"].stop()
 
     if failure_count:
         sys.exit(-1)

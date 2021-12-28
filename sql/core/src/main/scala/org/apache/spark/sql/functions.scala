@@ -113,7 +113,17 @@ object functions {
    * @group normal_funcs
    * @since 1.3.0
    */
-  def lit(literal: Any): Column = typedLit(literal)
+  def lit(literal: Any): Column = literal match {
+    case c: Column => c
+    case s: Symbol => new ColumnName(s.name)
+    case _ =>
+      // This is different from `typedlit`. `typedlit` calls `Literal.create` to use
+      // `ScalaReflection` to get the type of `literal`. However, since we use `Any` in this method,
+      // `typedLit[Any](literal)` will always fail and fallback to `Literal.apply`. Hence, we can
+      // just manually call `Literal.apply` to skip the expensive `ScalaReflection` code. This is
+      // significantly better when there are many threads calling `lit` concurrently.
+      Column(Literal(literal))
+  }
 
   /**
    * Creates a [[Column]] of literal value.
@@ -133,6 +143,9 @@ object functions {
    * Otherwise, a new [[Column]] is created to represent the literal value.
    * The difference between this function and [[lit]] is that this function
    * can handle parameterized scala types e.g.: List, Seq and Map.
+   *
+   * @note `typedlit` will call expensive Scala reflection APIs. `lit` is preferred if parameterized
+   * Scala types are not used.
    *
    * @group normal_funcs
    * @since 3.2.0
@@ -2739,7 +2752,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    StringLPad(str.expr, lit(len).expr, lit(pad).expr)
+    new BinaryLPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -2828,7 +2841,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    StringRPad(str.expr, lit(len).expr, lit(pad).expr)
+    new BinaryRPad(str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -3234,6 +3247,15 @@ object functions {
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
+
+  /**
+   * @return A date created from year, month and day fields.
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
+    MakeDate(year.expr, month.expr, day.expr)
+  }
 
   /**
    * Returns number of months between dates `start` and `end`.
@@ -4700,6 +4722,15 @@ object functions {
    * @since 2.4.0
    */
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
+
+  /**
+   * Returns true if the map contains the key.
+   * @group collection_funcs
+   * @since 3.3.0
+   */
+  def map_contains_key(column: Column, key: Any): Column = withExpr {
+    ArrayContains(MapKeys(column.expr), lit(key).expr)
+  }
 
   /**
    * Returns an unordered array containing the keys of the map.

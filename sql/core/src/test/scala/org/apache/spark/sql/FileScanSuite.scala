@@ -358,7 +358,7 @@ class FileScanSuite extends FileScanSuiteBase {
       Seq.empty),
     ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, f, pf, df),
+        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, None, f, pf, df),
       Seq.empty),
     ("CSVScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => CSVScan(s, fi, ds, rds, rps, o, f, pf, df),

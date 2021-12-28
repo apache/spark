@@ -118,4 +118,8 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def getTableCommentQuery(table: String, comment: String): String = {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    ""
+  }
 }

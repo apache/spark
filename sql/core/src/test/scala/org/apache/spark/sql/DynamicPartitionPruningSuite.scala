@@ -167,6 +167,7 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("DROP TABLE IF EXISTS dim_store")
       sql("DROP TABLE IF EXISTS fact_stats")
       sql("DROP TABLE IF EXISTS dim_stats")
+      sql("DROP TABLE IF EXISTS code_stats")
     } finally {
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)

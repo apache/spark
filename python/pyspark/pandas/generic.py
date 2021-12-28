@@ -20,7 +20,6 @@ A base class of DataFrame/Column to behave similar to pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections import Counter
-from distutils.version import LooseVersion
 from functools import reduce
 from typing import (
     Any,
@@ -39,7 +38,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
@@ -74,6 +73,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_mode,
     SPARK_CONF_ARROW_ENABLED,
+    log_advice,
 )
 
 if TYPE_CHECKING:
@@ -116,7 +116,7 @@ class Frame(object, metaclass=ABCMeta):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Union["Series", Scalar]:
         pass
 
@@ -127,6 +127,10 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def to_pandas(self) -> Union[pd.DataFrame, pd.Series]:
+        pass
+
+    @abstractmethod
+    def _to_pandas(self) -> Union[pd.DataFrame, pd.Series]:
         pass
 
     @property
@@ -573,7 +577,11 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
-        return self.to_pandas().values
+        log_advice(
+            "`to_numpy` loads all data into the driver's memory. "
+            "It should only be used if the resulting NumPy ndarray is expected to be small."
+        )
+        return self._to_pandas().values
 
     @property
     def values(self) -> np.ndarray:
@@ -652,7 +660,7 @@ class Frame(object, metaclass=ABCMeta):
         mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> Optional[str]:
         r"""
         Write object to a comma-separated values (csv) file.
@@ -786,31 +794,17 @@ class Frame(object, metaclass=ABCMeta):
 
         if path is None:
             # If path is none, just collect and use pandas's to_csv.
-            psdf_or_ser = self
-            if (LooseVersion("0.24") > LooseVersion(pd.__version__)) and isinstance(
-                self, ps.Series
-            ):
-                # 0.23 seems not having 'columns' parameter in Series' to_csv.
-                return psdf_or_ser.to_pandas().to_csv(
-                    None,
-                    sep=sep,
-                    na_rep=na_rep,
-                    header=header,
-                    date_format=date_format,
-                    index=False,
-                )
-            else:
-                return psdf_or_ser.to_pandas().to_csv(
-                    None,
-                    sep=sep,
-                    na_rep=na_rep,
-                    columns=columns,
-                    header=header,
-                    quotechar=quotechar,
-                    date_format=date_format,
-                    escapechar=escapechar,
-                    index=False,
-                )
+            return self._to_pandas().to_csv(
+                None,
+                sep=sep,
+                na_rep=na_rep,
+                columns=columns,
+                header=header,
+                quotechar=quotechar,
+                date_format=date_format,
+                escapechar=escapechar,
+                index=False,
+            )
 
         if isinstance(self, ps.DataFrame):
             psdf = self
@@ -895,7 +889,7 @@ class Frame(object, metaclass=ABCMeta):
         lines: bool = True,
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        **options: Any
+        **options: Any,
     ) -> Optional[str]:
         """
         Convert the object to a JSON string.
@@ -996,7 +990,7 @@ class Frame(object, metaclass=ABCMeta):
         if path is None:
             # If path is none, just collect and use pandas's to_json.
             psdf_or_ser = self
-            pdf = psdf_or_ser.to_pandas()
+            pdf = psdf_or_ser._to_pandas()
             if isinstance(self, ps.Series):
                 pdf = pdf.to_frame()
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
@@ -1142,6 +1136,10 @@ class Frame(object, metaclass=ABCMeta):
 
         >>> df1.to_excel('output1.xlsx', engine='xlsxwriter')  # doctest: +SKIP
         """
+        log_advice(
+            "`to_excel` loads all data into the driver's memory. "
+            "It should only be used if the resulting DataFrame is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psdf = self
@@ -2929,17 +2927,17 @@ class Frame(object, metaclass=ABCMeta):
 
         if isinstance(self, ps.Series):
             if indexes_increasing:
-                result = first_series(self.to_frame().loc[before:after]).rename(self.name)
+                result = first_series(self.to_frame().loc[before:after]).rename(self.name)  # type: ignore[arg-type, assignment]
             else:
-                result = first_series(self.to_frame().loc[after:before]).rename(self.name)
+                result = first_series(self.to_frame().loc[after:before]).rename(self.name)  # type: ignore[arg-type,assignment]
         elif isinstance(self, ps.DataFrame):
             if axis == 0:
                 if indexes_increasing:
-                    result = self.loc[before:after]
+                    result = self.loc[before:after]  # type: ignore[assignment]
                 else:
-                    result = self.loc[after:before]
+                    result = self.loc[after:before]  # type: ignore[assignment]
             elif axis == 1:
-                result = self.loc[:, before:after]
+                result = self.loc[:, before:after]  # type: ignore[assignment]
 
         return cast(DataFrameOrSeries, result.copy() if copy else result)
 
@@ -2992,11 +2990,10 @@ class Frame(object, metaclass=ABCMeta):
         |  0 | elk        | dog        |
         |  1 | pig        | quetzal    |
         """
-        # `to_markdown` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            raise NotImplementedError(
-                "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
-            )
+        log_advice(
+            "`to_markdown` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas object is expected to be small."
+        )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
         psser_or_psdf = self

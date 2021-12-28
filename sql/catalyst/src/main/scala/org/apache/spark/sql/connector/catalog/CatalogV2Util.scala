@@ -22,8 +22,8 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
@@ -276,9 +276,21 @@ private[sql] object CatalogV2Util {
     new StructType(newFields)
   }
 
-  def loadTable(catalog: CatalogPlugin, ident: Identifier): Option[Table] =
+  def loadTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
     try {
-      Option(catalog.asTableCatalog.loadTable(ident))
+      if (timeTravelSpec.nonEmpty) {
+        timeTravelSpec.get match {
+          case v: AsOfVersion =>
+            Option(catalog.asTableCatalog.loadTable(ident, v.version))
+          case ts: AsOfTimestamp =>
+            Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
+        }
+      } else {
+        Option(catalog.asTableCatalog.loadTable(ident))
+      }
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
@@ -293,22 +305,10 @@ private[sql] object CatalogV2Util {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
-  def convertTableProperties(c: CreateTableStatement): Map[String, String] = {
-    convertTableProperties(
-      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
-  }
-
-  def convertTableProperties(c: CreateTableAsSelectStatement): Map[String, String] = {
-    convertTableProperties(
-      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
-  }
-
-  def convertTableProperties(r: ReplaceTableStatement): Map[String, String] = {
-    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
-  }
-
-  def convertTableProperties(r: ReplaceTableAsSelectStatement): Map[String, String] = {
-    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  def convertTableProperties(t: TableSpec): Map[String, String] = {
+    val props = convertTableProperties(
+      t.properties, t.options, t.serde, t.location, t.comment, t.provider, t.external)
+    withDefaultOwnership(props)
   }
 
   private def convertTableProperties(

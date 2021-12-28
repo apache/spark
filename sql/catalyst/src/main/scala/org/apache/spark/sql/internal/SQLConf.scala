@@ -662,6 +662,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
+
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
@@ -959,6 +968,14 @@ object SQLConf {
     .version("1.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
+    .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
+      "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
@@ -1496,6 +1513,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1754,6 +1778,38 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_SORT_AGGREGATE_CODEGEN =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER shuffled hash join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.fullOuterSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for FULL OUTER sort merge join.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.existenceSortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enable code-gen for Existence sort merge join.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2601,6 +2657,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
+      "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
+      "and/or identifiers for table, view, function, etc.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -3374,13 +3438,20 @@ object SQLConf {
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
       .internal()
-      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
-        " APIs that accept or parse data types as parameters, e.g." +
-        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
-        " string type as Spark 3.0 and earlier.")
+      .doc("When true, Spark treats CHAR/VARCHAR type the same as STRING type, which is the " +
+        "behavior of Spark 3.0 and earlier. This means no length check for CHAR/VARCHAR type and " +
+        "no padding for CHAR type when writing data to the table.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val CHAR_AS_VARCHAR = buildConf("spark.sql.charAsVarchar")
+    .doc("When true, Spark replaces CHAR type with VARCHAR type in CREATE/REPLACE/ALTER TABLE " +
+      "commands, so that newly created/updated tables will not have CHAR type columns/fields. " +
+      "Existing tables with CHAR type columns/fields are not affected by this config.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
@@ -3708,6 +3779,8 @@ class SQLConf extends Serializable with Logging {
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
@@ -4054,6 +4127,8 @@ class SQLConf extends Serializable with Logging {
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

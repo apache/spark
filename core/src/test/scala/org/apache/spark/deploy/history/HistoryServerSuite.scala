@@ -86,6 +86,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
       .set(EXECUTOR_PROCESS_TREE_METRICS_ENABLED, true)
     conf.setAll(extraConf)
+    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
+    if (Utils.isMacOnAppleSilicon) {
+      conf.remove(LOCAL_STORE_DIR)
+    }
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -387,6 +391,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove(IS_TESTING)
+    // Since LevelDB doesn't support Apple Silicon yet, fallback to in-memory provider
+    if (Utils.isMacOnAppleSilicon) {
+      myConf.remove(LOCAL_STORE_DIR)
+    }
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
 

@@ -35,7 +35,7 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
     )
 
 
-class MissingPandasLikeIndex(object):
+class MissingPandasLikeIndex:
 
     # Properties
     nbytes = _unsupported_property("nbytes")
@@ -100,7 +100,22 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     std = _unsupported_function("std", cls="DatetimeIndex")
 
 
-class MissingPandasLikeMultiIndex(object):
+class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
+
+    # Properties
+    nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
+    components = _unsupported_property("components", cls="TimedeltaIndex")
+    inferred_freq = _unsupported_property("inferred_freq", cls="TimedeltaIndex")
+
+    # Functions
+    to_pytimedelta = _unsupported_function("to_pytimedelta", cls="TimedeltaIndex")
+    round = _unsupported_function("round", cls="TimedeltaIndex")
+    floor = _unsupported_function("floor", cls="TimedeltaIndex")
+    ceil = _unsupported_function("ceil", cls="TimedeltaIndex")
+    mean = _unsupported_function("mean", cls="TimedeltaIndex")
+
+
+class MissingPandasLikeMultiIndex:
 
     # Functions
     argsort = _unsupported_function("argsort")
