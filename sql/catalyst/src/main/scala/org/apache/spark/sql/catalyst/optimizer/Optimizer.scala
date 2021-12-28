@@ -1408,6 +1408,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
+    case r: RebalancePartitions => r.partitionExpressions.forall(_.deterministic)
     case _: Repartition => true
     case _ => false
   }

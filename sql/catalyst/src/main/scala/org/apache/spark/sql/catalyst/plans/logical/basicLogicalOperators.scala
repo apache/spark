@@ -1475,7 +1475,20 @@ case class RebalancePartitions(
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)
   } else {
-    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), conf.numShufflePartitions)
+    } else {
+      HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+    }
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =

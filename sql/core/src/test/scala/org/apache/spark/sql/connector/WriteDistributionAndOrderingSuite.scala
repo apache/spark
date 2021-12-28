@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.functions.lit
@@ -67,7 +67,7 @@ class WriteDistributionAndOrderingSuite
   test("ordered distribution and sort with same exprs: append") {
     Seq(false, true).foreach { skew =>
       // if true, skew data: 144, 88, 88, 144, 80
-      // after repartition: 72, 72, 88, 88, 80
+      // after repartition: 72, 72, 88, 88, 72, 72, 80
       checkOrderedDistributionAndSortWithSameExprs("append", testSkewed = skew)
     }
   }
@@ -75,7 +75,7 @@ class WriteDistributionAndOrderingSuite
   test("ordered distribution and sort with same exprs: overwrite") {
     Seq(false, true).foreach { skew =>
       // if true, skew data: 144, 88, 88, 144, 80
-      // after repartition: 72, 72, 88, 88, 80
+      // after repartition: 72, 72, 88, 88, 72, 72, 80
       checkOrderedDistributionAndSortWithSameExprs("overwrite", testSkewed = skew)
     }
   }
@@ -83,7 +83,7 @@ class WriteDistributionAndOrderingSuite
   test("ordered distribution and sort with same exprs: overwriteDynamic") {
     Seq(false, true).foreach { skew =>
       // if true, skew data: 144, 88, 88, 144, 80
-      // after repartition: 72, 72, 88, 88, 80
+      // after repartition: 72, 72, 88, 88, 72, 72, 80
       checkOrderedDistributionAndSortWithSameExprs("overwriteDynamic", testSkewed = skew)
     }
   }
@@ -136,27 +136,15 @@ class WriteDistributionAndOrderingSuite
   }
 
   test("clustered distribution and sort with same exprs: append") {
-    Seq(false, true).foreach { skew =>
-      // if true, Skew data: 0, 224, 144, 160, 72
-      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithSameExprs("append", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithSameExprs("append", false)
   }
 
   test("clustered distribution and sort with same exprs: overwrite") {
-    Seq(false, true).foreach { skew =>
-      // if true, Skew data: 0, 224, 144, 160, 72
-      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithSameExprs("overwrite", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithSameExprs("overwrite", false)
   }
 
   test("clustered distribution and sort with same exprs: overwriteDynamic") {
-    Seq(false, true).foreach { skew =>
-      // if true, Skew data: 0, 224, 144, 160, 72
-      // after repartition: 0, 72, 72, 80, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithSameExprs("overwriteDynamic", false)
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: append") {
@@ -216,27 +204,15 @@ class WriteDistributionAndOrderingSuite
   }
 
   test("clustered distribution and sort with extended exprs: append") {
-    Seq(false, true).foreach { skew =>
-      // Skew data: 144, 144, 0, 144, 232
-      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithExtendedExprs("append", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithExtendedExprs("append", false)
   }
 
   test("clustered distribution and sort with extended exprs: overwrite") {
-    Seq(false, true).foreach { skew =>
-      // Skew data: 144, 144, 0, 144, 232
-      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithExtendedExprs("overwrite", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithExtendedExprs("overwrite", false)
   }
 
   test("clustered distribution and sort with extended exprs: overwriteDynamic") {
-    Seq(false, true).foreach { skew =>
-      // Skew data: 144, 144, 0, 144, 232
-      // after repartition: 72, 72, 72, 72, 0, 72, 72, 88, 72, 72
-      checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", testSkewed = skew)
-    }
+    checkClusteredDistributionAndSortWithExtendedExprs("overwriteDynamic", false)
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: append") {
@@ -627,22 +603,15 @@ class WriteDistributionAndOrderingSuite
   }
 
   test("clustered distribution and local sort with manual global sort: append") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("append", false)
   }
 
   test("clustered distribution and local sort with manual global sort: overwrite") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwrite", false)
   }
 
   test("clustered distribution and local sort with manual global sort: overwriteDynamic") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-        "overwriteDynamic", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualGlobalSort("overwriteDynamic", false)
   }
 
   test("clustered distribution and local sort with manual global sort with numPartitions: append") {
@@ -704,22 +673,15 @@ class WriteDistributionAndOrderingSuite
   }
 
   test("clustered distribution and local sort with manual local sort: append") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualLocalSort("append", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("append", false)
   }
 
   test("clustered distribution and local sort with manual local sort: overwrite") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwrite", false)
   }
 
   test("clustered distribution and local sort with manual local sort: overwriteDynamic") {
-    Seq(false, true).foreach { skew =>
-      checkClusteredDistributionAndLocalSortWithManualLocalSort(
-        "overwriteDynamic", testSkewed = skew)
-    }
+    checkClusteredDistributionAndLocalSortWithManualLocalSort("overwriteDynamic", false)
   }
 
   test("clustered distribution and local sort with manual local sort with numPartitions: append") {
@@ -834,6 +796,13 @@ class WriteDistributionAndOrderingSuite
           SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
           SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
           val executedPlan = executeCommand()
+          val read = collect(executedPlan) {
+            case r: AQEShuffleReadExec => r
+          }
+          assert(read.size == 1)
+          // skew data: 144, 88, 88, 144, 80
+          // after repartition: 72, 72, 88, 88, 72, 72, 80
+          assert(read.head.partitionSpecs.size == 7)
 
           checkPartitioningAndOrdering(
             executedPlan, expectedWritePartitioning, expectedWriteOrdering, true)

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils.toCatalyst
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -36,16 +36,26 @@ object DistributionAndOrderingUtils {
         case _: UnspecifiedDistribution => Array.empty[Expression]
       }
 
+      val (sortOrder, _) = distribution.partition(_.isInstanceOf[SortOrder])
+
       val queryWithDistribution = if (distribution.nonEmpty) {
-        if (numPartitions > 0) {
+        // Spark can optimize the partition when
+        // 1. numPartitions is not specified by the data source, and
+        // 2. sortOrder is specified. This is because the requested distribution needs to be
+        // guaranteed, which can only be achieved by using RangePartitioning, not HashPartitioning.
+        val ableToOptimizePartition = if (numPartitions == 0 && sortOrder.nonEmpty) true else false
+        if (ableToOptimizePartition) {
+          RebalancePartitions(distribution, query)
+        } else {
+          val finalNumPartitions = if (numPartitions > 0) {
+            numPartitions
+          } else {
+            conf.numShufflePartitions
+          }
           // the conversion to catalyst expressions above produces SortOrder expressions
           // for OrderedDistribution and generic expressions for ClusteredDistribution
           // this allows RepartitionByExpression to pick either range or hash partitioning
-          RepartitionByExpression(distribution, query, numPartitions)
-        } else {
-          // if numPartitions is not specified by the data source, Spark optimizes the
-          // partitions if necessary.
-          RepartitionByExpression(distribution, query, conf.numShufflePartitions, false)
+          RepartitionByExpression(distribution, query, finalNumPartitions)
         }
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
