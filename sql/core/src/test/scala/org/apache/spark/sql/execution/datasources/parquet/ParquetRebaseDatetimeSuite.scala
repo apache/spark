@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -40,7 +40,7 @@ abstract class ParquetRebaseDatetimeSuite
   // "SPARK-31159, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
   ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4/3.2") {
     val resourceDir = "sql/core/src/test/resources/test-data"
-    val version = "2_4_5"
+    val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     val N = 8
     def save(
         in: Seq[(String, String)],
