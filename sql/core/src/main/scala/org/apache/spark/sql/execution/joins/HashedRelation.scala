@@ -459,7 +459,8 @@ private[joins] object UnsafeHashedRelation extends Logging {
       isNullAware: Boolean = false,
       allowsNullKey: Boolean = false,
       ignoresDuplicatedKey: Boolean = false,
-      reorderFactor: Option[Double]): HashedRelation = {
+      reorderFactor: Option[Double],
+      throwExceptionOnReorderFailure: Boolean = Utils.isTesting): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
@@ -532,7 +533,8 @@ private[joins] object UnsafeHashedRelation extends Logging {
           logWarning("Reordering BytesToBytesMap failed, " +
             "try increasing the driver memory to mitigate it", e)
           maybeCompactMap.foreach(_.free())
-          if (Utils.isTesting) {
+          if (throwExceptionOnReorderFailure) {
+            candidate.close()
             throw e
           }
           candidate
@@ -1110,7 +1112,8 @@ private[joins] object LongHashedRelation extends Logging {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
-      reorderFactor: Option[Double]): HashedRelation = {
+      reorderFactor: Option[Double],
+      throwExceptionOnReorderFailure: Boolean = Utils.isTesting): HashedRelation = {
 
     val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
@@ -1138,7 +1141,7 @@ private[joins] object LongHashedRelation extends Logging {
       var maybeCompactMap: Option[LongToUnsafeRowMap] = None
       try {
         maybeCompactMap = Some(new LongToUnsafeRowMap(taskMemoryManager,
-          Math.toIntExact(map.numTotalValues)))
+          Math.toIntExact(map.numUniqueKeys)))
         val compactMap = maybeCompactMap.get
         val resultRow = new UnsafeRow(numFields)
         map.keys().foreach { rowKey =>
@@ -1155,7 +1158,8 @@ private[joins] object LongHashedRelation extends Logging {
           logWarning("Reordering LongToUnsafeRowMap failed, " +
             "try increasing driver memory to mitigate it", e)
           maybeCompactMap.foreach(_.free())
-          if (Utils.isTesting) {
+          if (throwExceptionOnReorderFailure) {
+            map.free()
             throw e
           }
           map

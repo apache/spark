@@ -733,57 +733,80 @@ abstract class BaseHashedRelationSuite extends SharedSparkSession {
 class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
   override def mapReorderFactor: Option[Double] = Some(1)
 
-  test("Reordering LongToUnsafeRowMap failure during initialization") {
-    val relation = LongHashedRelation(randomRows.iterator, singleKey, 10, mm, reorderFactor = None)
-    val memWithoutReordering = mm.getMemoryConsumptionForThisTask
-    relation.close()
-
-    val taskMemoryManager = new TaskMemoryManager(
+  private def zeroStorageRegionTaskMemoryManager(executionHeapMemory: Long): TaskMemoryManager = {
+    new TaskMemoryManager(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        memWithoutReordering * 2,
-        memWithoutReordering / 2,
+        executionHeapMemory,
+        0,
         1),
       1)
-
-    // Ensuring the maxHeapMemory specified above is sufficient for building a LongHashedRelation
-    // without reordering
-    LongHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
-      reorderFactor = None).close()
-
-    val message = intercept[SparkException] {
-      LongHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
-        reorderFactor = Some(1))
-    }.getMessage
-
-    message should include regex "Can't acquire (\\d+) bytes memory to build hash relation"
   }
 
-  test("Reordering BytesToBytesMap failure during initialization") {
-    val relation = UnsafeHashedRelation(randomRows.iterator, singleKey, 10, mm,
+  test("Reordering LongToUnsafeRowMap failure") {
+    // Find the execution memory required without reordering
+    val unboundedTMM = zeroStorageRegionTaskMemoryManager(Long.MaxValue)
+    val relation = LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, unboundedTMM,
       reorderFactor = None)
-    val memWithoutReordering = mm.getMemoryConsumptionForThisTask
+    val executionMemWithoutReordering = unboundedTMM.getMemoryConsumptionForThisTask
     relation.close()
 
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        memWithoutReordering * 2,
-        memWithoutReordering / 2,
-        1),
-      1)
+    // Once all rows are added to the map, LongToUnsafeRowMap.optimize is invoked to reduces the
+    // size of the final map and executionMemWithoutReordering does not account for the memory used
+    // intermediately while building the map. Thus we bump it up by 25%.
+    val boundedTMM = zeroStorageRegionTaskMemoryManager(
+      (executionMemWithoutReordering * 1.25).toLong)
+
+    // Ensure the maxHeapMemory specified above is sufficient for building a LongHashedRelation
+    // without reordering
+    LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
+      reorderFactor = None).close()
+
+    val ex = intercept[SparkException] {
+      LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
+        reorderFactor = Some(1))
+    }
+    ex.getMessage should include regex "Can't acquire (\\d+) bytes memory to build hash relation"
+
+    // Reordering failure due to insufficient memory does not bubble up exception
+    val reorderedRelation = LongHashedRelation(randomRows.iterator, singleKey, randomRows.size,
+      boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
+    randomRows.foreach { expectedRow =>
+      reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
+        actualRow shouldBe expectedRow
+      }
+    }
+  }
+
+  test("Reordering BytesToBytesMap failure") {
+    val unboundedTMM = zeroStorageRegionTaskMemoryManager(Long.MaxValue)
+    val relation = UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size,
+      unboundedTMM, reorderFactor = None)
+    val executionMemWithoutReordering = unboundedTMM.getMemoryConsumptionForThisTask
+    relation.close()
+
+    val boundedTMM = zeroStorageRegionTaskMemoryManager(
+      (executionMemWithoutReordering * 1.25).toLong)
 
     // Ensuring the maxHeapMemory specified above is sufficient for building a UnsafeHashedRelation
     // without reordering
-    UnsafeHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+    UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
       reorderFactor = None).close()
 
-    val message = intercept[SparkOutOfMemoryError] {
-      UnsafeHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+    val ex = intercept[SparkOutOfMemoryError] {
+      UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
         reorderFactor = Some(1))
-    }.getMessage
+    }
+    ex.getMessage shouldBe "There is not enough memory to build hash map"
 
-    message shouldBe "There is not enough memory to build hash map"
+    // Reordering failure due to insufficient memory does not bubble up exception
+    val reorderedRelation = UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size,
+      boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
+    randomRows.foreach { expectedRow =>
+      reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
+        actualRow shouldBe expectedRow
+      }
+    }
   }
 }
 
