@@ -505,39 +505,37 @@ private[joins] object UnsafeHashedRelation extends Logging {
     if (reorderMap) {
       logInfo(s"Reordering BytesToBytesMap, uniqueKeys: ${binaryMap.numKeys()}, " +
         s"totalNumValues: ${binaryMap.numValues()}")
-      val allocationTry = scala.util.Try {
-        new BytesToBytesMap(
+      var maybeCompactMap: Option[BytesToBytesMap] = None
+      try {
+        maybeCompactMap = Some(new BytesToBytesMap(
           taskMemoryManager,
           // Only 70% of the slots can be used before growing, more capacity help to reduce
           // collision
           (binaryMap.numKeys() * 1.5 + 1).toInt,
-          pageSizeBytes)
-      }
-
-      if (allocationTry.isSuccess) {
-        allocationTry.map { compactMap =>
-          // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
-          // applied to find unique keys
-          candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
-            val rowIter = candidate.get(key)
-            while (rowIter.hasNext) {
-              val row = rowIter.next().asInstanceOf[UnsafeRow]
-              val unsafeKey = keyGenerator(row)
-              mapAppendHelper(unsafeKey, row, compactMap)
-            }
+          pageSizeBytes))
+        val compactMap = maybeCompactMap.get
+        // candidate.keys() returns all keys and not just distinct keys thus distinct operation is
+        // applied to find unique keys
+        candidate.keys().map(_.copy()).toArray.distinct.foreach { key =>
+          val rowIter = candidate.get(key)
+          while (rowIter.hasNext) {
+            val row = rowIter.next().asInstanceOf[UnsafeRow]
+            val unsafeKey = keyGenerator(row)
+            mapAppendHelper(unsafeKey, row, compactMap)
           }
-          candidate.close()
-          logInfo("BytesToBytesMap reordered")
-          new UnsafeHashedRelation(key.size, numFields, compactMap)
-        }.recover { case e =>
-          logWarning("Reordering BytesToBytesMap failed", e)
-          allocationTry.map(_.free())
+        }
+        candidate.close()
+        logInfo("BytesToBytesMap reordered")
+        new UnsafeHashedRelation(key.size, numFields, compactMap)
+      } catch {
+        case e: SparkOutOfMemoryError =>
+          logWarning("Reordering BytesToBytesMap failed, " +
+            "try increasing the driver memory to mitigate it", e)
+          maybeCompactMap.foreach(_.free())
+          if (Utils.isTesting) {
+            throw e
+          }
           candidate
-        }.get
-      } else {
-        logWarning("Reordering BytesToBytesMap failed during initialization, " +
-          "try increasing driver memory to mitigate it")
-        candidate
       }
     } else {
       candidate
@@ -1137,31 +1135,30 @@ private[joins] object LongHashedRelation extends Logging {
     val mapToUse = if (reorderMap) {
       logInfo(s"Reordering LongToUnsafeRowMap, numKeys: ${map.numUniqueKeys}, " +
         s"totalValue: ${map.numTotalValues}")
-      val resultRow = new UnsafeRow(numFields)
-
-      val allocationTry = scala.util.Try {
-        new LongToUnsafeRowMap(taskMemoryManager, Math.toIntExact(map.numTotalValues))
-      }
-      if (allocationTry.isSuccess) {
-        allocationTry.map { compactMap =>
-          map.keys().foreach { rowKey =>
-            val key = rowKey.getLong(0)
-            map.get(key, resultRow).foreach { row =>
-              compactMap.append(key, row)
-            }
+      var maybeCompactMap: Option[LongToUnsafeRowMap] = None
+      try {
+        maybeCompactMap = Some(new LongToUnsafeRowMap(taskMemoryManager,
+          Math.toIntExact(map.numTotalValues)))
+        val compactMap = maybeCompactMap.get
+        val resultRow = new UnsafeRow(numFields)
+        map.keys().foreach { rowKey =>
+          val key = rowKey.getLong(0)
+          map.get(key, resultRow).foreach { row =>
+            compactMap.append(key, row)
           }
-          map.free()
-          logInfo("LongToUnsafeRowMap reordered")
-          compactMap
-        }.recover { case e =>
-          logWarning("Reordering LongToUnsafeRowMap failed", e)
-          allocationTry.foreach(_.free())
+        }
+        map.free()
+        logInfo("LongToUnsafeRowMap reordered")
+        compactMap
+      } catch {
+        case e: SparkException =>
+          logWarning("Reordering LongToUnsafeRowMap failed, " +
+            "try increasing driver memory to mitigate it", e)
+          maybeCompactMap.foreach(_.free())
+          if (Utils.isTesting) {
+            throw e
+          }
           map
-        }.get
-      } else {
-        logWarning("Reordering LongToUnsafeRowMap failed during initialization, " +
-          "try increasing driver memory to mitigate it")
-        map
       }
     } else {
       map

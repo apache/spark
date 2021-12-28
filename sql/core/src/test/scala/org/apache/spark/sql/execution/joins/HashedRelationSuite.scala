@@ -23,10 +23,12 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.spark.SparkConf
+import org.scalatest.matchers.should.Matchers._
+
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -731,7 +733,58 @@ abstract class BaseHashedRelationSuite extends SharedSparkSession {
 class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
   override def mapReorderFactor: Option[Double] = Some(1)
 
-  // TOOD: add more tests
+  test("Reordering LongToUnsafeRowMap failure during initialization") {
+    val relation = LongHashedRelation(randomRows.iterator, singleKey, 10, mm, reorderFactor = None)
+    val memWithoutReordering = mm.getMemoryConsumptionForThisTask
+    relation.close()
+
+    val taskMemoryManager = new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        memWithoutReordering * 2,
+        memWithoutReordering / 2,
+        1),
+      1)
+
+    // Ensuring the maxHeapMemory specified above is sufficient for building a LongHashedRelation
+    // without reordering
+    LongHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+      reorderFactor = None).close()
+
+    val message = intercept[SparkException] {
+      LongHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+        reorderFactor = Some(1))
+    }.getMessage
+
+    message should include regex "Can't acquire (\\d+) bytes memory to build hash relation"
+  }
+
+  test("Reordering BytesToBytesMap failure during initialization") {
+    val relation = UnsafeHashedRelation(randomRows.iterator, singleKey, 10, mm,
+      reorderFactor = None)
+    val memWithoutReordering = mm.getMemoryConsumptionForThisTask
+    relation.close()
+
+    val taskMemoryManager = new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        memWithoutReordering * 2,
+        memWithoutReordering / 2,
+        1),
+      1)
+
+    // Ensuring the maxHeapMemory specified above is sufficient for building a UnsafeHashedRelation
+    // without reordering
+    UnsafeHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+      reorderFactor = None).close()
+
+    val message = intercept[SparkOutOfMemoryError] {
+      UnsafeHashedRelation(randomRows.iterator, singleKey, 10, taskMemoryManager,
+        reorderFactor = Some(1))
+    }.getMessage
+
+    message shouldBe "There is not enough memory to build hash map"
+  }
 }
 
 class HashedRelationWithoutReorderingSuite extends BaseHashedRelationSuite {
