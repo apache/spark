@@ -43,6 +43,9 @@ from pyspark.sql.functions import (
     csc,
     cot,
     make_date,
+    date_add,
+    date_sub,
+    add_months,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
@@ -287,8 +290,6 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 2)
 
     def test_date_add_function(self):
-        from pyspark.sql.functions import date_add, col
-
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
         # default number in Python gets converted to LongType column
@@ -300,8 +301,6 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 30))
 
     def test_date_sub_function(self):
-        from pyspark.sql.functions import date_sub, col
-
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
         # default number in Python gets converted to LongType column
@@ -313,8 +312,6 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertEqual(row_via_scalar_addition[0], datetime.date(2021, 12, 24))
 
     def test_add_months_function(self):
-        from pyspark.sql.functions import add_months, col
-
         dt = datetime.date(2021, 12, 27)
         df = self.spark.createDataFrame([Row(date=dt, add=2)])
         # default number in Python gets converted to LongType column
