@@ -542,7 +542,7 @@ object QueryCompilationErrors {
 
   def cannotDropNonemptyDatabaseError(db: String, details: String): Throwable = {
     new AnalysisException(s"Cannot drop a non-empty database: $db. " +
-      "Use CASCADE option to drop a non-empty database.")
+      s"One or more $details exist. Use CASCADE option to drop a non-empty database.")
   }
 
   def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
