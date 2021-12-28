@@ -56,6 +56,13 @@ class RecordReaderIterator[T](
     rowReader.getCurrentValue
   }
 
+  override def map[B](f: (T) => B): Iterator[B] with Closeable =
+    new Iterator[B] with Closeable {
+      override def hasNext: Boolean = RecordReaderIterator.this.hasNext
+      override def next(): B = f(RecordReaderIterator.this.next())
+      override def close(): Unit = RecordReaderIterator.this.close()
+    }
+
   override def close(): Unit = {
     if (rowReader != null) {
       try {

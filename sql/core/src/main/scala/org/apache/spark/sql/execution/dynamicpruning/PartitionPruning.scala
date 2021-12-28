@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
@@ -48,13 +49,13 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
    *
-   * This methods tries to find either a v1 partitioned scan for a given partition column or
-   * a v2 scan that support runtime filtering on a given attribute.
+   * This methods tries to find either a v1 or Hive serde partitioned scan for a given
+   * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
@@ -70,6 +71,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
               None
             }
           case _ => None
+        }
+      case (resExp, l: HiveTableRelation) =>
+        if (resExp.references.subsetOf(AttributeSet(l.partitionCols))) {
+          return Some(l)
+        } else {
+          None
         }
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
@@ -97,12 +104,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      partScan: LogicalPlan,
-      canBuildBroadcast: Boolean): LogicalPlan = {
+      partScan: LogicalPlan): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
-    lazy val hasBenefit =
-      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
+    lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -120,8 +125,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Given an estimated filtering ratio(and extra filter ratio if filtering side can't
-   * build broadcast by join type) we assume the partition pruning has benefit if
+   * Given an estimated filtering ratio we assume the partition pruning has benefit if
    * the size in bytes of the partitioned plan after filtering is greater than the size
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
    * using column statistics if they are available, otherwise we use the config value of
@@ -131,8 +135,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       partExpr: Expression,
       partPlan: LogicalPlan,
       otherExpr: Expression,
-      otherPlan: LogicalPlan,
-      canBuildBroadcast: Boolean): Boolean = {
+      otherPlan: LogicalPlan): Boolean = {
 
     // get the distinct counts of an attribute for a given table
     def distinctCounts(attr: Attribute, plan: LogicalPlan): Option[BigInt] = {
@@ -164,17 +167,31 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     }
 
     val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
-    // the pruning overhead is the total size in bytes of all scan relations
-    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
-    if (canBuildBroadcast) {
-      estimatePruningSideSize > overhead
-    } else {
-      // We can't reuse the broadcast because the join type doesn't support broadcast,
-      // and doing DPP means running an extra query that may have significant overhead.
-      // We need to make sure the pruning side is very big so that DPP is still worthy.
-      canBroadcastBySize(otherPlan, conf) &&
-        estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
-    }
+    val overhead = calculatePlanOverhead(otherPlan)
+    estimatePruningSideSize > overhead
+  }
+
+  /**
+   * Calculates a heuristic overhead of a logical plan. Normally it returns the total
+   * size in bytes of all scan relations. We don't count in-memory relation which uses
+   * only memory.
+   */
+  private def calculatePlanOverhead(plan: LogicalPlan): Float = {
+    val (cached, notCached) = plan.collectLeaves().partition(p => p match {
+      case _: InMemoryRelation => true
+      case _ => false
+    })
+    val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
+    val cachedOverhead = cached.map {
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
+          !m.cacheBuilder.storageLevel.useMemory =>
+        m.stats.sizeInBytes.toFloat
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
+        m.stats.sizeInBytes.toFloat * 0.2
+      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
+        0.0
+    }.sum.toFloat
+    scanOverhead + cachedOverhead
   }
 
   /**
@@ -233,7 +250,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
         // extract the left and right keys of the join condition
         val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _) => (lkeys, rkeys)
+          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _, _) => (lkeys, rkeys)
           case _ => (Nil, Nil)
         }
 
@@ -260,14 +277,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get,
-                canBuildBroadcastRight(joinType))
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get)
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get,
-                  canBuildBroadcastLeft(joinType))
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get)
               }
             }
           case _ =>

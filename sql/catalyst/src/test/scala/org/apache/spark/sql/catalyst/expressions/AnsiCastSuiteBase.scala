@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
 import java.time.DateTimeException
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -132,20 +136,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
     checkExceptionInExpression[ArithmeticException](
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
-  }
-
-  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
-    import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampType)
-    var errorMsg =
-      "you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead"
-    verifyCastFailure(cast(Literal(0L), TimestampType), Some(errorMsg))
-
-    val timestampLiteral = Literal(1L, TimestampType)
-    errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
-    numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampLiteral, numericType), Some(errorMsg))
-    }
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
@@ -263,6 +253,47 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("ANSI mode: cast string to boolean with parse error") {
     checkCastToBooleanError(Literal("abc"), BooleanType, null)
     checkCastToBooleanError(Literal(""), BooleanType, null)
+  }
+
+  protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
+    checkExceptionInExpression[DateTimeException](
+      cast(l, to), s"Cannot cast $l to $to")
+  }
+
+  test("cast from timestamp II") {
+    checkCastToTimestampError(Literal(Double.NaN), TimestampType)
+    checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
+    checkCastToTimestampError(Literal(Float.NaN), TimestampType)
+    checkCastToTimestampError(Literal(1.0f / 0.0f), TimestampType)
+    Seq(Long.MinValue.toDouble, Long.MaxValue.toDouble, Long.MinValue.toFloat,
+      Long.MaxValue.toFloat).foreach { v =>
+      checkExceptionInExpression[SparkArithmeticException](
+        cast(Literal(v), TimestampType), "overflow")
+    }
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z II") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+        checkExceptionInExpression[SparkArithmeticException](
+          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
+      }
+    }
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+        checkExceptionInExpression[SparkArithmeticException](
+          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
+      }
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
   }
 
   test("cast from array II") {

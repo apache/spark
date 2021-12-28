@@ -1,3 +1,22 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
 name: Run benchmarks
 
 on:
@@ -8,7 +27,7 @@ on:
         required: true
         default: '*'
       jdk:
-        description: 'JDK version: 8 or 11'
+        description: 'JDK version: 8, 11 or 17'
         required: true
         default: '8'
       failfast:
@@ -82,8 +101,8 @@ jobs:
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
         # Make less noisy
-        cp conf/log4j.properties.template conf/log4j.properties
-        sed -i 's/log4j.rootCategory=INFO, console/log4j.rootCategory=WARN, console/g' conf/log4j.properties
+        cp conf/log4j2.properties.template conf/log4j2.properties
+        sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
         bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \

@@ -82,7 +82,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         pidx.categories = ["z", "y", "x"]
         psidx.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.5"):
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pidx, psidx)
             self.assert_eq(pdf, psdf)
         else:
@@ -118,7 +118,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pidx.remove_categories(None), psidx.remove_categories(None))
         self.assert_eq(pidx.remove_categories([None]), psidx.remove_categories([None]))
 
-        self.assertRaises(ValueError, lambda: pidx.remove_categories(4, inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.remove_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
@@ -145,7 +145,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             psidx.reorder_categories([3, 2, 1], ordered=True),
         )
 
-        self.assertRaises(ValueError, lambda: pidx.reorder_categories([1, 2, 3], inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 3], inplace=True))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
@@ -311,6 +311,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             TypeError,
             lambda: psidx.rename_categories("x"),
         )
+        self.assertRaises(
+            ValueError,
+            lambda: psidx.rename_categories({"b": "B", "c": "C"}, inplace=True),
+        )
 
     def test_set_categories(self):
         pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
@@ -360,6 +364,74 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             "cannot use inplace with CategoricalIndex",
             lambda: psidx.set_categories(["a", "c", "b", "o"], inplace=True),
         )
+
+    def test_map(self):
+        pidxs = [pd.CategoricalIndex([1, 2, 3]), pd.CategoricalIndex([1, 2, 3], ordered=True)]
+        psidxs = [ps.from_pandas(pidx) for pidx in pidxs]
+
+        for pidx, psidx in zip(pidxs, psidxs):
+
+            # Apply dict
+            self.assert_eq(
+                pidx.map({1: "one", 2: "two", 3: "three"}),
+                psidx.map({1: "one", 2: "two", 3: "three"}),
+            )
+            self.assert_eq(
+                pidx.map({1: "one", 2: "two", 3: "one"}),
+                psidx.map({1: "one", 2: "two", 3: "one"}),
+            )
+            self.assert_eq(
+                pidx.map({1: "one", 2: "two"}),
+                psidx.map({1: "one", 2: "two"}),
+            )
+            self.assert_eq(
+                pidx.map({1: "one", 2: "two"}),
+                psidx.map({1: "one", 2: "two"}),
+            )
+            self.assert_eq(
+                pidx.map({1: 10, 2: 20}),
+                psidx.map({1: 10, 2: 20}),
+            )
+
+            # Apply lambda
+            self.assert_eq(
+                pidx.map(lambda id: id + 1),
+                psidx.map(lambda id: id + 1),
+            )
+            self.assert_eq(
+                pidx.map(lambda id: id + 1.1),
+                psidx.map(lambda id: id + 1.1),
+            )
+            self.assert_eq(
+                pidx.map(lambda id: "{id} + 1".format(id=id)),
+                psidx.map(lambda id: "{id} + 1".format(id=id)),
+            )
+
+            # Apply series
+            pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+            self.assert_eq(
+                pidx.map(pser),
+                psidx.map(pser),
+            )
+            pser = pd.Series(["one", "two", "three"])
+            self.assert_eq(
+                pidx.map(pser),
+                psidx.map(pser),
+            )
+            self.assert_eq(
+                pidx.map(pser),
+                psidx.map(pser),
+            )
+            pser = pd.Series([1, 2, 3])
+            self.assert_eq(
+                pidx.map(pser),
+                psidx.map(pser),
+            )
+
+            self.assertRaises(
+                TypeError,
+                lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
+            )
 
 
 if __name__ == "__main__":

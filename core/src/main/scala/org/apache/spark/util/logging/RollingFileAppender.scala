@@ -25,7 +25,6 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
-import org.apache.spark.network.util.JavaUtils
 
 /**
  * Continuously appends data from input stream into the given file, and rolls
@@ -95,8 +94,8 @@ private[spark] class RollingFileAppender(
         gzOutputStream.close()
         activeFile.delete()
       } finally {
-        JavaUtils.closeQuietly(inputStream)
-        JavaUtils.closeQuietly(gzOutputStream)
+        IOUtils.closeQuietly(inputStream)
+        IOUtils.closeQuietly(gzOutputStream)
       }
     } else {
       Files.move(activeFile, rolloverFile)

@@ -23,7 +23,7 @@ import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverSt
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.{Date, Locale}
 
-import com.github.benmanes.caffeine.cache.Caffeine
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -194,7 +194,7 @@ trait DateTimeFormatterHelper {
 }
 
 private object DateTimeFormatterHelper {
-  val cache = Caffeine.newBuilder()
+  val cache = CacheBuilder.newBuilder()
     .maximumSize(128)
     .build[(String, Locale, Boolean), DateTimeFormatter]()
 
@@ -279,7 +279,11 @@ private object DateTimeFormatterHelper {
   // localized, for the default Locale.US, it uses Sunday as the first day of week, while in Spark
   // 2.4, the SimpleDateFormat uses Monday as the first day of week.
   final val weekBasedLetters = Set('Y', 'W', 'w', 'u', 'e', 'c')
-  final val unsupportedLetters = Set('A', 'n', 'N', 'p')
+  // SPARK-36970: `select date_format('2018-11-17 13:33:33.333', 'B')` failed with Java 8,
+  // but use Java 17 will return `in the afternoon` because 'B' is used to represent
+  // `Pattern letters to output a day period` in Java 17. So there manual disabled `B` for
+  // compatibility with Java 8 behavior.
+  final val unsupportedLetters = Set('A', 'B', 'n', 'N', 'p')
   // The quarter fields will also be parsed strangely, e.g. when the pattern contains `yMd` and can
   // be directly resolved then the `q` do check for whether the month is valid, but if the date
   // fields is incomplete, e.g. `yM`, the checking will be bypassed.

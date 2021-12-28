@@ -311,6 +311,10 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
   }
 
+  test("SPARK-36644: Push down boolean column filter") {
+    testTranslateFilter('col.boolean, Some(sources.EqualTo("col", true)))
+  }
+
   /**
    * Translate the given Catalyst [[Expression]] into data source [[sources.Filter]]
    * then verify against the given [[sources.Filter]].

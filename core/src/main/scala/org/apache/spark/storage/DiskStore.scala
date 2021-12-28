@@ -59,7 +59,14 @@ private[spark] class DiskStore(
    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
     if (contains(blockId)) {
-      throw new IllegalStateException(s"Block $blockId is already present in the disk store")
+      logWarning(s"Block $blockId is already present in the disk store")
+      try {
+        diskManager.getFile(blockId).delete()
+      } catch {
+        case e: Exception =>
+          throw new IllegalStateException(
+            s"Block $blockId is already present in the disk store and could not delete it $e")
+      }
     }
     logDebug(s"Attempting to put block $blockId")
     val startTimeNs = System.nanoTime()

@@ -1435,6 +1435,7 @@ test_that("column functions", {
     desc_nulls_first(c1) + desc_nulls_last(c1)
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
+  c31 <- sec(c1) + csc(c1) + cot(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1987,6 +1988,17 @@ test_that("string operators", {
     collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
     ""
   )
+
+  l6 <- list(list("cat"), list("\ud83d\udc08"))
+  df6 <- createDataFrame(l6)
+  expect_equal(
+    collect(select(df6, octet_length(df6$"_1")))[, 1],
+    c(3, 4)
+  )
+  expect_equal(
+    collect(select(df6, bit_length(df6$"_1")))[, 1],
+    c(24, 32)
+  )
 })
 
 test_that("date functions on a DataFrame", {
@@ -2036,6 +2048,20 @@ test_that("date functions on a DataFrame", {
   result32 <- collect(select(df3, from_unixtime(df3$a, "yyyy")))
   expect_equal(grep("\\d{4}", result32[, 1]), c(1, 2))
   Sys.setenv(TZ = .originalTimeZone)
+})
+
+test_that("SPARK-37108: expose make_date expression in R", {
+  df <- createDataFrame(
+    list(list(2021, 10, 22), list(2021, 13, 1),
+         list(2021, 2, 29), list(2020, 2, 29)),
+    list("year", "month", "day")
+  )
+  expect <- createDataFrame(
+    list(list(as.Date("2021-10-22")), NA, NA, list(as.Date("2020-02-29"))),
+    list("make_date(year, month, day)")
+  )
+  actual <- select(df, make_date(df$year, df$month, df$day))
+  expect_equal(collect(expect), collect(actual))
 })
 
 test_that("greatest() and least() on a DataFrame", {
@@ -2118,6 +2144,8 @@ test_that("higher order functions", {
       expr("transform(xs, (x, i) -> CASE WHEN ((i % 2.0) = 0.0) THEN x ELSE (- x) END)"),
     array_exists("vs", function(v) rlike(v, "FAILED")) ==
       expr("exists(vs, v -> (v RLIKE 'FAILED'))"),
+    array_exists("vs", function(v) ilike(v, "failed")) ==
+      expr("exists(vs, v -> (v ILIKE 'failed'))"),
     array_forall("xs", function(x) x > 0) ==
       expr("forall(xs, x -> x > 0)"),
     array_filter("xs", function(x, i) x > 0 | i %% 2 == 0) ==
@@ -2276,6 +2304,22 @@ test_that("group by, agg functions", {
 
   unlink(jsonPath2)
   unlink(jsonPath3)
+})
+
+test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
+  df <- createDataFrame(
+    list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
+         list("dotNET", 2013, 48000), list("Java", 2013, 30000))
+  )
+  gd <- groupBy(df, df$"_1")
+
+  actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
+  expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
+  expect_equal(collect(actual1), collect(expect1))
+
+  actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
+  expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
+  expect_equal(collect(actual2), collect(expect2))
 })
 
 test_that("pivot GroupedData column", {

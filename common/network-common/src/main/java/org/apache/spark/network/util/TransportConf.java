@@ -383,7 +383,7 @@ public class TransportConf {
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
-    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
+    return conf.get("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager");
   }
 
@@ -426,12 +426,5 @@ public class TransportConf {
    */
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
-  }
-
-  /**
-   * The application attemptID assigned from Hadoop YARN.
-   */
-  public int appAttemptId() {
-    return conf.getInt("spark.app.attempt.id", -1);
   }
 }

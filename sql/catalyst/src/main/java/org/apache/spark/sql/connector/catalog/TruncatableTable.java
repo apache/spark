@@ -21,6 +21,8 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * Represents a table which can be atomically truncated.
+ *
+ * @since 3.2.0
  */
 @Evolving
 public interface TruncatableTable extends Table {

@@ -18,12 +18,11 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-
-import com.github.benmanes.caffeine.cache.Caffeine
+import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -48,7 +47,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
   // bounds.
   private lazy val removedExecutorsCache =
-    Caffeine.newBuilder()
+    CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
 

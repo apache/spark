@@ -49,6 +49,16 @@ SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2);
 -- expect error: cannot resolve `t2.c1`
 SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b = t2.c1;
 
+-- SPARK-37716: lateral join with non-deterministic expressions.
+-- non-deterministic lateral subquery with single row relation.
+SELECT x FROM VALUES (0) t(x) JOIN LATERAL (SELECT x + rand(0) AS y);
+SELECT x FROM (SELECT SUM(c1) AS x FROM t1), LATERAL (SELECT x + rand(0) AS y);
+-- expect error: lateral subquery must be deterministic when joining with a multi-row relation.
+SELECT * FROM t1, LATERAL (SELECT c1 + c2 + rand(0) AS c3);
+SELECT * FROM t1, LATERAL (SELECT rand(0) FROM t2);
+-- expect error: lateral join cannot have non-deterministic join condition.
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2) s ON t1.c1 + rand(0) = s.c1;
+
 -- multiple lateral joins
 SELECT * FROM t1,
 LATERAL (SELECT c1 + c2 AS a),

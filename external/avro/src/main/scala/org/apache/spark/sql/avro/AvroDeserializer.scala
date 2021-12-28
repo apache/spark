@@ -62,10 +62,10 @@ private[sql] class AvroDeserializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
   private val converter: Any => Option[Any] = try {
@@ -329,6 +329,12 @@ private[sql] class AvroDeserializer(
         } else {
           (updater, ordinal, _) => updater.setNullAt(ordinal)
         }
+
+      case (INT, _: YearMonthIntervalType) => (updater, ordinal, value) =>
+        updater.setInt(ordinal, value.asInstanceOf[Int])
+
+      case (LONG, _: DayTimeIntervalType) => (updater, ordinal, value) =>
+        updater.setLong(ordinal, value.asInstanceOf[Long])
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }

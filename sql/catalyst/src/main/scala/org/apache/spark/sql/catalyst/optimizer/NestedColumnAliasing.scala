@@ -21,6 +21,7 @@ import scala.collection
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -258,6 +259,13 @@ object NestedColumnAliasing {
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
       .flatMap { case (attr: Attribute, nestedFields: collection.Seq[ExtractValue]) =>
+
+        // Check if `ExtractValue` expressions contain any aggregate functions in their tree. Those
+        // that do should not have an alias generated as it can lead to pushing the aggregate down
+        // into a projection.
+        def containsAggregateFunction(ev: ExtractValue): Boolean =
+          ev.find(_.isInstanceOf[AggregateFunction]).isDefined
+
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
         // Because `a.b` requires all of the inner fields of `b`, we cannot prune `a.b.c`.
@@ -268,7 +276,10 @@ object NestedColumnAliasing {
             val child = e.children.head
             nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
           case _ => true
-        }.distinct
+        }
+          .distinct
+          // Discard [[ExtractValue]]s that contain aggregate functions.
+          .filterNot(containsAggregateFunction)
 
         // If all nested fields of `attr` are used, we don't need to introduce new aliases.
         // By default, the [[ColumnPruning]] rule uses `attr` already.
@@ -276,7 +287,7 @@ object NestedColumnAliasing {
         // nested field once.
         val numUsedNestedFields = dedupNestedFields.map(_.canonicalized).distinct
           .map { nestedField => totalFieldNum(nestedField.dataType) }.sum
-        if (numUsedNestedFields < totalFieldNum(attr.dataType)) {
+        if (dedupNestedFields.nonEmpty && numUsedNestedFields < totalFieldNum(attr.dataType)) {
           Some((attr, dedupNestedFields.toSeq))
         } else {
           None
@@ -354,12 +365,7 @@ object GeneratorNestedColumnAliasing {
             //       df.select(explode($"items.a").as("item.a"))
             val rewrittenG = newG.transformExpressions {
               case e: ExplodeBase =>
-                val extractor = nestedFieldOnGenerator.transformUp {
-                  case _: Attribute =>
-                    e.child
-                  case g: GetStructField =>
-                    ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
-                }
+                val extractor = replaceGenerator(e, nestedFieldOnGenerator)
                 e.withNewChildren(Seq(extractor))
             }
 
@@ -401,6 +407,25 @@ object GeneratorNestedColumnAliasing {
 
     case _ =>
       None
+  }
+
+  /**
+   * Replace the reference attribute of extractor expression with generator input.
+   */
+  private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
+    expr match {
+      case a: Attribute if expr.references.contains(a) =>
+        generator.child
+      case g: GetStructField =>
+        // We cannot simply do a transformUp instead because if we replace the attribute
+        // `extractFieldName` could cause `ClassCastException` error. We need to get the
+        // field name before replacing down the attribute/other extractor.
+        val fieldName = g.extractFieldName
+        val newChild = replaceGenerator(generator, g.child)
+        ExtractValue(newChild, Literal(fieldName), SQLConf.get.resolver)
+      case other =>
+        other.mapChildren(replaceGenerator(generator, _))
+    }
   }
 
   /**

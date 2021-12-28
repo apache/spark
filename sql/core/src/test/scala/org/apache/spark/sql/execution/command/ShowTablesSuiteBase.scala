@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -46,13 +45,6 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
       runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(Row("ns", "table", false)))
     }
-  }
-
-  test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchNamespaceException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
   }
 
   test("show tables with a pattern") {
@@ -119,17 +111,19 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNamespaceAndTable("ns", "table") { t =>
-      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
+    withCurrentCatalogAndNamespace {
+      withNamespaceAndTable("ns", "table") { t =>
+        sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
-      sql(s"USE $catalog")
-      // No table is matched since the current namespace is not ["ns"]
-      assert(defaultNamespace != Seq("ns"))
-      runShowTablesSql("SHOW TABLES", Seq())
+        sql(s"USE $catalog")
+        // No table is matched since the current namespace is not ["ns"]
+        assert(defaultNamespace != Seq("ns"))
+        runShowTablesSql("SHOW TABLES", Seq())
 
-      // Update the current namespace to match "ns.tbl".
-      sql(s"USE $catalog.ns")
-      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+        // Update the current namespace to match "ns.tbl".
+        sql(s"USE $catalog.ns")
+        runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+      }
     }
   }
 }

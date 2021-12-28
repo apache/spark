@@ -382,7 +382,9 @@ class FileBasedDataSourceSuite extends QueryTest
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
 
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+          SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
           // write path
           Seq("csv", "json", "parquet", "orc").foreach { format =>
             val msg = intercept[AnalysisException] {
@@ -695,9 +697,9 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "457") {
         withTempPath { workDir =>
-          // the file size is 486 bytes
+          // the file size is 504 bytes
           val workDirPath = workDir.getAbsolutePath
           val data1 = Seq(100, 200, 300, 400).toDF("count")
           data1.write.orc(workDirPath + "/data1")
@@ -727,6 +729,28 @@ class FileBasedDataSourceSuite extends QueryTest
             assert(smJoinExec.nonEmpty)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempDir { dir =>
+        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
+          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
+        val dfAll = spark.read.orc(dir.toString)
+        val dfK = dfAll.select("k")
+        val dfV1 = dfAll.select("v1")
+        val dfV2 = dfAll.select("v2")
+        val dfV1V2 = dfAll.select("v1", "v2")
+
+        def sizeInBytes(df: DataFrame): BigInt = df.queryExecution.optimizedPlan.stats.sizeInBytes
+
+        assert(sizeInBytes(dfAll) === BigInt(getLocalDirSize(dir)))
+        assert(sizeInBytes(dfK) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV1) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV2) === sizeInBytes(dfV1))
+        assert(sizeInBytes(dfV1V2) < sizeInBytes(dfAll))
       }
     }
   }

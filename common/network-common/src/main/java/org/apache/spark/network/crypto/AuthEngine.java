@@ -213,7 +213,7 @@ class AuthEngine implements Closeable {
         transcript,  // Passing this as the HKDF salt
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
-    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "RAW");
+    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "AES");
     return new TransportCipher(
         cryptoConf,
         conf.cipherTransformation(),

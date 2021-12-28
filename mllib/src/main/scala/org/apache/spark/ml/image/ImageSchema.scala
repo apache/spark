@@ -133,9 +133,12 @@ object ImageSchema {
     val img = try {
       ImageIO.read(new ByteArrayInputStream(bytes))
     } catch {
-      // Catch runtime exception because `ImageIO` may throw unexpected `RuntimeException`.
-      // But do not catch the declared `IOException` (regarded as FileSystem failure)
-      case _: RuntimeException => null
+      // Note that:
+      // - At this point, the files are already read from the files as bytes. Therefore,
+      //   no real I/O exceptions are expected.
+      // - `ImageIO.read` can throw `javax.imageio.IIOException` that is technically
+      //   a runtime exception but it inherits IOException.
+      case _: Throwable => null
     }
 
     if (img == null) {

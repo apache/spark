@@ -31,14 +31,14 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
  */
 abstract class DynamicPartitionPruningSuiteBase
     extends QueryTest
-    with SharedSparkSession
+    with SQLTestUtils
     with GivenWhenThen
     with AdaptiveSparkPlanHelper {
 
@@ -49,7 +49,7 @@ abstract class DynamicPartitionPruningSuiteBase
   protected def initState(): Unit = {}
   protected def runAnalyzeColumnCommands: Boolean = true
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
 
     initState()
@@ -107,6 +107,10 @@ abstract class DynamicPartitionPruningSuiteBase
       (6, 60)
     )
 
+    if (tableFormat == "hive") {
+      spark.sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    }
+
     spark.range(1000)
       .select($"id" as "product_id", ($"id" % 10) as "store_id", ($"id" + 1) as "code")
       .write
@@ -150,11 +154,12 @@ abstract class DynamicPartitionPruningSuiteBase
     if (runAnalyzeColumnCommands) {
       sql("ANALYZE TABLE fact_stats COMPUTE STATISTICS FOR COLUMNS store_id")
       sql("ANALYZE TABLE dim_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+      sql("ANALYZE TABLE dim_store COMPUTE STATISTICS FOR COLUMNS store_id")
       sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
     }
   }
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS fact_np")
       sql("DROP TABLE IF EXISTS fact_sk")
@@ -162,6 +167,7 @@ abstract class DynamicPartitionPruningSuiteBase
       sql("DROP TABLE IF EXISTS dim_store")
       sql("DROP TABLE IF EXISTS fact_stats")
       sql("DROP TABLE IF EXISTS dim_stats")
+      sql("DROP TABLE IF EXISTS code_stats")
     } finally {
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)
@@ -182,11 +188,11 @@ abstract class DynamicPartitionPruningSuiteBase
     val plan = df.queryExecution.executedPlan
     val dpExprs = collectDynamicPruningExpressions(plan)
     val hasSubquery = dpExprs.exists {
-      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
+      case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
       case _ => false
     }
     val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) => b
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
@@ -239,7 +245,7 @@ abstract class DynamicPartitionPruningSuiteBase
     df.collect()
 
     val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) =>
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) =>
         b.index
     }
     assert(buf.distinct.size == n)
@@ -248,7 +254,7 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
    */
-  private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
+  protected def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
     flatMap(plan) {
       case s: FileSourceScanExec => s.partitionFilters.collect {
         case d: DynamicPruningExpression => d.child
@@ -354,8 +360,7 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -467,31 +472,70 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
-        sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_sk f WHERE store_id < 5
-          """.stripMargin)
-          .write
-          .partitionBy("store_id")
-          .saveAsTable("fact_aux")
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.02") {
+        withTable("fact_aux") {
+          sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_sk f WHERE store_id < 5
+            """.stripMargin)
+            .write
+            .partitionBy("store_id")
+            .saveAsTable("fact_aux")
 
-        val df = sql(
-          """
-            |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
-            |FROM fact_aux f JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'US'
-          """.stripMargin)
+          val df = sql(
+            """
+              |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+              |FROM fact_aux f JOIN dim_store s
+              |ON f.store_id = s.store_id WHERE s.country = 'US'
+            """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+          checkPartitionPruningPredicate(df, false, false)
 
-        checkAnswer(df,
-          Row(1070, 2, 10, 4) ::
-          Row(1080, 3, 20, 4) ::
-          Row(1090, 3, 10, 4) ::
-          Row(1100, 3, 10, 4) :: Nil
-        )
+          checkAnswer(df,
+            Row(1070, 2, 10, 4) ::
+              Row(1080, 3, 20, 4) ::
+              Row(1090, 3, 10, 4) ::
+              Row(1100, 3, 10, 4) :: Nil
+          )
+        }
+      }
+
+      Given("no stats and selective predicate with the size of dim too large but cached")
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+        withTable("fact_aux") {
+          withTempView("cached_dim_store") {
+            sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_sk f WHERE store_id < 5
+              """.stripMargin)
+              .write
+              .partitionBy("store_id")
+              .saveAsTable("fact_aux")
+
+            spark.table("dim_store").cache()
+              .createOrReplaceTempView("cached_dim_store")
+
+            val df = sql(
+              """
+                |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
+                |FROM fact_aux f JOIN cached_dim_store s
+                |ON f.store_id = s.store_id WHERE s.country = 'US'
+              """.stripMargin)
+
+            checkPartitionPruningPredicate(df, true, false)
+
+            checkAnswer(df,
+              Row(1070, 2, 10, 4) ::
+                Row(1080, 3, 20, 4) ::
+                Row(1090, 3, 10, 4) ::
+                Row(1100, 3, 10, 4) :: Nil
+            )
+          }
+        }
       }
 
       Given("no stats and selective predicate with the size of dim small")
@@ -983,41 +1027,6 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("no partition pruning when the build side is a stream") {
-    withTable("fact") {
-      val input = MemoryStream[Int]
-      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
-      spark.range(100).select(
-        $"id",
-        ($"id" + 1).as("one"),
-        ($"id" + 2).as("two"),
-        ($"id" + 3).as("three"))
-        .write.partitionBy("one")
-        .format(tableFormat).mode("overwrite").saveAsTable("fact")
-      val table = sql("SELECT * from fact f")
-
-      // join a partitioned table with a stream
-      val joined = table.join(stream, Seq("one")).where("code > 40")
-      val query = joined.writeStream.format("memory").queryName("test").start()
-      input.addData(1, 10, 20, 40, 50)
-      try {
-        query.processAllAvailable()
-      } finally {
-        query.stop()
-      }
-      // search dynamic pruning predicates on the executed plan
-      val plan = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
-      val ret = plan.find {
-        case s: FileSourceScanExec => s.partitionFilters.exists {
-          case _: DynamicPruningExpression => true
-          case _ => false
-        }
-        case _ => false
-      }
-      assert(ret.isDefined == false)
-    }
-  }
-
   test("avoid reordering broadcast join keys to match input hash partitioning") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1413,38 +1422,6 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-32855: Filtering side can not broadcast by join type") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
-
-      val sqlStr =
-        """
-          |SELECT s.store_id,f. product_id FROM dim_store s
-          |LEFT JOIN fact_sk f
-          |ON f.store_id = s.store_id WHERE s.country = 'NL'
-          """.stripMargin
-
-      // DPP will only apply if disable reuseBroadcastOnly
-      Seq(true, false).foreach { reuseBroadcastOnly =>
-        withSQLConf(
-          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
-        }
-      }
-
-      // DPP will only apply if left side can broadcast by size
-      Seq(1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, threshold > 10L, false)
-        }
-      }
-    }
-  }
-
   test("SPARK-34637: DPP side broadcast query stage is created firstly") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       val df = sql(
@@ -1507,7 +1484,49 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 }
 
-abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningSuiteBase {
+abstract class DynamicPartitionPruningDataSourceSuiteBase
+    extends DynamicPartitionPruningSuiteBase
+    with SharedSparkSession {
+
+  import testImplicits._
+
+  test("no partition pruning when the build side is a stream") {
+    withTable("fact") {
+      val input = MemoryStream[Int]
+      val stream = input.toDF.select($"value" as "one", ($"value" * 3) as "code")
+      spark.range(100).select(
+        $"id",
+        ($"id" + 1).as("one"),
+        ($"id" + 2).as("two"),
+        ($"id" + 3).as("three"))
+        .write.partitionBy("one")
+        .format(tableFormat).mode("overwrite").saveAsTable("fact")
+      val table = sql("SELECT * from fact f")
+
+      // join a partitioned table with a stream
+      val joined = table.join(stream, Seq("one")).where("code > 40")
+      val query = joined.writeStream.format("memory").queryName("test").start()
+      input.addData(1, 10, 20, 40, 50)
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+      // search dynamic pruning predicates on the executed plan
+      val plan = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+      val ret = plan.find {
+        case s: FileSourceScanExec => s.partitionFilters.exists {
+          case _: DynamicPruningExpression => true
+          case _ => false
+        }
+        case _ => false
+      }
+      assert(ret.isDefined == false)
+    }
+  }
+}
+
+abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDataSourceSuiteBase {
 
   import testImplicits._
 
@@ -1601,7 +1620,7 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   with EnableAdaptiveExecutionSuite
 
-abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningSuiteBase {
+abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
   override protected def runAnalyzeColumnCommands: Boolean = false
 
   override protected def initState(): Unit = {

@@ -2999,4 +2999,64 @@ class HiveDDLSuite
       assert(spark.sparkContext.listJars().exists(_.contains(jarName)))
     }
   }
+
+  test("SPARK-36949: Disallow tables with ANSI intervals when the provider is Hive") {
+    val tbl = "tbl_with_ansi_intervals"
+    withTable(tbl) {
+      Seq(
+        s"""
+           |CREATE TABLE $tbl
+           |STORED AS ORC
+           |AS SELECT
+           |  INTERVAL '1-1' YEAR TO MONTH AS YM,
+           |  INTERVAL '1 02:03:04.123456' DAY TO SECOND AS DT
+           |""".stripMargin,
+        s"CREATE TABLE $tbl (dt INTERVAL HOUR TO MINUTE)"
+      ).foreach { sqlCmd =>
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(sqlCmd)
+        }.getMessage
+        assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
+      }
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with view definition change") {
+    withView("v") {
+      // Changing view definition should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      spark.sql("ALTER VIEW v AS SELECT 1 AS C, 1 AS D")
+      val df1 = spark.table("v")
+      assert(df1.schema.names.toSeq == Seq("C", "D"))
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with view name change") {
+    withView("v") {
+      // Renaming view should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      sql("ALTER VIEW v RENAME TO vRenamed")
+      val df1 = spark.table("vRenamed")
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with tbl properties change") {
+    withView("v") {
+      // Setting table properties should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      sql("ALTER VIEW v SET TBLPROPERTIES('testkey' = 'testval')")
+      val df1 = spark.table("v")
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
+    }
+  }
 }

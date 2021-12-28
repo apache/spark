@@ -29,12 +29,12 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -76,7 +76,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       `hive.metastore.warehouse.dir`.
    * @param useExternalHiveFile whether to load the hive-site.xml from `src/test/noclasspath` or
    *                            not, disabled by default
-   * @param metastore which path the embedded derby database for metastore locates. Use the the
+   * @param metastore which path the embedded derby database for metastore locates. Use the
    *                  global `metastorePath` by default
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
@@ -610,5 +610,32 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute,
       Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
       s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
+  }
+
+  test("SPARK-37471: spark-sql support nested bracketed comment ") {
+    runCliWithin(1.minute)(
+      """
+        |/* SELECT /*+ HINT() */ 4; */
+        |SELECT 1;
+        |""".stripMargin -> "SELECT 1"
+    )
+  }
+
+  test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    runCliWithin(2.minute)(
+      // Only unclosed comment.
+      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "mismatched input ';'",
+      // Unclosed nested bracketed comment.
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
+      // Unclosed comment with query.
+      "/* Here is a unclosed bracketed comment SELECT 1;"-> "Unclosed bracketed comment",
+      // Whole comment.
+      "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
+    )
+  }
+
+  test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
+    runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
+      "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
   }
 }

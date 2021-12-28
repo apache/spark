@@ -431,7 +431,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
         .getOrCreate()
         .sharedState
     }
-    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
   }
 
   test("SPARK-33944: no warning setting spark.sql.warehouse.dir using session options") {
@@ -444,7 +444,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
         .getOrCreate()
         .sharedState
     }
-    assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(!logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
   }
 
   Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
@@ -484,6 +484,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
           .getOrCreate()
       session.sql("SELECT 1").collect()
     }
-    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
   }
 }

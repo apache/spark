@@ -37,13 +37,13 @@ import org.apache.spark.internal.config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{Clock, Utils}
 
-private[spark] class ExecutorPodsAllocator(
+class ExecutorPodsAllocator(
     conf: SparkConf,
     secMgr: SecurityManager,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) extends Logging {
+    clock: Clock) extends AbstractPodsAllocator() with Logging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicInteger(0)
 
@@ -97,12 +97,15 @@ private[spark] class ExecutorPodsAllocator(
 
   private var lastSnapshot = ExecutorPodsSnapshot()
 
+  private var appId: String = _
+
   // Executors that have been deleted by this allocator but not yet detected as deleted in
   // a snapshot from the API server. This is used to deny registration from these executors
   // if they happen to come up before the deletion takes effect.
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+    appId = applicationId
     driverPod.foreach { pod =>
       // Wait until the driver pod is ready before starting executors, as the headless service won't
       // be resolvable by DNS until the driver pod is ready.
@@ -199,7 +202,7 @@ private[spark] class ExecutorPodsAllocator(
     var _deletedExecutorIds = deletedExecutorIds
     if (snapshots.nonEmpty) {
       val existingExecs = lastSnapshot.executorPods.keySet
-      _deletedExecutorIds = _deletedExecutorIds.filter(existingExecs.contains)
+      _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
     val notDeletedPods = lastSnapshot.executorPods.filterKeys(!_deletedExecutorIds.contains(_))
@@ -453,12 +456,22 @@ private[spark] class ExecutorPodsAllocator(
 
   private def isExecutorIdleTimedOut(state: ExecutorPodState, currentTime: Long): Boolean = {
     try {
-      val startTime = Instant.parse(state.pod.getStatus.getStartTime).toEpochMilli()
-      currentTime - startTime > executorIdleTimeout
+      val creationTime = Instant.parse(state.pod.getMetadata.getCreationTimestamp).toEpochMilli()
+      currentTime - creationTime > executorIdleTimeout
     } catch {
-      case _: Exception =>
-        logDebug(s"Cannot get startTime of pod ${state.pod}")
+      case e: Exception =>
+        logError(s"Cannot get the creationTimestamp of the pod: ${state.pod}", e)
         true
+    }
+  }
+
+  override def stop(applicationId: String): Unit = {
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .pods()
+        .withLabel(SPARK_APP_ID_LABEL, applicationId)
+        .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .delete()
     }
   }
 }
@@ -471,5 +484,4 @@ private[spark] object ExecutorPodsAllocator {
     val r = slots % consumers.size
     consumers.take(r).map((_, d + 1)) ++ consumers.takeRight(consumers.size - r).map((_, d))
   }
-
 }

@@ -24,24 +24,29 @@ import sys
 from pyspark.accumulators import AccumulatorParam
 
 
-class ProfilerCollector(object):
+class ProfilerCollector:
     """
     This class keeps track of different profilers on a per
-    stage basis. Also this is used to create new profilers for
-    the different stages.
+    stage/UDF basis. Also this is used to create new profilers for
+    the different stages/UDFs.
     """
 
-    def __init__(self, profiler_cls, dump_path=None):
+    def __init__(self, profiler_cls, udf_profiler_cls, dump_path=None):
         self.profiler_cls = profiler_cls
+        self.udf_profiler_cls = udf_profiler_cls
         self.profile_dump_path = dump_path
         self.profilers = []
 
     def new_profiler(self, ctx):
-        """ Create a new profiler using class `profiler_cls` """
+        """Create a new profiler using class `profiler_cls`"""
         return self.profiler_cls(ctx)
 
+    def new_udf_profiler(self, ctx):
+        """Create a new profiler using class `udf_profiler_cls`"""
+        return self.udf_profiler_cls(ctx)
+
     def add_profiler(self, id, profiler):
-        """ Add a profiler for RDD `id` """
+        """Add a profiler for RDD/UDF `id`"""
         if not self.profilers:
             if self.profile_dump_path:
                 atexit.register(self.dump_profiles, self.profile_dump_path)
@@ -51,13 +56,13 @@ class ProfilerCollector(object):
         self.profilers.append([id, profiler, False])
 
     def dump_profiles(self, path):
-        """ Dump the profile stats into directory `path` """
+        """Dump the profile stats into directory `path`"""
         for id, profiler, _ in self.profilers:
             profiler.dump(id, path)
         self.profilers = []
 
     def show_profiles(self):
-        """ Print the profile stats to stdout """
+        """Print the profile stats to stdout"""
         for i, (id, profiler, showed) in enumerate(self.profilers):
             if not showed and profiler:
                 profiler.show(id)
@@ -65,7 +70,7 @@ class ProfilerCollector(object):
                 self.profilers[i][2] = True
 
 
-class Profiler(object):
+class Profiler:
     """
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
@@ -106,16 +111,16 @@ class Profiler(object):
     def __init__(self, ctx):
         pass
 
-    def profile(self, func):
-        """ Do profiling on the function `func`"""
+    def profile(self, func, *args, **kwargs):
+        """Do profiling on the function `func`"""
         raise NotImplementedError
 
     def stats(self):
-        """ Return the collected profiling stats (pstats.Stats)"""
+        """Return the collected profiling stats (pstats.Stats)"""
         raise NotImplementedError
 
     def show(self, id):
-        """ Print the profile stats to stdout, id is the RDD id """
+        """Print the profile stats to stdout, id is the RDD id"""
         stats = self.stats()
         if stats:
             print("=" * 60)
@@ -124,7 +129,7 @@ class Profiler(object):
             stats.sort_stats("time", "cumulative").print_stats()
 
     def dump(self, id, path):
-        """ Dump the profile into path, id is the RDD id """
+        """Dump the profile into path, id is the RDD id"""
         if not os.path.exists(path):
             os.makedirs(path)
         stats = self.stats()
@@ -153,16 +158,17 @@ class BasicProfiler(Profiler):
     BasicProfiler is the default profiler, which is implemented based on
     cProfile and Accumulator
     """
+
     def __init__(self, ctx):
         Profiler.__init__(self, ctx)
         # Creates a new accumulator for combining the profiles of different
         # partitions of a stage
         self._accumulator = ctx.accumulator(None, PStatsParam)
 
-    def profile(self, func):
-        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
+    def profile(self, func, *args, **kwargs):
+        """Runs and profiles the method to_profile passed in. A profile object is returned."""
         pr = cProfile.Profile()
-        pr.runcall(func)
+        ret = pr.runcall(func, *args, **kwargs)
         st = pstats.Stats(pr)
         st.stream = None  # make it picklable
         st.strip_dirs()
@@ -170,12 +176,39 @@ class BasicProfiler(Profiler):
         # Adds a new profile to the existing accumulated value
         self._accumulator.add(st)
 
+        return ret
+
     def stats(self):
         return self._accumulator.value
 
 
+class UDFBasicProfiler(BasicProfiler):
+    """
+    UDFBasicProfiler is the profiler for Python/Pandas UDFs.
+    """
+
+    def show(self, id):
+        """Print the profile stats to stdout, id is the PythonUDF id"""
+        stats = self.stats()
+        if stats:
+            print("=" * 60)
+            print("Profile of UDF<id=%d>" % id)
+            print("=" * 60)
+            stats.sort_stats("time", "cumulative").print_stats()
+
+    def dump(self, id, path):
+        """Dump the profile into path, id is the PythonUDF id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()
+        if stats:
+            p = os.path.join(path, "udf_%d.pstats" % id)
+            stats.dump_stats(p)
+
+
 if __name__ == "__main__":
     import doctest
+
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
         sys.exit(-1)

@@ -546,6 +546,17 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
+  // Since SPARK-36419
+  @Test
+  public void treeAggregateWithFinalAggregateOnExecutor() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(-5, -4, -3, -2, -1, 1, 2, 3, 4), 10);
+    Function2<Integer, Integer, Integer> add = (a, b) -> a + b;
+    for (int depth = 1; depth <= 10; depth++) {
+      int sum = rdd.treeAggregate(0, add, add, depth, true);
+      assertEquals(-5, sum);
+    }
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void aggregateByKey() {

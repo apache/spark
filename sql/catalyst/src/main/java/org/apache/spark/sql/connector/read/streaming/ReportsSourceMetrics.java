@@ -25,6 +25,8 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A mix-in interface for {@link SparkDataStream} streaming sources to signal that they can report
  * metrics.
+ *
+ * @since 3.2.0
  */
 @Evolving
 public interface ReportsSourceMetrics extends SparkDataStream {

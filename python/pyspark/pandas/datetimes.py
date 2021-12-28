@@ -20,21 +20,21 @@ Date/Time related functions on pandas-on-Spark Series
 """
 from typing import Any, Optional, Union, TYPE_CHECKING, no_type_check
 
-import numpy as np  # noqa: F401 (SPARK-34943)
+import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.tseries.offsets import DateOffset
 import pyspark.sql.functions as F
-from pyspark.sql.types import DateType, TimestampType, LongType
+from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
-class DatetimeMethods(object):
+class DatetimeMethods:
     """Date/Time methods for pandas-on-Spark Series"""
 
     def __init__(self, series: "ps.Series"):
-        if not isinstance(series.spark.data_type, (DateType, TimestampType)):
+        if not isinstance(series.spark.data_type, (DateType, TimestampType, TimestampNTZType)):
             raise ValueError(
                 "Cannot call DatetimeMethods on type {}".format(series.spark.data_type)
             )

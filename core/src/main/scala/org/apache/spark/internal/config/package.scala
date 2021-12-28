@@ -2098,10 +2098,10 @@ package object config {
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +
-        "conjunction with the server side flag spark.shuffle.server.mergedShuffleFileManagerImpl " +
-        "which needs to be set with the appropriate " +
-        "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based " +
-        "shuffle to be enabled")
+        "conjunction with the server side flag" +
+        " spark.shuffle.push.server.mergedShuffleFileManagerImpl which needs to be set with" +
+        " the appropriate org.apache.spark.network.shuffle.MergedShuffleFileManager" +
+        " implementation for push-based shuffle to be enabled")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
@@ -2258,4 +2258,13 @@ package object config {
       .version("3.2.0")
       .stringConf
       .createOptional
+
+  private[spark] val EXECUTOR_STATE_SYNC_MAX_ATTEMPTS =
+    ConfigBuilder("spark.worker.executorStateSync.maxAttempts")
+      .internal()
+      .doc("The max attempts the worker will try to sync the ExecutorState to the Master, if " +
+        "the failed attempts reach the max attempts limit, the worker will give up and exit.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(5)
 }

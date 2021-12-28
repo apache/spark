@@ -143,7 +143,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
     val tp1 = new TopicPartition(topic, 0)
     val tp2 = new TopicPartition(topic, 1)
-    val reader = createKafkaReader(topic, minPartitions = Some(3))
+    val reader = createKafkaReader(topic, minPartitions = Some(4))
 
     val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
     val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
@@ -163,7 +163,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
     val tp1 = new TopicPartition(topic, 0)
     val tp2 = new TopicPartition(topic, 1)
-    val reader = createKafkaReader(topic, minPartitions = Some(3))
+    val reader = createKafkaReader(topic, minPartitions = Some(4))
 
     val fromPartitionOffsets = Map(tp1 -> 0L, tp2 -> 0L)
     val untilPartitionOffsets = Map(tp1 -> 100L, tp2 -> 3L)

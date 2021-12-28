@@ -24,6 +24,8 @@
 # $SPARK_HOME/R/pkg/html
 # The vignettes can be found in
 # $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
+# pkgdown website can be found in
+# $SPARK_HOME/R/pkg/docs
 
 set -o pipefail
 set -e
@@ -50,6 +52,18 @@ mkdir -p pkg/html
 pushd pkg/html
 
 "$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); knitr::knit_rd("SparkR", links = tools::findHTMLlinks(file.path(libDir, "SparkR")))'
+
+
+# Determine Spark(R) version
+SPARK_VERSION=$(grep -oP "(?<=Version:\ ).*" ../DESCRIPTION)
+
+# Update url
+sed "s/{SPARK_VERSION}/$SPARK_VERSION/" ../pkgdown/_pkgdown_template.yml > ../_pkgdown.yml
+
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); pkgdown::build_site("..")'
+
+# Clean temporary config
+rm ../_pkgdown.yml
 
 popd
 

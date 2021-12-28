@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFieldName, UnresolvedFieldPosition, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -717,12 +717,12 @@ class DDLParserSuite extends AnalysisTest {
     val parsedPlan = parsePlan(sqlStatement)
     val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
     parsedPlan match {
-      case create: CreateTableStatement if newTableToken == "CREATE" =>
-        assert(create.ifNotExists == expectedIfNotExists)
-      case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
-        assert(ctas.ifNotExists == expectedIfNotExists)
-      case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
-      case replace: ReplaceTableAsSelectStatement if newTableToken == "REPLACE" =>
+      case create: CreateTable if newTableToken == "CREATE" =>
+        assert(create.ignoreIfExists == expectedIfNotExists)
+      case ctas: CreateTableAsSelect if newTableToken == "CREATE" =>
+        assert(ctas.ignoreIfExists == expectedIfNotExists)
+      case replace: ReplaceTable if newTableToken == "REPLACE" =>
+      case replace: ReplaceTableAsSelect if newTableToken == "REPLACE" =>
       case other =>
         fail("First token in statement does not match the expected parsed plan; CREATE TABLE" +
           " should create a CreateTableStatement, and REPLACE TABLE should create a" +
@@ -1191,15 +1191,6 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
     assert(caught.getMessage.contains(
         "DESC TABLE COLUMN for a specific partition is not supported"))
-  }
-
-  test("describe database") {
-    val sql1 = "DESCRIBE DATABASE EXTENDED a.b"
-    val sql2 = "DESCRIBE DATABASE a.b"
-    comparePlans(parsePlan(sql1),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = true))
-    comparePlans(parsePlan(sql2),
-      DescribeNamespace(UnresolvedNamespace(Seq("a", "b")), extended = false))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
@@ -1696,8 +1687,8 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
-    val expected = CreateNamespaceStatement(
-      Seq("a", "b", "c"),
+    val expected = CreateNamespace(
+      UnresolvedDBObjectName(Seq("a", "b", "c"), true),
       ifNotExists = true,
       Map(
         "a" -> "a",
@@ -1769,90 +1760,14 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     comparePlans(
       parsePlan(sql),
-      CreateNamespaceStatement(
-        Seq("a", "b", "c"),
+      CreateNamespace(
+        UnresolvedDBObjectName(Seq("a", "b", "c"), true),
         ifNotExists = false,
         Map(
           "a" -> "1",
           "b" -> "0.1",
           "c" -> "true",
           "location" -> "/home/user/db")))
-  }
-
-  test("drop namespace") {
-    comparePlans(
-      parsePlan("DROP NAMESPACE a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c RESTRICT"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = false))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE IF EXISTS a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = true, cascade = true))
-
-    comparePlans(
-      parsePlan("DROP NAMESPACE a.b.c CASCADE"),
-      DropNamespace(
-        UnresolvedNamespace(Seq("a", "b", "c")), ifExists = false, cascade = true))
-  }
-
-  test("set namespace properties") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-  }
-
-  test("set namespace location") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
-      SetNamespaceLocation(
-        UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
   test("analyze table statistics") {
@@ -2101,12 +2016,6 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin)
   }
 
-  test("show current namespace") {
-    comparePlans(
-      parsePlan("SHOW CURRENT NAMESPACE"),
-      ShowCurrentNamespaceStatement())
-  }
-
   test("alter table: SerDe properties") {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val hint = Some("Please use ALTER VIEW instead.")
@@ -2207,128 +2116,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed, expected)
   }
 
-  test("create view -- basic") {
-    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val parsed1 = parsePlan(v1)
-
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
-      Seq.empty[(String, Option[String])],
-      None,
-      Map.empty[String, String],
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      false,
-      PersistedView)
-    comparePlans(parsed1, expected1)
-
-    val v2 = "CREATE TEMPORARY VIEW a.b.c AS SELECT * FROM tab1"
-    val parsed2 = parsePlan(v2)
-
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
-      Seq.empty[(String, Option[String])],
-      None,
-      Map.empty[String, String],
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      false,
-      LocalTempView)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("create view - full") {
-    val v1 =
-      """
-        |CREATE OR REPLACE VIEW view1
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val parsed1 = parsePlan(v1)
-    val expected1 = CreateViewStatement(
-      Seq("view1"),
-      Seq("col1" -> None, "col3" -> Some("hello")),
-      Some("BLABLA"),
-      Map("prop1Key" -> "prop1Val"),
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      true,
-      PersistedView)
-    comparePlans(parsed1, expected1)
-
-    val v2 =
-      """
-        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a.b.c
-        |(col1, col3 COMMENT 'hello')
-        |COMMENT 'BLABLA'
-        |AS SELECT * FROM tab1
-      """.stripMargin
-    val parsed2 = parsePlan(v2)
-    val expected2 = CreateViewStatement(
-      Seq("a", "b", "c"),
-      Seq("col1" -> None, "col3" -> Some("hello")),
-      Some("BLABLA"),
-      Map(),
-      Some("SELECT * FROM tab1"),
-      parsePlan("SELECT * FROM tab1"),
-      false,
-      true,
-      GlobalTempView)
-    comparePlans(parsed2, expected2)
-  }
-
-  test("create view -- partitioned view") {
-    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
-    intercept[ParseException] {
-      parsePlan(v1)
-    }
-  }
-
-  test("create view - duplicate clauses") {
-    def createViewStatement(duplicateClause: String): String = {
-      s"""
-         |CREATE OR REPLACE VIEW view1
-         |(col1, col3 COMMENT 'hello')
-         |$duplicateClause
-         |$duplicateClause
-         |AS SELECT * FROM tab1
-      """.stripMargin
-    }
-    val sql1 = createViewStatement("COMMENT 'BLABLA'")
-    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
-  }
-
-  test("SPARK-32374: create temporary view with properties not allowed") {
-    assertUnsupported(
-      sql = """
-        |CREATE OR REPLACE TEMPORARY VIEW a.b.c
-        |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
-        |AS SELECT * FROM tab1
-      """.stripMargin,
-      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
-  }
-
-  test("SHOW TBLPROPERTIES table") {
-    comparePlans(
-      parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true),
-        None))
-
-    comparePlans(
-      parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true), Some("propKey1")))
-  }
-
   test("DESCRIBE FUNCTION") {
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2388,43 +2175,6 @@ class DDLParserSuite extends AnalysisTest {
       DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
   }
 
-  test("CREATE FUNCTION") {
-    parseCompare("CREATE FUNCTION a as 'fun'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(), false, false, false))
-
-    parseCompare("CREATE FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, false))
-
-    parseCompare("CREATE OR REPLACE FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, false, true))
-
-    parseCompare("CREATE TEMPORARY FUNCTION a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), true, false, false))
-
-    parseCompare("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'",
-      CreateFunctionStatement(Seq("a", "b", "c"), "fun", Seq(), false, true, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(ArchiveResource, "a")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING FILE 'f'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(FileResource, "f")),
-        false, false, false))
-
-    parseCompare("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'",
-      CreateFunctionStatement(Seq("a"), "fun", Seq(FunctionResource(JarResource, "j"),
-        FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
-        false, false, false))
-
-    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
-      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
-  }
-
   test("REFRESH FUNCTION") {
     parseCompare("REFRESH FUNCTION c",
       RefreshFunction(UnresolvedFunc(Seq("c"))))
@@ -2432,6 +2182,32 @@ class DDLParserSuite extends AnalysisTest {
       RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
       RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
+  }
+
+  test("CREATE INDEX") {
+    parseCompare("CREATE index i1 ON a.b.c USING BTREE (col1)",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", false,
+        Seq(UnresolvedFieldName(Seq("col1"))).zip(Seq(Map.empty[String, String])), Map.empty))
+
+    parseCompare("CREATE index IF NOT EXISTS i1 ON TABLE a.b.c USING BTREE" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) ",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "BTREE", true,
+        Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map.empty))
+
+    parseCompare("CREATE index i1 ON a.b.c" +
+      " (col1 OPTIONS ('k1'='v1'), col2 OPTIONS ('k2'='v2')) OPTIONS ('k3'='v3', 'k4'='v4')",
+      CreateIndex(UnresolvedTable(Seq("a", "b", "c"), "CREATE INDEX", None), "i1", "", false,
+        Seq(UnresolvedFieldName(Seq("col1")), UnresolvedFieldName(Seq("col2")))
+          .zip(Seq(Map("k1" -> "v1"), Map("k2" -> "v2"))), Map("k3" -> "v3", "k4" -> "v4")))
+  }
+
+  test("DROP INDEX") {
+    parseCompare("DROP index i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", false))
+
+    parseCompare("DROP index IF EXISTS i1 ON a.b.c",
+      DropIndex(UnresolvedTable(Seq("a", "b", "c"), "DROP INDEX", None), "i1", true))
   }
 
   private case class TableSpec(
@@ -2450,56 +2226,56 @@ class DDLParserSuite extends AnalysisTest {
   private object TableSpec {
     def apply(plan: LogicalPlan): TableSpec = {
       plan match {
-        case create: CreateTableStatement =>
+        case create: CreateTable =>
           TableSpec(
-            create.tableName,
+            create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(create.tableSchema),
             create.partitioning,
-            create.bucketSpec,
-            create.properties,
-            create.provider,
-            create.options,
-            create.location,
-            create.comment,
-            create.serde,
-            create.external)
-        case replace: ReplaceTableStatement =>
+            create.tableSpec.bucketSpec,
+            create.tableSpec.properties,
+            create.tableSpec.provider,
+            create.tableSpec.options,
+            create.tableSpec.location,
+            create.tableSpec.comment,
+            create.tableSpec.serde,
+            create.tableSpec.external)
+        case replace: ReplaceTable =>
           TableSpec(
-            replace.tableName,
+            replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
-            replace.bucketSpec,
-            replace.properties,
-            replace.provider,
-            replace.options,
-            replace.location,
-            replace.comment,
-            replace.serde)
-        case ctas: CreateTableAsSelectStatement =>
+            replace.tableSpec.bucketSpec,
+            replace.tableSpec.properties,
+            replace.tableSpec.provider,
+            replace.tableSpec.options,
+            replace.tableSpec.location,
+            replace.tableSpec.comment,
+            replace.tableSpec.serde)
+        case ctas: CreateTableAsSelect =>
           TableSpec(
-            ctas.tableName,
-            Some(ctas.asSelect).filter(_.resolved).map(_.schema),
+            ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
-            ctas.bucketSpec,
-            ctas.properties,
-            ctas.provider,
-            ctas.options,
-            ctas.location,
-            ctas.comment,
-            ctas.serde,
-            ctas.external)
-        case rtas: ReplaceTableAsSelectStatement =>
+            ctas.tableSpec.bucketSpec,
+            ctas.tableSpec.properties,
+            ctas.tableSpec.provider,
+            ctas.tableSpec.options,
+            ctas.tableSpec.location,
+            ctas.tableSpec.comment,
+            ctas.tableSpec.serde,
+            ctas.tableSpec.external)
+        case rtas: ReplaceTableAsSelect =>
           TableSpec(
-            rtas.tableName,
-            Some(rtas.asSelect).filter(_.resolved).map(_.schema),
+            rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
+            Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
-            rtas.bucketSpec,
-            rtas.properties,
-            rtas.provider,
-            rtas.options,
-            rtas.location,
-            rtas.comment,
-            rtas.serde)
+            rtas.tableSpec.bucketSpec,
+            rtas.tableSpec.properties,
+            rtas.tableSpec.provider,
+            rtas.tableSpec.options,
+            rtas.tableSpec.location,
+            rtas.tableSpec.comment,
+            rtas.tableSpec.serde)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")

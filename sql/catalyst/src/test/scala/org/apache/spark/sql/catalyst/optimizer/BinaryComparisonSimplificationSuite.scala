@@ -44,8 +44,13 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         PruneFilters) :: Nil
   }
 
+  private def checkCondition(rel: LocalRelation, input: Expression, expected: Expression): Unit =
+    comparePlans(Optimize.execute(rel.where(input).analyze), rel.where(expected).analyze)
+
   val nullableRelation = LocalRelation('a.int.withNullability(true))
   val nonNullableRelation = LocalRelation('a.int.withNullability(false))
+  val boolRelation = LocalRelation('a.boolean, 'b.boolean)
+
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
@@ -193,5 +198,22 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     comparePlans(
       Optimize.execute(testRelation.select(Coalesce(Seq('b, 'd)).as("out")).analyze),
       testRelation.select(Coalesce(Seq('b, 'd)).as("out")).analyze)
+  }
+
+  test("SPARK-36721: Simplify boolean equalities if one side is literal") {
+    checkCondition(boolRelation, And('a, 'b) === TrueLiteral, And('a, 'b))
+    checkCondition(boolRelation, TrueLiteral === And('a, 'b), And('a, 'b))
+    checkCondition(boolRelation, And('a, 'b) === FalseLiteral, Or(Not('a), Not('b)))
+    checkCondition(boolRelation, FalseLiteral === And('a, 'b), Or(Not('a), Not('b)))
+    checkCondition(boolRelation, IsNull('a) <=> TrueLiteral, IsNull('a))
+    checkCondition(boolRelation, TrueLiteral <=> IsNull('a), IsNull('a))
+    checkCondition(boolRelation, IsNull('a) <=> FalseLiteral, IsNotNull('a))
+    checkCondition(boolRelation, FalseLiteral <=> IsNull('a), IsNotNull('a))
+
+    // Should not optimize for nullable <=> Literal
+    checkCondition(boolRelation, And('a, 'b) <=> TrueLiteral, And('a, 'b) <=> TrueLiteral)
+    checkCondition(boolRelation, TrueLiteral <=> And('a, 'b), TrueLiteral <=> And('a, 'b))
+    checkCondition(boolRelation, And('a, 'b) <=> FalseLiteral, And('a, 'b) <=> FalseLiteral)
+    checkCondition(boolRelation, FalseLiteral <=> And('a, 'b), FalseLiteral <=> And('a, 'b))
   }
 }

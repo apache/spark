@@ -48,7 +48,7 @@ class CaseInsensitiveMapSuite extends SparkFunSuite {
   test("SPARK-32377: CaseInsensitiveMap should be deterministic for addition") {
     var m = CaseInsensitiveMap(Map.empty[String, String])
     Seq(("paTh", "1"), ("PATH", "2"), ("Path", "3"), ("patH", "4"), ("path", "5")).foreach { kv =>
-      m = (m + kv).asInstanceOf[CaseInsensitiveMap[String]]
+      m = (m + kv)
       assert(m.get("path").contains(kv._2))
     }
   }

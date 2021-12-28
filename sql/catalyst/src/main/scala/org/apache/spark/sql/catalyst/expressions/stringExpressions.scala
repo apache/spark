@@ -27,9 +27,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -295,7 +296,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -347,11 +348,13 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
+      // scalastyle:on line.size.limit
     } else {
       ""
     }
@@ -464,6 +467,23 @@ abstract class StringPredicate extends BinaryExpression
 /**
  * A function that returns true if the string `left` contains the string `right`.
  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SPARK');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -473,9 +493,23 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` starts with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns true if the string `left` starts with the string `right`.
+    Returns NULL if either input expression is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       true
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -485,9 +519,23 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
-/**
- * A function that returns true if the string `left` ends with the string `right`.
- */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(left, right) - Returns true if the string `left` ends with the string `right`.
+    Returns NULL if either input expression is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 'SQL');
+       true
+      > SELECT _FUNC_('Spark SQL', 'Spark');
+       false
+      > SELECT _FUNC_('Spark SQL', null);
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs"
+)
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1328,14 +1376,37 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 }
 
-/**
- * Returns str, left-padded with pad to a length of len.
- */
+trait PadExpressionBuilderBase extends ExpressionBuilder {
+  override def build(expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      if (expressions(0).dataType == BinaryType) {
+        createBinaryPad(expressions(0), expressions(1), Literal(Array[Byte](0)))
+      } else {
+        createStringPad(expressions(0), expressions(1), Literal(" "))
+      }
+    } else if (numArgs == 3) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+        createBinaryPad(expressions(0), expressions(1), expressions(2))
+      } else {
+        createStringPad(expressions(0), expressions(1), expressions(2))
+      }
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+    }
+  }
+
+  protected def funcName: String
+  protected def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression
+  protected def createStringPad(str: Expression, len: Expression, pad: Expression): Expression
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, left-padded with `pad` to a length of `len`.
-      If `str` is longer than `len`, the return value is shortened to `len` characters.
-      If `pad` is not specified, `str` will be padded to the left with space characters.
+      If `str` is longer than `len`, the return value is shortened to `len` characters or bytes.
+      If `pad` is not specified, `str` will be padded to the left with space characters if it is
+      a character string, and with zeros if it is a byte sequence.
   """,
   examples = """
     Examples:
@@ -1345,28 +1416,41 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
        h
       > SELECT _FUNC_('hi', 5);
           hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+       000000AABB
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+       112211AABB
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringLPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  def this(str: Expression, len: Expression) = {
-    this(str, len, Literal(" "))
+object LPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def funcName: String = "lpad"
+  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    new BinaryLPad(str, len, pad)
   }
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringLPad(str, len, pad)
+  }
+}
+
+case class StringLPad(str: Expression, len: Expression, pad: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
+
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    string.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      s"$string.lpad($len, $pad)"
+    })
   }
 
   override def prettyName: String = "lpad"
@@ -1376,14 +1460,29 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
-/**
- * Returns str, right-padded with pad to a length of len.
- */
+case class BinaryLPad(str: Expression, len: Expression, pad: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
+    classOf[ByteArray],
+    BinaryType,
+    "lpad",
+    Seq(str, len, pad),
+    Seq(BinaryType, IntegerType, BinaryType),
+    returnNullable = false)
+  )
+
+  override def prettyName: String = "lpad"
+  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
+  protected def withNewChildInternal(newChild: Expression): BinaryLPad = copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(str, len[, pad]) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
-      If `pad` is not specified, `str` will be padded to the right with space characters.
+      If `pad` is not specified, `str` will be padded to the right with space characters if it is
+      a character string, and with zeros if it is a binary string.
   """,
   examples = """
     Examples:
@@ -1393,29 +1492,41 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
        h
       > SELECT _FUNC_('hi', 5);
        hi
+      > SELECT hex(_FUNC_(unhex('aabb'), 5));
+       AABB000000
+      > SELECT hex(_FUNC_(unhex('aabb'), 5, unhex('1122')));
+       AABB112211
   """,
   since = "1.5.0",
   group = "string_funcs")
+object RPadExpressionBuilder extends PadExpressionBuilderBase {
+  override def funcName: String = "rpad"
+  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    new BinaryRPad(str, len, pad)
+  }
+  override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
+    StringRPad(str, len, pad)
+  }
+}
+
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  def this(str: Expression, len: Expression) = {
-    this(str, len, Literal(" "))
-  }
 
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType, StringType)
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, StringType)
 
-  override def nullSafeEval(str: Any, len: Any, pad: Any): Any = {
-    str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
+  override def nullSafeEval(string: Any, len: Any, pad: Any): Any = {
+    string.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
+    defineCodeGen(ctx, ev, (string, len, pad) => {
+      s"$string.rpad($len, $pad)"
+    })
   }
 
   override def prettyName: String = "rpad"
@@ -1423,6 +1534,23 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
     copy(str = newFirst, len = newSecond, pad = newThird)
+}
+
+case class BinaryRPad(str: Expression, len: Expression, pad: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
+    classOf[ByteArray],
+    BinaryType,
+    "rpad",
+    Seq(str, len, pad),
+    Seq(BinaryType, IntegerType, BinaryType),
+    returnNullable = false)
+  )
+
+  override def prettyName: String = "rpad"
+  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
+  protected def withNewChildInternal(newChild: Expression): BinaryRPad = copy(child = newChild)
 }
 
 object ParseUrl {
@@ -1617,6 +1745,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
+  checkArgumentIndexNotZero(children(0))
+
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
@@ -1688,6 +1818,23 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
+
+  /**
+   * SPARK-37013: The `formatSpecifier` defined in `j.u.Formatter` as follows:
+   *  "%[argument_index$][flags][width][.precision][t]conversion"
+   * The optional `argument_index` is a decimal integer indicating the position of the argument
+   * in the argument list. The first argument is referenced by "1$", the second by "2$", etc.
+   * However, for the illegal definition of "%0$", Java 8 and Java 11 uses it as "%1$",
+   * and Java 17 throws IllegalFormatArgumentIndexException(Illegal format argument index = 0).
+   * Therefore, manually check that the pattern string not contains "%0$" to ensure consistent
+   * behavior of Java 8, Java 11 and Java 17.
+   */
+  private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
+    case StringLiteral(pattern) if pattern.contains("%0$") =>
+      throw QueryCompilationErrors.illegalSubstringError(
+        "The argument_index of string format", "position 0$")
+    case _ => // do nothing
+  }
 }
 
 /**

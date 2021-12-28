@@ -1908,6 +1908,10 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
+    testBadOptions(
+      "kafka.bootstrap.servers" -> "fake", "subscribe" -> "t", "minOffsetsPerTrigger" -> "20",
+      "maxOffsetsPerTrigger" -> "15")(
+      "value of minOffsetPerTrigger(20) is higher than the maxOffsetsPerTrigger(15)")
   }
 
   test("unsupported kafka configs") {

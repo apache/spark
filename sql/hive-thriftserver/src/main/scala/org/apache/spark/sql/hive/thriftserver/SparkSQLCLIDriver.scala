@@ -371,6 +371,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
           proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ListResourceProcessor] ||
+          proc.isInstanceOf[DeleteResourceProcessor] ||
           proc.isInstanceOf[ResetProcessor] ) {
           val driver = new SparkSQLDriver
 
@@ -600,7 +601,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
           // Decrements `bracketedCommentLevel` at the beginning of the next loop
           leavingBracketedComment = true
-        } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
+        } else if (hasNext && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
         }
       }
@@ -613,7 +614,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       isStatement = statementInProgress(index)
     }
-    if (isStatement) {
+    if (beginIndex < line.length()) {
       ret.add(line.substring(beginIndex))
     }
     ret

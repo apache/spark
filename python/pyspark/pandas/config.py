@@ -20,7 +20,7 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
 
@@ -88,7 +88,7 @@ class Option:
         doc: str,
         default: Any,
         types: Union[Tuple[type, ...], type] = str,
-        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, "")
+        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, ""),
     ):
         self.key = key
         self.doc = doc
@@ -112,11 +112,12 @@ class Option:
 # Available options.
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
-#     copy & paste the results into show_options 'docs/source/user_guide/options.rst' as well.
+#     copy & paste the results into show_options
+#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
-_options = [
+_options: List[Option] = [
     Option(
         key="display.max_rows",
         doc=(
@@ -175,7 +176,7 @@ _options = [
     Option(
         key="compute.default_index_type",
         doc=("This sets the default index type: sequence, distributed and distributed-sequence."),
-        default="sequence",
+        default="distributed-sequence",
         types=str,
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
@@ -193,6 +194,34 @@ _options = [
         ),
         default=False,
         types=bool,
+    ),
+    Option(
+        key="compute.eager_check",
+        doc=(
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas. "
+            "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
+            "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
+            "`FractionalOps.astype`, `DecimalOps.astype`."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.isin_limit",
+        doc=(
+            "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
+            "If the length of the ‘list’ is above the limit, broadcast join is used instead "
+            "for better performance."
+        ),
+        default=80,
+        types=int,
+        check_func=(
+            lambda v: v >= 0,
+            "'compute.isin_limit' should be greater than or equal to 0.",
+        ),
     ),
     Option(
         key="plotting.max_rows",
@@ -232,9 +261,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict: Dict[str, Option] = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 
@@ -262,18 +291,18 @@ def show_options() -> None:
     import textwrap
 
     header = ["Option", "Default", "Description"]
-    row_format = "{:<31} {:<14} {:<53}"
+    row_format = "{:<31} {:<23} {:<53}"
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
     print(row_format.format(*header))
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
     for option in _options:
         doc = textwrap.fill(option.doc, 53)
-        formatted = "".join([line + "\n" + (" " * 47) for line in doc.split("\n")]).rstrip()
+        formatted = "".join([line + "\n" + (" " * 56) for line in doc.split("\n")]).rstrip()
         print(row_format.format(option.key, repr(option.default), formatted))
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
 def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:

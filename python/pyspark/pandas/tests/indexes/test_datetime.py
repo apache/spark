@@ -221,6 +221,25 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
             self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
 
+    def test_map(self):
+        for psidx, pidx in self.idx_pairs:
+            self.assert_eq(psidx.map(lambda x: x.normalize()), pidx.map(lambda x: x.normalize()))
+            self.assert_eq(
+                psidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
+                pidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
+            )
+
+        pidx = pd.date_range(start="2020-08-08", end="2020-08-10")
+        psidx = ps.from_pandas(pidx)
+        mapper_dict = {
+            datetime.datetime(2020, 8, 8): datetime.datetime(2021, 8, 8),
+            datetime.datetime(2020, 8, 9): datetime.datetime(2021, 8, 9),
+        }
+        self.assert_eq(psidx.map(mapper_dict), pidx.map(mapper_dict))
+
+        mapper_pser = pd.Series([1, 2, 3], index=pidx)
+        self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
+
 
 if __name__ == "__main__":
     import unittest

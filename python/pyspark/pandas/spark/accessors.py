@@ -20,7 +20,7 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
@@ -30,11 +30,11 @@ from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
-    from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark._typing import PrimitiveType
 
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
+    from pyspark.pandas.frame import CachedDataFrame
 
 
 class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
@@ -301,7 +301,7 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
         return DataFrame(self._data._internal.resolved_copy).index
 
 
-class SparkFrameMethods(object):
+class SparkFrameMethods:
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
@@ -396,7 +396,7 @@ class SparkFrameMethods(object):
         See Also
         --------
         DataFrame.to_spark
-        DataFrame.to_pandas_on_spark
+        DataFrame.pandas_api
         DataFrame.spark.frame
 
         Examples
@@ -440,7 +440,7 @@ class SparkFrameMethods(object):
 
         >>> spark_df = df.to_spark(index_col="index")
         >>> spark_df = spark_df.filter("a == 2")
-        >>> spark_df.to_pandas_on_spark(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
+        >>> spark_df.pandas_api(index_col="index")  # doctest: +NORMALIZE_WHITESPACE
                a  b  c
         index
         1      2  5  8
@@ -460,7 +460,7 @@ class SparkFrameMethods(object):
 
         Likewise, can be converted to back to pandas-on-Spark DataFrame.
 
-        >>> new_spark_df.to_pandas_on_spark(
+        >>> new_spark_df.pandas_api(
         ...     index_col=["index_1", "index_2"])  # doctest: +NORMALIZE_WHITESPACE
                          b  c
         index_1 index_2
@@ -743,7 +743,7 @@ class SparkFrameMethods(object):
         >>> df.to_table('%s.my_table' % db, partition_cols='date')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")  # type: ignore[assignment]
 
         self._psdf.spark.frame(index_col=index_col).write.saveAsTable(
             name=name, format=format, mode=mode, partitionBy=partition_cols, **options
@@ -816,7 +816,7 @@ class SparkFrameMethods(object):
         >>> df.to_spark_io(path='%s/to_spark_io/foo.json' % path, format='json')
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
-            options = options.get("options")  # type: ignore
+            options = options.get("options")  # type: ignore[assignment]
 
         self._psdf.spark.frame(index_col=index_col).write.save(
             path=path, format=format, mode=mode, partitionBy=partition_cols, **options
@@ -893,7 +893,7 @@ class SparkFrameMethods(object):
             expensive in general.
 
         .. note:: it will lose column labels. This is a synonym of
-            ``func(psdf.to_spark(index_col)).to_pandas_on_spark(index_col)``.
+            ``func(psdf.to_spark(index_col)).pandas_api(index_col)``.
 
         Parameters
         ----------
@@ -941,8 +941,7 @@ class SparkFrameMethods(object):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))
             )
-        psdf = output.to_pandas_on_spark(index_col)  # type: ignore
-        return cast("ps.DataFrame", psdf)
+        return output.pandas_api(index_col)
 
     def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """

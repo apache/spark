@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
 
@@ -42,7 +43,10 @@ import java.io.Serializable;
  *
  * @param <S> the JVM type for the aggregation's intermediate state; must be {@link Serializable}
  * @param <R> the JVM type of result values
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface AggregateFunction<S extends Serializable, R> extends BoundFunction {
 
   /**

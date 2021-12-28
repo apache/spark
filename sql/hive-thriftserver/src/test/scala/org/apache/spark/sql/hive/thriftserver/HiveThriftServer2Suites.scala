@@ -44,13 +44,13 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 object TestData {
   def getTestDataFilePath(name: String): URL = {
@@ -1215,18 +1215,20 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
     }
 
     val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """rootLogger.level = info
+          |rootLogger.appenderRef.stdout.ref = console
+          |appender.console.type = Console
+          |appender.console.name = console
+          |appender.console.target = SYSTEM_ERR
+          |appender.console.layout.type = PatternLayout
+          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
         """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
+        new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
 
       tempLog4jConf
@@ -1242,7 +1244,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
        |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
-       |  --driver-java-options -Dlog4j.debug
+       |  --driver-java-options -Dlog4j2.debug
        |  --conf spark.ui.enabled=false
        |  ${extraConf.mkString("\n")}
      """.stripMargin.split("\\s+").toSeq
@@ -1338,33 +1340,36 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
       process
     }
 
+    ShutdownHookManager.addShutdownHook(stopThriftServer _)
     ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {
-    // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
-    Utils.executeAndGetOutput(
-      command = Seq(stopScript),
-      extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
-    Thread.sleep(3.seconds.toMillis)
+    if (pidDir.list.nonEmpty) {
+      // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
+      Utils.executeAndGetOutput(
+        command = Seq(stopScript),
+        extraEnvironment = Map("SPARK_PID_DIR" -> pidDir.getCanonicalPath))
+      Thread.sleep(3.seconds.toMillis)
 
-    warehousePath.delete()
-    warehousePath = null
+      warehousePath.delete()
+      warehousePath = null
 
-    metastorePath.delete()
-    metastorePath = null
+      metastorePath.delete()
+      metastorePath = null
 
-    operationLogPath.delete()
-    operationLogPath = null
+      operationLogPath.delete()
+      operationLogPath = null
 
-    lScratchDir.delete()
-    lScratchDir = null
+      lScratchDir.delete()
+      lScratchDir = null
 
-    Option(logPath).foreach(_.delete())
-    logPath = null
+      Option(logPath).foreach(_.delete())
+      logPath = null
 
-    Option(logTailingProcess).foreach(_.destroy())
-    logTailingProcess = null
+      Option(logTailingProcess).foreach(_.destroy())
+      logTailingProcess = null
+    }
   }
 
   private def dumpLogs(): Unit = {

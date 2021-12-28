@@ -71,43 +71,9 @@ for multiclass problems, a [`MultilabelClassificationEvaluator`](api/scala/org/a
 [`RankingEvaluator`](api/scala/org/apache/spark/ml/evaluation/RankingEvaluator.html) for ranking problems. The default metric used to
 choose the best `ParamMap` can be overridden by the `setMetricName` method in each of these evaluators.
 
-To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/org/apache/spark/ml/tuning/ParamGridBuilder.html) utility (see the *Cross-Validation* section below for an example).
+To help construct the parameter grid, users can use the [`ParamGridBuilder`](api/scala/org/apache/spark/ml/tuning/ParamGridBuilder.html) utility.
 By default, sets of parameters from the parameter grid are evaluated in serial. Parameter evaluation can be done in parallel by setting `parallelism` with a value of 2 or more (a value of 1 will be serial) before running model selection with `CrossValidator` or `TrainValidationSplit`.
 The value of `parallelism` should be chosen carefully to maximize parallelism without exceeding cluster resources, and larger values may not always lead to improved performance.  Generally speaking, a value up to 10 should be sufficient for most clusters.
-
-Alternatively, users can use the [`ParamRandomBuilder`](api/scala/org/apache/spark/ml/tuning/ParamRandomBuilder.html) utility.
-This has the same properties of `ParamGridBuilder` mentioned above, but hyperparameters are chosen at random within a user-defined range.
-The mathematical principle behind this is that given enough samples, the probability of at least one sample *not* being near the optimum within a range tends to zero.
-Irrespective of machine learning model, the expected number of samples needed to have at least one within 5% of the optimum is about 60. 
-If this 5% volume lies between the parameters defined in a grid search, it will *never* be found by `ParamGridBuilder`.  
-
-<div class="codetabs">
-
-<div data-lang="scala" markdown="1">
-
-Refer to the [`ParamRandomBuilder` Scala docs](api/scala/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaRandomHyperparametersExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [`ParamRandomBuilder` Java docs](api/java/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
-
-{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaRandomHyperparametersExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Python users are recommended to look at Python libraries that are specifically for hyperparameter tuning such as Hyperopt.  
-
-Refer to the [`ParamRandomBuilder` Java docs](api/python/reference/api/pyspark.ml.tuning.ParamRandomBuilder.html) for details on the API.
-
-{% include_example python/ml/model_selection_random_hyperparameters_example.py %}
-
-</div>
-
-</div>
 
 # Cross-Validation
 

@@ -19,10 +19,23 @@ from distutils.version import LooseVersion
 
 import matplotlib as mat
 import numpy as np
-import pandas as pd
 from matplotlib.axes._base import _process_plot_format
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
+
+from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
+    BarPlot as PandasBarPlot,
+    BoxPlot as PandasBoxPlot,
+    HistPlot as PandasHistPlot,
+    PiePlot as PandasPiePlot,
+    AreaPlot as PandasAreaPlot,
+    LinePlot as PandasLinePlot,
+    BarhPlot as PandasBarhPlot,
+    ScatterPlot as PandasScatterPlot,
+    KdePlot as PandasKdePlot,
+)
+from pandas.plotting._core import PlotAccessor
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
 
 from pyspark.pandas.plot import (
     TopNPlotBase,
@@ -33,37 +46,7 @@ from pyspark.pandas.plot import (
     KdePlotBase,
 )
 
-
-if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-    from pandas.plotting._core import (
-        _all_kinds,
-        BarPlot as PandasBarPlot,
-        BoxPlot as PandasBoxPlot,
-        HistPlot as PandasHistPlot,
-        MPLPlot as PandasMPLPlot,
-        PiePlot as PandasPiePlot,
-        AreaPlot as PandasAreaPlot,
-        LinePlot as PandasLinePlot,
-        BarhPlot as PandasBarhPlot,
-        ScatterPlot as PandasScatterPlot,
-        KdePlot as PandasKdePlot,
-    )
-else:
-    from pandas.plotting._matplotlib import (
-        BarPlot as PandasBarPlot,
-        BoxPlot as PandasBoxPlot,
-        HistPlot as PandasHistPlot,
-        PiePlot as PandasPiePlot,
-        AreaPlot as PandasAreaPlot,
-        LinePlot as PandasLinePlot,
-        BarhPlot as PandasBarhPlot,
-        ScatterPlot as PandasScatterPlot,
-        KdePlot as PandasKdePlot,
-    )
-    from pandas.plotting._core import PlotAccessor
-    from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot
-
-    _all_kinds = PlotAccessor._all_kinds
+_all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
@@ -331,7 +314,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         showcaps=None,
         showbox=None,
         showfliers=None,
-        **kwargs
+        **kwargs,
     ):
         # Missing arguments default to rcParams.
         if whis is None:
@@ -392,6 +375,12 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            label = (
+                self._mark_right_label(label, index=i)
+                if hasattr(self, "_mark_right_label")
+                else label
+            )
             kwds["label"] = label
 
             style, kwds = self._apply_style_colors(colors, kwds, i, label)
@@ -400,7 +389,10 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            self._add_legend_handle(artists[0], label, index=i)
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            self._append_legend_handles_labels(artists[0], label) if hasattr(
+                self, "_append_legend_handles_labels"
+            ) else self._add_legend_handle(artists[0], label, index=i)
 
     @classmethod
     def _plot(cls, ax, y, style=None, bins=None, bottom=0, column_num=0, stacking_id=None, **kwds):
@@ -483,6 +475,12 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             kwds = self.kwds.copy()
 
             label = pprint_thing(label if len(label) > 1 else label[0])
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            label = (
+                self._mark_right_label(label, index=i)
+                if hasattr(self, "_mark_right_label")
+                else label
+            )
             kwds["label"] = label
 
             style, kwds = self._apply_style_colors(colors, kwds, i, label)
@@ -491,7 +489,10 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
 
             kwds = self._make_plot_keywords(kwds, y)
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
-            self._add_legend_handle(artists[0], label, index=i)
+            # `if hasattr(...)` makes plotting compatible with pandas < 1.3, see pandas-dev/pandas#40078.
+            self._append_legend_handles_labels(artists[0], label) if hasattr(
+                self, "_append_legend_handles_labels"
+            ) else self._add_legend_handle(artists[0], label, index=i)
 
     def _get_ind(self, y):
         return KdePlotBase.get_ind(y, self.ind)
@@ -564,7 +565,7 @@ def plot_series(
     xerr=None,
     label=None,
     secondary_y=False,  # Series unique
-    **kwds
+    **kwds,
 ):
     """
     Make plots of Series using matplotlib / pylab.
@@ -727,7 +728,7 @@ def plot_frame(
     xerr=None,
     secondary_y=False,
     sort_columns=False,
-    **kwds
+    **kwds,
 ):
     """
     Make plots of DataFrames using matplotlib / pylab.

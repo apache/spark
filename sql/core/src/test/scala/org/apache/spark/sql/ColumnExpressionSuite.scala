@@ -932,7 +932,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
   }
 
+  test("SPARK-37646: lit") {
+    assert(lit($"foo") == $"foo")
+    assert(lit('foo) == $"foo")
+    assert(lit(1) == Column(Literal(1)))
+    assert(lit(null) == Column(Literal(null, NullType)))
+  }
+
   test("typedLit") {
+    assert(typedLit($"foo") == $"foo")
+    assert(typedLit('foo) == $"foo")
+    assert(typedLit(1) == Column(Literal(1)))
+    assert(typedLit[String](null) == Column(Literal(null, StringType)))
+
     val df = Seq(Tuple1(0)).toDF("a")
     // Only check the types `lit` cannot handle
     checkAnswer(
@@ -2737,7 +2749,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
     }.getCause
     assert(e.isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("/ by zero"))
+    assert(e.getMessage.contains("divide by zero"))
+
+    val e2 = intercept[SparkException] {
+      Seq((Period.ofYears(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e2.isInstanceOf[ArithmeticException])
+    assert(e2.getMessage.contains("divide by zero"))
+
+    val e3 = intercept[SparkException] {
+      Seq((Period.ofYears(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e3.isInstanceOf[ArithmeticException])
+    assert(e3.getMessage.contains("divide by zero"))
   }
 
   test("SPARK-34875: divide day-time interval by numeric") {
@@ -2772,7 +2796,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
     }.getCause
     assert(e.isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("/ by zero"))
+    assert(e.getMessage.contains("divide by zero"))
+
+    val e2 = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), 0d)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e2.isInstanceOf[ArithmeticException])
+    assert(e2.getMessage.contains("divide by zero"))
+
+    val e3 = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), BigDecimal(0))).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e3.isInstanceOf[ArithmeticException])
+    assert(e3.getMessage.contains("divide by zero"))
   }
 
   test("SPARK-34896: return day-time interval from dates subtraction") {
@@ -2903,5 +2939,36 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df, Row(add, add, sub))
       }
     }
+  }
+
+  test("SPARK-36778: add ilike API for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    // null handling
+    val nullDf = Seq("a", null).toDF("src")
+    checkAnswer(nullDf.filter($"src".ilike("A")), Row("a"))
+    checkAnswer(nullDf.filter($"src".ilike(null)), spark.emptyDataFrame)
+    // simple pattern
+    val simpleDf = Seq("a", "A", "abdef", "a_%b", "addb", "abC", "a\nb").toDF("src")
+    checkAnswer(simpleDf.filter($"src".ilike("a")), Seq("a", "A").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("A")), Seq("a", "A").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("b")), spark.emptyDataFrame)
+    checkAnswer(simpleDf.filter($"src".ilike("aBdef")), Seq("abdef").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("a\\__b")), Seq("a_%b").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("A_%b")), Seq("a_%b", "addb", "a\nb").toDF())
+    checkAnswer(simpleDf.filter($"src".ilike("a%")), simpleDf)
+    checkAnswer(simpleDf.filter($"src".ilike("a_b")), Seq("a\nb").toDF())
+    // double-escaping backslash
+    val dEscDf = Seq("""\__""", """\\__""").toDF("src")
+    checkAnswer(dEscDf.filter($"src".ilike("""\\\__""")), Seq("""\__""").toDF())
+    checkAnswer(dEscDf.filter($"src".ilike("""%\\%\%""")), spark.emptyDataFrame)
+    // unicode
+    val uncDf = Seq("a\u20ACA", "A€a", "a€AA", "a\u20ACaz", "ЀЁЂѺΏỀ").toDF("src")
+    checkAnswer(uncDf.filter($"src".ilike("_\u20AC_")), Seq("a\u20ACA", "A€a").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_€_")), Seq("a\u20ACA", "A€a").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_\u20AC_a")), Seq("a€AA").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("_€_Z")), Seq("a\u20ACaz").toDF())
+    checkAnswer(uncDf.filter($"src".ilike("ѐёђѻώề")), Seq("ЀЁЂѺΏỀ").toDF())
+    // scalastyle:on
   }
 }
