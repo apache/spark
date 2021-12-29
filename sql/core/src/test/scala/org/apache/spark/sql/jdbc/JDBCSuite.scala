@@ -87,7 +87,6 @@ class JDBCSuite extends QueryTest
     val properties = new Properties()
     properties.setProperty("user", "testUser")
     properties.setProperty("password", "testPass")
-    properties.setProperty("rowId", "false")
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
@@ -727,18 +726,6 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getDouble(0) === 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
-  }
-
-  test("Pass extra properties via OPTIONS") {
-    // We set rowId to false during setup, which means that _ROWID_ column should be absent from
-    // all tables. If rowId is true (default), the query below doesn't throw an exception.
-    sql(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW abc
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
-         |         user 'testUser', password 'testPass')
-         """.stripMargin.replaceAll("\n", " "))
   }
 
   test("Remap types via JdbcDialects") {
