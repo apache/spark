@@ -743,6 +743,29 @@ class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
       1)
   }
 
+  private def assertReorderingFailure(mapName: String)(f: => Unit): Unit = {
+    val logAppender = new LogAppender(s"$mapName reordering failure")
+    withLogAppender(logAppender) {
+      f
+    }
+    assert(logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(s"Reordering $mapName")),
+      s"Reordering $mapName was not attempted")
+    assert(logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(s"Reordering $mapName failed")),
+      s"Reordering $mapName did not fail")
+  }
+
+  private def assertNoReordering(mapName: String)(f: => Unit): Unit = {
+    val logAppender = new LogAppender(s"$mapName no-reordering")
+    withLogAppender(logAppender) {
+      f
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains(s"Reordering $mapName")),
+      s"Unexpected reordering $mapName was attempted")
+  }
+
   test("Reordering LongToUnsafeRowMap failure") {
     // Find the execution memory required without reordering
     val unboundedTMM = zeroStorageRegionTaskMemoryManager(Long.MaxValue)
@@ -759,21 +782,27 @@ class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
 
     // Ensure the maxHeapMemory specified above is sufficient for building a LongHashedRelation
     // without reordering
-    LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
-      reorderFactor = None).close()
+    assertNoReordering("LongToUnsafeRowMap") {
+      LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
+        reorderFactor = None).close()
+    }
 
     val ex = intercept[SparkException] {
-      LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
-        reorderFactor = Some(1))
+      assertReorderingFailure("LongToUnsafeRowMap") {
+        LongHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
+          reorderFactor = Some(1))
+      }
     }
     ex.getMessage should include regex "Can't acquire (\\d+) bytes memory to build hash relation"
 
     // Reordering failure due to insufficient memory does not bubble up exception
-    val reorderedRelation = LongHashedRelation(randomRows.iterator, singleKey, randomRows.size,
-      boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
-    randomRows.foreach { expectedRow =>
-      reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
-        actualRow shouldBe expectedRow
+    assertReorderingFailure("LongToUnsafeRowMap") {
+      val reorderedRelation = LongHashedRelation(randomRows.iterator, singleKey, randomRows.size,
+        boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
+      randomRows.foreach { expectedRow =>
+        reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
+          actualRow shouldBe expectedRow
+        }
       }
     }
   }
@@ -790,21 +819,27 @@ class HashedRelationWithReorderingSuite extends BaseHashedRelationSuite {
 
     // Ensuring the maxHeapMemory specified above is sufficient for building a UnsafeHashedRelation
     // without reordering
-    UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
-      reorderFactor = None).close()
-
-    val ex = intercept[SparkOutOfMemoryError] {
+    assertNoReordering("BytesToBytesMap") {
       UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
-        reorderFactor = Some(1))
+        reorderFactor = None).close()
     }
-    ex.getMessage shouldBe "There is not enough memory to build hash map"
+
+    assertReorderingFailure("BytesToBytesMap") {
+      val ex = intercept[SparkOutOfMemoryError] {
+        UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size, boundedTMM,
+          reorderFactor = Some(1))
+      }
+      ex.getMessage shouldBe "There is not enough memory to build hash map"
+    }
 
     // Reordering failure due to insufficient memory does not bubble up exception
-    val reorderedRelation = UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size,
-      boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
-    randomRows.foreach { expectedRow =>
-      reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
-        actualRow shouldBe expectedRow
+    assertReorderingFailure("BytesToBytesMap") {
+      val reorderedRelation = UnsafeHashedRelation(randomRows.iterator, singleKey, randomRows.size,
+        boundedTMM, reorderFactor = Some(1), throwExceptionOnReorderFailure = false)
+      randomRows.foreach { expectedRow =>
+        reorderedRelation.get(projection(expectedRow)).foreach { actualRow =>
+          actualRow shouldBe expectedRow
+        }
       }
     }
   }
