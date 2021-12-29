@@ -1395,6 +1395,32 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
     copy(child = newChild)
 }
 
+trait hasPartitionExpressions {
+
+  def partitionExpressions: Seq[Expression]
+
+  def optNumPartitions: Option[Int]
+
+  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(optNumPartitions.get)
+  } else {
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), optNumPartitions.get)
+    } else {
+      HashPartitioning(partitionExpressions, optNumPartitions.get)
+    }
+  }
+}
+
 /**
  * This method repartitions data using [[Expression]]s into `optNumPartitions`, and receives
  * information about the number of partitions during execution. Used when a specific ordering or
@@ -1406,31 +1432,16 @@ case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
     optNumPartitions: Option[Int],
-    userSpecified: Boolean = true) extends RepartitionOperation {
+    userSpecified: Boolean = true) extends RepartitionOperation with hasPartitionExpressions {
 
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override val partitioning: Partitioning = {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-      s"""
-         |SortOrder: $sortOrder
-         |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-
     if (numPartitions == 1) {
       SinglePartition
-    } else if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-    } else if (nonSortOrder.nonEmpty) {
-      HashPartitioning(nonSortOrder, numPartitions)
     } else {
-      RoundRobinPartitioning(numPartitions)
+      super.partitioning
     }
   }
 
@@ -1468,28 +1479,10 @@ object RepartitionByExpression {
  */
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with hasPartitionExpressions {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-
-  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
-    RoundRobinPartitioning(conf.numShufflePartitions)
-  } else {
-    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-        s"""
-           |SortOrder: $sortOrder
-           |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-    if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), conf.numShufflePartitions)
-    } else {
-      HashPartitioning(partitionExpressions, conf.numShufflePartitions)
-    }
-  }
+  override def optNumPartitions: Option[Int] = Some(conf.numShufflePartitions)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
