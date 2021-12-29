@@ -685,6 +685,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(query, Seq(Row(47100.0)))
   }
 
+  test("scan with aggregate push-down: partition columns are same as group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"dept")
+      .count()
+    checkAggregateRemoved(df)
+    checkAnswer(df, Seq(Row(1, 2), Row(2, 2), Row(6, 1)))
+  }
+
   test("scan with aggregate push-down: aggregate over alias NOT push down") {
     val cols = Seq("a", "b", "c", "d")
     val df1 = sql("select * from h2.test.employee").toDF(cols: _*)
@@ -729,5 +742,33 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1), Row(2), Row(2)))
+  }
+
+  test("scan with aggregate push-down: partition columns with multi group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"dept", $"name")
+      .count()
+    checkAggregateRemoved(df, false)
+    checkAnswer(df, Seq(Row(1, "amy", 1), Row(1, "cathy", 1),
+      Row(2, "alex", 1), Row(2, "david", 1), Row(6, "jen", 1)))
+  }
+
+  test("scan with aggregate push-down: partition columns is different from group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"name")
+      .count()
+    checkAggregateRemoved(df, false)
+    checkAnswer(df,
+      Seq(Row("alex", 1), Row("amy", 1), Row("cathy", 1), Row("david", 1), Row("jen", 1)))
   }
 }

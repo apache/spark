@@ -20,6 +20,8 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 
+import java.util.List;
+
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down aggregates.
@@ -50,9 +52,10 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * Whether the datasource support complete aggregation push-down. Spark will do grouping again
    * if this method returns false.
    *
+   * @param groupAttrs group by attributes of aggregation.
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
-  default boolean supportCompletePushDown() { return false; }
+  default boolean supportCompletePushDown(String[] groupAttrs) { return false; }
 
   /**
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should
