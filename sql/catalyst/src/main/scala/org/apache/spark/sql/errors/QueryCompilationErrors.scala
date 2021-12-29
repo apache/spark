@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -507,9 +507,8 @@ object QueryCompilationErrors {
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
-  def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
-    new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
-      "SHOW VIEWS, only SessionCatalog supports this command.")
+  def sqlOnlySupportedWithV1CatalogError(sql: String, catalog: String): Throwable = {
+    new AnalysisException(s"Catalog $catalog does not support $sql.")
   }
 
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {

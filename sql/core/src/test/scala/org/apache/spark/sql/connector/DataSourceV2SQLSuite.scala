@@ -1089,8 +1089,7 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM testcat")
     }
 
-    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
-      " only SessionCatalog supports this command."))
+    assert(exception.getMessage.contains("Catalog testcat does not support SHOW VIEWS"))
   }
 
   test("CreateNameSpace: basic tests") {
@@ -2119,7 +2118,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"SHOW FUNCTIONS LIKE $function")
     }
-    assert(e.message.contains("function is only supported in v1 catalog"))
+    assert(e.getMessage.contains("Catalog testcat does not support SHOW FUNCTIONS"))
   }
 
   test("DROP FUNCTION: only support session catalog") {

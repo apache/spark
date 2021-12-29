@@ -2132,29 +2132,34 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SHOW FUNCTIONS") {
+    val nsPlan = UnresolvedNamespace(Nil)
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(None, true, true, None))
+      ShowFunctions(nsPlan, true, true, None))
     comparePlans(
       parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(None, true, false, None))
+      ShowFunctions(nsPlan, true, false, None))
     comparePlans(
       parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(None, true, false, None))
+      ShowFunctions(nsPlan, true, false, None))
     comparePlans(
       parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(None, false, true, None))
+      ShowFunctions(nsPlan, false, true, None))
     comparePlans(
       parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(None, true, true, None))
+      ShowFunctions(nsPlan, true, true, None))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctions(None, true, true, Some("funct*")))
+      ShowFunctions(nsPlan, true, true, Some("funct*")))
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
+      ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctions(Some(UnresolvedFunc(Seq("a", "b", "c"))), true, true, None))
+      ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
+    intercept("SHOW FUNCTIONS IN db f1", "Invalid pattern")
   }
 
   test("DROP FUNCTION") {
