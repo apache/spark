@@ -1007,8 +1007,8 @@ struct<k:int,regr_sxx(y, x):double>
 
 -- !query
 SELECT
- percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
- percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr
 -- !query schema
 struct<percentile_cont(v, 0.25):double,percentile_cont(v, (1 - 0.25)):double>
