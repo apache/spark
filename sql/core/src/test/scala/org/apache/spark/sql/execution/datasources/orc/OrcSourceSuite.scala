@@ -35,6 +35,7 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -657,7 +658,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
         val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
-          case scan: FileSourceScanExec => scan.supportsColumnar
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
         }.isDefined
         assert(vectorizationEnabled)
