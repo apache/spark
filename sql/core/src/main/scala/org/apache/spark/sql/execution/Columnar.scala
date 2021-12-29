@@ -65,7 +65,9 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  assert(child.supportsColumnar)
+  // This try-catch is to work around SPARK-37779 by catching NPEs
+  // when the child's supportsColumnar contains transient fields.
+  assert(scala.util.Try(child.supportsColumnar).getOrElse(true))
 
   override def output: Seq[Attribute] = child.output
 

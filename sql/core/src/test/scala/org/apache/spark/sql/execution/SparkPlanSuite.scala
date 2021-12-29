@@ -124,6 +124,25 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
   }
+
+  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(1).write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        val columnarToRowExec =
+          df.queryExecution.executedPlan.collectFirst { case p: ColumnarToRowExec => p }.get
+        val serializer = SparkEnv.get.serializer.newInstance()
+        val readback =
+          serializer.deserialize[ColumnarToRowExec](serializer.serialize(columnarToRowExec))
+        try {
+          readback.canonicalized
+        } catch {
+          case e: Throwable => fail("ColumnarToRowExec was not canonicalizable", e)
+        }
+      }
+    }
+  }
 }
 
 case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
