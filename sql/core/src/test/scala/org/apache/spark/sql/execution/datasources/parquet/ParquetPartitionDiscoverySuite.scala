@@ -1255,7 +1255,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     val spec = Map("p_int"-> "010", "p_float"-> "01.00")
     val schema = new StructType().add("p_int", "int").add("p_float", "float")
     val path = PartitioningUtils.getPathFragment(spec, schema)
-    assert("p_int=10/p_float=1.0" === path)
+    assert("p_int=10/p_float=1%2E0" === path)
   }
 
   test("read partitioned table - partition key included in Parquet file") {

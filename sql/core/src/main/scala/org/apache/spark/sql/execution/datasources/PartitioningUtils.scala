@@ -461,8 +461,9 @@ object PartitioningUtils extends SQLConfHelper{
       dateFormatter: DateFormatter,
       timestampFormatter: TimestampFormatter): DataType = {
     val decimalTry = Try {
+      val unescapedRaw = unescapePathName(raw)
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
-      val bigDecimal = new JBigDecimal(raw)
+      val bigDecimal = new JBigDecimal(unescapedRaw)
       // It reduces the cases for decimals by disallowing values having scale (e.g. `1.1`).
       require(bigDecimal.scale <= 0)
       // `DecimalType` conversion can fail when
@@ -511,7 +512,7 @@ object PartitioningUtils extends SQLConfHelper{
         .orElse(Try { JLong.parseLong(raw); LongType })
         .orElse(decimalTry)
         // Then falls back to fractional types
-        .orElse(Try { JDouble.parseDouble(raw); DoubleType })
+        .orElse(Try { JDouble.parseDouble(unescapePathName(raw)); DoubleType })
         // Then falls back to date/timestamp types
         .orElse(timestampTry)
         .orElse(dateTry)
@@ -533,8 +534,8 @@ object PartitioningUtils extends SQLConfHelper{
     case StringType => UTF8String.fromString(unescapePathName(value))
     case ByteType | ShortType | IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case FloatType | DoubleType => JDouble.parseDouble(value)
-    case _: DecimalType => Literal(new JBigDecimal(value)).value
+    case FloatType | DoubleType => JDouble.parseDouble(unescapePathName(value))
+    case _: DecimalType => Literal(new JBigDecimal(unescapePathName(value))).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
     // Timestamp types
