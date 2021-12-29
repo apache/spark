@@ -29,6 +29,7 @@ import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.util.Utils
 
 /**
@@ -37,6 +38,13 @@ import org.apache.spark.util.Utils
  * to/from Proleptic Gregorian calendar which is used by Spark since version 3.0. See SPARK-26651.
  */
 object RebaseDateTime {
+
+  // Specification of rebase operation including `mode` and the time zone in which it is performed
+  case class RebaseSpec(mode: LegacyBehaviorPolicy.Value, originTimeZone: Option[String] = None) {
+    // Use the default JVM time zone for backward compatibility
+    def timeZone: String = originTimeZone.getOrElse(TimeZone.getDefault.getID)
+  }
+
   /**
    * Rebases days since the epoch from an original to an target calendar, for instance,
    * from a hybrid (Julian + Gregorian) to Proleptic Gregorian calendar.
@@ -363,10 +371,34 @@ object RebaseDateTime {
   }
 
   /**
-   * An optimized version of [[rebaseGregorianToJulianMicros(ZoneId, Long)]]. This method leverages
-   * the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't contain
-   * information about the current JVM system time zone or `micros` is related to Before Common Era,
-   * the function falls back to the regular unoptimized version.
+   * An optimized version of [[rebaseGregorianToJulianMicros(TimeZone, Long)]]. This method
+   * leverages the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't
+   * contain information about the given time zone `timeZoneId` or `micros` is related to Before
+   * Common Era, the function falls back to the regular unoptimized version.
+   *
+   * @param timeZoneId A string identifier of a time zone.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in Proleptic Gregorian calendar. It can be negative.
+   * @return The rebased microseconds since the epoch in Julian calendar.
+   */
+  def rebaseGregorianToJulianMicros(timeZoneId: String, micros: Long): Long = {
+    if (micros >= lastSwitchGregorianTs) {
+      micros
+    } else {
+      val rebaseRecord = gregJulianRebaseMap.getOrNull(timeZoneId)
+      if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
+        rebaseGregorianToJulianMicros(TimeZone.getTimeZone(timeZoneId), micros)
+      } else {
+        rebaseMicros(rebaseRecord, micros)
+      }
+    }
+  }
+
+  /**
+   * An optimized version of [[rebaseGregorianToJulianMicros(TimeZone, Long)]]. This method
+   * leverages the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't
+   * contain information about the current JVM system time zone or `micros` is related to Before
+   * Common Era, the function falls back to the regular unoptimized version.
    *
    * Note: The function assumes that the input micros was derived from a local timestamp
    *       at the default system JVM time zone in Proleptic Gregorian calendar.
@@ -376,18 +408,7 @@ object RebaseDateTime {
    * @return The rebased microseconds since the epoch in Julian calendar.
    */
   def rebaseGregorianToJulianMicros(micros: Long): Long = {
-    if (micros >= lastSwitchGregorianTs) {
-      micros
-    } else {
-      val timeZone = TimeZone.getDefault
-      val tzId = timeZone.getID
-      val rebaseRecord = gregJulianRebaseMap.getOrNull(tzId)
-      if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseGregorianToJulianMicros(timeZone, micros)
-      } else {
-        rebaseMicros(rebaseRecord, micros)
-      }
-    }
+    rebaseGregorianToJulianMicros(TimeZone.getDefault.getID, micros)
   }
 
   /**
@@ -464,10 +485,34 @@ object RebaseDateTime {
   final val lastSwitchJulianTs: Long = getLastSwitchTs(julianGregRebaseMap)
 
   /**
-   * An optimized version of [[rebaseJulianToGregorianMicros(ZoneId, Long)]]. This method leverages
-   * the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't contain
-   * information about the current JVM system time zone or `micros` is related to Before Common Era,
-   * the function falls back to the regular unoptimized version.
+   * An optimized version of [[rebaseJulianToGregorianMicros(TimeZone, Long)]]. This method
+   * leverages the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't
+   * contain information about the given time zone `timeZoneId` or `micros` is related to Before
+   * Common Era, the function falls back to the regular unoptimized version.
+   *
+   * @param timeZoneId A string identifier of a time zone.
+   * @param micros The number of microseconds since the epoch '1970-01-01T00:00:00Z'
+   *               in the Julian calendar. It can be negative.
+   * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
+   */
+  def rebaseJulianToGregorianMicros(timeZoneId: String, micros: Long): Long = {
+    if (micros >= lastSwitchJulianTs) {
+      micros
+    } else {
+      val rebaseRecord = julianGregRebaseMap.getOrNull(timeZoneId)
+      if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
+        rebaseJulianToGregorianMicros(TimeZone.getTimeZone(timeZoneId), micros)
+      } else {
+        rebaseMicros(rebaseRecord, micros)
+      }
+    }
+  }
+
+  /**
+   * An optimized version of [[rebaseJulianToGregorianMicros(TimeZone, Long)]]. This method
+   * leverages the pre-calculated rebasing maps to save calculation. If the rebasing map doesn't
+   * contain information about the current JVM system time zone or `micros` is related to Before
+   * Common Era, the function falls back to the regular unoptimized version.
    *
    * Note: The function assumes that the input micros was derived from a local timestamp
    *       at the default system JVM time zone in the Julian calendar.
@@ -477,17 +522,6 @@ object RebaseDateTime {
    * @return The rebased microseconds since the epoch in Proleptic Gregorian calendar.
    */
   def rebaseJulianToGregorianMicros(micros: Long): Long = {
-    if (micros >= lastSwitchJulianTs) {
-      micros
-    } else {
-      val timeZone = TimeZone.getDefault
-      val tzId = timeZone.getID
-      val rebaseRecord = julianGregRebaseMap.getOrNull(tzId)
-      if (rebaseRecord == null || micros < rebaseRecord.switches(0)) {
-        rebaseJulianToGregorianMicros(timeZone, micros)
-      } else {
-        rebaseMicros(rebaseRecord, micros)
-      }
-    }
+    rebaseJulianToGregorianMicros(TimeZone.getDefault.getID, micros)
   }
 }
