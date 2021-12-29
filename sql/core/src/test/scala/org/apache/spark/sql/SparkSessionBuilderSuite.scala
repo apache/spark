@@ -502,13 +502,14 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
         .getOrCreate()
     }
 
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
     Seq(
         "Ignored static SQL configurations",
         "spark.sql.warehouse.dir=2",
         "Configurations that might not take effect",
         "spark.abcd=abcb4",
         "spark.abc=abcb").foreach { msg =>
-      assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
     }
   }
 
@@ -527,15 +528,17 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
     }
 
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
     Seq(
       "Using an existing Spark session; only runtime SQL configurations will take effect",
       "Configurations that might not take effect",
       "spark.abc.new=abc").foreach { msg =>
-      assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
     }
 
-    assert(!logAppender.loggingEvents.exists(
-      _.getMessage.getFormattedMessage.contains("spark.abc=abc")))
+    assert(
+      !logs.exists(_.contains("spark.abc=abc")),
+      s"'spark.abc=abc' existed in:\n${logs.mkString("\n")}")
   }
 
   test("SPARK-37727: Hide runtime SQL configurations in logs") {
@@ -555,14 +558,16 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       SparkSession.builder().config("spark.sql.warehouse.dir", "xyz").getOrCreate()
     }
 
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
     Seq(
       "spark.buffer.size=1234",
       "spark.sql.source.abc=abc",
       "spark.sql.warehouse.dir=xyz").foreach { msg =>
-      assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
     }
 
-    assert(!logAppender.loggingEvents.exists(
-      _.getMessage.getFormattedMessage.contains("spark.sql.ansi.enabled")))
+    assert(
+      !logs.exists(_.contains("spark.sql.ansi.enabled\"")),
+      s"'spark.sql.ansi.enabled' existed in:\n${logs.mkString("\n")}")
   }
 }

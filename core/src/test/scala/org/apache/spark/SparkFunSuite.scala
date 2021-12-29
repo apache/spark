@@ -28,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.appender.AbstractAppender
-import org.apache.logging.log4j.core.{LogEvent, Logger}
+import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -249,6 +249,7 @@ abstract class SparkFunSuite
       if (level.isDefined) {
         logger.setLevel(level.get)
         logger.get().setLevel(level.get)
+        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
       }
     }
     try f finally {
