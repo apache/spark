@@ -496,7 +496,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     logAppender.setThreshold(Level.DEBUG)
     withLogAppender(logAppender, level = Some(Level.DEBUG)) {
       SparkSession.builder()
-        .master("local")
         .config("spark.sql.warehouse.dir", "2")
         .config("spark.abc", "abcb")
         .config("spark.abcd", "abcb4")
@@ -521,11 +520,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     logAppender.setThreshold(Level.DEBUG)
     withLogAppender(logAppender, level = Some(Level.DEBUG)) {
       // Ignore logs because it's already set.
-      SparkSession.builder().master("local").config("spark.abc", "abc").getOrCreate()
+      SparkSession.builder().config("spark.abc", "abc").getOrCreate()
       // Show logs for only configuration newly set.
-      SparkSession.builder().master("local").config("spark.abc.new", "abc").getOrCreate()
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
       // Ignore logs because it's set ^.
-      SparkSession.builder().master("local").config("spark.abc.new", "abc").getOrCreate()
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
     }
 
     Seq(
@@ -547,13 +546,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     logAppender.setThreshold(Level.DEBUG)
     withLogAppender(logAppender, level = Some(Level.DEBUG)) {
       // Ignore logs for runtime SQL configurations
-      SparkSession.builder().master("local").config("spark.sql.ansi.enabled", "true").getOrCreate()
+      SparkSession.builder().config("spark.sql.ansi.enabled", "true").getOrCreate()
       // Show logs for Spark core configuration
-      SparkSession.builder().master("local").config("spark.buffer.size", "1234").getOrCreate()
+      SparkSession.builder().config("spark.buffer.size", "1234").getOrCreate()
       // Show logs for custom runtime options
-      SparkSession.builder().master("local").config("spark.sql.source.abc", "abc").getOrCreate()
+      SparkSession.builder().config("spark.sql.source.abc", "abc").getOrCreate()
       // Show logs for static SQL configurations
-      SparkSession.builder().master("local").config("spark.sql.warehouse.dir", "xyz").getOrCreate()
+      SparkSession.builder().config("spark.sql.warehouse.dir", "xyz").getOrCreate()
     }
 
     Seq(
