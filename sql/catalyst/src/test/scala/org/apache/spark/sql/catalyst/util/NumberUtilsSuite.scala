@@ -114,7 +114,7 @@ class NumberUtilsSuite extends SparkFunSuite {
       ("4542.", "9999.") -> Decimal(4542),
       ("4542.", "0000.") -> Decimal(4542),
       ("4542.", "9999D") -> Decimal(4542),
-      ("4542.", "0000D") -> Decimal(4542),
+      ("4542.", "0000D") -> Decimal(4542)
     ).foreach { case ((str, format), expected) =>
       assert(parse(UTF8String.fromString(str), format) === expected)
     }
@@ -145,7 +145,7 @@ class NumberUtilsSuite extends SparkFunSuite {
       (",454,367", ",999,999") -> Decimal(454367),
       (",454,367", ",000,000") -> Decimal(454367),
       (",454,367", "G999G999") -> Decimal(454367),
-      (",454,367", "G000G000") -> Decimal(454367),
+      (",454,367", "G000G000") -> Decimal(454367)
     ).foreach { case ((str, format), expected) =>
       assert(parse(UTF8String.fromString(str), format) === expected)
     }
@@ -213,7 +213,7 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(454), "0000") -> "0454",
       (Decimal(54), "0000") -> "0054",
       (Decimal(404), "0000") -> "0404",
-      (Decimal(450), "0000") -> "0450",
+      (Decimal(450), "0000") -> "0450"
     ).foreach { case ((decimal, str), expected) =>
       assert(format(decimal, str) === expected)
     }
