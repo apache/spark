@@ -2,269 +2,269 @@
 SQL Single Numeric Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single BOOLEAN Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            9999          10058          83          1.6         635.7       1.0X
-SQL Json                                           8857           8883          37          1.8         563.1       1.1X
-SQL Parquet Vectorized                              132            157          16        119.0           8.4      75.7X
-SQL Parquet MR                                     1987           1997          14          7.9         126.3       5.0X
-SQL ORC Vectorized                                  186            227          34         84.3          11.9      53.6X
-SQL ORC MR                                         1559           1602          62         10.1          99.1       6.4X
+SQL CSV                                           11834          11929         134          1.3         752.4       1.0X
+SQL Json                                           8574           8597          32          1.8         545.1       1.4X
+SQL Parquet Vectorized                              116            136          17        135.5           7.4     102.0X
+SQL Parquet MR                                     1703           1715          17          9.2         108.2       7.0X
+SQL ORC Vectorized                                  172            215          48         91.2          11.0      68.6X
+SQL ORC MR                                         1819           1825           8          8.6         115.7       6.5X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single BOOLEAN Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                             110            117           9        143.0           7.0       1.0X
-ParquetReader Vectorized -> Row                       57             59           3        276.2           3.6       1.9X
+ParquetReader Vectorized                             117            126          17        134.9           7.4       1.0X
+ParquetReader Vectorized -> Row                       47             49           3        336.5           3.0       2.5X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           12897          12916          28          1.2         819.9       1.0X
-SQL Json                                           9739           9770          44          1.6         619.2       1.3X
-SQL Parquet Vectorized                              226            237          14         69.7          14.3      57.2X
-SQL Parquet MR                                     2124           2127           4          7.4         135.1       6.1X
-SQL ORC Vectorized                                  213            250          39         73.9          13.5      60.6X
-SQL ORC MR                                         1535           1548          19         10.2          97.6       8.4X
+SQL CSV                                           13434          13590         220          1.2         854.1       1.0X
+SQL Json                                          10056          10073          24          1.6         639.3       1.3X
+SQL Parquet Vectorized                              212            229          12         74.3          13.5      63.4X
+SQL Parquet MR                                     1883           1916          47          8.4         119.7       7.1X
+SQL ORC Vectorized                                  200            241          30         78.8          12.7      67.3X
+SQL ORC MR                                         1529           1549          28         10.3          97.2       8.8X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single TINYINT Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                             259            269          15         60.6          16.5       1.0X
-ParquetReader Vectorized -> Row                      168            184          33         93.9          10.7       1.5X
+ParquetReader Vectorized                             229            254          13         68.6          14.6       1.0X
+ParquetReader Vectorized -> Row                      162            171          14         96.9          10.3       1.4X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           12765          12774          13          1.2         811.6       1.0X
-SQL Json                                          10144          10158          21          1.6         644.9       1.3X
-SQL Parquet Vectorized                              168            208          34         93.7          10.7      76.1X
-SQL Parquet MR                                     2443           2458          21          6.4         155.3       5.2X
-SQL ORC Vectorized                                  300            313          16         52.4          19.1      42.5X
-SQL ORC MR                                         1736           1780          62          9.1         110.4       7.4X
+SQL CSV                                           14320          14476         221          1.1         910.4       1.0X
+SQL Json                                           9769          10067         423          1.6         621.1       1.5X
+SQL Parquet Vectorized                              187            228          28         84.3          11.9      76.8X
+SQL Parquet MR                                     2230           2240          14          7.1         141.8       6.4X
+SQL ORC Vectorized                                  221            265          36         71.1          14.1      64.8X
+SQL ORC MR                                         1763           1779          23          8.9         112.1       8.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single SMALLINT Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                              229            239           9         68.6          14.6       1.0X
-ParquetReader Vectorized -> Row                       224            265          26         70.2          14.3       1.0X
+ParquetReader Vectorized                              246            255          12         64.1          15.6       1.0X
+ParquetReader Vectorized -> Row                       249            294          21         63.1          15.8       1.0X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           14055          14060           6          1.1         893.6       1.0X
-SQL Json                                          10692          10738          64          1.5         679.8       1.3X
-SQL Parquet Vectorized                              167            223          34         94.0          10.6      84.0X
-SQL Parquet MR                                     2416           2482          94          6.5         153.6       5.8X
-SQL ORC Vectorized                                  329            344          12         47.8          20.9      42.7X
-SQL ORC MR                                         1773           1789          23          8.9         112.7       7.9X
+SQL CSV                                           15460          15543         116          1.0         982.9       1.0X
+SQL Json                                          10199          10393         274          1.5         648.4       1.5X
+SQL Parquet Vectorized                              163            203          30         96.5          10.4      94.8X
+SQL Parquet MR                                     1914           2025         157          8.2         121.7       8.1X
+SQL ORC Vectorized                                  324            355          23         48.5          20.6      47.7X
+SQL ORC MR                                         1673           1701          39          9.4         106.4       9.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single INT Column Scan:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                            232            239           9         67.9          14.7       1.0X
-ParquetReader Vectorized -> Row                     262            295          23         60.1          16.6       0.9X
+ParquetReader Vectorized                            209            223          17         75.2          13.3       1.0X
+ParquetReader Vectorized -> Row                     303            307           6         51.9          19.3       0.7X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           18964          18975          17          0.8        1205.7       1.0X
-SQL Json                                          13173          13189          23          1.2         837.5       1.4X
-SQL Parquet Vectorized                              278            290          11         56.6          17.7      68.2X
-SQL Parquet MR                                     2565           2589          34          6.1         163.1       7.4X
-SQL ORC Vectorized                                  432            481          48         36.4          27.5      43.9X
-SQL ORC MR                                         2052           2061          12          7.7         130.5       9.2X
+SQL CSV                                           19075          19147         101          0.8        1212.8       1.0X
+SQL Json                                          12181          12369         265          1.3         774.5       1.6X
+SQL Parquet Vectorized                              230            268          25         68.5          14.6      83.1X
+SQL Parquet MR                                     2160           2244         120          7.3         137.3       8.8X
+SQL ORC Vectorized                                  396            444          41         39.7          25.2      48.2X
+SQL ORC MR                                         1924           1939          21          8.2         122.3       9.9X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single BIGINT Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                            296            321          29         53.2          18.8       1.0X
-ParquetReader Vectorized -> Row                     329            335           7         47.7          20.9       0.9X
+ParquetReader Vectorized                            273            311          43         57.5          17.4       1.0X
+ParquetReader Vectorized -> Row                     316            322           8         49.8          20.1       0.9X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           15092          15095           5          1.0         959.5       1.0X
-SQL Json                                          12166          12169           5          1.3         773.5       1.2X
-SQL Parquet Vectorized                              161            198          27         97.4          10.3      93.5X
-SQL Parquet MR                                     2407           2412           6          6.5         153.0       6.3X
-SQL ORC Vectorized                                  476            509          30         33.1          30.2      31.7X
-SQL ORC MR                                         1978           1981           5          8.0         125.7       7.6X
+SQL CSV                                           15439          15605         235          1.0         981.6       1.0X
+SQL Json                                          11709          11852         201          1.3         744.5       1.3X
+SQL Parquet Vectorized                              157            199          33         99.9          10.0      98.0X
+SQL Parquet MR                                     1996           2120         176          7.9         126.9       7.7X
+SQL ORC Vectorized                                  439            466          28         35.8          27.9      35.1X
+SQL ORC MR                                         1965           1991          36          8.0         124.9       7.9X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single FLOAT Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                            256            261           9         61.4          16.3       1.0X
-ParquetReader Vectorized -> Row                     210            257          22         74.7          13.4       1.2X
+ParquetReader Vectorized                            206            212           8         76.4          13.1       1.0X
+ParquetReader Vectorized -> Row                     220            266          29         71.4          14.0       0.9X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           19785          19786           1          0.8        1257.9       1.0X
-SQL Json                                          16339          16340           1          1.0        1038.8       1.2X
-SQL Parquet Vectorized                              284            302          19         55.4          18.1      69.7X
-SQL Parquet MR                                     2570           2576           8          6.1         163.4       7.7X
-SQL ORC Vectorized                                  473            519          32         33.3          30.0      41.9X
-SQL ORC MR                                         2136           2142           9          7.4         135.8       9.3X
+SQL CSV                                           20048          20816        1086          0.8        1274.6       1.0X
+SQL Json                                          16265          16314          69          1.0        1034.1       1.2X
+SQL Parquet Vectorized                              238            296          29         66.1          15.1      84.3X
+SQL Parquet MR                                     2414           2418           7          6.5         153.5       8.3X
+SQL ORC Vectorized                                  555            604          38         28.4          35.3      36.2X
+SQL ORC MR                                         2225           2242          24          7.1         141.5       9.0X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Parquet Reader Single DOUBLE Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized                            298            351          32         52.8          18.9       1.0X
-ParquetReader Vectorized -> Row                     370            375           9         42.5          23.5       0.8X
+ParquetReader Vectorized                            317            352          35         49.6          20.2       1.0X
+ParquetReader Vectorized -> Row                     346            356           9         45.4          22.0       0.9X
 
 
 ================================================================================================
 Int and String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           13811          13824          18          0.8        1317.1       1.0X
-SQL Json                                          11546          11589          61          0.9        1101.1       1.2X
-SQL Parquet Vectorized                             2143           2164          30          4.9         204.4       6.4X
-SQL Parquet MR                                     4369           4386          24          2.4         416.7       3.2X
-SQL ORC Vectorized                                 2289           2294           8          4.6         218.3       6.0X
-SQL ORC MR                                         3770           3847         109          2.8         359.5       3.7X
+SQL CSV                                           13981          14223         342          0.7        1333.4       1.0X
+SQL Json                                          11241          11293          74          0.9        1072.0       1.2X
+SQL Parquet Vectorized                             2060           2076          23          5.1         196.4       6.8X
+SQL Parquet MR                                     3779           3931         216          2.8         360.4       3.7X
+SQL ORC Vectorized                                 2085           2088           4          5.0         198.8       6.7X
+SQL ORC MR                                         3739           3767          39          2.8         356.6       3.7X
 
 
 ================================================================================================
 Repeated String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            7344           7377          47          1.4         700.3       1.0X
-SQL Json                                           7117           7153          51          1.5         678.7       1.0X
-SQL Parquet Vectorized                              598            618          18         17.5          57.0      12.3X
-SQL Parquet MR                                     1955           1969          20          5.4         186.5       3.8X
-SQL ORC Vectorized                                  559            565           8         18.8          53.3      13.1X
-SQL ORC MR                                         1923           1932          13          5.5         183.4       3.8X
+SQL CSV                                            8544           8579          50          1.2         814.8       1.0X
+SQL Json                                           6705           6952         348          1.6         639.5       1.3X
+SQL Parquet Vectorized                              603            615           9         17.4          57.5      14.2X
+SQL Parquet MR                                     1722           1725           4          6.1         164.2       5.0X
+SQL ORC Vectorized                                  515            547          24         20.4          49.1      16.6X
+SQL ORC MR                                         1827           1845          25          5.7         174.2       4.7X
 
 
 ================================================================================================
 Partitioned Table Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column - CSV                                 19266          19281          21          0.8        1224.9       1.0X
-Data column - Json                                13119          13126          10          1.2         834.1       1.5X
-Data column - Parquet Vectorized                    305            334          27         51.6          19.4      63.2X
-Data column - Parquet MR                           2978           3022          63          5.3         189.3       6.5X
-Data column - ORC Vectorized                        446            480          32         35.3          28.3      43.2X
-Data column - ORC MR                               2451           2469          24          6.4         155.9       7.9X
-Partition column - CSV                             6640           6641           1          2.4         422.2       2.9X
-Partition column - Json                           10485          10512          37          1.5         666.6       1.8X
-Partition column - Parquet Vectorized                65             88          24        241.2           4.1     295.4X
-Partition column - Parquet MR                      1403           1434          44         11.2          89.2      13.7X
-Partition column - ORC Vectorized                    62             86          21        253.8           3.9     310.9X
-Partition column - ORC MR                          1523           1525           3         10.3          96.8      12.6X
-Both columns - CSV                                19347          19354          10          0.8        1230.0       1.0X
-Both columns - Json                               13788          13793           6          1.1         876.6       1.4X
-Both columns - Parquet Vectorized                   346            414          70         45.5          22.0      55.7X
-Both columns - Parquet MR                          3022           3032          14          5.2         192.1       6.4X
-Both columns - ORC Vectorized                       479            519          28         32.9          30.4      40.2X
-Both columns - ORC MR                              2539           2540           1          6.2         161.4       7.6X
+Data column - CSV                                 18854          19521         943          0.8        1198.7       1.0X
+Data column - Json                                12579          12688         154          1.3         799.8       1.5X
+Data column - Parquet Vectorized                    246            298          28         63.9          15.7      76.5X
+Data column - Parquet MR                           2693           2699           9          5.8         171.2       7.0X
+Data column - ORC Vectorized                        434            463          25         36.2          27.6      43.4X
+Data column - ORC MR                               2249           2303          77          7.0         143.0       8.4X
+Partition column - CSV                             6045           6199         217          2.6         384.3       3.1X
+Partition column - Json                            9463           9679         305          1.7         601.7       2.0X
+Partition column - Parquet Vectorized                64             92          36        244.3           4.1     292.9X
+Partition column - Parquet MR                      1238           1252          20         12.7          78.7      15.2X
+Partition column - ORC Vectorized                    60             85          25        263.7           3.8     316.1X
+Partition column - ORC MR                          1440           1458          26         10.9          91.5      13.1X
+Both columns - CSV                                19647          20381        1038          0.8        1249.1       1.0X
+Both columns - Json                               12615          12654          55          1.2         802.0       1.5X
+Both columns - Parquet Vectorized                   337            345           9         46.7          21.4      56.0X
+Both columns - Parquet MR                          2461           2573         158          6.4         156.5       7.7X
+Both columns - ORC Vectorized                       432            470          54         36.4          27.5      43.6X
+Both columns - ORC MR                              2507           2536          40          6.3         159.4       7.5X
 
 
 ================================================================================================
 String with Nulls Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            9158           9163           8          1.1         873.3       1.0X
-SQL Json                                          10429          10448          27          1.0         994.6       0.9X
-SQL Parquet Vectorized                             1363           1660         420          7.7         130.0       6.7X
-SQL Parquet MR                                     3894           3898           5          2.7         371.4       2.4X
-ParquetReader Vectorized                           1021           1031          14         10.3          97.4       9.0X
-SQL ORC Vectorized                                 1168           1191          33          9.0         111.4       7.8X
-SQL ORC MR                                         3267           3287          28          3.2         311.6       2.8X
+SQL CSV                                           10199          10226          38          1.0         972.6       1.0X
+SQL Json                                          10744          10925         256          1.0        1024.6       0.9X
+SQL Parquet Vectorized                             1251           1261          15          8.4         119.3       8.2X
+SQL Parquet MR                                     3306           3315          13          3.2         315.3       3.1X
+ParquetReader Vectorized                            849            904          48         12.4          80.9      12.0X
+SQL ORC Vectorized                                 1184           1204          28          8.9         112.9       8.6X
+SQL ORC MR                                         2895           2945          71          3.6         276.1       3.5X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            7570           7577          11          1.4         721.9       1.0X
-SQL Json                                           8085           8096          14          1.3         771.1       0.9X
-SQL Parquet Vectorized                             1097           1101           5          9.6         104.7       6.9X
-SQL Parquet MR                                     2999           3014          21          3.5         286.0       2.5X
-ParquetReader Vectorized                           1052           1064          18         10.0         100.3       7.2X
-SQL ORC Vectorized                                 1286           2162        1239          8.2         122.6       5.9X
-SQL ORC MR                                         3053           3123         100          3.4         291.1       2.5X
+SQL CSV                                            7949           8052         145          1.3         758.1       1.0X
+SQL Json                                           7750           7868         167          1.4         739.1       1.0X
+SQL Parquet Vectorized                              949            976          24         11.0          90.5       8.4X
+SQL Parquet MR                                     2700           2722          31          3.9         257.5       2.9X
+ParquetReader Vectorized                            916            940          31         11.4          87.3       8.7X
+SQL ORC Vectorized                                 1240           1249          13          8.5         118.2       6.4X
+SQL ORC MR                                         2856           2929         103          3.7         272.4       2.8X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            6211           6214           3          1.7         592.4       1.0X
-SQL Json                                           4977           4994          24          2.1         474.6       1.2X
-SQL Parquet Vectorized                              260            272          10         40.3          24.8      23.9X
-SQL Parquet MR                                     1981           1985           5          5.3         188.9       3.1X
-ParquetReader Vectorized                            268            276          11         39.1          25.6      23.2X
-SQL ORC Vectorized                                  428            457          35         24.5          40.8      14.5X
-SQL ORC MR                                         1696           1705          12          6.2         161.8       3.7X
+SQL CSV                                            5416           5542         179          1.9         516.5       1.0X
+SQL Json                                           4760           4980         311          2.2         454.0       1.1X
+SQL Parquet Vectorized                              222            236           8         47.2          21.2      24.4X
+SQL Parquet MR                                     1669           1685          22          6.3         159.2       3.2X
+ParquetReader Vectorized                            248            252           3         42.3          23.6      21.9X
+SQL ORC Vectorized                                  409            472          81         25.6          39.0      13.2X
+SQL ORC MR                                         1686           1687           0          6.2         160.8       3.2X
 
 
 ================================================================================================
 Single Column Scan From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 10 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            2067           2093          36          0.5        1971.6       1.0X
-SQL Json                                           3047           5663         NaN          0.3        2906.0       0.7X
-SQL Parquet Vectorized                               50             73          21         20.9          47.7      41.3X
-SQL Parquet MR                                      205            224          28          5.1         195.3      10.1X
-SQL ORC Vectorized                                   60             79          23         17.4          57.5      34.3X
-SQL ORC MR                                          173            196          25          6.1         165.1      11.9X
+SQL CSV                                            2244           2282          53          0.5        2140.4       1.0X
+SQL Json                                           3015           3099         119          0.3        2875.6       0.7X
+SQL Parquet Vectorized                               50             77          29         20.9          47.9      44.7X
+SQL Parquet MR                                      190            209          27          5.5         180.8      11.8X
+SQL ORC Vectorized                                   57             76          20         18.5          54.0      39.6X
+SQL ORC MR                                          158            195          40          6.6         151.0      14.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 50 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            4841           4844           5          0.2        4616.4       1.0X
-SQL Json                                          11721          11745          34          0.1       11177.9       0.4X
-SQL Parquet Vectorized                               67            101          27         15.7          63.8      72.4X
-SQL Parquet MR                                      225            247          27          4.7         214.2      21.5X
-SQL ORC Vectorized                                   75             99          26         13.9          71.7      64.4X
-SQL ORC MR                                          192            219          26          5.5         183.4      25.2X
+SQL CSV                                            5114           5296         257          0.2        4876.7       1.0X
+SQL Json                                          11564          11828         373          0.1       11028.4       0.4X
+SQL Parquet Vectorized                               60             93          26         17.3          57.6      84.6X
+SQL Parquet MR                                      198            232          31          5.3         188.9      25.8X
+SQL ORC Vectorized                                   69            103          35         15.2          65.9      74.0X
+SQL ORC MR                                          175            212          36          6.0         166.9      29.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            8410           8414           5          0.1        8020.8       1.0X
-SQL Json                                          22537          22923         547          0.0       21492.8       0.4X
-SQL Parquet Vectorized                              101            141          32         10.4          96.2      83.4X
-SQL Parquet MR                                      262            289          45          4.0         249.9      32.1X
-SQL ORC Vectorized                                   90            113          32         11.7          85.4      93.9X
-SQL ORC MR                                          210            232          36          5.0         200.3      40.0X
+SQL CSV                                            9072           9324         357          0.1        8651.4       1.0X
+SQL Json                                          23444          23735         411          0.0       22358.1       0.4X
+SQL Parquet Vectorized                               91            129          28         11.5          86.7      99.8X
+SQL Parquet MR                                      220            270          56          4.8         209.6      41.3X
+SQL ORC Vectorized                                   96            110          20         10.9          91.8      94.2X
+SQL ORC MR                                          216            240          33          4.8         206.2      41.9X
 
 
