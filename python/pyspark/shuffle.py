@@ -52,6 +52,7 @@ try:
             info = process.get_memory_info()
         return info.rss >> 20
 
+
 except ImportError:
 
     def get_used_memory():
