@@ -1431,8 +1431,7 @@ trait hasPartitionExpressions {
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int],
-    userSpecified: Boolean = true) extends RepartitionOperation with hasPartitionExpressions {
+    optNumPartitions: Option[Int]) extends RepartitionOperation with hasPartitionExpressions {
 
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
@@ -1452,14 +1451,6 @@ case class RepartitionByExpression(
 }
 
 object RepartitionByExpression {
-  def apply(
-      partitionExpressions: Seq[Expression],
-      child: LogicalPlan,
-      numPartitions: Int,
-      userSpecified: Boolean): RepartitionByExpression = {
-    RepartitionByExpression(partitionExpressions, child, Some(numPartitions), userSpecified)
-  }
-
   def apply(
       partitionExpressions: Seq[Expression],
       child: LogicalPlan,
