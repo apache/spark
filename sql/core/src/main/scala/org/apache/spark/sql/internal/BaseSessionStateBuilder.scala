@@ -331,8 +331,8 @@ abstract class BaseSessionStateBuilder(
    * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone(session)).getOrElse(
-      new ExecutionListenerManager(session, loadExtensions = true))
+    parentState.map(_.listenerManager.clone(session, conf)).getOrElse(
+      new ExecutionListenerManager(session, conf, loadExtensions = true))
   }
 
   /**
