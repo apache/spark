@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
@@ -886,6 +887,167 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  test("ToNumber") {
+    ToNumber(Literal("454"), Literal("")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Format expression cannot be empty"))
+    }
+
+    // Test '0' and '9'
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("9")))
+    }
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("99")))
+    }
+
+    Seq(
+      ("454", "999") -> Decimal(454),
+      ("054", "999") -> Decimal(54),
+      ("404", "999") -> Decimal(404),
+      ("450", "999") -> Decimal(450),
+      ("454", "9999") -> Decimal(454),
+      ("054", "9999") -> Decimal(54),
+      ("404", "9999") -> Decimal(404),
+      ("450", "9999") -> Decimal(450)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("0")))
+    }
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("00")))
+    }
+
+    Seq(
+      ("454", "000") -> Decimal(454),
+      ("054", "000") -> Decimal(54),
+      ("404", "000") -> Decimal(404),
+      ("450", "000") -> Decimal(450),
+      ("454", "0000") -> Decimal(454),
+      ("054", "0000") -> Decimal(54),
+      ("404", "0000") -> Decimal(404),
+      ("450", "0000") -> Decimal(450)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    // Test '.' and 'D'
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454.2"), Literal("999")))
+    }
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454.23"), Literal("999.9")))
+    }
+
+    Seq(
+      ("454.2", "999.9") -> Decimal(454.2),
+      ("454.2", "000.0") -> Decimal(454.2),
+      ("454.2", "999D9") -> Decimal(454.2),
+      ("454.2", "000D0") -> Decimal(454.2),
+      ("454.23", "999.99") -> Decimal(454.23),
+      ("454.23", "000.00") -> Decimal(454.23),
+      ("454.23", "999D99") -> Decimal(454.23),
+      ("454.23", "000D00") -> Decimal(454.23),
+      ("454.0", "999.9") -> Decimal(454),
+      ("454.0", "000.0") -> Decimal(454),
+      ("454.0", "999D9") -> Decimal(454),
+      ("454.0", "000D0") -> Decimal(454),
+      ("454.00", "999.99") -> Decimal(454),
+      ("454.00", "000.00") -> Decimal(454),
+      ("454.00", "999D99") -> Decimal(454),
+      ("454.00", "000D00") -> Decimal(454),
+      (".4542", ".9999") -> Decimal(0.4542),
+      (".4542", ".0000") -> Decimal(0.4542),
+      (".4542", "D9999") -> Decimal(0.4542),
+      (".4542", "D0000") -> Decimal(0.4542),
+      ("4542.", "9999.") -> Decimal(4542),
+      ("4542.", "0000.") -> Decimal(4542),
+      ("4542.", "9999D") -> Decimal(4542),
+      ("4542.", "0000D") -> Decimal(4542)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    Seq("999.9.9", "999D9D9", "999.9D9", "999D9.9").foreach { str =>
+      ToNumber(Literal("454.3.2"), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"Multiple 'D' or '.' in '$str'"))
+      }
+    }
+
+    // Test ',' and 'G'
+    Seq(
+      ("12,454", "99,999") -> Decimal(12454),
+      ("12,454", "00,000") -> Decimal(12454),
+      ("12,454", "99G999") -> Decimal(12454),
+      ("12,454", "00G000") -> Decimal(12454),
+      ("12,454,367", "99,999,999") -> Decimal(12454367),
+      ("12,454,367", "00,000,000") -> Decimal(12454367),
+      ("12,454,367", "99G999G999") -> Decimal(12454367),
+      ("12,454,367", "00G000G000") -> Decimal(12454367),
+      ("12,454,", "99,999,") -> Decimal(12454),
+      ("12,454,", "00,000,") -> Decimal(12454),
+      ("12,454,", "99G999G") -> Decimal(12454),
+      ("12,454,", "00G000G") -> Decimal(12454),
+      (",454,367", ",999,999") -> Decimal(454367),
+      (",454,367", ",000,000") -> Decimal(454367),
+      (",454,367", "G999G999") -> Decimal(454367),
+      (",454,367", "G000G000") -> Decimal(454367)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    // Test '$'
+    Seq(
+      ("$78.12", "$99.99") -> Decimal(78.12),
+      ("$78.12", "$00.00") -> Decimal(78.12),
+      ("78.12$", "99.99$") -> Decimal(78.12),
+      ("78.12$", "00.00$") -> Decimal(78.12)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    ToNumber(Literal("78$.12"), Literal("99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'$' must be the first or last char in '99$.99'"))
+    }
+    ToNumber(Literal("$78$.12"), Literal("$99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple '$' in '$99$.99'"))
+    }
+
+    // Test 'S'
+    Seq(
+      ("454-", "999-") -> Decimal(-454),
+      ("454-", "999S") -> Decimal(-454),
+      ("-454", "-999") -> Decimal(-454),
+      ("-454", "S999") -> Decimal(-454),
+      ("454-", "000-") -> Decimal(-454),
+      ("454-", "000S") -> Decimal(-454),
+      ("-454", "-000") -> Decimal(-454),
+      ("-454", "S000") -> Decimal(-454),
+      ("12,454.8-", "99G999D9S") -> Decimal(-12454.8),
+      ("00,454.8-", "99G999.9S") -> Decimal(-454.8)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    Seq("9S99", "9-99").foreach { str =>
+      ToNumber(Literal("-454"), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"'S' or '-' must be the first or last char in '$str'"))
+      }
+    }
+
+    ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple 'S' or '-' in '999D9SS'"))
+    }
   }
 
   test("find in set") {

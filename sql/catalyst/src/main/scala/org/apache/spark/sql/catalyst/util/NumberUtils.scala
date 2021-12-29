@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.text.{DecimalFormat, NumberFormat, ParsePosition}
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,6 +96,18 @@ object NumberUtils {
     }
   }
 
+  private def getPrecision(numberFormat: String): Int =
+    numberFormat.filterNot(isSign).length
+
+  private def getScale(numberFormat: String): Int = {
+    val formatSplits = numberFormat.split(pointSign)
+    if (formatSplits.length == 1) {
+      0
+    } else {
+      formatSplits(1).filterNot(isSign).length
+    }
+  }
+
   /**
    * Convert string to numeric based on the given number format.
    * The format can consist of the following characters:
@@ -108,20 +122,18 @@ object NumberUtils {
    *
    * @param input the string need to converted
    * @param numberFormat the given number format
+   * @param normalizedNumberFormat normalized number format
+   * @param precision decimal precision
+   * @param scale decimal scale
    * @return decimal obtained from string parsing
    */
-  def parse(input: UTF8String, numberFormat: String): Decimal = {
-    val normalizedFormat = normalize(numberFormat)
-    check(normalizedFormat, numberFormat)
-
-    val precision = normalizedFormat.filterNot(isSign).length
-    val formatSplits = normalizedFormat.split(pointSign)
-    val scale = if (formatSplits.length == 1) {
-      0
-    } else {
-      formatSplits(1).filterNot(isSign).length
-    }
-    val transformedFormat = transform(normalizedFormat)
+  private def parse(
+      input: UTF8String,
+      numberFormat: String,
+      normalizedNumberFormat: String,
+      precision: Int,
+      scale: Int): Decimal = {
+    val transformedFormat = transform(normalizedNumberFormat)
     val numberFormatInstance = NumberFormat.getInstance()
     val numberDecimalFormat = numberFormatInstance.asInstanceOf[DecimalFormat]
     numberDecimalFormat.setParseBigDecimal(true)
@@ -186,4 +198,34 @@ object NumberUtils {
     }
   }
 
+  class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
+
+    val normalizedNumberFormat = normalize(originNumberFormat)
+
+    private val precision = getPrecision(normalizedNumberFormat)
+
+    private val scale = getScale(normalizedNumberFormat)
+
+    def parsePrecisionAndScale(): (Int, Int) = (precision, scale)
+
+    def check(): TypeCheckResult = {
+      try {
+        NumberUtils.check(normalizedNumberFormat, originNumberFormat)
+      } catch {
+        case e: AnalysisException => return TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+      TypeCheckResult.TypeCheckSuccess
+    }
+
+    def parse(input: UTF8String): Decimal = {
+      NumberUtils.parse(input, originNumberFormat, normalizedNumberFormat, precision, scale)
+    }
+  }
+
+  // Used for test
+  class TestBuilder(originNumberFormat: String) extends NumberFormatBuilder(originNumberFormat) {
+    def checkWithException(): Unit = {
+      NumberUtils.check(normalizedNumberFormat, originNumberFormat)
+    }
+  }
 }
