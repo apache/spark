@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -62,7 +63,7 @@ case class ParquetScanBuilder(
       isCaseSensitive,
       // The rebase mode doesn't matter here because the filters are used to determine
       // whether they is convertible.
-      LegacyBehaviorPolicy.CORRECTED)
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 

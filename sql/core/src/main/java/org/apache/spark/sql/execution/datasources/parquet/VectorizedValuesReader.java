@@ -46,7 +46,12 @@ public interface VectorizedValuesReader {
   void readUnsignedIntegers(int total, WritableColumnVector c, int rowId);
   void readUnsignedLongs(int total, WritableColumnVector c, int rowId);
   void readLongs(int total, WritableColumnVector c, int rowId);
-  void readLongsWithRebase(int total, WritableColumnVector c, int rowId, boolean failIfRebase);
+  void readLongsWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
