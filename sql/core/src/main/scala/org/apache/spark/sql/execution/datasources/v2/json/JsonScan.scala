@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.json.JsonDataSource
-import org.apache.spark.sql.execution.datasources.v2.{FileScan, TextBasedFileScan}
+import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -82,10 +82,6 @@ case class JsonScan(
     JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
   }
-
-  override def withFilters(
-      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
-    this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
 
   override def equals(obj: Any): Boolean = obj match {
     case j: JsonScan => super.equals(j) && dataSchema == j.dataSchema && options == j.options &&

@@ -307,7 +307,7 @@ case class Union(
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
       if (firstAttr.dataType == newDt) {
         firstAttr.withNullability(nullable)
       } else {
@@ -327,7 +327,7 @@ case class Union(
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.sameType(r.dataType)
+          case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
         })
     children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
   }
@@ -383,8 +383,16 @@ case class Join(
   override def maxRows: Option[Long] = {
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter
-        if left.maxRows.isDefined && right.maxRows.isDefined =>
-        val maxRows = BigInt(left.maxRows.get) * BigInt(right.maxRows.get)
+          if left.maxRows.isDefined && right.maxRows.isDefined =>
+        val leftMaxRows = BigInt(left.maxRows.get)
+        val rightMaxRows = BigInt(right.maxRows.get)
+        val minRows = joinType match {
+          case LeftOuter => leftMaxRows
+          case RightOuter => rightMaxRows
+          case FullOuter => leftMaxRows + rightMaxRows
+          case _ => BigInt(0)
+        }
+        val maxRows = (leftMaxRows * rightMaxRows).max(minRows)
         if (maxRows.isValidLong) {
           Some(maxRows.toLong)
         } else {
@@ -618,6 +626,8 @@ object View {
 case class UnresolvedWith(
     child: LogicalPlan,
     cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
+
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
@@ -974,7 +984,10 @@ case class Aggregate(
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
-    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    aggregateExpressions.map {
+      case Alias(child, _) => child
+      case e => e
+    }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }
 
@@ -1595,5 +1608,121 @@ case class LateralJoin(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LateralJoin = {
     copy(left = newChild)
+  }
+}
+
+/**
+ * A logical plan for as-of join.
+ */
+case class AsOfJoin(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    asOfCondition: Expression,
+    condition: Option[Expression],
+    joinType: JoinType,
+    orderExpression: Expression,
+    toleranceAssertion: Option[Expression]) extends BinaryNode {
+
+  require(Seq(Inner, LeftOuter).contains(joinType),
+    s"Unsupported as-of join type $joinType")
+
+  override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case _ =>
+        left.output ++ right.output
+    }
+  }
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  override lazy val resolved: Boolean = {
+    childrenResolved &&
+      expressions.forall(_.resolved) &&
+      duplicateResolved &&
+      asOfCondition.dataType == BooleanType &&
+      condition.forall(_.dataType == BooleanType) &&
+      toleranceAssertion.forall { assertion =>
+        assertion.foldable && assertion.eval().asInstanceOf[Boolean]
+      }
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): AsOfJoin = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+object AsOfJoin {
+
+  def apply(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      condition: Option[Expression],
+      joinType: JoinType,
+      tolerance: Option[Expression],
+      allowExactMatches: Boolean,
+      direction: AsOfJoinDirection): AsOfJoin = {
+    val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
+    val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
+    AsOfJoin(left, right, asOfCond, condition, joinType,
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+  }
+
+  private def makeAsOfCond(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      tolerance: Option[Expression],
+      allowExactMatches: Boolean,
+      direction: AsOfJoinDirection): Expression = {
+    val base = (allowExactMatches, direction) match {
+      case (true, Backward) => GreaterThanOrEqual(leftAsOf, rightAsOf)
+      case (false, Backward) => GreaterThan(leftAsOf, rightAsOf)
+      case (true, Forward) => LessThanOrEqual(leftAsOf, rightAsOf)
+      case (false, Forward) => LessThan(leftAsOf, rightAsOf)
+      case (true, Nearest) => Literal.TrueLiteral
+      case (false, Nearest) => Not(EqualTo(leftAsOf, rightAsOf))
+    }
+    tolerance match {
+      case Some(tolerance) =>
+        (allowExactMatches, direction) match {
+          case (true, Backward) =>
+            And(base, GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)))
+          case (false, Backward) =>
+            And(base, GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)))
+          case (true, Forward) =>
+            And(base, LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+          case (false, Forward) =>
+            And(base, LessThan(rightAsOf, Add(leftAsOf, tolerance)))
+          case (true, Nearest) =>
+            And(GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)),
+              LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+          case (false, Nearest) =>
+            And(base,
+              And(GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)),
+                LessThan(rightAsOf, Add(leftAsOf, tolerance))))
+        }
+      case None => base
+    }
+  }
+
+  private def makeOrderingExpr(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      direction: AsOfJoinDirection): Expression = {
+    direction match {
+      case Backward => Subtract(leftAsOf, rightAsOf)
+      case Forward => Subtract(rightAsOf, leftAsOf)
+      case Nearest =>
+        If(GreaterThan(leftAsOf, rightAsOf),
+          Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
+    }
   }
 }

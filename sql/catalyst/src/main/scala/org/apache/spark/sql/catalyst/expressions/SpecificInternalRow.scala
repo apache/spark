@@ -175,7 +175,7 @@ final class MutableAny extends MutableValue {
   override def boxed: Any = if (isNull) null else value
   override def update(v: Any): Unit = {
     isNull = false
-    value = v.asInstanceOf[Any]
+    value = v
   }
   override def copy(): MutableAny = {
     val newCopy = new MutableAny

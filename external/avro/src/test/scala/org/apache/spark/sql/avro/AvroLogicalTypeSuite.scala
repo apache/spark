@@ -434,7 +434,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
 
       val msg = intercept[SparkException] {
         spark.read.format("avro").load(s"$dir.avro").collect()
-      }.getCause.getMessage
+      }.getCause.getCause.getMessage
       assert(msg.contains("Unscaled value too large for precision"))
     }
   }

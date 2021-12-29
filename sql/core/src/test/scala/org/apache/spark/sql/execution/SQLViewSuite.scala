@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -217,12 +216,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
       assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
-    }
-  }
-
-  private def assertNoSuchTable(query: String): Unit = {
-    intercept[NoSuchTableException] {
-      sql(query)
     }
   }
 
@@ -869,9 +862,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(CASE_SENSITIVE.key -> "true") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
-            }.getMessage
-            assert(e.contains("cannot resolve 'C1' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("C1", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -888,9 +881,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
-            }.getMessage
-            assert(e.contains("cannot resolve 'a' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("a", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {

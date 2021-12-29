@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import decimal
 from datetime import datetime
 from distutils.version import LooseVersion
 import inspect
 import sys
 import unittest
 from io import StringIO
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -222,6 +223,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             "loc must be int",
             lambda: psdf.insert((1,), "b", 10),
         )
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Assigning column name as tuple is only supported for MultiIndex columns for now.",
+            lambda: psdf.insert(0, ("e",), 10),
+        )
+
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
         self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))
@@ -245,6 +252,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assertRaisesRegex(
             ValueError, "cannot insert d, already exists", lambda: psdf.insert(4, "d", 11)
+        )
+        self.assertRaisesRegex(
+            ValueError,
+            r"cannot insert \('x', 'a', 'b'\), already exists",
+            lambda: psdf.insert(4, ("x", "a", "b"), 11),
         )
         self.assertRaisesRegex(
             ValueError,
@@ -500,18 +512,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         check(psdf.index.to_frame(), pdf.index.to_frame())
         check(psdf.index.to_frame(index=False), pdf.index.to_frame(index=False))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
-            # The `name` argument is added in pandas 0.24.
-            check(psdf.index.to_frame(name="a"), pdf.index.to_frame(name="a"))
-            check(
-                psdf.index.to_frame(index=False, name="a"),
-                pdf.index.to_frame(index=False, name="a"),
-            )
-            check(psdf.index.to_frame(name=("x", "a")), pdf.index.to_frame(name=("x", "a")))
-            check(
-                psdf.index.to_frame(index=False, name=("x", "a")),
-                pdf.index.to_frame(index=False, name=("x", "a")),
-            )
+        check(psdf.index.to_frame(name="a"), pdf.index.to_frame(name="a"))
+        check(psdf.index.to_frame(index=False, name="a"), pdf.index.to_frame(index=False, name="a"))
+        check(psdf.index.to_frame(name=("x", "a")), pdf.index.to_frame(name=("x", "a")))
+        check(
+            psdf.index.to_frame(index=False, name=("x", "a")),
+            pdf.index.to_frame(index=False, name=("x", "a")),
+        )
 
     def test_multiindex_column_access(self):
         columns = pd.MultiIndex.from_tuples(
@@ -895,46 +902,22 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(ValueError, lambda: psdf.rename_axis(["cols2", "cols3"], axis=1))
         self.assertRaises(TypeError, lambda: psdf.rename_axis(mapper=["index2"], index=["index3"]))
 
-        # index/columns parameters and dict_like/functions mappers introduced in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(
-                pdf.rename_axis(index={"index": "index2"}, columns={"cols": "cols2"}).sort_index(),
-                psdf.rename_axis(index={"index": "index2"}, columns={"cols": "cols2"}).sort_index(),
-            )
+        self.assert_eq(
+            pdf.rename_axis(index={"index": "index2"}, columns={"cols": "cols2"}).sort_index(),
+            psdf.rename_axis(index={"index": "index2"}, columns={"cols": "cols2"}).sort_index(),
+        )
 
-            self.assert_eq(
-                pdf.rename_axis(
-                    index={"missing": "index2"}, columns={"missing": "cols2"}
-                ).sort_index(),
-                psdf.rename_axis(
-                    index={"missing": "index2"}, columns={"missing": "cols2"}
-                ).sort_index(),
-            )
-
-            self.assert_eq(
-                pdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
-                psdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
-            )
-        else:
-            expected = pdf
-            expected.index.name = "index2"
-            expected.columns.name = "cols2"
-            result = psdf.rename_axis(
-                index={"index": "index2"}, columns={"cols": "cols2"}
-            ).sort_index()
-            self.assert_eq(expected, result)
-
-            expected.index.name = "index"
-            expected.columns.name = "cols"
-            result = psdf.rename_axis(
+        self.assert_eq(
+            pdf.rename_axis(index={"missing": "index2"}, columns={"missing": "cols2"}).sort_index(),
+            psdf.rename_axis(
                 index={"missing": "index2"}, columns={"missing": "cols2"}
-            ).sort_index()
-            self.assert_eq(expected, result)
+            ).sort_index(),
+        )
 
-            expected.index.name = "INDEX"
-            expected.columns.name = "COLS"
-            result = psdf.rename_axis(index=str.upper, columns=str.upper).sort_index()
-            self.assert_eq(expected, result)
+        self.assert_eq(
+            pdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
+            psdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
+        )
 
         index = pd.MultiIndex.from_tuples(
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
@@ -962,69 +945,33 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assertRaises(ValueError, lambda: psdf.rename_axis(["cols3", "cols4", "cols5"], axis=1))
 
-        # index/columns parameters and dict_like/functions mappers introduced in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(
-                pdf.rename_axis(
-                    index={"index1": "index3"}, columns={"cols1": "cols3"}
-                ).sort_index(),
-                psdf.rename_axis(
-                    index={"index1": "index3"}, columns={"cols1": "cols3"}
-                ).sort_index(),
-            )
+        self.assert_eq(
+            pdf.rename_axis(index={"index1": "index3"}, columns={"cols1": "cols3"}).sort_index(),
+            psdf.rename_axis(index={"index1": "index3"}, columns={"cols1": "cols3"}).sort_index(),
+        )
 
-            self.assert_eq(
-                pdf.rename_axis(
-                    index={"missing": "index3"}, columns={"missing": "cols3"}
-                ).sort_index(),
-                psdf.rename_axis(
-                    index={"missing": "index3"}, columns={"missing": "cols3"}
-                ).sort_index(),
-            )
+        self.assert_eq(
+            pdf.rename_axis(index={"missing": "index3"}, columns={"missing": "cols3"}).sort_index(),
+            psdf.rename_axis(
+                index={"missing": "index3"}, columns={"missing": "cols3"}
+            ).sort_index(),
+        )
 
-            self.assert_eq(
-                pdf.rename_axis(
-                    index={"index1": "index3", "index2": "index4"},
-                    columns={"cols1": "cols3", "cols2": "cols4"},
-                ).sort_index(),
-                psdf.rename_axis(
-                    index={"index1": "index3", "index2": "index4"},
-                    columns={"cols1": "cols3", "cols2": "cols4"},
-                ).sort_index(),
-            )
-
-            self.assert_eq(
-                pdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
-                psdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
-            )
-        else:
-            expected = pdf
-            expected.index.names = ["index3", "index2"]
-            expected.columns.names = ["cols3", "cols2"]
-            result = psdf.rename_axis(
-                index={"index1": "index3"}, columns={"cols1": "cols3"}
-            ).sort_index()
-            self.assert_eq(expected, result)
-
-            expected.index.names = ["index1", "index2"]
-            expected.columns.names = ["cols1", "cols2"]
-            result = psdf.rename_axis(
-                index={"missing": "index2"}, columns={"missing": "cols2"}
-            ).sort_index()
-            self.assert_eq(expected, result)
-
-            expected.index.names = ["index3", "index4"]
-            expected.columns.names = ["cols3", "cols4"]
-            result = psdf.rename_axis(
+        self.assert_eq(
+            pdf.rename_axis(
                 index={"index1": "index3", "index2": "index4"},
                 columns={"cols1": "cols3", "cols2": "cols4"},
-            ).sort_index()
-            self.assert_eq(expected, result)
+            ).sort_index(),
+            psdf.rename_axis(
+                index={"index1": "index3", "index2": "index4"},
+                columns={"cols1": "cols3", "cols2": "cols4"},
+            ).sort_index(),
+        )
 
-            expected.index.names = ["INDEX1", "INDEX2"]
-            expected.columns.names = ["COLS1", "COLS2"]
-            result = psdf.rename_axis(index=str.upper, columns=str.upper).sort_index()
-            self.assert_eq(expected, result)
+        self.assert_eq(
+            pdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
+            psdf.rename_axis(index=str.upper, columns=str.upper).sort_index(),
+        )
 
     def test_dot(self):
         psdf = self.psdf
@@ -1142,47 +1089,17 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(KeyError, lambda: psdf.droplevel({"level_1"}, axis=1))
         self.assertRaises(KeyError, lambda: psdf.droplevel({"level_1": 1}, axis=1))
 
-        # droplevel is new in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(pdf.droplevel("a"), psdf.droplevel("a"))
-            self.assert_eq(pdf.droplevel(["a"]), psdf.droplevel(["a"]))
-            self.assert_eq(pdf.droplevel(("a",)), psdf.droplevel(("a",)))
-            self.assert_eq(pdf.droplevel(0), psdf.droplevel(0))
-            self.assert_eq(pdf.droplevel(-1), psdf.droplevel(-1))
+        self.assert_eq(pdf.droplevel("a"), psdf.droplevel("a"))
+        self.assert_eq(pdf.droplevel(["a"]), psdf.droplevel(["a"]))
+        self.assert_eq(pdf.droplevel(("a",)), psdf.droplevel(("a",)))
+        self.assert_eq(pdf.droplevel(0), psdf.droplevel(0))
+        self.assert_eq(pdf.droplevel(-1), psdf.droplevel(-1))
 
-            self.assert_eq(pdf.droplevel("level_1", axis=1), psdf.droplevel("level_1", axis=1))
-            self.assert_eq(pdf.droplevel(["level_1"], axis=1), psdf.droplevel(["level_1"], axis=1))
-            self.assert_eq(
-                pdf.droplevel(("level_1",), axis=1), psdf.droplevel(("level_1",), axis=1)
-            )
-            self.assert_eq(pdf.droplevel(0, axis=1), psdf.droplevel(0, axis=1))
-            self.assert_eq(pdf.droplevel(-1, axis=1), psdf.droplevel(-1, axis=1))
-        else:
-            expected = pdf.copy()
-            expected.index = expected.index.droplevel("a")
-
-            self.assert_eq(expected, psdf.droplevel("a"))
-            self.assert_eq(expected, psdf.droplevel(["a"]))
-            self.assert_eq(expected, psdf.droplevel(("a",)))
-            self.assert_eq(expected, psdf.droplevel(0))
-
-            expected = pdf.copy()
-            expected.index = expected.index.droplevel(-1)
-
-            self.assert_eq(expected, psdf.droplevel(-1))
-
-            expected = pdf.copy()
-            expected.columns = expected.columns.droplevel("level_1")
-
-            self.assert_eq(expected, psdf.droplevel("level_1", axis=1))
-            self.assert_eq(expected, psdf.droplevel(["level_1"], axis=1))
-            self.assert_eq(expected, psdf.droplevel(("level_1",), axis=1))
-            self.assert_eq(expected, psdf.droplevel(0, axis=1))
-
-            expected = pdf.copy()
-            expected.columns = expected.columns.droplevel(-1)
-
-            self.assert_eq(expected, psdf.droplevel(-1, axis=1))
+        self.assert_eq(pdf.droplevel("level_1", axis=1), psdf.droplevel("level_1", axis=1))
+        self.assert_eq(pdf.droplevel(["level_1"], axis=1), psdf.droplevel(["level_1"], axis=1))
+        self.assert_eq(pdf.droplevel(("level_1",), axis=1), psdf.droplevel(("level_1",), axis=1))
+        self.assert_eq(pdf.droplevel(0, axis=1), psdf.droplevel(0, axis=1))
+        self.assert_eq(pdf.droplevel(-1, axis=1), psdf.droplevel(-1, axis=1))
 
         # Tupled names
         pdf.columns.names = [("level", 1), ("level", 2)]
@@ -1192,22 +1109,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(KeyError, lambda: psdf.droplevel("a"))
         self.assertRaises(KeyError, lambda: psdf.droplevel(("a", 10)))
 
-        # droplevel is new in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(pdf.droplevel([("a", 10)]), psdf.droplevel([("a", 10)]))
-            self.assert_eq(
-                pdf.droplevel([("level", 1)], axis=1), psdf.droplevel([("level", 1)], axis=1)
-            )
-        else:
-            expected = pdf.copy()
-            expected.index = expected.index.droplevel([("a", 10)])
-
-            self.assert_eq(expected, psdf.droplevel([("a", 10)]))
-
-            expected = pdf.copy()
-            expected.columns = expected.columns.droplevel([("level", 1)])
-
-            self.assert_eq(expected, psdf.droplevel([("level", 1)], axis=1))
+        self.assert_eq(pdf.droplevel([("a", 10)]), psdf.droplevel([("a", 10)]))
+        self.assert_eq(
+            pdf.droplevel([("level", 1)], axis=1), psdf.droplevel([("level", 1)], axis=1)
+        )
 
         # non-string names
         pdf = (
@@ -1218,33 +1123,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.columns = pd.MultiIndex.from_tuples([("c", "e"), ("d", "f")], names=[100.0, 200.0])
         psdf = ps.from_pandas(pdf)
 
-        # droplevel is new in pandas 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            self.assert_eq(pdf.droplevel(10.0), psdf.droplevel(10.0))
-            self.assert_eq(pdf.droplevel([10.0]), psdf.droplevel([10.0]))
-            self.assert_eq(pdf.droplevel((10.0,)), psdf.droplevel((10.0,)))
-            self.assert_eq(pdf.droplevel(0), psdf.droplevel(0))
-            self.assert_eq(pdf.droplevel(-1), psdf.droplevel(-1))
-            self.assert_eq(pdf.droplevel(100.0, axis=1), psdf.droplevel(100.0, axis=1))
-            self.assert_eq(pdf.droplevel(0, axis=1), psdf.droplevel(0, axis=1))
-        else:
-            expected = pdf.copy()
-            expected.index = expected.index.droplevel(10.0)
-
-            self.assert_eq(expected, psdf.droplevel(10.0))
-            self.assert_eq(expected, psdf.droplevel([10.0]))
-            self.assert_eq(expected, psdf.droplevel((10.0,)))
-            self.assert_eq(expected, psdf.droplevel(0))
-
-            expected = pdf.copy()
-            expected.index = expected.index.droplevel(-1)
-            self.assert_eq(expected, psdf.droplevel(-1))
-
-            expected = pdf.copy()
-            expected.columns = expected.columns.droplevel(100.0)
-
-            self.assert_eq(expected, psdf.droplevel(100.0, axis=1))
-            self.assert_eq(expected, psdf.droplevel(0, axis=1))
+        self.assert_eq(pdf.droplevel(10.0), psdf.droplevel(10.0))
+        self.assert_eq(pdf.droplevel([10.0]), psdf.droplevel([10.0]))
+        self.assert_eq(pdf.droplevel((10.0,)), psdf.droplevel((10.0,)))
+        self.assert_eq(pdf.droplevel(0), psdf.droplevel(0))
+        self.assert_eq(pdf.droplevel(-1), psdf.droplevel(-1))
+        self.assert_eq(pdf.droplevel(100.0, axis=1), psdf.droplevel(100.0, axis=1))
+        self.assert_eq(pdf.droplevel(0, axis=1), psdf.droplevel(0, axis=1))
 
     def test_drop(self):
         pdf = pd.DataFrame({"x": [1, 2], "y": [3, 4], "z": [5, 6]}, index=np.random.rand(2))
@@ -1254,23 +1139,22 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         expected_error_message = "Need to specify at least one of 'labels' or 'columns'"
         with self.assertRaisesRegex(ValueError, expected_error_message):
             psdf.drop()
-        # Assert axis cannot be 0
-        with self.assertRaisesRegex(NotImplementedError, "Drop currently only works for axis=1"):
-            psdf.drop("x", axis=0)
+
+        #
+        # Drop columns
+        #
+
         # Assert using a str for 'labels' works
         self.assert_eq(psdf.drop("x", axis=1), pdf.drop("x", axis=1))
-        # Assert axis is 1 by default
-        self.assert_eq(psdf.drop("x"), pdf.drop("x", axis=1))
+        self.assert_eq((psdf + 1).drop("x", axis=1), (pdf + 1).drop("x", axis=1))
         # Assert using a list for 'labels' works
         self.assert_eq(psdf.drop(["y", "z"], axis=1), pdf.drop(["y", "z"], axis=1))
+        self.assert_eq(psdf.drop(["x", "y", "z"], axis=1), pdf.drop(["x", "y", "z"], axis=1))
         # Assert using 'columns' instead of 'labels' produces the same results
         self.assert_eq(psdf.drop(columns="x"), pdf.drop(columns="x"))
         self.assert_eq(psdf.drop(columns=["y", "z"]), pdf.drop(columns=["y", "z"]))
-
-        # Assert 'labels' being used when both 'labels' and 'columns' are specified
-        # TODO: should throw an error?
-        expected_output = pd.DataFrame({"y": [3, 4], "z": [5, 6]}, index=psdf.index.to_pandas())
-        self.assert_eq(psdf.drop(labels=["x"], columns=["y"]), expected_output)
+        self.assert_eq(psdf.drop(columns=["x", "y", "z"]), pdf.drop(columns=["x", "y", "z"]))
+        self.assert_eq(psdf.drop(columns=[]), pdf.drop(columns=[]))
 
         columns = pd.MultiIndex.from_tuples([(1, "x"), (1, "y"), (2, "z")])
         pdf.columns = columns
@@ -1279,16 +1163,112 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.drop(columns=1), pdf.drop(columns=1))
         self.assert_eq(psdf.drop(columns=(1, "x")), pdf.drop(columns=(1, "x")))
         self.assert_eq(psdf.drop(columns=[(1, "x"), 2]), pdf.drop(columns=[(1, "x"), 2]))
+        self.assert_eq(
+            psdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+            pdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+        )
 
         self.assertRaises(KeyError, lambda: psdf.drop(columns=3))
         self.assertRaises(KeyError, lambda: psdf.drop(columns=(1, "z")))
+
+        pdf.index = pd.MultiIndex.from_tuples([("i", 0), ("j", 1)])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+            pdf.drop(columns=[(1, "x"), (1, "y"), (2, "z")]),
+        )
 
         # non-string names
         pdf = pd.DataFrame({10: [1, 2], 20: [3, 4], 30: [5, 6]}, index=np.random.rand(2))
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.drop(10), pdf.drop(10, axis=1))
-        self.assert_eq(psdf.drop([20, 30]), pdf.drop([20, 30], axis=1))
+        self.assert_eq(psdf.drop(10, axis=1), pdf.drop(10, axis=1))
+        self.assert_eq(psdf.drop([20, 30], axis=1), pdf.drop([20, 30], axis=1))
+
+        #
+        # Drop rows
+        #
+
+        pdf = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6], "Z": [7, 8, 9]}, index=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+
+        # Given labels (and axis = 0)
+        self.assert_eq(psdf.drop(labels="A", axis=0), pdf.drop(labels="A", axis=0))
+        self.assert_eq(psdf.drop(labels="A"), pdf.drop(labels="A"))
+        self.assert_eq((psdf + 1).drop(labels="A"), (pdf + 1).drop(labels="A"))
+        self.assert_eq(psdf.drop(labels=["A", "C"], axis=0), pdf.drop(labels=["A", "C"], axis=0))
+        self.assert_eq(
+            psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)
+        )
+
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(labels=["A", "B", "C"], axis=0), pdf.drop(labels=["A", "B", "C"], axis=0)
+            )
+
+        # Given index
+        self.assert_eq(psdf.drop(index="A"), pdf.drop(index="A"))
+        self.assert_eq(psdf.drop(index=["A", "C"]), pdf.drop(index=["A", "C"]))
+        self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
+        self.assert_eq(psdf.drop(index=[]), pdf.drop(index=[]))
+
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(psdf.drop(index=["A", "B", "C"]), pdf.drop(index=["A", "B", "C"]))
+
+        # Non-string names
+        pdf.index = [10, 20, 30]
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.drop(labels=10, axis=0), pdf.drop(labels=10, axis=0))
+        self.assert_eq(psdf.drop(labels=[10, 30], axis=0), pdf.drop(labels=[10, 30], axis=0))
+        self.assert_eq(
+            psdf.drop(labels=[10, 20, 30], axis=0), pdf.drop(labels=[10, 20, 30], axis=0)
+        )
+
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(labels=[10, 20, 30], axis=0), pdf.drop(labels=[10, 20, 30], axis=0)
+            )
+
+        # MultiIndex
+        pdf.index = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        psdf = ps.from_pandas(pdf)
+        self.assertRaises(NotImplementedError, lambda: psdf.drop(labels=[("a", "x")]))
+
+        #
+        # Drop rows and columns
+        #
+        pdf = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6], "Z": [7, 8, 9]}, index=["A", "B", "C"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf.drop(index="A", columns="X"), pdf.drop(index="A", columns="X"))
+        self.assert_eq(
+            psdf.drop(index=["A", "C"], columns=["X", "Z"]),
+            pdf.drop(index=["A", "C"], columns=["X", "Z"]),
+        )
+        self.assert_eq(
+            psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+            pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+        )
+        with ps.option_context("compute.isin_limit", 2):
+            self.assert_eq(
+                psdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+                pdf.drop(index=["A", "B", "C"], columns=["X", "Z"]),
+            )
+        self.assert_eq(
+            psdf.drop(index=[], columns=["X", "Z"]),
+            pdf.drop(index=[], columns=["X", "Z"]),
+        )
+        self.assert_eq(
+            psdf.drop(index=["A", "B", "C"], columns=[]),
+            pdf.drop(index=["A", "B", "C"], columns=[]),
+        )
+        self.assert_eq(
+            psdf.drop(index=[], columns=[]),
+            pdf.drop(index=[], columns=[]),
+        )
+        self.assertRaises(
+            ValueError,
+            lambda: psdf.drop(labels="A", axis=0, columns="X"),
+        )
 
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
@@ -1509,14 +1489,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
 
-        if sys.version_info >= (3, 6):
-            # flaky in Python 3.5.
-            self.assert_eq(
-                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-            )
-            self.assert_eq(
-                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-            )
+        self.assert_eq(
+            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+        )
+        self.assert_eq(
+            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+        )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])
@@ -1941,6 +1919,41 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psdf.isin(1)
 
+        pdf = pd.DataFrame(
+            {
+                "a": [4, 2, 3, 4, 8, 6],
+                "b": [1, None, 9, 4, None, 4],
+                "c": [None, 5, None, 3, 2, 1],
+            },
+        )
+        psdf = ps.from_pandas(pdf)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), pdf.isin([4, 3, 1, 1, None]))
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [True, False, True, True, False, False],
+                    "b": [True, False, False, True, False, True],
+                    "c": [False, False, False, True, False, True],
+                }
+            )
+            self.assert_eq(psdf.isin([4, 3, 1, 1, None]), expected)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(
+                psdf.isin({"b": [4, 3, 1, 1, None]}), pdf.isin({"b": [4, 3, 1, 1, None]})
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [False, False, False, False, False, False],
+                    "b": [True, False, False, True, False, True],
+                    "c": [False, False, False, False, False, False],
+                }
+            )
+            self.assert_eq(psdf.isin({"b": [4, 3, 1, 1, None]}), expected)
+
     def test_merge(self):
         left_pdf = pd.DataFrame(
             {
@@ -2028,41 +2041,37 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # Test Series on the right
-        # pd.DataFrame.merge with Series is implemented since version 0.24.0
-        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
-            check(lambda left, right: left.merge(right), right_psser, right_ps)
+        check(lambda left, right: left.merge(right), right_psser, right_ps)
+        check(
+            lambda left, right: left.merge(right, left_on="x", right_on="x"), right_psser, right_ps
+        )
+        check(
+            lambda left, right: left.set_index("x").merge(right, left_index=True, right_on="x"),
+            right_psser,
+            right_ps,
+        )
+
+        # Test join types with Series
+        for how in ["inner", "left", "right", "outer"]:
+            check(lambda left, right: left.merge(right, how=how), right_psser, right_ps)
             check(
-                lambda left, right: left.merge(right, left_on="x", right_on="x"),
-                right_psser,
-                right_ps,
-            )
-            check(
-                lambda left, right: left.set_index("x").merge(right, left_index=True, right_on="x"),
+                lambda left, right: left.merge(right, left_on="x", right_on="x", how=how),
                 right_psser,
                 right_ps,
             )
 
-            # Test join types with Series
-            for how in ["inner", "left", "right", "outer"]:
-                check(lambda left, right: left.merge(right, how=how), right_psser, right_ps)
-                check(
-                    lambda left, right: left.merge(right, left_on="x", right_on="x", how=how),
-                    right_psser,
-                    right_ps,
-                )
-
-            # suffix with Series
-            check(
-                lambda left, right: left.merge(
-                    right,
-                    suffixes=["_left", "_right"],
-                    how="outer",
-                    left_index=True,
-                    right_index=True,
-                ),
-                right_psser,
-                right_ps,
-            )
+        # suffix with Series
+        check(
+            lambda left, right: left.merge(
+                right,
+                suffixes=["_left", "_right"],
+                how="outer",
+                left_index=True,
+                right_index=True,
+            ),
+            right_psser,
+            right_ps,
+        )
 
         # multi-index columns
         left_columns = pd.MultiIndex.from_tuples([(10, "lkey"), (10, "value"), (20, "x")])
@@ -3719,14 +3728,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(KeyError, lambda: psdf.melt(value_vars="Z"))
 
         # multi-index columns
-        if LooseVersion("0.24") <= LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            # pandas >=0.24,<1.0 doesn't support mixed int/str columns in melt.
-            # see: https://github.com/pandas-dev/pandas/pull/29792
-            TEN = "10"
-            TWELVE = "20"
-        else:
-            TEN = 10.0
-            TWELVE = 20.0
+        TEN = 10.0
+        TWELVE = 20.0
 
         columns = pd.MultiIndex.from_tuples([(TEN, "A"), (TEN, "B"), (TWELVE, "C")])
         pdf.columns = columns
@@ -4183,6 +4186,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.filter(items=["ab", "aa"], axis=0).sort_index(),
             pdf.filter(items=["ab", "aa"], axis=0).sort_index(),
         )
+
+        with option_context("compute.isin_limit", 0):
+            self.assert_eq(
+                psdf.filter(items=["ab", "aa"], axis=0).sort_index(),
+                pdf.filter(items=["ab", "aa"], axis=0).sort_index(),
+            )
+
         self.assert_eq(
             psdf.filter(items=["ba", "db"], axis=1).sort_index(),
             pdf.filter(items=["ba", "db"], axis=1).sort_index(),
@@ -4415,6 +4425,28 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.apply(lambda x: len(x), axis=1).sort_index(),
             )
 
+    def test_apply_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.apply(identify1, axis=1)
+        expected = pdf.apply(identify1, axis=1)
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.apply(identify2, axis=1)
+        expected = pdf.apply(identify2, axis=1)
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
+
     def test_apply_batch(self):
         pdf = pd.DataFrame(
             {
@@ -4467,6 +4499,82 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.pandas_on_spark.apply_batch(lambda x: x + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
+
+    def test_apply_batch_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.pandas_on_spark.apply_batch(identify1)
+        expected = pdf
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify2)
+        expected = pdf
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [[e] for e in [4, 5, 6, 3, 2, 1, 0, 0, 0]]},
+            index=np.random.rand(9),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def identify3(x) -> ps.DataFrame[float, [int, List[int]]]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify3)
+        actual.columns = ["a", "b"]
+        self.assert_eq(actual, pdf)
+
+        # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
+        if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+            import numpy.typing as ntp
+
+            psdf = ps.from_pandas(pdf)
+
+            def identify4(
+                x,
+            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore[name-defined]
+                return x
+
+            actual = psdf.pandas_on_spark.apply_batch(identify4)
+            actual.columns = ["a", "b"]
+            self.assert_eq(actual, pdf)
+
+        arrays = [[1, 2, 3, 4, 5, 6, 7, 8, 9], ["a", "b", "c", "d", "e", "f", "g", "h", "i"]]
+        idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        pdf = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [[e] for e in [4, 5, 6, 3, 2, 1, 0, 0, 0]]},
+            index=idx,
+        )
+        psdf = ps.from_pandas(pdf)
+
+        def identify4(x) -> ps.DataFrame[[int, str], [int, List[int]]]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify4)
+        actual.index.names = ["number", "color"]
+        actual.columns = ["a", "b"]
+        self.assert_eq(actual, pdf)
+
+        def identify5(
+            x,
+        ) -> ps.DataFrame[
+            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F405
+        ]:
+            return x
+
+        actual = psdf.pandas_on_spark.apply_batch(identify5)
+        self.assert_eq(actual, pdf)
 
     def test_transform_batch(self):
         pdf = pd.DataFrame(
@@ -4536,6 +4644,28 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 psdf.pandas_on_spark.transform_batch(lambda x: x + 1).sort_index(),
                 (pdf + 1).sort_index(),
             )
+
+    def test_transform_batch_with_type(self):
+        pdf = self.pdf
+        psdf = ps.from_pandas(pdf)
+
+        def identify1(x) -> ps.DataFrame[int, int]:
+            return x
+
+        # Type hints set the default column names, and we use default index for
+        # pandas API on Spark. Here we ignore both diff.
+        actual = psdf.pandas_on_spark.transform_batch(identify1)
+        expected = pdf
+        self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
+
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+            return x
+
+        actual = psdf.pandas_on_spark.transform_batch(identify2)
+        expected = pdf
+        self.assert_eq(sorted(actual["a"].to_numpy()), sorted(expected["a"].to_numpy()))
+        self.assert_eq(sorted(actual["b"].to_numpy()), sorted(expected["b"].to_numpy()))
 
     def test_transform_batch_same_anchor(self):
         psdf = ps.range(10)
@@ -4646,12 +4776,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"x": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
-            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
-        else:
-            self.assert_eq(psdf.quantile(0.5), pd.Series(name=0.5))
-            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pd.DataFrame(index=[0.25, 0.5, 0.75]))
+        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
+        self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile(0.5, numeric_only=False)
@@ -4893,11 +5019,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame(data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]})
         psdf = ps.from_pandas(pdf)
 
-        # `to_markdown()` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            self.assertRaises(NotImplementedError, lambda: psdf.to_markdown())
-        else:
-            self.assert_eq(pdf.to_markdown(), psdf.to_markdown())
+        self.assert_eq(pdf.to_markdown(), psdf.to_markdown())
 
     def test_cache(self):
         pdf = pd.DataFrame(
@@ -4976,17 +5098,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) < LooseVersion("1.0.0") and LooseVersion(
-            pd.__version__
-        ) >= LooseVersion("0.24.0"):
-            expected_result = pd.DataFrame(
-                {"angles": [np.inf, 3.0, 2.0], "degrees": [0.0, 0.0, 0.0]},
-                index=["circle", "triangle", "rectangle"],
-                columns=["angles", "degrees"],
-            )
-        else:
-            expected_result = pdf.rfloordiv(10)
-
+        expected_result = pdf.rfloordiv(10)
         self.assert_eq(psdf.rfloordiv(10), expected_result)
 
     def test_truncate(self):
@@ -5102,17 +5214,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.columns.name = "columns"
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25.0"):
-            expected_result1 = pdf.explode("A")
-            expected_result2 = pdf.explode("B")
-        else:
-            expected_result1 = pd.DataFrame(
-                {"A": [-1, np.nan, 0, np.inf, 1, -np.inf], "B": [1, 1, 1, 1, 1, 1]},
-                index=pd.Index([0, 0, 1, 1, 2, 2]),
-            )
-            expected_result1.index.name = "index"
-            expected_result1.columns.name = "columns"
-            expected_result2 = pdf
+        expected_result1 = pdf.explode("A")
+        expected_result2 = pdf.explode("B")
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
         self.assert_eq(psdf.explode("B"), expected_result2)
@@ -5128,16 +5231,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.index = midx
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25.0"):
-            expected_result1 = pdf.explode("A")
-            expected_result2 = pdf.explode("B")
-        else:
-            midx = pd.MultiIndex.from_tuples(
-                [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("y", "c"), ("y", "c")],
-                names=["index1", "index2"],
-            )
-            expected_result1.index = midx
-            expected_result2 = pdf
+        expected_result1 = pdf.explode("A")
+        expected_result2 = pdf.explode("B")
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
         self.assert_eq(psdf.explode("B"), expected_result2)
@@ -5151,16 +5246,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf.columns = columns
         psdf.columns = columns
 
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25.0"):
-            expected_result1 = pdf.explode(("A", "Z"))
-            expected_result2 = pdf.explode(("B", "X"))
-            expected_result3 = pdf.A.explode("Z")
-        else:
-            expected_result1.columns = columns
-            expected_result2 = pdf
-            expected_result3 = pd.DataFrame({"Z": [-1, np.nan, 0, np.inf, 1, -np.inf]}, index=midx)
-            expected_result3.index.name = "index"
-            expected_result3.columns.name = "column2"
+        expected_result1 = pdf.explode(("A", "Z"))
+        expected_result2 = pdf.explode(("B", "X"))
+        expected_result3 = pdf.A.explode("Z")
 
         self.assert_eq(psdf.explode(("A", "Z")), expected_result1, almost=True)
         self.assert_eq(psdf.explode(("B", "X")), expected_result2)
@@ -5702,17 +5790,199 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.astype({"c": float})
 
     def test_describe(self):
-        psdf = self.psdf
+        pdf, psdf = self.df_pair
+
+        # numeric columns
+        self.assert_eq(psdf.describe(), pdf.describe())
+        psdf.a += psdf.a
+        pdf.a += pdf.a
+        self.assert_eq(psdf.describe(), pdf.describe())
+
+        # string columns
+        psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+
+        # timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [
+                    pd.Timestamp("2020-10-20"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2022-07-11"),
+                ],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # NOTE: Set `datetime_is_numeric=True` for pandas:
+        # FutureWarning: Treating datetime data as categorical rather than numeric in `.describe` is deprecated
+        # and will be removed in a future version of pandas. Specify `datetime_is_numeric=True` to silence this
+        # warning and adopt the future behavior now.
+        # NOTE: Compare the result except percentiles, since we use approximate percentile
+        # so the result is different from pandas.
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+
+        # String & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": ["a", "b", "b", "c"],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe(datetime_is_numeric=True).astype(str).loc[["count", "mean", "min", "max"]],
+        )
+
+        # Numeric & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [1, 2, 2, 3],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.B = pandas_result.B.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
+
+        # Include None column
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 2, 3],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "c": [None, None, None],
+            }
+        )
+        pdf = psdf.to_pandas()
+        pandas_result = pdf.describe(datetime_is_numeric=True)
+        pandas_result.b = pandas_result.b.astype(str)
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pandas_result.loc[["count", "mean", "min", "max"]],
+        )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe(percentiles=[1.1])
 
-        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
-
+        psdf = ps.DataFrame()
         msg = "Cannot describe a DataFrame without columns"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
+
+    def test_describe_empty(self):
+        # Empty DataFrame
+        psdf = ps.DataFrame(columns=["A", "B"])
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe(),
+            pdf.describe().astype(float),
+        )
+
+        # Explicit empty DataFrame numeric only
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string only
+        psdf = ps.DataFrame({"a": ["a", "b", "c"], "b": ["q", "w", "e"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe().astype(float),
+        )
+
+        # Explicit empty DataFrame timestamp only
+        psdf = ps.DataFrame(
+            {
+                "a": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # For timestamp type, we should convert NaT to None in pandas result
+        # since pandas API on Spark doesn't support the NaT for object type.
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
+
+        # Explicit empty DataFrame numeric & timestamp
+        psdf = ps.DataFrame(
+            {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result,
+        )
+
+        # Explicit empty DataFrame numeric & string
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string & timestamp
+        psdf = ps.DataFrame(
+            {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
 
     def test_getitem_with_none_key(self):
         psdf = self.psdf
@@ -5741,6 +6011,123 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+
+    def test_multi_index_dtypes(self):
+        # SPARK-36930: Support ps.MultiIndex.dtypes
+        arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series([np.dtype("int64"), np.dtype("O")], index=["number", "color"])
+            self.assert_eq(psmidx.dtypes, expected)
+
+        # multiple labels
+        pmidx = pd.MultiIndex.from_arrays(arrays, names=[("zero", "first"), ("one", "second")])
+        psmidx = ps.from_pandas(pmidx)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(psmidx.dtypes, pmidx.dtypes)
+        else:
+            expected = pd.Series(
+                [np.dtype("int64"), np.dtype("O")],
+                index=pd.Index([("zero", "first"), ("one", "second")]),
+            )
+            self.assert_eq(psmidx.dtypes, expected)
+
+    def test_cov(self):
+        # SPARK-36396: Implement DataFrame.cov
+
+        # int
+        pdf = pd.DataFrame([(1, 2), (0, 3), (2, 0), (1, 1)], columns=["a", "b"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
+
+        # bool
+        pdf = pd.DataFrame(
+            {
+                "a": [1, np.nan, 3, 4],
+                "b": [True, False, False, True],
+                "c": [True, True, False, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
+
+        # extension dtype
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "float"]
+            boolean_dtypes = ["boolean", "bool"]
+        else:
+            numeric_dtypes = ["Int8", "Int16", "Int32", "Int64", "float"]
+            boolean_dtypes = ["boolean", "bool"]
+
+        sers = [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in numeric_dtypes]
+        sers += [pd.Series([True, False, True, None], dtype=dtype) for dtype in boolean_dtypes]
+        sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3), None]))
+
+        pdf = pd.concat(sers, axis=1)
+        pdf.columns = [dtype for dtype in numeric_dtypes + boolean_dtypes] + ["decimal"]
+        psdf = ps.from_pandas(pdf)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+            self.assert_eq(pdf.cov(min_periods=3), psdf.cov(min_periods=3), almost=True)
+            self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4))
+        else:
+            test_types = [
+                "Int8",
+                "Int16",
+                "Int32",
+                "Int64",
+                "float",
+                "boolean",
+                "bool",
+            ]
+            expected = pd.DataFrame(
+                data=[
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
+                ],
+                index=test_types,
+                columns=test_types,
+            )
+            self.assert_eq(expected, psdf.cov(), almost=True)
+
+        # string column
+        pdf = pd.DataFrame(
+            [(1, 2, "a", 1), (0, 3, "b", 1), (2, 0, "c", 9), (1, 1, "d", 1)],
+            columns=["a", "b", "c", "d"],
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5))
+
+        # nan
+        np.random.seed(42)
+        pdf = pd.DataFrame(np.random.randn(20, 3), columns=["a", "b", "c"])
+        pdf.loc[pdf.index[:5], "a"] = np.nan
+        pdf.loc[pdf.index[5:10], "b"] = np.nan
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(min_periods=11), psdf.cov(min_periods=11), almost=True)
+        self.assert_eq(pdf.cov(min_periods=10), psdf.cov(min_periods=10), almost=True)
+
+        # return empty DataFrame
+        pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov())
 
 
 if __name__ == "__main__":

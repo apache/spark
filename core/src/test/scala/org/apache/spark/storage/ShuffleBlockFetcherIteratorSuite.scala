@@ -29,7 +29,7 @@ import scala.concurrent.Future
 
 import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doThrow, mock, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -247,7 +247,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .fetchBlocks(any(), any(), any(), any(), any(), any())
       // only diagnose once
       assert(logAppender.loggingEvents.count(
-        _.getRenderedMessage.contains("Start corruption diagnosis")) === 1)
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")) === 1)
     }
   }
 
@@ -283,7 +283,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .fetchBlocks(any(), any(), any(), any(), any(), any())
       // only diagnose once
       assert(logAppender.loggingEvents.exists(
-        _.getRenderedMessage.contains("Start corruption diagnosis")))
+        _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")))
     }
   }
 
@@ -315,7 +315,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     hostLocalBlocks.foreach { case (blockId, buf) =>
       doReturn(buf)
         .when(blockManager)
-        .getHostLocalShuffleData(meq(blockId.asInstanceOf[ShuffleBlockId]), any())
+        .getHostLocalShuffleData(meq(blockId), any())
     }
     val hostLocalDirs = Map("test-host-local-client-1" -> Array("local-dir"))
     // returning local dir for hostLocalBmId
@@ -571,7 +571,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       )
     }
     assert(appender.loggingEvents.exists(
-      _.getRenderedMessage.contains(s"2 ($expectedSizeInBytes) remote blocks")),
+      _.getMessage.getFormattedMessage.contains(s"2 ($expectedSizeInBytes) remote blocks")),
       "remote blocks should be merged to 2 blocks and kept the actual size")
   }
 

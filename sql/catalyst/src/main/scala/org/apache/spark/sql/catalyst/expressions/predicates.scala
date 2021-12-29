@@ -311,6 +311,16 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(Seq(child.preCanonicalized)) match {
+      case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+      case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+      case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+      case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+      case other => other
+    }
+  }
+
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
   // +---------+-----------+
@@ -439,6 +449,15 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+    if (list.size > 1) {
+      basic.copy(list = basic.list.sortBy(_.hashCode()))
+    } else {
+      basic
+    }
+  }
+
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
@@ -554,6 +573,16 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+  @transient private[this] lazy val isNaN: Any => Boolean = child.dataType match {
+    case DoubleType => (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
+    case FloatType => (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
+    case _ => (_: Any) => false
+  }
+  @transient private[this] lazy val hasNaN = child.dataType match {
+    case DoubleType | FloatType => set.exists(isNaN)
+    case _ => false
+  }
+
 
   override def nullable: Boolean = child.nullable || hasNull
 
@@ -562,6 +591,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {
       true
+    } else if (isNaN(value)) {
+      hasNaN
     } else if (hasNull) {
       null
     } else {
@@ -593,15 +624,34 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val setTerm = ctx.addReferenceObj("set", set)
+
       val setIsNull = if (hasNull) {
         s"${ev.isNull} = !${ev.value};"
       } else {
         ""
       }
-      s"""
-         |${ev.value} = $setTerm.contains($c);
-         |$setIsNull
-       """.stripMargin
+
+      val isNaNCode = child.dataType match {
+        case DoubleType => Some((v: Any) => s"java.lang.Double.isNaN($v)")
+        case FloatType => Some((v: Any) => s"java.lang.Float.isNaN($v)")
+        case _ => None
+      }
+
+      if (hasNaN && isNaNCode.isDefined) {
+        s"""
+           |if ($setTerm.contains($c)) {
+           |  ${ev.value} = true;
+           |} else if (${isNaNCode.get(c)}) {
+           |  ${ev.value} = true;
+           |}
+           |$setIsNull
+         """.stripMargin
+      } else {
+        s"""
+           |${ev.value} = $setTerm.contains($c);
+           |$setIsNull
+         """.stripMargin
+      }
     })
   }
 
@@ -839,6 +889,21 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   override def inputType: AbstractDataType = AnyDataType
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
+
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(children.map(_.preCanonicalized)) match {
+      case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
+      case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
+
+      case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
+      case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+
+      case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+      case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+
+      case other => other
+    }
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>

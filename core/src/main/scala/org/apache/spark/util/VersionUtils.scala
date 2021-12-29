@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import org.apache.hadoop.util.VersionInfo
+
 /**
  * Utilities for working with Spark version strings
  */
@@ -25,6 +27,11 @@ private[spark] object VersionUtils {
   private val majorMinorRegex = """^(\d+)\.(\d+)(\..*)?$""".r
   private val shortVersionRegex = """^(\d+\.\d+\.\d+)(.*)?$""".r
   private val majorMinorPatchRegex = """^(\d+)(?:\.(\d+)(?:\.(\d+)(?:[.-].*)?)?)?$""".r
+
+  /**
+   * Whether the Hadoop version used by Spark is 3.x
+   */
+  def isHadoop3: Boolean = majorVersion(VersionInfo.getVersion) == 3
 
   /**
    * Given a Spark version string, return the major version number.

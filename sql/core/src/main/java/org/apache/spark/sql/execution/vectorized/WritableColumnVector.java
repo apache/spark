@@ -46,6 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
+  private final byte[] byte8 = new byte[8];
 
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
@@ -200,6 +201,29 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets value to [rowId, rowId + count).
    */
   public abstract void putBooleans(int rowId, int count, boolean value);
+
+  /**
+   * Sets bits from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public void putBooleans(int rowId, int count, byte src, int srcIndex) {
+    assert ((srcIndex + count) <= 8);
+    byte8[0] = (byte)(src & 1);
+    byte8[1] = (byte)(src >>> 1 & 1);
+    byte8[2] = (byte)(src >>> 2 & 1);
+    byte8[3] = (byte)(src >>> 3 & 1);
+    byte8[4] = (byte)(src >>> 4 & 1);
+    byte8[5] = (byte)(src >>> 5 & 1);
+    byte8[6] = (byte)(src >>> 6 & 1);
+    byte8[7] = (byte)(src >>> 7 & 1);
+    putBytes(rowId, count, byte8, srcIndex);
+  }
+
+  /**
+   * Sets bits from [src[0], src[7]] to [rowId, rowId + 7]
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public abstract void putBooleans(int rowId, byte src);
 
   /**
    * Sets `value` to the value at rowId.
@@ -466,6 +490,18 @@ public abstract class WritableColumnVector extends ColumnVector {
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putBooleans(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
+  /**
+   * Append bits from [src[offset], src[offset + count])
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public final int appendBooleans(int count, byte src, int offset) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putBooleans(elementsAppended, count, src, offset);
     elementsAppended += count;
     return result;
   }

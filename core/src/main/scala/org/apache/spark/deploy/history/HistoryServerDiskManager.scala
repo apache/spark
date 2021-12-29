@@ -87,7 +87,7 @@ private class HistoryServerDiskManager(
       listing.delete(info.getClass(), info.path)
     }
 
-    // Reading level db would trigger table file compaction, then it may cause size of level db
+    // Reading disk-based KVStore may trigger table file compaction, then it may cause size of
     // directory changed. When service restarts, "currentUsage" is calculated from real directory
     // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
     // sum of "ApplicationStoreInfo.size".
@@ -162,8 +162,8 @@ private class HistoryServerDiskManager(
    * @param delete Whether to delete the store from disk.
    */
   def release(appId: String, attemptId: Option[String], delete: Boolean = false): Unit = {
-    // Because LevelDB may modify the structure of the store files even when just reading, update
-    // the accounting for this application when it's closed.
+    // Because disk-based stores may modify the structure of the store files even when just reading,
+    // update the accounting for this application when it's closed.
     val oldSizeOpt = active.synchronized {
       active.remove(appId -> attemptId)
     }

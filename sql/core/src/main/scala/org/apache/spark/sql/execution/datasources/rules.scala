@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -42,24 +43,36 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
+  private def resolveDataSource(ident: Seq[String]): DataSource = {
+    val dataSource = DataSource(sparkSession, paths = Seq(ident.last), className = ident.head)
+    // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
+    // it and return the original plan, so that the analyzer can report table not found later.
+    val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+    if (!isFileFormat ||
+      dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+      throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
+        dataSource.className)
+    }
+    dataSource
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, _)
+        if maybeSQLFile(u) && timestamp.forall(_.resolved) =>
+      // If we successfully look up the data source, then this is a path-based table, so we should
+      // fail to time travel. Otherwise, this is some other catalog table that isn't resolved yet,
+      // so we should leave it be for now.
+      try {
+        resolveDataSource(u.multipartIdentifier)
+        throw QueryCompilationErrors.timeTravelUnsupportedError("path-based tables")
+      } catch {
+        case _: ClassNotFoundException => r
+      }
+
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
-        val dataSource = DataSource(
-          sparkSession,
-          paths = u.multipartIdentifier.last :: Nil,
-          className = u.multipartIdentifier.head)
-
-        // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
-        // will catch it and return the original plan, so that the analyzer can report table not
-        // found later.
-        val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        if (!isFileFormat ||
-            dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-          throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
-            dataSource.className)
-        }
-        LogicalRelation(dataSource.resolveRelation())
+        val ds = resolveDataSource(u.multipartIdentifier)
+        LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
@@ -81,7 +94,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
     // we fail the query if the partitioning information is specified.
-    case c @ CreateTable(tableDesc, _, None) if tableDesc.schema.isEmpty =>
+    case c @ CreateTableV1(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
         failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
           "when creating and will be inferred at runtime")
@@ -96,7 +109,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     // When we append data to an existing table, check if the given provider, partition columns,
     // bucket spec, etc. match the existing table, and adjust the columns order of the given query
     // if necessary.
-    case c @ CreateTable(tableDesc, SaveMode.Append, Some(query))
+    case c @ CreateTableV1(tableDesc, SaveMode.Append, Some(query))
         if query.resolved && catalog.tableExists(tableDesc.identifier) =>
       // This is guaranteed by the parser and `DataFrameWriter`
       assert(tableDesc.provider.isDefined)
@@ -189,7 +202,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
     //   * reorder table schema or output of query plan, to put partition columns at the end.
-    case c @ CreateTable(tableDesc, _, query) if query.forall(_.resolved) =>
+    case c @ CreateTableV1(tableDesc, _, query) if query.forall(_.resolved) =>
       if (query.isDefined) {
         assert(tableDesc.schema.isEmpty,
           "Schema may not be specified in a Create Table As Select (CTAS) statement")
@@ -197,7 +210,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         val analyzedQuery = query.get
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
-        DDLUtils.checkDataColNames(tableDesc.copy(schema = analyzedQuery.schema))
+        DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
 
         val output = analyzedQuery.output
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
@@ -212,7 +225,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
-        DDLUtils.checkDataColNames(tableDesc)
+        DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
@@ -433,7 +446,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+      case CreateTableV1(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
         throw QueryCompilationErrors.ddlWithoutHiveSupportEnabledError(
           "CREATE Hive TABLE (AS SELECT)")
       case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>

@@ -243,26 +243,31 @@ private[spark] class ApplicationMaster(
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
-        val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-        val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
+        try {
+          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
+          val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
 
-        if (!finished) {
-          // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
-          // This behavior is different compared to 1.x version.
-          // If user application is exited ahead of time by calling System.exit(N), here mark
-          // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
-          // System.exit(0) to terminate the application.
-          finish(finalStatus,
-            ApplicationMaster.EXIT_EARLY,
-            "Shutdown hook called before final status was reported.")
-        }
-
-        if (!unregistered) {
-          // we only want to unregister if we don't want the RM to retry
-          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-            unregister(finalStatus, finalMsg)
-            cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+          if (!finished) {
+            // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
+            // This behavior is different compared to 1.x version.
+            // If user application is exited ahead of time by calling System.exit(N), here mark
+            // this application as failed with EXIT_EARLY. For a good shutdown, user shouldn't call
+            // System.exit(0) to terminate the application.
+            finish(finalStatus,
+              ApplicationMaster.EXIT_EARLY,
+              "Shutdown hook called before final status was reported.")
           }
+
+          if (!unregistered) {
+            // we only want to unregister if we don't want the RM to retry
+            if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+              unregister(finalStatus, finalMsg)
+              cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+            }
+          }
+        } catch {
+          case e: Throwable =>
+            logWarning("Ignoring Exception while stopping ApplicationMaster from shutdown hook", e)
         }
       }
 
@@ -776,6 +781,9 @@ private[spark] class ApplicationMaster(
    */
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
+    @volatile private var shutdown = false
+    private val clientModeTreatDisconnectAsFailed =
+      sparkConf.get(AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED)
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
@@ -793,6 +801,8 @@ private[spark] class ApplicationMaster(
     override def receive: PartialFunction[Any, Unit] = {
       case UpdateDelegationTokens(tokens) =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
+
+      case Shutdown => shutdown = true
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -835,8 +845,13 @@ private[spark] class ApplicationMaster(
       // In cluster mode or unmanaged am case, do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
       if (!(isClusterMode || sparkConf.get(YARN_UNMANAGED_AM))) {
-        logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        if (shutdown || !clientModeTreatDisconnectAsFailed) {
+          logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        } else {
+          logError(s"Application Master lost connection with driver! Shutting down. $remoteAddress")
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_DISCONNECTED)
+        }
       }
     }
   }
@@ -854,6 +869,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
+  private val EXIT_DISCONNECTED = 17
 
   private var master: ApplicationMaster = _
 

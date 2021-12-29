@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
@@ -78,7 +76,8 @@ object TestLocalScanTable {
 class TestLocalScanTable(override val name: String) extends Table with SupportsRead {
   override def schema(): StructType = TestLocalScanTable.schema
 
-  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.BATCH_READ)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new TestLocalScanBuilder

@@ -47,8 +47,4 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     public String getErrorClass() {
         return errorClass;
     }
-
-    public String getSqlState() {
-        return SparkThrowableHelper.getSqlState(errorClass);
-    }
 }

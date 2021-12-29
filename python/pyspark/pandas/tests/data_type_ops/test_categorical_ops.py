@@ -198,6 +198,20 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         else:
             self.assert_eq(psser.astype(cat_type), pser)
 
+        # Empty
+        pser = pd.Series([], dtype="category")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.astype(int), psser.astype(int))
+        self.assert_eq(pser.astype(float), psser.astype(float))
+        self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+        self.assert_eq(pser.astype(np.int32), psser.astype(np.int32))
+        self.assert_eq(pser.astype(np.int16), psser.astype(np.int16))
+        self.assert_eq(pser.astype(np.int8), psser.astype(np.int8))
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+
     def test_neg(self):
         self.assertRaises(TypeError, lambda: -self.psser)
 
@@ -269,6 +283,13 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser2 = ps.from_pandas(pser2)
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(pser1 == pser2, (psser1 == psser2).sort_index())
+
+        psser3 = ps.Series(pd.Categorical(list("xyzx")))
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same.",
+            lambda: psser1 == psser3,
+        )
 
     def test_ne(self):
         pdf, psdf = self.pdf, self.psdf

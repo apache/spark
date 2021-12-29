@@ -79,6 +79,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- #if scala-2.13 --><!--
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    --><!-- #endif scala-2.13 -->
 <!--
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -217,15 +223,6 @@
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>scala-2.13</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.scala-lang.modules</groupId>
-          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
   </profiles>
 
   <build>
@@ -237,7 +234,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>

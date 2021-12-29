@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -64,6 +64,12 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
       messageParameters = Array(sizeLimit.toString))
+  }
+
+  def illegalSubstringError(subject: String, illegalContent: String): Throwable = {
+    new AnalysisException(
+      errorClass = "ILLEGAL_SUBSTRING",
+      messageParameters = Array(subject, illegalContent))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -419,7 +425,7 @@ object QueryCompilationErrors {
   }
 
   def invalidFunctionArgumentNumberError(
-      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+      validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
       new AnalysisException(s"Invalid arguments for function $name")
     } else {
@@ -429,7 +435,7 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, actualNumber)
     }
   }
 
@@ -473,20 +479,12 @@ object QueryCompilationErrors {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def replaceColumnsOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
-  }
-
-  def alterQualifiedColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN with qualified column is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
+    new AnalysisException(s"$operation is only supported with v2 tables.")
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
-  }
-
-  def alterOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
   }
 
   def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
@@ -495,24 +493,8 @@ object QueryCompilationErrors {
         s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
   }
 
-  def renameColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
-  }
-
-  def dropColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("DROP COLUMN is only supported with v2 tables.")
-  }
-
   def invalidDatabaseNameError(quoted: String): Throwable = {
     new AnalysisException(s"The database name is not valid: $quoted")
-  }
-
-  def replaceTableOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
-  }
-
-  def replaceTableAsSelectOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
   }
 
   def cannotDropViewWithDropTableError(): Throwable = {
@@ -528,10 +510,6 @@ object QueryCompilationErrors {
   def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
     new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
       "SHOW VIEWS, only SessionCatalog supports this command.")
-  }
-
-  def unsupportedFunctionNameError(quoted: String): Throwable = {
-    new AnalysisException(s"Unsupported function name '$quoted'")
   }
 
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
@@ -861,9 +839,9 @@ object QueryCompilationErrors {
     new TableAlreadyExistsException(ident)
   }
 
-  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
-    new NoSuchTableException(
-      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  def requiresSinglePartNamespaceError(ns: Seq[String]): Throwable = {
+    new AnalysisException(CatalogManager.SESSION_CATALOG_NAME +
+      " requires a single-part namespace, but got " + ns.mkString("[", ", ", "]"))
   }
 
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
@@ -1382,11 +1360,6 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot use interval type in the table schema.")
   }
 
-  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
-    new AnalysisException(
-      s"Cannot convert bucketing with sort columns to a transform: $spec")
-  }
-
   def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
     new AnalysisException("Transforms cannot be converted to partition columns: " +
       nonIdTransforms.map(_.describe).mkString(", "))
@@ -1849,19 +1822,6 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempFuncWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
-  }
-
-  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
   def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
     new AnalysisException(
       s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
@@ -2009,19 +1969,6 @@ object QueryCompilationErrors {
       s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
         "which is created by Hive and uses the following unsupported feature(s)\n" +
         features.map(" - " + _).mkString("\n"))
-  }
-
-  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
-    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
-  }
-
-  def defineTempViewWithIfNotExistsError(): Throwable = {
-    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
-  }
-
-  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
-    new AnalysisException(
-      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   def logicalPlanForViewNotAnalyzedError(): Throwable = {
@@ -2333,7 +2280,11 @@ object QueryCompilationErrors {
   }
 
   def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
-    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+    new AnalysisException(
+      s"""
+         |Cannot modify the value of a Spark config: $key.
+         |See also 'https://spark.apache.org/docs/latest/sql-migration-guide.html#ddl-statements'
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -2387,5 +2338,31 @@ object QueryCompilationErrors {
     new AnalysisException(
       errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
       messageParameters = Array(schema.toString))
+  }
+
+  def tableIndexNotSupportedError(errorMessage: String): Throwable = {
+    new AnalysisException(errorMessage)
+  }
+
+  def invalidViewText(viewText: String, tableName: String): Throwable = {
+    new AnalysisException(
+      s"Invalid view text: $viewText. The view $tableName may have been tampered with")
+  }
+
+  def invalidTimeTravelSpecError(): Throwable = {
+    new AnalysisException(
+      "Cannot specify both version and timestamp when time travelling the table.")
+  }
+
+  def invalidTimestampExprForTimeTravel(expr: Expression): Throwable = {
+    new AnalysisException(s"${expr.sql} is not a valid timestamp expression for time travel.")
+  }
+
+  def timeTravelUnsupportedError(target: String): Throwable = {
+    new AnalysisException(s"Cannot time travel $target.")
+  }
+
+  def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
+    new UnsupportedOperationException(s"Table $tableName does not support time travel.")
   }
 }

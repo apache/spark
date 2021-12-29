@@ -19,7 +19,7 @@ from functools import partial
 from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
@@ -138,7 +138,7 @@ class DatetimeIndex(Index):
         if hasattr(MissingPandasLikeDatetimeIndex, item):
             property_or_func = getattr(MissingPandasLikeDatetimeIndex, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError("'DatetimeIndex' object has no attribute '{}'".format(item))

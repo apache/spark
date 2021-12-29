@@ -69,18 +69,20 @@ class UISeleniumSuite
     }
 
     val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """rootLogger.level = info
+          |rootLogger.appenderRef.file.ref = console
+          |appender.console.type = Console
+          |appender.console.name = console
+          |appender.console.target = SYSTEM_ERR
+          |appender.console.layout.type = PatternLayout
+          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
         """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
+        new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
 
       tempLog4jConf
@@ -123,6 +125,51 @@ class UISeleniumSuite
         queries.foreach { line =>
           findAll(cssSelector("span.description-input")).map(_.text).toList should contain (line)
         }
+      }
+    }
+  }
+
+  test("SPARK-36400: Redact sensitive information in UI by config") {
+    withJdbcStatement("test_tbl1", "test_tbl2") { statement =>
+      val baseURL = s"http://localhost:$uiPort"
+
+      val Seq(nonMaskedQuery, maskedQuery) = Seq("test_tbl1", "test_tbl2").map (tblName =>
+        s"CREATE TABLE $tblName(a int) " +
+          s"OPTIONS(url='jdbc:postgresql://localhost:5432/$tblName', " +
+          "user='test_user', password='abcde')")
+      statement.execute(nonMaskedQuery)
+
+      statement.execute("SET spark.sql.redaction.string.regex=((?i)(?<=password=))('.*')")
+      statement.execute(maskedQuery)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (baseURL + "/sqlserver")
+        // Take description of 2 statements executed within this test.
+        val statements = findAll(cssSelector("span.description-input"))
+          .map(_.text).filter(_.startsWith("CREATE")).take(2).toSeq
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
+      }
+
+      val sessionLink =
+        find(cssSelector("table#sessionstat td a")).head.underlying.getAttribute("href")
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to sessionLink
+        val statements = findAll(
+          cssSelector("span.description-input")).map(_.text).filter(_.startsWith("CREATE")).toSeq
+        statements.size should be (2)
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
       }
     }
   }

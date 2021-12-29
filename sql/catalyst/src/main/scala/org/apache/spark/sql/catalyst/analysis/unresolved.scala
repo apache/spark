@@ -40,7 +40,7 @@ class UnresolvedException(function: String)
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
  * @param multipartIdentifier table name
- * @param options options to scan this relation. Only applicable to v2 table scan.
+ * @param options options to scan this relation.
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
@@ -641,7 +641,7 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
  */
 case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
   with Unevaluable {
-  override lazy val canonicalized = child.canonicalized
+  override lazy val preCanonicalized = child.preCanonicalized
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)

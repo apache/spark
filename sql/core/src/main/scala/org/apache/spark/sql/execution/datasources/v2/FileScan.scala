@@ -72,12 +72,6 @@ trait FileScan extends Scan
   def dataFilters: Seq[Expression]
 
   /**
-   * Create a new `FileScan` instance from the current one
-   * with different `partitionFilters` and `dataFilters`
-   */
-  def withFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan
-
-  /**
    * If a file with `path` is unsplittable, return the unsplittable reason,
    * otherwise return `None`.
    */
@@ -142,10 +136,10 @@ trait FileScan extends Scan
     val partitionAttributes = fileIndex.partitionSchema.toAttributes
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
     val readPartitionAttributes = readPartitionSchema.map { readField =>
-      attributeMap.get(normalizeName(readField.name)).getOrElse {
+      attributeMap.getOrElse(normalizeName(readField.name),
         throw QueryCompilationErrors.cannotFindPartitionColumnInPartitionSchemaError(
           readField, fileIndex.partitionSchema)
-      }
+      )
     }
     lazy val partitionValueProject =
       GenerateUnsafeProjection.generate(readPartitionAttributes, partitionAttributes)

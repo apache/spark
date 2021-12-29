@@ -101,10 +101,19 @@ private[hive] object HiveShim {
 
   def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
     if (hdoi.preferWritable()) {
-      Decimal(hdoi.getPrimitiveWritableObject(data).getHiveDecimal().bigDecimalValue,
-        hdoi.precision(), hdoi.scale())
+      val value = hdoi.getPrimitiveWritableObject(data)
+      if (value == null) {
+        null
+      } else {
+        Decimal(value.getHiveDecimal().bigDecimalValue, hdoi.precision(), hdoi.scale())
+      }
     } else {
-      Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
+      val value = hdoi.getPrimitiveJavaObject(data)
+      if (value == null) {
+        null
+      } else {
+        Decimal(value.bigDecimalValue(), hdoi.precision(), hdoi.scale())
+      }
     }
   }
 

@@ -896,7 +896,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve 'a' given input columns: [t.i, t.j]"))
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.sameElements(Array("a", "t.i, t.j")))
     }
   }
 
@@ -1408,7 +1409,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("Scalar subquery name should start with scalar-subquery#") {
     val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
-    var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
+    val subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
     df.queryExecution.executedPlan.transformAllExpressions {
       case s @ ScalarSubquery(p: SubqueryExec, _) =>
         subqueryExecs += p
@@ -1902,4 +1903,57 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(exchanges.size === 1)
     }
   }
+
+  test("SPARK-36747: should not combine Project with Aggregate") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(
+        sql("""
+              |SELECT m, (SELECT SUM(c2) FROM t WHERE c1 = m)
+              |FROM (SELECT MIN(c2) AS m FROM t)
+              |""".stripMargin),
+        Row(1, 2) :: Nil)
+      checkAnswer(
+        sql("""
+              |SELECT c, (SELECT SUM(c2) FROM t WHERE c1 = c)
+              |FROM (SELECT c1 AS c FROM t GROUP BY c1)
+              |""".stripMargin),
+        Row(0, 1) :: Row(1, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-36656: Do not collapse projects with correlate scalar subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      val correctAnswer = Row(0, 2, 20) :: Row(1, null, null) :: Nil
+      checkAnswer(
+        sql(
+          """
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, (SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1) s FROM t1)
+            |""".stripMargin),
+        correctAnswer)
+      checkAnswer(
+        sql(
+          """
+            |SELECT c1, s, s * 10 FROM (
+            |  SELECT c1, SUM((SELECT FIRST(c2) FROM t2 WHERE t1.c1 = t2.c1)) s
+            |  FROM t1 GROUP BY c1
+            |)
+            |""".stripMargin),
+        correctAnswer)
+    }
+  }
+
+  test("SPARK-37199: deterministic in QueryPlan considers subquery") {
+    val deterministicQueryPlan = sql("select (select 1 as b) as b")
+      .queryExecution.executedPlan
+    assert(deterministicQueryPlan.deterministic)
+
+    val nonDeterministicQueryPlan = sql("select (select rand(1) as b) as b")
+      .queryExecution.executedPlan
+    assert(!nonDeterministicQueryPlan.deterministic)
+  }
+
 }

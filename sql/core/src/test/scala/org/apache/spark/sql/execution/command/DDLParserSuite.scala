@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DDLParserSuite extends AnalysisTest with SharedSparkSession {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   private lazy val parser = new SparkSqlParser()
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
@@ -43,15 +45,18 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
     comparePlans(plan, expected, checkAnalysis = false)
   }
 
-  test("alter database - property values must be set") {
-    assertUnsupported(
-      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
+  test("show current namespace") {
+    comparePlans(
+      parser.parsePlan("SHOW CURRENT NAMESPACE"),
+      ShowCurrentNamespaceCommand())
   }
 
   test("insert overwrite directory") {
@@ -319,6 +324,156 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val parsed1 = parser.parsePlan(v1)
+
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false)
+    comparePlans(parsed1, expected1)
+
+    val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
+    val parsed2 = parser.parsePlan(v2)
+
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq.empty[(String, Option[String])],
+      None,
+      Map.empty[String, String],
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      false,
+      LocalTempView)
+    comparePlans(parsed2, expected2)
+
+    // TODO(SPARK-37367): Reenable exception test in DDLParserSuite.create view -- basic
+    // val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    // intercept(v3, "It is not allowed to add database prefix")
+  }
+
+  test("create temp view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW view1
+        |(col1, col3 COMMENT 'hello')
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val parsed1 = parser.parsePlan(v1)
+    val expected1 = CreateView(
+      UnresolvedDBObjectName(Seq("view1"), false),
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map("prop1Key" -> "prop1Val"),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true)
+    comparePlans(parsed1, expected1)
+
+    val v2 =
+      """
+        |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
+        |(col1, col3 COMMENT 'hello')
+        |COMMENT 'BLABLA'
+        |AS SELECT * FROM tab1
+          """.stripMargin
+    val parsed2 = parser.parsePlan(v2)
+    val expected2 = CreateViewCommand(
+      Seq("a").asTableIdentifier,
+      Seq("col1" -> None, "col3" -> Some("hello")),
+      Some("BLABLA"),
+      Map(),
+      Some("SELECT * FROM tab1"),
+      parser.parsePlan("SELECT * FROM tab1"),
+      false,
+      true,
+      GlobalTempView)
+    comparePlans(parsed2, expected2)
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parser.parsePlan(v1)
+    }
+  }
+
+  test("create view - duplicate clauses") {
+    def createViewStatement(duplicateClause: String): String = {
+      s"""
+         |CREATE OR REPLACE VIEW view1
+         |(col1, col3 COMMENT 'hello')
+         |$duplicateClause
+         |$duplicateClause
+         |AS SELECT * FROM tab1
+      """.stripMargin
+    }
+    val sql1 = createViewStatement("COMMENT 'BLABLA'")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    intercept(sql1, "Found duplicate clauses: COMMENT")
+    intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
+  }
+
+  test("CREATE FUNCTION") {
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, false))
+
+    comparePlans(parser.parsePlan("CREATE OR REPLACE FUNCTION a.b.c as 'fun'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, true))
+
+    comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
+      CreateFunctionCommand(None, "a", "fun", Seq(), true, false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), true, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+        Seq(FunctionResource(JarResource, "j")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING ARCHIVE 'a'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+        Seq(FunctionResource(ArchiveResource, "a")), false, false))
+
+    comparePlans(parser.parsePlan("CREATE FUNCTION a as 'fun' USING FILE 'f'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+        Seq(FunctionResource(FileResource, "f")), false, false))
+
+    comparePlans(
+      parser.parsePlan("CREATE FUNCTION a as 'fun' USING JAR 'j', ARCHIVE 'a', FILE 'f'"),
+      CreateFunction(UnresolvedDBObjectName(Seq("a"), false), "fun",
+        Seq(FunctionResource(JarResource, "j"),
+          FunctionResource(ArchiveResource, "a"), FunctionResource(FileResource, "f")),
+        false, false))
+
+    intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
+      "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("SPARK-32374: create temporary view with properties not allowed") {
+    assertUnsupported(
+      sql = """
+              |CREATE OR REPLACE TEMPORARY VIEW a.b.c
+              |(col1, col3 COMMENT 'hello')
+              |TBLPROPERTIES('prop1Key'="prop1Val")
+              |AS SELECT * FROM tab1
+      """.stripMargin,
+      containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))
+  }
+
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, fileFormat, provider, properties, exists) =
@@ -397,5 +552,26 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(source6.table == "table2")
     assert(fileFormat6.locationUri.isEmpty)
     assert(provider6 == Some("ORC"))
+  }
+
+  test("SET CATALOG") {
+    comparePlans(
+      parser.parsePlan("SET CATALOG abc"),
+      SetCatalogCommand("abc"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG 'a b c'"),
+      SetCatalogCommand("a b c"))
+    comparePlans(
+      parser.parsePlan("SET CATALOG `a b c`"),
+      SetCatalogCommand("a b c"))
+  }
+
+  test("SHOW CATALOGS") {
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS"),
+      ShowCatalogsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
+      ShowCatalogsCommand(Some("defau*")))
   }
 }

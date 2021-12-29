@@ -106,7 +106,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -125,7 +125,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(
@@ -144,7 +144,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements.apply(

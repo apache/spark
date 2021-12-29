@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -41,13 +41,24 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(2)))
   }
 
-  test("Aggregate should be included in WholeStageCodegen") {
+  test("HashAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
+  }
+
+  test("SortAggregate should be included in WholeStageCodegen") {
+    val df = spark.range(10).agg(max(col("id")), avg(col("id")))
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]).isDefined)
+      assert(df.collect() === Array(Row(9, 4.5)))
+    }
   }
 
   testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
@@ -129,7 +140,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
   }
 
-  test("Aggregate with grouping keys should be included in WholeStageCodegen") {
+  test("HashAggregate with grouping keys should be included in WholeStageCodegen") {
     val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
@@ -149,7 +160,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
 
-  test("ShuffledHashJoin should be included in WholeStageCodegen") {
+  test("Inner ShuffledHashJoin should be included in WholeStageCodegen") {
     val df1 = spark.range(5).select($"id".as("k1"))
     val df2 = spark.range(15).select($"id".as("k2"))
     val df3 = spark.range(6).select($"id".as("k3"))
@@ -169,6 +180,56 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.size === 2)
     checkAnswer(twoJoinsDF,
       Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+  }
+
+  test("Full Outer ShuffledHashJoin and SortMergeJoin should be included in WholeStageCodegen") {
+    val df1 = spark.range(5).select($"id".as("k1"))
+    val df2 = spark.range(10).select($"id".as("k2"))
+    val df3 = spark.range(3).select($"id".as("k3"))
+
+    Seq("SHUFFLE_HASH", "SHUFFLE_MERGE").foreach { hint =>
+      // test one join with unique key from build side
+      val joinUniqueDF = df1.join(df2.hint(hint), $"k1" === $"k2", "full_outer")
+      assert(joinUniqueDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+      }.size === 1)
+      checkAnswer(joinUniqueDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4),
+        Row(null, 5), Row(null, 6), Row(null, 7), Row(null, 8), Row(null, 9)))
+      assert(joinUniqueDF.count() === 10)
+
+      // test one join with non-unique key from build side
+      val joinNonUniqueDF = df1.join(df2.hint(hint), $"k1" === $"k2" % 3, "full_outer")
+      assert(joinNonUniqueDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+      }.size === 1)
+      checkAnswer(joinNonUniqueDF, Seq(Row(0, 0), Row(0, 3), Row(0, 6), Row(0, 9), Row(1, 1),
+        Row(1, 4), Row(1, 7), Row(2, 2), Row(2, 5), Row(2, 8), Row(3, null), Row(4, null)))
+
+      // test one join with non-equi condition
+      val joinWithNonEquiDF = df1.join(df2.hint(hint),
+        $"k1" === $"k2" % 3 && $"k1" + 3 =!= $"k2", "full_outer")
+      assert(joinWithNonEquiDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+      }.size === 1)
+      checkAnswer(joinWithNonEquiDF, Seq(Row(0, 0), Row(0, 6), Row(0, 9), Row(1, 1),
+        Row(1, 7), Row(2, 2), Row(2, 8), Row(3, null), Row(4, null), Row(null, 3), Row(null, 4),
+        Row(null, 5)))
+
+      // test two joins
+      val twoJoinsDF = df1.join(df2.hint(hint), $"k1" === $"k2", "full_outer")
+        .join(df3.hint(hint), $"k1" === $"k3" && $"k1" + $"k3" =!= 2, "full_outer")
+      assert(twoJoinsDF.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(_ : SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+      }.size === 2)
+      checkAnswer(twoJoinsDF,
+        Seq(Row(0, 0, 0), Row(1, 1, null), Row(2, 2, 2), Row(3, 3, null), Row(4, 4, null),
+          Row(null, 5, null), Row(null, 6, null), Row(null, 7, null), Row(null, 8, null),
+          Row(null, 9, null), Row(null, null, 1)))
+    }
   }
 
   test("Left/Right Outer SortMergeJoin should be included in WholeStageCodegen") {
@@ -417,7 +478,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val planInt = dsIntFilter.queryExecution.executedPlan
     assert(planInt.collect {
       case WholeStageCodegenExec(FilterExec(_,
-          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
+          InputAdapter(_: InMemoryTableScanExec))) => ()
     }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 

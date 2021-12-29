@@ -23,7 +23,7 @@ from pyspark.testing.utils import PySparkTestCase
 
 
 class KeywordOnlyTests(unittest.TestCase):
-    class Wrapped(object):
+    class Wrapped:
         @keyword_only
         def set(self, x=None, y=None):
             if "x" in self._input_kwargs:
@@ -46,7 +46,7 @@ class KeywordOnlyTests(unittest.TestCase):
 
     def test_kwarg_ownership(self):
         # test _input_kwargs is owned by each class instance and not a shared static variable
-        class Setter(object):
+        class Setter:
             @keyword_only
             def set(self, x=None, other=None, other_x=None):
                 if "other" in self._input_kwargs:
@@ -66,10 +66,11 @@ class UtilTests(PySparkTestCase):
             # This attempts java.lang.String(null) which throws an NPE.
             self.sc._jvm.java.lang.String(None)
 
-        self.assertTrue('NullPointerException' in str(context.exception))
+        self.assertTrue("NullPointerException" in str(context.exception))
 
     def test_parsing_version_string(self):
         from pyspark.util import VersionUtils
+
         self.assertRaises(ValueError, lambda: VersionUtils.majorMinorVersion("abced"))
 
 
@@ -78,7 +79,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

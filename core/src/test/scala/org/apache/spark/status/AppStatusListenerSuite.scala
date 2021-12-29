@@ -36,8 +36,11 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
+@ExtendedLevelDBTest
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf()
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
@@ -50,10 +53,12 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private var store: ElementTrackingStore = _
   private var taskIdTracker = -1L
 
+  protected def createKVStore: KVStore = KVUtils.open(testDir, getClass().getName())
+
   before {
     time = 0L
     testDir = Utils.createTempDir()
-    store = new ElementTrackingStore(KVUtils.open(testDir, getClass().getName()), conf)
+    store = new ElementTrackingStore(createKVStore, conf)
     taskIdTracker = -1L
   }
 
@@ -341,6 +346,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(task.attempt === reattempt.attemptNumber)
     }
 
+    check[SpeculationStageSummaryWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numActiveTasks == 2)
+      assert(stage.info.numTasks == 2)
+    }
+
     // Kill one task, restart it.
     time += 1
     val killed = s1Tasks.drop(1).head
@@ -423,6 +433,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.numKilledTasks === 2)
       assert(stage.info.numActiveTasks === 0)
       assert(stage.info.numCompleteTasks === pending.size)
+    }
+
+    check[SpeculationStageSummaryWrapper](key(stages.head)) { stage =>
+      assert(stage.info.numCompletedTasks == 2)
+      assert(stage.info.numKilledTasks == 2)
     }
 
     pending.foreach { task =>
@@ -1871,4 +1886,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     def blockId: BlockId = RDDBlockId(rddId, partId)
 
   }
+}
+
+class AppStatusListenerWithInMemoryStoreSuite extends AppStatusListenerSuite {
+  override def createKVStore: KVStore = new InMemoryStore()
 }

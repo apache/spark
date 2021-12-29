@@ -25,6 +25,7 @@ This page describes the migration guide specific to PySpark.
 .. toctree::
    :maxdepth: 2
 
+   pyspark_3.2_to_3.3
    pyspark_3.1_to_3.2
    pyspark_2.4_to_3.0
    pyspark_2.3_to_2.4

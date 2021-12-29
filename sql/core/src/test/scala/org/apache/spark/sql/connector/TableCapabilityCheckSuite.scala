@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
@@ -217,7 +215,11 @@ private case object TestRelation extends LeafNode with NamedRelation {
 private case class CapabilityTable(_capabilities: TableCapability*) extends Table {
   override def name(): String = "capability_test_table"
   override def schema(): StructType = TableCapabilityCheckSuite.schema
-  override def capabilities(): util.Set[TableCapability] = _capabilities.toSet.asJava
+  override def capabilities(): util.Set[TableCapability] = {
+    val set = util.EnumSet.noneOf(classOf[TableCapability])
+    _capabilities.foreach(set.add)
+    set
+  }
 }
 
 private class TestStreamSourceProvider extends StreamSourceProvider {

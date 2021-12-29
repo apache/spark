@@ -22,12 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -40,7 +39,7 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushFilters(
       scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
+      filters: Seq[Expression]): (Either[Seq[sources.Filter], Seq[V2Filter]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -69,9 +68,41 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
+        (Left(r.pushedFilters()), (untranslatableExprs ++ postScanFilters).toSeq)
 
-      case _ => (Nil, filters)
+      case r: SupportsPushDownV2Filters =>
+        // A map from translated data source leaf node filters to original catalyst filter
+        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
+        // pushed down. This map can be used to construct a catalyst filter expression from the
+        // input filter, or a superset(partial push down filter) of the input filter.
+        val translatedFilterToExpr = mutable.HashMap.empty[V2Filter, Expression]
+        val translatedFilters = mutable.ArrayBuffer.empty[V2Filter]
+        // Catalyst filter expression that can't be translated to data source filters.
+        val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+
+        for (filterExpr <- filters) {
+          val translated =
+            DataSourceV2Strategy.translateFilterV2WithMapping(
+              filterExpr, Some(translatedFilterToExpr), nestedPredicatePushdownEnabled = true)
+          if (translated.isEmpty) {
+            untranslatableExprs += filterExpr
+          } else {
+            translatedFilters += translated.get
+          }
+        }
+
+        // Data source filters that need to be evaluated again after scanning. which means
+        // the data source cannot guarantee the rows returned can pass these filters.
+        // As a result we must return it so Spark can plan an extra filter operator.
+        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
+          DataSourceV2Strategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+        }
+        (Right(r.pushedFilters), (untranslatableExprs ++ postScanFilters).toSeq)
+
+      case f: FileScanBuilder =>
+        val postScanFilters = f.pushFilters(filters)
+        (Left(f.pushedFilters), postScanFilters)
+      case _ => (Left(Nil), filters)
     }
   }
 
@@ -81,7 +112,7 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed aggregation.
    */
   def pushAggregates(
-      scanBuilder: ScanBuilder,
+      scanBuilder: SupportsPushDownAggregates,
       aggregates: Seq[AggregateExpression],
       groupBy: Seq[Expression]): Option[Aggregation] = {
 
@@ -91,19 +122,49 @@ object PushDownUtils extends PredicateHelper {
       case _ => None
     }
 
+    val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+    val translatedGroupBys = groupBy.flatMap(columnAsString)
+
+    if (translatedAggregates.length != aggregates.length ||
+      translatedGroupBys.length != groupBy.length) {
+      return None
+    }
+
+    val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
+    Some(agg).filter(scanBuilder.pushAggregation)
+  }
+
+  /**
+   * Pushes down TableSample to the data source Scan
+   */
+  def pushTableSample(scanBuilder: ScanBuilder, sample: TableSampleInfo): Boolean = {
     scanBuilder match {
-      case r: SupportsPushDownAggregates if aggregates.nonEmpty =>
-        val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
-        val translatedGroupBys = groupBy.flatMap(columnAsString)
+      case s: SupportsPushDownTableSample =>
+        s.pushTableSample(
+          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
+      case _ => false
+    }
+  }
 
-        if (translatedAggregates.length != aggregates.length ||
-          translatedGroupBys.length != groupBy.length) {
-          return None
-        }
+  /**
+   * Pushes down LIMIT to the data source Scan
+   */
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownLimit =>
+        s.pushLimit(limit)
+      case _ => false
+    }
+  }
 
-        val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
-        Some(agg).filter(r.pushAggregation)
-      case _ => None
+  /**
+   * Pushes down top N to the data source Scan
+   */
+  def pushTopN(scanBuilder: ScanBuilder, order: Array[SortOrder], limit: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownTopN =>
+        s.pushTopN(order, limit)
+      case _ => false
     }
   }
 

@@ -517,6 +517,8 @@ There are a few built-in sources.
 
   - **Rate source (for testing)** - Generates data at the specified number of rows per second, each output row contains a `timestamp` and `value`. Where `timestamp` is a `Timestamp` type containing the time of message dispatch, and `value` is of `Long` type containing the message count, starting from 0 as the first row. This source is intended for testing and benchmarking.
 
+  - **Rate Per Micro-Batch source (for testing)** - Generates data at the specified number of rows per micro-batch, each output row contains a `timestamp` and `value`. Where `timestamp` is a `Timestamp` type containing the time of message dispatch, and `value` is of `Long` type containing the message count, starting from 0 as the first row. Unlike `rate` data source, this data source provides a consistent set of input rows per micro-batch regardless of query execution (configuration of trigger, query being lagging, etc.), say, batch 0 will produce 0~999 and batch 1 will produce 1000~1999, and so on. Same applies to the generated time. This source is intended for testing and benchmarking.
+
 Some sources are not fault-tolerant because they do not guarantee that data can be replayed using 
 checkpointed offsets after a failure. See the earlier section on 
 [fault-tolerance semantics](#fault-tolerance-semantics).
@@ -553,7 +555,7 @@ Here are the details of all the sources in Spark.
         For example, suppose you provide '/hello?/spark/*' as source pattern, '/hello1/spark/archive/dir' cannot be used as the value of "sourceArchiveDir", as '/hello?/spark/*' and '/hello1/spark/archive' will be matched. '/hello1/spark' cannot be also used as the value of "sourceArchiveDir", as '/hello?/spark' and '/hello1/spark' will be matched. '/archived/here' would be OK as it doesn't match.<br/>
         Spark will move source files respecting their own path. For example, if the path of source file is <code>/a/b/dataset.txt</code> and the path of archive directory is <code>/archived/here</code>, file will be moved to <code>/archived/here/a/b/dataset.txt</code>.<br/>
         NOTE: Both archiving (via moving) or deleting completed files will introduce overhead (slow down, even if it's happening in separate thread) in each micro-batch, so you need to understand the cost for each operation in your file system before enabling this option. On the other hand, enabling this option will reduce the cost to list source files which can be an expensive operation.<br/>
-        Number of threads used in completed file cleaner can be configured with<code>spark.sql.streaming.fileSource.cleaner.numThreads</code> (default: 1).<br/>
+        Number of threads used in completed file cleaner can be configured with <code>spark.sql.streaming.fileSource.cleaner.numThreads</code> (default: 1).<br/>
         NOTE 2: The source path should not be used from multiple sources or queries when enabling this option. Similarly, you must ensure the source path doesn't match to any files in output directory of file stream sink.<br/>
         NOTE 3: Both delete and move actions are best effort. Failing to delete or move files will not fail the streaming query. Spark may not clean up some source files in some circumstances - e.g. the application doesn't shut down gracefully, too many files are queued to clean up.
         <br/><br/>
@@ -584,6 +586,17 @@ Here are the details of all the sources in Spark.
         <code>numPartitions</code> (e.g. 10, default: Spark's default parallelism): The partition number for the generated rows. <br/><br/>
         
         The source will try its best to reach <code>rowsPerSecond</code>, but the query may be resource constrained, and <code>numPartitions</code> can be tweaked to help reach the desired speed.
+    </td>
+    <td>Yes</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><b>Rate Per Micro-Batch Source</b> (format: <b>rate-micro-batch</b>)</td>
+    <td>
+        <code>rowsPerBatch</code> (e.g. 100): How many rows should be generated per micro-batch.<br/><br/>
+        <code>numPartitions</code> (e.g. 10, default: Spark's default parallelism): The partition number for the generated rows. <br/><br/>
+        <code>startTimestamp</code> (e.g. 1000, default: 0): starting value of generated time. <br/><br/>
+        <code>advanceMillisPerBatch</code> (e.g. 1000, default: 1000): the amount of time being advanced in generated time on each micro-batch. <br/><br/>
     </td>
     <td>Yes</td>
     <td></td>
@@ -1806,7 +1819,7 @@ However, as a side effect, data from the slower streams will be aggressively dro
 this configuration judiciously.
 
 ### Arbitrary Stateful Operations
-Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/org/apache/spark/sql/streaming/GroupState.html)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/org/apache/spark/sql/streaming/GroupState.html)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredComplexSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredComplexSessionization.java)).
 
 Though Spark cannot check and force it, the state function should be implemented with respect to the semantics of the output mode. For example, in Update mode Spark doesn't expect that the state function will emit rows which are older than current watermark plus allowed late record delay, whereas in Append mode the state function can emit these rows.
 
@@ -1943,7 +1956,21 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
     <td>True</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows</td>
+    <td>Whether we track the total number of rows in state store. Please refer the details in <a href="#performance-aspect-considerations">Performance-aspect considerations</a>.</td>
+    <td>True</td>
+  </tr>
 </table>
+
+##### Performance-aspect considerations
+
+1. You may want to disable the track of total number of rows to aim the better performance on RocksDB state store.
+
+Tracking the number of rows brings additional lookup on write operations - you're encouraged to try turning off the config on tuning RocksDB state store, especially the values of metrics for state operator are big - `numRowsUpdated`, `numRowsRemoved`.
+
+You can change the config during restarting the query, which enables you to change the trade-off decision on "observability vs performance".
+If the config is disabled, the number of rows in state (`numTotalStateRows`) will be reported as 0.
 
 #### State Store and task locality
 
@@ -2749,6 +2776,15 @@ Here are the different kinds of triggers that are supported.
     </td>
   </tr>
   <tr>
+    <td><b>Available-now micro-batch</b></td>
+    <td>
+        Similar to queries one-time micro-batch trigger, the query will process all the available data and then
+        stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
+        based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
+        in better query scalability.
+    </td>
+  </tr>
+  <tr>
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
@@ -2780,6 +2816,12 @@ df.writeStream
 df.writeStream
   .format("console")
   .trigger(Trigger.Once())
+  .start()
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
   .start()
 
 // Continuous trigger with one-second checkpointing interval
@@ -2814,6 +2856,12 @@ df.writeStream
   .trigger(Trigger.Once())
   .start();
 
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start();
+
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
@@ -2842,6 +2890,12 @@ df.writeStream \
 df.writeStream \
   .format("console") \
   .trigger(once=True) \
+  .start()
+
+# Available-now trigger
+df.writeStream \
+  .format("console") \
+  .trigger(availableNow=True) \
   .start()
 
 # Continuous trigger with one-second checkpointing interval
@@ -2945,9 +2999,9 @@ query.awaitTermination()   # block until query is terminated, with stop() or wit
 
 query.exception()       # the exception if the query has been terminated with error
 
-query.recentProgress()  # an array of the most recent progress updates for this query
+query.recentProgress  # a list of the most recent progress updates for this query
 
-query.lastProgress()    # the most recent progress update of this streaming query
+query.lastProgress    # the most recent progress update of this streaming query
 
 {% endhighlight %}
 
@@ -3608,3 +3662,6 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 - Spark Summit 2016
   - A Deep Dive into Structured Streaming - [slides/video](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
 
+# Migration Guide
+
+The migration guide is now archived [on this page](ss-migration-guide.html).

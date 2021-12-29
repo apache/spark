@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.test.TestSparkSession
@@ -28,28 +29,46 @@ import org.apache.spark.util.JsonProtocol
 class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
   test("SparkPlanGraph backward compatibility: metadata") {
-    val SQLExecutionStartJsonString =
-      """
-        |{
-        |  "Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
-        |  "executionId":0,
-        |  "description":"test desc",
-        |  "details":"test detail",
-        |  "physicalPlanDescription":"test plan",
-        |  "sparkPlanInfo": {
-        |    "nodeName":"TestNode",
-        |    "simpleString":"test string",
-        |    "children":[],
-        |    "metadata":{},
-        |    "metrics":[]
-        |  },
-        |  "time":0
-        |}
+    Seq(true, false).foreach { newExecutionStartEvent =>
+      val event = if (newExecutionStartEvent) {
+        "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart"
+      } else {
+        "org.apache.spark.sql.execution.OldVersionSQLExecutionStart"
+      }
+      val SQLExecutionStartJsonString =
+        s"""
+          |{
+          |  "Event":"$event",
+          |  "executionId":0,
+          |  "description":"test desc",
+          |  "details":"test detail",
+          |  "physicalPlanDescription":"test plan",
+          |  "sparkPlanInfo": {
+          |    "nodeName":"TestNode",
+          |    "simpleString":"test string",
+          |    "children":[],
+          |    "metadata":{},
+          |    "metrics":[]
+          |  },
+          |  "time":0,
+          |  "modifiedConfigs": {
+          |    "k1":"v1"
+          |  }
+          |}
       """.stripMargin
-    val reconstructedEvent = JsonProtocol.sparkEventFromJson(parse(SQLExecutionStartJsonString))
-    val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail", "test plan",
-      new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
-    assert(reconstructedEvent == expectedEvent)
+
+      val reconstructedEvent = JsonProtocol.sparkEventFromJson(parse(SQLExecutionStartJsonString))
+      if (newExecutionStartEvent) {
+        val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail",
+          "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0,
+          Map("k1" -> "v1"))
+        assert(reconstructedEvent == expectedEvent)
+      } else {
+        val expectedOldEvent = OldVersionSQLExecutionStart(0, "test desc", "test detail",
+          "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
+        assert(reconstructedEvent == expectedOldEvent)
+      }
+    }
   }
 
   test("SparkListenerSQLExecutionEnd backward compatibility") {
@@ -77,3 +96,12 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
     assert(readBack == event)
   }
 }
+
+private case class OldVersionSQLExecutionStart(
+    executionId: Long,
+    description: String,
+    details: String,
+    physicalPlanDescription: String,
+    sparkPlanInfo: SparkPlanInfo,
+    time: Long)
+  extends SparkListenerEvent

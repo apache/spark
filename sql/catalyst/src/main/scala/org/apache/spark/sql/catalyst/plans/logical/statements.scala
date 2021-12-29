@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -124,107 +122,6 @@ object SerdeInfo {
 }
 
 /**
- * A CREATE TABLE command, as parsed from SQL.
- *
- * This is a metadata-only command and is not used to write data to the created table.
- */
-case class CreateTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends LeafParsedStatement
-
-/**
- * A CREATE TABLE AS SELECT command, as parsed from SQL.
- */
-case class CreateTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
-    copy(asSelect = newChild)
-}
-
-/**
- * A CREATE VIEW statement, as parsed from SQL.
- */
-case class CreateViewStatement(
-    viewName: Seq[String],
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
-    copy(child = newChild)
-}
-
-/**
- * A REPLACE TABLE command, as parsed from SQL.
- *
- * If the table exists prior to running this command, executing this statement
- * will replace the table's metadata and clear the underlying rows from the table.
- */
-case class ReplaceTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends LeafParsedStatement
-
-/**
- * A REPLACE TABLE AS SELECT command, as parsed from SQL.
- */
-case class ReplaceTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(
-    newChild: LogicalPlan): ReplaceTableAsSelectStatement = copy(asSelect = newChild)
-}
-
-
-/**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
@@ -272,32 +169,3 @@ case class InsertIntoStatement(
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
-
-/**
- * A CREATE NAMESPACE statement, as parsed from SQL.
- */
-case class CreateNamespaceStatement(
-    namespace: Seq[String],
-    ifNotExists: Boolean,
-    properties: Map[String, String]) extends LeafParsedStatement
-
-/**
- * A USE statement, as parsed from SQL.
- */
-case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends LeafParsedStatement
-
-/**
- * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
- */
-case class ShowCurrentNamespaceStatement() extends LeafParsedStatement
-
-/**
- *  CREATE FUNCTION statement, as parsed from SQL
- */
-case class CreateFunctionStatement(
-    functionName: Seq[String],
-    className: String,
-    resources: Seq[FunctionResource],
-    isTemp: Boolean,
-    ignoreIfExists: Boolean,
-    replace: Boolean) extends LeafParsedStatement

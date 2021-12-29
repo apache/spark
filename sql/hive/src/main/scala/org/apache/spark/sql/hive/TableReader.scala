@@ -35,7 +35,6 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
@@ -352,7 +351,7 @@ class HadoopTableReader(
       initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
-      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+      _broadcastedHadoopConf,
       Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],

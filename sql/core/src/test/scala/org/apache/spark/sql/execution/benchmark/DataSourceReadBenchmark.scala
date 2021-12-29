@@ -119,31 +119,36 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
+        val query = dataType match {
+          case BooleanType => "sum(cast(id as bigint))"
+          case _ => "sum(id)"
+        }
+
         sqlBenchmark.addCase("SQL CSV") { _ =>
-          spark.sql("select sum(id) from csvTable").noop()
+          spark.sql(s"select $query from csvTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Json") { _ =>
-          spark.sql("select sum(id) from jsonTable").noop()
+          spark.sql(s"select $query from jsonTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Parquet Vectorized") { _ =>
-          spark.sql("select sum(id) from parquetTable").noop()
+          spark.sql(s"select $query from parquetTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(id) from parquetTable").noop()
+            spark.sql(s"select $query from parquetTable").noop()
           }
         }
 
         sqlBenchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(id) FROM orcTable").noop()
+          spark.sql(s"SELECT $query FROM orcTable").noop()
         }
 
         sqlBenchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(id) FROM orcTable").noop()
+            spark.sql(s"SELECT $query FROM orcTable").noop()
           }
         }
 
@@ -157,6 +162,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           var longSum = 0L
           var doubleSum = 0.0
           val aggregateValue: (ColumnVector, Int) => Unit = dataType match {
+            case BooleanType => (col: ColumnVector, i: Int) => if (col.getBoolean(i)) longSum += 1L
             case ByteType => (col: ColumnVector, i: Int) => longSum += col.getByte(i)
             case ShortType => (col: ColumnVector, i: Int) => longSum += col.getShort(i)
             case IntegerType => (col: ColumnVector, i: Int) => longSum += col.getInt(i)
@@ -191,6 +197,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           var longSum = 0L
           var doubleSum = 0.0
           val aggregateValue: (InternalRow) => Unit = dataType match {
+            case BooleanType => (col: InternalRow) => if (col.getBoolean(0)) longSum += 1L
             case ByteType => (col: InternalRow) => longSum += col.getByte(0)
             case ShortType => (col: InternalRow) => longSum += col.getShort(0)
             case IntegerType => (col: InternalRow) => longSum += col.getInt(0)
@@ -542,7 +549,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
-      Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
+      Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
         dataType => numericScanBenchmark(1024 * 1024 * 15, dataType)
       }
     }

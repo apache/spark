@@ -200,6 +200,32 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-37494: Unify v1 and v2 option output") {
+    withTable("ddl_test") {
+      sql(
+        s"""CREATE TABLE ddl_test (
+           |  a STRING
+           |)
+           |USING json
+           |TBLPROPERTIES (
+           | 'b' = '1',
+           | 'a' = '2')
+           |OPTIONS (
+           | k4 'v4',
+           | `k3` 'v3',
+           | 'k5' 'v5',
+           | 'k1' = 'v1',
+           | k2 = 'v2'
+           |)
+         """.stripMargin
+      )
+      val expected = "CREATE TABLE `default`.`ddl_test` ( `a` STRING) USING json" +
+        " OPTIONS ( 'k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4', 'k5' = 'v5')" +
+        " TBLPROPERTIES ( 'a' = '2', 'b' = '1')"
+      assert(getShowDDL("SHOW CREATE TABLE ddl_test") == expected)
+    }
+  }
+
   protected def getShowDDL(showCreateTableSql: String): String = {
     sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim).mkString(" ")
   }

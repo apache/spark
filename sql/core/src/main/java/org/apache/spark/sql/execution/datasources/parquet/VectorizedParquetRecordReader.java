@@ -22,10 +22,12 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
@@ -92,11 +94,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * The mode of rebasing date/timestamp from Julian to Proleptic Gregorian calendar.
    */
   private final String datetimeRebaseMode;
+  // The time zone Id in which rebasing of date/timestamp is performed
+  private final String datetimeRebaseTz;
 
   /**
    * The mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian calendar.
    */
   private final String int96RebaseMode;
+  // The time zone Id in which rebasing of INT96 is performed
+  private final String int96RebaseTz;
 
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
@@ -129,19 +135,30 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public VectorizedParquetRecordReader(
       ZoneId convertTz,
       String datetimeRebaseMode,
+      String datetimeRebaseTz,
       String int96RebaseMode,
+      String int96RebaseTz,
       boolean useOffHeap,
       int capacity) {
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
+    this.datetimeRebaseTz = datetimeRebaseTz;
     this.int96RebaseMode = int96RebaseMode;
+    this.int96RebaseTz = int96RebaseTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
   }
 
   // For test only.
   public VectorizedParquetRecordReader(boolean useOffHeap, int capacity) {
-    this(null, "CORRECTED", "LEGACY", useOffHeap, capacity);
+    this(
+      null,
+      "CORRECTED",
+      "UTC",
+      "LEGACY",
+      ZoneId.systemDefault().getId(),
+      useOffHeap,
+      capacity);
   }
 
   /**
@@ -162,6 +179,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public void initialize(String path, List<String> columns) throws IOException,
       UnsupportedOperationException {
     super.initialize(path, columns);
+    initializeInternal();
+  }
+
+  @VisibleForTesting
+  @Override
+  public void initialize(
+      MessageType fileSchema,
+      MessageType requestedSchema,
+      ParquetRowGroupReader rowGroupReader,
+      int totalRowCount) throws IOException {
+    super.initialize(fileSchema, requestedSchema, rowGroupReader, totalRowCount);
     initializeInternal();
   }
 
@@ -320,7 +348,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   private void checkEndOfRowGroup() throws IOException {
     if (rowsReturned != totalCountLoadedSoFar) return;
-    PageReadStore pages = reader.readNextFilteredRowGroup();
+    PageReadStore pages = reader.readNextRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
@@ -337,7 +365,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         pages.getRowIndexes().orElse(null),
         convertTz,
         datetimeRebaseMode,
-        int96RebaseMode);
+        datetimeRebaseTz,
+        int96RebaseMode,
+        int96RebaseTz);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

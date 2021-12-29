@@ -208,7 +208,7 @@ object SparkBuild extends PomBuild {
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.5"
+        val silencerVersion = "1.7.6"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -250,7 +250,17 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
           // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
+          // 1. `The outer reference in this type test cannot be checked at run time`
+          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
+          //    has type parameters eliminated by erasure`
+          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
+          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
+          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
+          "-Wconf:cat=unchecked&msg=outer reference:s",
+          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
+          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
         )
       }
     }
@@ -589,8 +599,7 @@ object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
-    libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
+    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/"
   )
 }
 
@@ -629,12 +638,19 @@ object KubernetesIntegrationTests {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
+        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
+        val extraOptions = if (dockerFile.isDefined) {
+          Seq("-f", s"${dockerFile.get}")
+        } else {
+          Seq("-b", s"java_image_tag=$javaImageTag")
+        }
         val cmd = Seq(dockerTool, "-m",
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile") ++
+          extraOptions :+
           "build"
-        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
@@ -695,9 +711,7 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule("io.netty", "netty-handler"),
-      ExclusionRule("io.netty", "netty-transport-native-epoll"))
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -854,7 +868,7 @@ object Assembly {
                                                                => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
                                                                => MergeStrategy.discard
-      case "log4j.properties"                                  => MergeStrategy.discard
+      case "log4j2.properties"                                 => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
@@ -917,7 +931,8 @@ object SparkR {
   val buildRPackage = taskKey[Unit]("Build the R package")
   lazy val settings = Seq(
     buildRPackage := {
-      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      val postfix = if (File.separator == "\\") ".bat" else ".sh"
+      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
       Process(command.toString).!!
     },
     (Compile / compile) := (Def.taskDyn {
@@ -1124,10 +1139,27 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
-    // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
+        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
+        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
+        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {

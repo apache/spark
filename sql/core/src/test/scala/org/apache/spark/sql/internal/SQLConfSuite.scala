@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.TimeZone
 
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -205,7 +205,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
     val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores")
+    val str_match = "Cannot modify the value of a Spark config: spark.executor.cores"
+    assert(e1.getMessage.contains(str_match))
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -319,6 +320,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 
+  test("SPARK-36643: Show migration guide when attempting SparkConf") {
+    val e1 = intercept[AnalysisException](spark.conf.set("spark.driver.host", "myhost"))
+    assert(e1.message.contains("https://spark.apache.org/docs/latest/sql-migration-guide.html"))
+  }
+
   test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, null))
@@ -409,7 +415,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     def check(config: String): Unit = {
       assert(logAppender.loggingEvents.exists(
         e => e.getLevel == Level.WARN &&
-        e.getRenderedMessage.contains(config)))
+        e.getMessage.getFormattedMessage.contains(config)))
     }
 
     val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key

@@ -63,15 +63,9 @@ true
 -- !query
 select current_timestamp() = current_timestamp()
 -- !query schema
-struct<>
+struct<(current_timestamp() = current_timestamp()):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'current_timestamp'(line 1, pos 7)
-
-== SQL ==
-select current_timestamp() = current_timestamp()
--------^^^
+true
 
 
 -- !query
@@ -104,7 +98,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-The fraction of sec must be zero. Valid range is [0, 60].
+The fraction of sec must be zero. Valid range is [0, 60]. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -129,7 +123,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61
+Invalid value for SecondOfMinute (valid values 0 - 59): 61. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -154,7 +148,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 99
+Invalid value for SecondOfMinute (valid values 0 - 59): 99. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -163,7 +157,7 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 999
+Invalid value for SecondOfMinute (valid values 0 - 59): 999. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -265,10 +259,10 @@ struct<>
 -- !query
 select typeof(current_date), typeof(current_timestamp) from ttf1
 -- !query schema
-struct<typeof(current_date()):string,typeof(current_timestamp()):string>
+struct<typeof(current_date):string,typeof(current_timestamp):string>
 -- !query output
-date	timestamp
-date	timestamp
+int	int
+int	int
 
 
 -- !query
@@ -285,15 +279,10 @@ struct<>
 -- !query
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
 -- !query schema
-struct<>
+struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean,a:int,b:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'current_date'(line 1, pos 22)
-
-== SQL ==
-select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
-----------------------^^^
+true	true	1	2
+true	true	2	3
 
 
 -- !query
@@ -343,7 +332,7 @@ select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '2019-10-06 10:11:12.' could not be parsed at index 20
+Text '2019-10-06 10:11:12.' could not be parsed at index 20. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -408,7 +397,7 @@ select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSS
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26
+Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -425,7 +414,7 @@ select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27
+Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -490,7 +479,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '12.1232019-10-06S10:11' could not be parsed at index 7
+Text '12.1232019-10-06S10:11' could not be parsed at index 7. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -499,7 +488,7 @@ select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 struct<>
 -- !query output
 java.time.format.DateTimeParseException
-Text '12.1232019-10-06S10:11' could not be parsed at index 9
+Text '12.1232019-10-06S10:11' could not be parsed at index 9. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -572,7 +561,7 @@ select to_timestamp("02-29", "MM-dd")
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid date 'February 29' as '1970' is not a leap year
+Invalid date 'February 29' as '1970' is not a leap year. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -679,7 +668,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' due to data type mismatch: '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' requires (numeric or interval or interval day to second or interval year to month) type, not timestamp_ntz; line 1 pos 7
+cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' due to data type mismatch: '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
 
 
 -- !query
@@ -688,7 +677,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' requires (numeric or interval or interval day to second or interval year to month) type, not timestamp_ntz; line 1 pos 7
+cannot resolve '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
 
 
 -- !query
