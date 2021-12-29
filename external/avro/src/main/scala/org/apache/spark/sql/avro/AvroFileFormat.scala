@@ -123,7 +123,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
         reader.sync(file.start)
 
-        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        val datetimeRebaseMode = DataSourceUtils.datetimeRebaseSpec(
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
           datetimeRebaseModeInRead)
 

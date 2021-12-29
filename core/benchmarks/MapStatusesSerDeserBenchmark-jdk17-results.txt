@@ -2,10 +2,10 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 10 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Serialization                                        151            157           5          1.3         756.0       1.0X
-Deserialization                                      265            274           9          0.8        1325.4       0.6X
+Serialization                                        142            151           7          1.4         709.7       1.0X
+Deserialization                                      236            261          34          0.8        1178.1       0.6X
 
-Compressed Serialized MapStatus sizes: 413 bytes
+Compressed Serialized MapStatus sizes: 410 bytes
 Compressed Serialized Broadcast MapStatus sizes: 2 MB
 
 
@@ -13,8 +13,8 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 10 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-Serialization                                         133            135           2          1.5         662.9       1.0X
-Deserialization                                       228            260          25          0.9        1140.3       0.6X
+Serialization                                         135            139           3          1.5         675.1       1.0X
+Deserialization                                       258            260           2          0.8        1288.2       0.5X
 
 Compressed Serialized MapStatus sizes: 2 MB
 Compressed Serialized Broadcast MapStatus sizes: 0 bytes
@@ -24,10 +24,10 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 100 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-Serialization                                         270            298          13          0.7        1350.8       1.0X
-Deserialization                                       292            316          20          0.7        1458.5       0.9X
+Serialization                                         266            273          13          0.8        1329.7       1.0X
+Deserialization                                       261            281          19          0.8        1306.2       1.0X
 
-Compressed Serialized MapStatus sizes: 427 bytes
+Compressed Serialized MapStatus sizes: 429 bytes
 Compressed Serialized Broadcast MapStatus sizes: 13 MB
 
 
@@ -35,8 +35,8 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 100 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-Serialization                                          271            277           4          0.7        1355.2       1.0X
-Deserialization                                        286            293          10          0.7        1429.2       0.9X
+Serialization                                          251            256           4          0.8        1257.5       1.0X
+Deserialization                                        263            278          23          0.8        1317.0       1.0X
 
 Compressed Serialized MapStatus sizes: 13 MB
 Compressed Serialized Broadcast MapStatus sizes: 0 bytes
@@ -46,10 +46,10 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 1000 blocks w/ broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-Serialization                                         1277           1335          81          0.2        6386.2       1.0X
-Deserialization                                        551            583          43          0.4        2755.8       2.3X
+Serialization                                         1243           1248           7          0.2        6215.7       1.0X
+Deserialization                                        469            534          69          0.4        2344.6       2.7X
 
-Compressed Serialized MapStatus sizes: 561 bytes
+Compressed Serialized MapStatus sizes: 556 bytes
 Compressed Serialized Broadcast MapStatus sizes: 121 MB
 
 
@@ -57,8 +57,8 @@ OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 200000 MapOutputs, 1000 blocks w/o broadcast:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------
-Serialization                                          1217           1247          43          0.2        6086.0       1.0X
-Deserialization                                         609            632          46          0.3        3044.2       2.0X
+Serialization                                          1006           1035          41          0.2        5029.6       1.0X
+Deserialization                                         479            488          14          0.4        2394.8       2.1X
 
 Compressed Serialized MapStatus sizes: 121 MB
 Compressed Serialized Broadcast MapStatus sizes: 0 bytes
