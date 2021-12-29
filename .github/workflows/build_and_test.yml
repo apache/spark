@@ -37,6 +37,8 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+    # ARM64 Spark Test
+    - cron: '0 18 * * *'
 
 jobs:
   configure-jobs:
@@ -88,6 +90,12 @@ jobs:
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
           echo '::set-output name=hadoop::hadoop3'
+        elif [ "${{ github.event.schedule }}" = "0 18 * * *" ]; then
+          echo '::set-output name=java::8'
+          echo '::set-output name=branch::master'
+          echo '::set-output name=type::spark-arm64-scheduled'
+          echo '::set-output name=envs::{}'
+          echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
@@ -101,12 +109,16 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
     needs: configure-jobs
     # Run scheduled jobs for Apache Spark only
+    # Run spark arm64 scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
+      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'spark-arm64-scheduled')
       || needs.configure-jobs.outputs.type == 'regular'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
+    runs-on:  >-
+      ${{ (needs.configure-jobs.outputs.type == 'spark-arm64-scheduled' && 'ubuntu-20.04-arm64')
+      || 'ubuntu-20.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -205,14 +217,17 @@ jobs:
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
+      # actions/setup-java doesn'ts suppport arm64, it had been installed in self-hosted runner.
+      if: needs.configure-jobs.outputs.type != 'spark-arm64-scheduled'
       with:
         java-version: ${{ matrix.java }}
     - name: Install Python 3.8
       uses: actions/setup-python@v2
-      # We should install one Python that is higher then 3+ for SQL and Yarn because:
-      # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
-      # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-      if: contains(matrix.modules, 'yarn') || (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
+      # * We should install one Python that is higher then 3+ for SQL and Yarn because:
+      #  - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+      #  - Yarn has a Python specific test too, for example, YarnClusterSuite.
+      # * actions/setup-python doesn't support arm64, it had been installed in self-hosted runner.
+      if: needs.configure-jobs.outputs.type != 'spark-arm64-scheduled' && (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       with:
         python-version: 3.8
         architecture: x64
