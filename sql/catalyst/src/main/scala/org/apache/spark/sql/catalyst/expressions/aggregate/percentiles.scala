@@ -294,28 +294,28 @@ case class Percentile(
     val maxPosition = accumulatedCounts.last._2 - 1
 
     percentages.map { percentile =>
-      getPercentile(accumulatedCounts, maxPosition, percentile)
+      getPercentile(accumulatedCounts, maxPosition * percentile)
     }
   }
+
   private def getPercentile(
-      aggreCounts: Seq[(AnyRef, Long)], maxPosition: Long, percentile: Double): Double = {
-    val position = maxPosition * percentile
+      accumulatedCounts: Seq[(AnyRef, Long)], position: Double): Double = {
     // We may need to do linear interpolation to get the exact percentile
     val lower = position.floor.toLong
     val higher = position.ceil.toLong
 
     // Use binary search to find the lower and the higher position.
-    val countsArray = aggreCounts.map(_._2).toArray[Long]
-    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
-    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
+    val countsArray = accumulatedCounts.map(_._2).toArray[Long]
+    val lowerIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, lower + 1)
+    val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher + 1)
 
-    val lowerKey = aggreCounts(lowerIndex)._1
+    val lowerKey = accumulatedCounts(lowerIndex)._1
     if (higher == lower) {
       // no interpolation needed because position does not have a fraction
       return toDoubleValue(lowerKey)
     }
 
-    val higherKey = aggreCounts(higherIndex)._1
+    val higherKey = accumulatedCounts(higherIndex)._1
     if (higherKey == lowerKey) {
       // no interpolation needed because lower position and higher position has the same key
       return toDoubleValue(lowerKey)
@@ -387,20 +387,28 @@ case class PercentileDisc(
       }
     }
 
-    var acc = 0L
-    val idxs = sortedCounts.zipWithIndex.map { x =>
-      acc = acc + x._1._2
-      (x._2, acc)
-    }
+    // Build the mapping between the index of the input data and the index of the aggregated data
+    var accumulator = 0L
+    val idxMap = sortedCounts.zipWithIndex.map { case (c, i) =>
+      accumulator = accumulator + c._2
+      i -> accumulator
+    }.toMap
+
+    // Use binary search to find the lower position.
     val countsArray = sortedCounts.map(_._2).toArray[Long]
     var lowerIndex = binarySearchCount(countsArray, 0, sortedCounts.size, lower)
-    val n = countsArray.reduce(_ + _)
-    var index = idxs(lowerIndex)._2
-    var cumeDist = index / n.toDouble
+
+    // Get the count of the input data
+    val count = countsArray.reduce(_ + _)
+
+    // Find the row has the smallest cumeDist value that is greater than or equal to the given
+    // percentile.
+    var index = idxMap(lowerIndex)
+    var cumeDist = index.toDouble / count
     while (cumeDist < percentile) {
       lowerIndex = lowerIndex + 1
-      index = idxs(lowerIndex)._2
-      cumeDist = index / n.toDouble
+      index = idxMap(lowerIndex)
+      cumeDist = index.toDouble / count
     }
     val lowerKey = sortedCounts(lowerIndex)._1
     toDoubleValue(lowerKey)
