@@ -288,6 +288,20 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  metadataColumnsTest("filter on metadata and user data", schema) { (df, _, f1) =>
+    checkAnswer(
+      df.select("name", "age", "info",
+        METADATA_FILE_NAME, METADATA_FILE_PATH,
+        METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME)
+        .where(Column(METADATA_FILE_NAME) === f1(METADATA_FILE_NAME) and Column("name") === "lily")
+        .where(Column(METADATA_FILE_PATH) === f1(METADATA_FILE_PATH))
+        .where("age == 31"),
+      Seq(Row("lily", 31, Row(54321L, "ucb"),
+        f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+        f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+    )
+  }
+
   Seq(true, false).foreach { caseSensitive =>
     metadataColumnsTest(s"upper/lower case when case " +
       s"sensitive is $caseSensitive", schemaWithNameConflicts) { (df, f0, f1) =>

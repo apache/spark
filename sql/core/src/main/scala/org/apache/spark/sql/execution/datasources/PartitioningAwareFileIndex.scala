@@ -27,7 +27,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_STRUCT
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
@@ -71,8 +73,34 @@ abstract class PartitioningAwareFileIndex(
     def isNonEmptyFile(f: FileStatus): Boolean = {
       isDataPath(f.getPath) && f.getLen > 0
     }
+
+    // retrieve the file metadata filters and reduce to a final filter expression
+    val fileMetadataFilterOpt = dataFilters.filter(_.references.forall {
+      case MetadataAttribute(_) => true
+      case _ => false
+    }).reduceOption(expressions.And)
+
+    // will create internal rows for each file, position 0: Metadata Struct
+    val boundedFilterOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
+      Predicate.createInterpreted(fileMetadataFilter.transform {
+        case _: AttributeReference => BoundReference(0, METADATA_STRUCT, nullable = true)
+      })
+    }
+
+    def matchFileMetadataPredicate(f: FileStatus): Boolean = {
+      // use option.forall, so if there is no filter, return true
+      boundedFilterOpt.forall(_.eval(
+        InternalRow.fromSeq(Seq(InternalRow.fromSeq(Seq(
+          UTF8String.fromString(f.getPath.toString),
+          UTF8String.fromString(f.getPath.getName),
+          f.getLen,
+          f.getModificationTime * 1000L))))
+      ))
+    }
+
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles().filter(isNonEmptyFile)) :: Nil
+      PartitionDirectory(InternalRow.empty, allFiles()
+        .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(f))) :: Nil
     } else {
       if (recursiveFileLookup) {
         throw new IllegalArgumentException(
@@ -83,7 +111,8 @@ abstract class PartitioningAwareFileIndex(
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f))
+              existingDir.filter(f => matchPathPattern(f) && isNonEmptyFile(f) &&
+                matchFileMetadataPredicate(f))
 
             case None =>
               // Directory does not exist, or has no children files
