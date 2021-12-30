@@ -49,7 +49,6 @@ object ValidateRequirements extends Logging {
     // have the same number of partitions.
     val numPartitions = requiredChildDistributions.zipWithIndex.collect {
       case (_: ClusteredDistribution, i) => i
-      case (_: HashClusteredDistribution, i) => i
     }.map(i => children(i).outputPartitioning.numPartitions)
     if (numPartitions.length > 1 && !numPartitions.tail.forall(_ == numPartitions.head)) {
       logDebug(s"ValidateRequirements failed: different partition num in\n$plan")

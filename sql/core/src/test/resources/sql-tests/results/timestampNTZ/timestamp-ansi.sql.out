@@ -63,15 +63,9 @@ true
 -- !query
 select current_timestamp() = current_timestamp()
 -- !query schema
-struct<>
+struct<(current_timestamp() = current_timestamp()):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'current_timestamp'(line 1, pos 7)
-
-== SQL ==
-select current_timestamp() = current_timestamp()
--------^^^
+true
 
 
 -- !query
@@ -265,10 +259,10 @@ struct<>
 -- !query
 select typeof(current_date), typeof(current_timestamp) from ttf1
 -- !query schema
-struct<typeof(current_date()):string,typeof(current_timestamp()):string>
+struct<typeof(current_date):string,typeof(current_timestamp):string>
 -- !query output
-date	timestamp
-date	timestamp
+int	int
+int	int
 
 
 -- !query
@@ -285,15 +279,10 @@ struct<>
 -- !query
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
 -- !query schema
-struct<>
+struct<(current_date() = current_date()):boolean,(current_timestamp() = current_timestamp()):boolean,a:int,b:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'current_date'(line 1, pos 22)
-
-== SQL ==
-select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
-----------------------^^^
+true	true	1	2
+true	true	2	3
 
 
 -- !query

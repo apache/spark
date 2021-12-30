@@ -99,12 +99,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS
   test("TABLESAMPLE (integer_expression ROWS) is the same as LIMIT") {
     val df = sql("SELECT NAME FROM h2.test.employee TABLESAMPLE (3 ROWS)")
+    checkSchemaNames(df, Seq("NAME"))
+    checkPushedLimit(df, Some(3))
+    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
+  }
+
+  private def checkSchemaNames(df: DataFrame, names: Seq[String]): Unit = {
     val scan = df.queryExecution.optimizedPlan.collectFirst {
       case s: DataSourceV2ScanRelation => s
     }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
-    checkPushedLimit(df, Some(3))
-    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
+    assert(scan.schema.names.sameElements(names))
   }
 
   test("simple scan with LIMIT") {
@@ -125,10 +129,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0)))
 
     val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1")
-    val scan = df3.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkSchemaNames(df3, Seq("NAME"))
     checkPushedLimit(df3, Some(1))
     checkAnswer(df3, Seq(Row("alex")))
 
@@ -196,10 +197,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df4 =
       sql("SELECT name FROM h2.test.employee WHERE dept > 1 ORDER BY salary NULLS LAST LIMIT 1")
-    val scan = df4.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkSchemaNames(df4, Seq("NAME"))
     checkPushedLimit(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
     checkAnswer(df4, Seq(Row("david")))
 
@@ -244,10 +242,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("scan with filter push-down") {
     val df = spark.table("h2.test.people").filter($"id" > 1)
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+
+    checkFiltersRemoved(df)
 
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -261,23 +257,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("scan with column pruning") {
     val df = spark.table("h2.test.people").select("id")
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("ID")))
+    checkSchemaNames(df, Seq("ID"))
     checkAnswer(df, Seq(Row(1), Row(2)))
   }
 
   test("scan with filter push-down and column pruning") {
     val df = spark.table("h2.test.people").filter($"id" > 1).select("name")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq("NAME")))
+    checkFiltersRemoved(df)
+    checkSchemaNames(df, Seq("NAME"))
     checkAnswer(df, Row("mary"))
   }
 
@@ -402,10 +389,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: MAX MIN with filter and group by") {
     val df = sql("select MAX(SaLaRY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DePt")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -418,12 +402,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
   }
 
-  test("scan with aggregate push-down: MAX MIN with filter without group by") {
-    val df = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+  private def checkFiltersRemoved(df: DataFrame): Unit = {
     val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
     assert(filters.isEmpty)
+  }
+
+  test("scan with aggregate push-down: MAX MIN with filter without group by") {
+    val df = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
@@ -539,10 +527,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: with multiple group by columns") {
     val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT, NAME")
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
+    checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
