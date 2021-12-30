@@ -22,18 +22,19 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down aggregates. Spark assumes that the data source can't fully complete the
- * grouping work, and will group the data source output again. For queries like
- * "SELECT min(value) AS m FROM t GROUP BY key", after pushing down the aggregate
- * to the data source, the data source can still output data with duplicated keys, which is OK
- * as Spark will do GROUP BY key again. The final query plan can be something like this:
+ * push down aggregates.
+ * <p>
+ * If the data source can't fully complete the grouping work, then
+ * {@link #supportCompletePushDown()} should return false, and Spark will group the data source
+ * output again. For queries like "SELECT min(value) AS m FROM t GROUP BY key", after pushing down
+ * the aggregate to the data source, the data source can still output data with duplicated keys,
+ * which is OK as Spark will do GROUP BY key again. The final query plan can be something like this:
  * <pre>
- *   Aggregate [key#1], [min(min(value)#2) AS m#3]
- *     +- RelationV2[key#1, min(value)#2]
+ *   Aggregate [key#1], [min(min_value#2) AS m#3]
+ *     +- RelationV2[key#1, min_value#2]
  * </pre>
  * Similarly, if there is no grouping expression, the data source can still output more than one
  * rows.
- *
  * <p>
  * When pushing down operators, Spark pushes down filters to the data source first, then push down
  * aggregates or apply column pruning. Depends on data source implementation, aggregates may or
@@ -46,8 +47,8 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
-   * Whether the datasource support complete aggregation push-down. Spark could avoid partial-agg
-   * and final-agg when the aggregation operation can be pushed down to the datasource completely.
+   * Whether the datasource support complete aggregation push-down. Spark will do grouping again
+   * if this method returns false.
    *
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
