@@ -50,16 +50,17 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * Whether the datasource support complete aggregation push-down. Spark will do grouping again
    * if this method returns false.
    *
-   * @param groupAttrs group by attributes of aggregation.
+   * @param aggregation Aggregation in SQL statement.
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
-  default boolean supportCompletePushDown(String[] groupAttrs) { return false; }
+  default boolean supportCompletePushDown(Aggregation aggregation) { return false; }
 
   /**
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should
    * be: grouping columns, aggregate columns (in the same order as the aggregate functions in
    * the given Aggregation).
    *
+   * @param aggregation Aggregation in SQL statement.
    * @return true if the aggregation can be pushed down to datasource, false otherwise.
    */
   boolean pushAggregation(Aggregation aggregation);

@@ -149,7 +149,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
                 val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-                if (r.supportCompletePushDown(groupAttrs.map(_.name).toArray)) {
+                if (r.supportCompletePushDown(pushedAggregates.get)) {
                   val projectExpressions = resultExpressions.map { expr =>
                     // TODO At present, only push down group by attribute is supported.
                     // In future, more attribute conversion is extended here. e.g. GetStructField
