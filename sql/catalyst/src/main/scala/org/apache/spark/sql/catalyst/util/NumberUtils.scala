@@ -231,7 +231,7 @@ object NumberUtils {
 
   class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
 
-    val normalizedNumberFormat = normalize(originNumberFormat)
+    protected val normalizedNumberFormat = normalize(originNumberFormat)
 
     private val precision = getPrecision(normalizedNumberFormat)
 
