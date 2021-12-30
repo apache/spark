@@ -162,21 +162,11 @@ class FileScanRDD(
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new OnHeapColumnVector(c.numRows(), StringType)
-            rowId = 0
-            // use a tight-loop for better performance
-            while (rowId < c.numRows()) {
-              columnVector.putByteArray(rowId, filePathBytes)
-              rowId += 1
-            }
+            columnVector.putByteArrays(0, c.numRows(), filePathBytes)
             columnVector
           case FILE_NAME =>
             val columnVector = new OnHeapColumnVector(c.numRows(), StringType)
-            rowId = 0
-            // use a tight-loop for better performance
-            while (rowId < c.numRows()) {
-              columnVector.putByteArray(rowId, fileNameBytes)
-              rowId += 1
-            }
+            columnVector.putByteArrays(0, c.numRows(), fileNameBytes)
             columnVector
           case FILE_SIZE =>
             val columnVector = new OnHeapColumnVector(c.numRows(), LongType)
