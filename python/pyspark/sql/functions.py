@@ -1758,7 +1758,7 @@ def when(condition: Column, value: Any) -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
 
-    # Have explicitly decided to not use ColumnOrName here in order to avoid confusion
+    # Explicitly not using ColumnOrName type here to make reading statement less opaque
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
