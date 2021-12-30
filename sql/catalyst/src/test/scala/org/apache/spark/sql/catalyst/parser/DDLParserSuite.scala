@@ -2149,17 +2149,31 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SHOW ALL FUNCTIONS"),
       ShowFunctions(nsPlan, true, true, None))
     comparePlans(
+      parsePlan("SHOW FUNCTIONS 'funct*'"),
+      ShowFunctions(nsPlan, true, true, Some("funct*")))
+    comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
       ShowFunctions(nsPlan, true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
       ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
+    val sql = "SHOW other FUNCTIONS"
+    intercept(sql, s"$sql not supported")
+    intercept("SHOW FUNCTIONS IN db f1",
+      "Invalid pattern in SHOW FUNCTIONS: f1")
+    intercept("SHOW FUNCTIONS IN db LIKE f1",
+      "Invalid pattern in SHOW FUNCTIONS: f1")
+
+    // The legacy syntax.
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS a"),
+      ShowFunctions(nsPlan, true, true, Some("a")))
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS LIKE a"),
+      ShowFunctions(nsPlan, true, true, Some("a")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
       ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
-    val sql = "SHOW other FUNCTIONS"
-    intercept(sql, s"$sql not supported")
-    intercept("SHOW FUNCTIONS IN db f1", "Invalid pattern")
   }
 
   test("DROP FUNCTION") {
