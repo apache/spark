@@ -875,9 +875,9 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Returns if the current codes are running on the executor side.
+   * Returns if the current codes are running in a Spark task, e.g., in executors.
    */
-  def isAtExecutorSide: Boolean = TaskContext.get() != null
+  def isInRunningSparkTask: Boolean = TaskContext.get() != null
 
   /**
    * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,

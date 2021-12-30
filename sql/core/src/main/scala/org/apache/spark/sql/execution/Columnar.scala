@@ -67,7 +67,7 @@ trait ColumnarToRowTransition extends UnaryExecNode
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
   // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
-  assert(Utils.isAtExecutorSide || child.supportsColumnar)
+  assert(Utils.isInRunningSparkTask || child.supportsColumnar)
 
   override def output: Seq[Attribute] = child.output
 
