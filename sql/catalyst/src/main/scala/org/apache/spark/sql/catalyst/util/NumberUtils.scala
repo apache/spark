@@ -54,7 +54,7 @@ object NumberUtils {
    * 3. 'D' -> '.'
    * 4. 'S' -> '-'
    *
-   * Note: When you call format, we must preserve the digits after decimal point, so the digits
+   * Note: When calling format, we must preserve the digits after decimal point, so the digits
    * after decimal point should be replaced as '0'. For example: '999.9' will be normalized as
    * '###.0' and '999.99' will be normalized as '###.00', so if the input is 454, so the format
    * output will be 454.0 and 454.00 respectively.
