@@ -1397,11 +1397,11 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 
 trait hasPartitionExpressions extends SQLConfHelper {
 
-  protected def partitionExpressions: Seq[Expression]
+  def partitionExpressions: Seq[Expression]
 
   def optNumPartitions: Option[Int]
 
-  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+  protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(optNumPartitions.getOrElse(conf.numShufflePartitions))
   } else {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
