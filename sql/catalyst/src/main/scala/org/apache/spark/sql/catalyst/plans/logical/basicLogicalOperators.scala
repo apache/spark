@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -1395,14 +1395,14 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
     copy(child = newChild)
 }
 
-trait hasPartitionExpressions {
+trait hasPartitionExpressions extends SQLConfHelper {
 
   def partitionExpressions: Seq[Expression]
 
   def optNumPartitions: Option[Int]
 
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
-    RoundRobinPartitioning(optNumPartitions.get)
+    RoundRobinPartitioning(optNumPartitions.getOrElse(conf.numShufflePartitions))
   } else {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
@@ -1414,9 +1414,10 @@ trait hasPartitionExpressions {
            |NonSortOrder: $nonSortOrder
        """.stripMargin)
     if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), optNumPartitions.get)
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]),
+        optNumPartitions.getOrElse(conf.numShufflePartitions))
     } else {
-      HashPartitioning(partitionExpressions, optNumPartitions.get)
+      HashPartitioning(partitionExpressions, optNumPartitions.getOrElse(conf.numShufflePartitions))
     }
   }
 }
