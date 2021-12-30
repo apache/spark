@@ -511,7 +511,7 @@ class FunctionsTests(ReusedSQLTestCase):
                 [
                     df.select(slice(df.x, 2, 2).alias("sliced")).collect() == expected,
                     df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect() == expected,
-                    df.select(slice(df.x, "index", "len").alias("sliced")).collect() == expected,
+                    df.select(slice("x", "index", "len").alias("sliced")).collect() == expected,
                 ]
             )
         )
