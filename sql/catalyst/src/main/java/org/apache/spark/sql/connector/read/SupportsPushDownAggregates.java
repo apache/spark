@@ -20,8 +20,6 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 
-import java.util.List;
-
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down aggregates.
