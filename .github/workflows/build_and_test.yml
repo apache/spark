@@ -254,7 +254,7 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20211116
+      image: dongjoon/apache-spark-github-action-image:20211228
     strategy:
       fail-fast: false
       matrix:
@@ -327,9 +327,6 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
-        # TODO(SPARK-36361): Install coverage in Python 3.9 and PyPy 3 in the base image
-        python3.9 -m pip install coverage
-        pypy3 -m pip install coverage
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
@@ -360,7 +357,7 @@ jobs:
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20211116
+      image: dongjoon/apache-spark-github-action-image:20211228
     env:
       HADOOP_PROFILE: ${{ needs.configure-jobs.outputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -431,7 +428,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
     container:
-      image: dongjoon/apache-spark-github-action-image:20211116
+      image: dongjoon/apache-spark-github-action-image:20211228
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2

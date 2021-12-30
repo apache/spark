@@ -6,7 +6,7 @@ OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Int In-Memory scan:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-columnar deserialization + columnar-to-row            255            469         191          3.9         255.3       1.0X
-row-based deserialization                             192            273          82          5.2         192.5       1.3X
+columnar deserialization + columnar-to-row            368            403          33          2.7         368.3       1.0X
+row-based deserialization                             272            312          50          3.7         271.6       1.4X
 
 
