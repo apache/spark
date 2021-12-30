@@ -194,19 +194,18 @@ case class DropFunctionCommand(
  * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
  */
 case class ShowFunctionsCommand(
-    db: Option[String],
+    db: String,
     pattern: Option[String],
     showUserFunctions: Boolean,
     showSystemFunctions: Boolean,
     override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
     // If pattern is not specified, we use '*', which is used to
     // match any sequence of characters (including no characters).
     val functionNames =
       sparkSession.sessionState.catalog
-        .listFunctions(dbName, pattern.getOrElse("*"))
+        .listFunctions(db, pattern.getOrElse("*"))
         .collect {
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString

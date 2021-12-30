@@ -690,6 +690,7 @@ class Dataset[T] private[sql](
       // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
       // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
       // joins.
+      @scala.annotation.tailrec
       def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
         partitioning match {
           case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)

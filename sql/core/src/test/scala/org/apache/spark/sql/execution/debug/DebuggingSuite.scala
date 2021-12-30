@@ -125,22 +125,25 @@ class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSui
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {
-    val base = spark.range(5)
-    base.persist()
-    val df = base.union(base)
+    withTempPath { workDir =>
+      val workDirPath = workDir.getAbsolutePath
+      val input = spark.range(5).toDF("id")
+      input.write.parquet(workDirPath)
+      val df = spark.read.parquet(workDirPath)
 
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      df.debug()
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.debug()
+      }
+
+      val output = captured.toString()
+        .replaceAll("== FileScan parquet \\[id#\\d+L] .* ==", "== FileScan parquet [id#xL] ==")
+      assert(output.contains(
+        """== FileScan parquet [id#xL] ==
+          |Tuples output: 0
+          | id LongType: {}
+          |""".stripMargin))
     }
-    df.unpersist()
-
-    val output = captured.toString().replaceAll("#\\d+", "#x")
-    assert(output.contains(
-      """== InMemoryTableScan [id#xL] ==
-        |Tuples output: 0
-        | id LongType: {}
-        |""".stripMargin))
   }
 }
 
