@@ -946,6 +946,9 @@ final class ShuffleBlockFetcherIterator(
               // Since the request for local block meta completed successfully, numBlocksToFetch
               // is decremented.
               numBlocksToFetch -= 1
+              if (bufs.isEmpty) {
+                throw SparkCoreErrors.noLocalMergedBlockDataError(shuffleBlockId, localDirs)
+              }
               // Update total number of blocks to fetch, reflecting the multiple local shuffle
               // chunks.
               numBlocksToFetch += bufs.size

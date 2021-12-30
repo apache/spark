@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, TaskNotSerializableException}
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, ShuffleMergedBlockId, UnrecognizedBlockId}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -314,5 +314,12 @@ object SparkCoreErrors {
 
   def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
     new SparkException(s"Failed to get block $blockId, which is not a shuffle block", e)
+  }
+
+  def noLocalMergedBlockDataError(
+    blockId: ShuffleMergedBlockId,
+    localDirs: Array[String]): Throwable = {
+    new SparkException(s"Can not found LocalMergedBlockData of block $blockId on local dirs: " +
+      localDirs.mkString(", "))
   }
 }
