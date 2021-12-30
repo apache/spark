@@ -18,16 +18,20 @@
 import sys
 
 from collections import namedtuple
+from typing import TypeVar, Generic, List, Any, cast
 
-from pyspark import since
+from pyspark import since, SparkContext
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
-from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
+from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc  # type: ignore[attr-defined]
+from pyspark.rdd import RDD
 
-__all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
+_all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
+
+T = TypeVar("T")
 
 
 @inherit_doc
-class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader, Generic[T]):
     """
     A FP-Growth model for mining frequent itemsets
     using the Parallel FP-Growth algorithm.
@@ -49,19 +53,22 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
 
     @since("1.4.0")
-    def freqItemsets(self):
+    def freqItemsets(self) -> "RDD[FPGrowth.FreqItemset[T]]":  # type: ignore[misc]
         """
         Returns the frequent itemsets of this model.
         """
-        return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
+        return cast(Any, self.call("getFreqItemsets")).map(
+            lambda x: (FPGrowth.FreqItemset(x[0], x[1]))
+        )
 
     @classmethod
     @since("2.0.0")
-    def load(cls, sc, path):
+    def load(cls, sc: SparkContext, path: str) -> "FPGrowthModel":
         """
         Load a model from the given path.
         """
-        model = cls._load_java(sc, path)
+        model = cls._load_java(sc, path)  # type: ignore[attr-defined]
+        assert sc._jvm is not None
         wrapper = sc._jvm.org.apache.spark.mllib.api.python.FPGrowthModelWrapper(model)
         return FPGrowthModel(wrapper)
 
@@ -74,7 +81,9 @@ class FPGrowth:
     """
 
     @classmethod
-    def train(cls, data, minSupport=0.3, numPartitions=-1):
+    def train(
+        cls, data: "RDD[list[T]]", minSupport: float = 0.3, numPartitions: int = -1
+    ) -> FPGrowthModel[T]:
         """
         Computes an FP-Growth model that contains frequent itemsets.
 
@@ -95,7 +104,7 @@ class FPGrowth:
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
 
-    class FreqItemset(namedtuple("FreqItemset", ["items", "freq"])):
+    class FreqItemset(Generic[T], namedtuple("FreqItemset", ["items", "freq"])):
         """
         Represents an (items, freq) tuple.
 
@@ -104,7 +113,7 @@ class FPGrowth:
 
 
 @inherit_doc
-class PrefixSpanModel(JavaModelWrapper):
+class PrefixSpanModel(JavaModelWrapper, Generic[T]):
     """
     Model fitted by PrefixSpan
 
@@ -124,9 +133,11 @@ class PrefixSpanModel(JavaModelWrapper):
     """
 
     @since("1.6.0")
-    def freqSequences(self):
+    def freqSequences(self) -> "RDD[PrefixSpan.FreqSequence[T]]":  # type: ignore[misc]
         """Gets frequent sequences"""
-        return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
+        return cast(Any, self.call("getFreqSequences")).map(
+            lambda x: (PrefixSpan.FreqSequence(x[0], x[1]))
+        )
 
 
 class PrefixSpan:
@@ -144,7 +155,13 @@ class PrefixSpan:
     """
 
     @classmethod
-    def train(cls, data, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000):
+    def train(
+        cls,
+        data: "RDD[List[List[T]]]",
+        minSupport: float = 0.1,
+        maxPatternLength: int = 10,
+        maxLocalProjDBSize: int = 32000000,
+    ) -> PrefixSpanModel[T]:
         """
         Finds the complete set of frequent sequential patterns in the
         input sequences of itemsets.
@@ -177,7 +194,7 @@ class PrefixSpan:
         )
         return PrefixSpanModel(model)
 
-    class FreqSequence(namedtuple("FreqSequence", ["sequence", "freq"])):
+    class FreqSequence(Generic[T], namedtuple("FreqSequence", ["sequence", "freq"])):
         """
         Represents a (sequence, freq) tuple.
 
@@ -185,7 +202,7 @@ class PrefixSpan:
         """
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.mllib.fpm
