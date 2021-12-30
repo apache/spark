@@ -2211,7 +2211,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
     >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
-    >>> df.select(date_add(df.dt, df.add.cast(IntegerType())).alias('next_date')).collect()
+    >>> df.select(date_add(df.dt, df.add.cast('integer')).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 10))]
     """
     sc = SparkContext._active_spark_context
@@ -2233,7 +2233,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'sub'])
     >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
-    >>> df.select(date_sub(df.dt, df.sub.cast(IntegerType())).alias('prev_date')).collect()
+    >>> df.select(date_sub(df.dt, df.sub.cast('integer')).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 6))]
     """
     sc = SparkContext._active_spark_context
@@ -2272,7 +2272,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     >>> df = spark.createDataFrame([('2015-04-08', 2)], ['dt', 'add'])
     >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 5, 8))]
-    >>> df.select(add_months(df.dt, df.add.cast(IntegerType())).alias('next_month')).collect()
+    >>> df.select(add_months(df.dt, df.add.cast('integer')).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 6, 8))]
     """
     sc = SparkContext._active_spark_context
