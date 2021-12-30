@@ -984,6 +984,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       }
   }
 
+  @scala.annotation.tailrec
   private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = expr match {
     case a: Alias => isExtractOnly(a.child, ref)
     case e: ExtractValue => isExtractOnly(e.children.head, ref)

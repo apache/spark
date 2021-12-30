@@ -889,6 +889,7 @@ object ScalaReflection extends ScalaReflection {
     }
   }
 
+  @scala.annotation.tailrec
   def javaBoxedType(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
     case _: DayTimeIntervalType => classOf[java.lang.Long]
