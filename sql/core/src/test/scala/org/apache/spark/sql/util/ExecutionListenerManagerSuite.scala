@@ -48,8 +48,15 @@ class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession
   test("SPARK-37780: register query execution listeners using SQLCoonf") {
     import CountingSQLConfQueryExecutionListener._
     val conf = new SparkConf(false)
+      .setMaster("local")
+      .setAppName("test")
       .set(QUERY_EXECUTION_LISTENERS, Seq(classOf[SQLConfQueryExecutionListener].getName()))
-    spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
+      .set("spark.aaa", "aaa")
+    val sc = new SparkContext(conf)
+    spark = SparkSession.builder()
+      .sparkContext(sc)
+      .config("spark.bbb", "bbb")
+      .getOrCreate()
 
     spark.sql("select 1").collect()
     spark.sparkContext.listenerBus.waitUntilEmpty()
@@ -87,8 +94,12 @@ private object CountingQueryExecutionListener {
 
 }
 
-private class SQLConfQueryExecutionListener(sqlConf: SQLConf) extends QueryExecutionListener {
+private class SQLConfQueryExecutionListener extends QueryExecutionListener {
   import CountingSQLConfQueryExecutionListener._
+  val sqlConf = SQLConf.get
+
+  assert(sqlConf.getConfString("spark.aaa") == "aaa")
+  assert(sqlConf.getConfString("spark.bbb") == "bbb")
 
   INSTANCE_COUNT.incrementAndGet()
 

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.util.ListenerBus
+import org.apache.spark.util.{ListenerBus, Utils}
 
 /**
  * The interface of query execution listener that can be used to analyze execution metrics.
@@ -86,8 +86,9 @@ class ExecutionListenerManager private[sql](
   if (loadExtensions) {
     val conf = session.sparkContext.conf
     conf.get(QUERY_EXECUTION_LISTENERS).foreach { classNames =>
-      Utils.loadExtensions(
-        classOf[QueryExecutionListener], classNames, conf, sqlConf).foreach(register)
+      SQLConf.withExistingConf(sqlConf) {
+        Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+      }
     }
   }
 
