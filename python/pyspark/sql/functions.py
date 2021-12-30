@@ -3709,7 +3709,9 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-def slice(x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]) -> Column:
+def slice(
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
