@@ -92,14 +92,6 @@ def _invoke_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
     return _invoke_function(name, *(_to_java_column(col) for col in cols))
 
 
-def _invoke_function_over_column(name: str, col: "ColumnOrName") -> Column:
-    """
-    Invokes unary JVM function identified by name
-    and wraps the result with :class:`~pyspark.sql.Column`.
-    """
-    return _invoke_function_over_columns(name, col)
-
-
 def _invoke_function_over_seq_of_columns(name: str, cols: "Iterable[ColumnOrName]") -> Column:
     """
     Invokes unary JVM function identified by name with
@@ -182,7 +174,7 @@ def sqrt(col: "ColumnOrName") -> Column:
     """
     Computes the square root of the specified float value.
     """
-    return _invoke_function_over_column("sqrt", col)
+    return _invoke_function_over_columns("sqrt", col)
 
 
 @since(1.3)
@@ -190,7 +182,7 @@ def abs(col: "ColumnOrName") -> Column:
     """
     Computes the absolute value.
     """
-    return _invoke_function_over_column("abs", col)
+    return _invoke_function_over_columns("abs", col)
 
 
 @since(1.3)
@@ -198,7 +190,7 @@ def max(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the maximum value of the expression in a group.
     """
-    return _invoke_function_over_column("max", col)
+    return _invoke_function_over_columns("max", col)
 
 
 @since(1.3)
@@ -206,7 +198,7 @@ def min(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the minimum value of the expression in a group.
     """
-    return _invoke_function_over_column("min", col)
+    return _invoke_function_over_columns("min", col)
 
 
 def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
@@ -284,7 +276,7 @@ def count(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the number of items in a group.
     """
-    return _invoke_function_over_column("count", col)
+    return _invoke_function_over_columns("count", col)
 
 
 @since(1.3)
@@ -292,7 +284,7 @@ def sum(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of all values in the expression.
     """
-    return _invoke_function_over_column("sum", col)
+    return _invoke_function_over_columns("sum", col)
 
 
 @since(1.3)
@@ -300,7 +292,7 @@ def avg(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
     """
-    return _invoke_function_over_column("avg", col)
+    return _invoke_function_over_columns("avg", col)
 
 
 @since(1.3)
@@ -308,7 +300,7 @@ def mean(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the average of the values in a group.
     """
-    return _invoke_function_over_column("mean", col)
+    return _invoke_function_over_columns("mean", col)
 
 
 @since(1.3)
@@ -328,7 +320,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the sum of distinct values in the expression.
     """
-    return _invoke_function_over_column("sum_distinct", col)
+    return _invoke_function_over_columns("sum_distinct", col)
 
 
 def product(col: "ColumnOrName") -> Column:
@@ -356,7 +348,7 @@ def product(col: "ColumnOrName") -> Column:
     +----+-------+
 
     """
-    return _invoke_function_over_column("product", col)
+    return _invoke_function_over_columns("product", col)
 
 
 def acos(col: "ColumnOrName") -> Column:
@@ -370,7 +362,7 @@ def acos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         inverse cosine of `col`, as if computed by `java.lang.Math.acos()`
     """
-    return _invoke_function_over_column("acos", col)
+    return _invoke_function_over_columns("acos", col)
 
 
 def acosh(col: "ColumnOrName") -> Column:
@@ -383,7 +375,7 @@ def acosh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
     """
-    return _invoke_function_over_column("acosh", col)
+    return _invoke_function_over_columns("acosh", col)
 
 
 def asin(col: "ColumnOrName") -> Column:
@@ -398,7 +390,7 @@ def asin(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         inverse sine of `col`, as if computed by `java.lang.Math.asin()`
     """
-    return _invoke_function_over_column("asin", col)
+    return _invoke_function_over_columns("asin", col)
 
 
 def asinh(col: "ColumnOrName") -> Column:
@@ -411,7 +403,7 @@ def asinh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
     """
-    return _invoke_function_over_column("asinh", col)
+    return _invoke_function_over_columns("asinh", col)
 
 
 def atan(col: "ColumnOrName") -> Column:
@@ -425,7 +417,7 @@ def atan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
     """
-    return _invoke_function_over_column("atan", col)
+    return _invoke_function_over_columns("atan", col)
 
 
 def atanh(col: "ColumnOrName") -> Column:
@@ -438,7 +430,7 @@ def atanh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
     """
-    return _invoke_function_over_column("atanh", col)
+    return _invoke_function_over_columns("atanh", col)
 
 
 @since(1.4)
@@ -446,7 +438,7 @@ def cbrt(col: "ColumnOrName") -> Column:
     """
     Computes the cube-root of the given value.
     """
-    return _invoke_function_over_column("cbrt", col)
+    return _invoke_function_over_columns("cbrt", col)
 
 
 @since(1.4)
@@ -454,7 +446,7 @@ def ceil(col: "ColumnOrName") -> Column:
     """
     Computes the ceiling of the given value.
     """
-    return _invoke_function_over_column("ceil", col)
+    return _invoke_function_over_columns("ceil", col)
 
 
 def cos(col: "ColumnOrName") -> Column:
@@ -473,7 +465,7 @@ def cos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         cosine of the angle, as if computed by `java.lang.Math.cos()`.
     """
-    return _invoke_function_over_column("cos", col)
+    return _invoke_function_over_columns("cos", col)
 
 
 def cosh(col: "ColumnOrName") -> Column:
@@ -492,7 +484,7 @@ def cosh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
     """
-    return _invoke_function_over_column("cosh", col)
+    return _invoke_function_over_columns("cosh", col)
 
 
 def cot(col: "ColumnOrName") -> Column:
@@ -511,7 +503,7 @@ def cot(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Cotangent of the angle.
     """
-    return _invoke_function_over_column("cot", col)
+    return _invoke_function_over_columns("cot", col)
 
 
 def csc(col: "ColumnOrName") -> Column:
@@ -530,7 +522,7 @@ def csc(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Cosecant of the angle.
     """
-    return _invoke_function_over_column("csc", col)
+    return _invoke_function_over_columns("csc", col)
 
 
 @since(1.4)
@@ -538,7 +530,7 @@ def exp(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value.
     """
-    return _invoke_function_over_column("exp", col)
+    return _invoke_function_over_columns("exp", col)
 
 
 @since(1.4)
@@ -546,7 +538,7 @@ def expm1(col: "ColumnOrName") -> Column:
     """
     Computes the exponential of the given value minus one.
     """
-    return _invoke_function_over_column("expm1", col)
+    return _invoke_function_over_columns("expm1", col)
 
 
 @since(1.4)
@@ -554,7 +546,7 @@ def floor(col: "ColumnOrName") -> Column:
     """
     Computes the floor of the given value.
     """
-    return _invoke_function_over_column("floor", col)
+    return _invoke_function_over_columns("floor", col)
 
 
 @since(1.4)
@@ -562,7 +554,7 @@ def log(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value.
     """
-    return _invoke_function_over_column("log", col)
+    return _invoke_function_over_columns("log", col)
 
 
 @since(1.4)
@@ -570,7 +562,7 @@ def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
     """
-    return _invoke_function_over_column("log10", col)
+    return _invoke_function_over_columns("log10", col)
 
 
 @since(1.4)
@@ -578,7 +570,7 @@ def log1p(col: "ColumnOrName") -> Column:
     """
     Computes the natural logarithm of the given value plus one.
     """
-    return _invoke_function_over_column("log1p", col)
+    return _invoke_function_over_columns("log1p", col)
 
 
 @since(1.4)
@@ -587,7 +579,7 @@ def rint(col: "ColumnOrName") -> Column:
     Returns the double value that is closest in value to the argument and
     is equal to a mathematical integer.
     """
-    return _invoke_function_over_column("rint", col)
+    return _invoke_function_over_columns("rint", col)
 
 
 def sec(col: "ColumnOrName") -> Column:
@@ -606,7 +598,7 @@ def sec(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Secant of the angle.
     """
-    return _invoke_function_over_column("sec", col)
+    return _invoke_function_over_columns("sec", col)
 
 
 @since(1.4)
@@ -614,7 +606,7 @@ def signum(col: "ColumnOrName") -> Column:
     """
     Computes the signum of the given value.
     """
-    return _invoke_function_over_column("signum", col)
+    return _invoke_function_over_columns("signum", col)
 
 
 def sin(col: "ColumnOrName") -> Column:
@@ -632,7 +624,7 @@ def sin(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         sine of the angle, as if computed by `java.lang.Math.sin()`
     """
-    return _invoke_function_over_column("sin", col)
+    return _invoke_function_over_columns("sin", col)
 
 
 def sinh(col: "ColumnOrName") -> Column:
@@ -652,7 +644,7 @@ def sinh(col: "ColumnOrName") -> Column:
         hyperbolic sine of the given value,
         as if computed by `java.lang.Math.sinh()`
     """
-    return _invoke_function_over_column("sinh", col)
+    return _invoke_function_over_columns("sinh", col)
 
 
 def tan(col: "ColumnOrName") -> Column:
@@ -671,7 +663,7 @@ def tan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         tangent of the given value, as if computed by `java.lang.Math.tan()`
     """
-    return _invoke_function_over_column("tan", col)
+    return _invoke_function_over_columns("tan", col)
 
 
 def tanh(col: "ColumnOrName") -> Column:
@@ -691,7 +683,7 @@ def tanh(col: "ColumnOrName") -> Column:
         hyperbolic tangent of the given value
         as if computed by `java.lang.Math.tanh()`
     """
-    return _invoke_function_over_column("tanh", col)
+    return _invoke_function_over_columns("tanh", col)
 
 
 @since(1.4)
@@ -731,7 +723,7 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     """
     Computes bitwise not.
     """
-    return _invoke_function_over_column("bitwise_not", col)
+    return _invoke_function_over_columns("bitwise_not", col)
 
 
 @since(2.4)
@@ -789,7 +781,7 @@ def stddev(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for stddev_samp.
     """
-    return _invoke_function_over_column("stddev", col)
+    return _invoke_function_over_columns("stddev", col)
 
 
 @since(1.6)
@@ -798,7 +790,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     Aggregate function: returns the unbiased sample standard deviation of
     the expression in a group.
     """
-    return _invoke_function_over_column("stddev_samp", col)
+    return _invoke_function_over_columns("stddev_samp", col)
 
 
 @since(1.6)
@@ -807,7 +799,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     Aggregate function: returns population standard deviation of
     the expression in a group.
     """
-    return _invoke_function_over_column("stddev_pop", col)
+    return _invoke_function_over_columns("stddev_pop", col)
 
 
 @since(1.6)
@@ -815,7 +807,7 @@ def variance(col: "ColumnOrName") -> Column:
     """
     Aggregate function: alias for var_samp
     """
-    return _invoke_function_over_column("variance", col)
+    return _invoke_function_over_columns("variance", col)
 
 
 @since(1.6)
@@ -824,7 +816,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     Aggregate function: returns the unbiased sample variance of
     the values in a group.
     """
-    return _invoke_function_over_column("var_samp", col)
+    return _invoke_function_over_columns("var_samp", col)
 
 
 @since(1.6)
@@ -832,7 +824,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the population variance of the values in a group.
     """
-    return _invoke_function_over_column("var_pop", col)
+    return _invoke_function_over_columns("var_pop", col)
 
 
 @since(1.6)
@@ -840,7 +832,7 @@ def skewness(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the skewness of the values in a group.
     """
-    return _invoke_function_over_column("skewness", col)
+    return _invoke_function_over_columns("skewness", col)
 
 
 @since(1.6)
@@ -848,7 +840,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
     """
     Aggregate function: returns the kurtosis of the values in a group.
     """
-    return _invoke_function_over_column("kurtosis", col)
+    return _invoke_function_over_columns("kurtosis", col)
 
 
 def collect_list(col: "ColumnOrName") -> Column:
@@ -868,7 +860,7 @@ def collect_list(col: "ColumnOrName") -> Column:
     >>> df2.agg(collect_list('age')).collect()
     [Row(collect_list(age)=[2, 5, 5])]
     """
-    return _invoke_function_over_column("collect_list", col)
+    return _invoke_function_over_columns("collect_list", col)
 
 
 def collect_set(col: "ColumnOrName") -> Column:
@@ -888,7 +880,7 @@ def collect_set(col: "ColumnOrName") -> Column:
     >>> df2.agg(array_sort(collect_set('age')).alias('c')).collect()
     [Row(c=[2, 5])]
     """
-    return _invoke_function_over_column("collect_set", col)
+    return _invoke_function_over_columns("collect_set", col)
 
 
 def degrees(col: "ColumnOrName") -> Column:
@@ -908,7 +900,7 @@ def degrees(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         angle in degrees, as if computed by `java.lang.Math.toDegrees()`
     """
-    return _invoke_function_over_column("degrees", col)
+    return _invoke_function_over_columns("degrees", col)
 
 
 def radians(col: "ColumnOrName") -> Column:
@@ -928,7 +920,7 @@ def radians(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         angle in radians, as if computed by `java.lang.Math.toRadians()`
     """
-    return _invoke_function_over_column("radians", col)
+    return _invoke_function_over_columns("radians", col)
 
 
 @overload
@@ -1101,7 +1093,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     [Row(distinct_ages=2)]
     """
     if rsd is None:
-        return _invoke_function_over_column("approx_count_distinct", col)
+        return _invoke_function_over_columns("approx_count_distinct", col)
     else:
         return _invoke_function("approx_count_distinct", _to_java_column(col), rsd)
 
@@ -1269,7 +1261,7 @@ def grouping(col: "ColumnOrName") -> Column:
     |  Bob|             0|       5|
     +-----+--------------+--------+
     """
-    return _invoke_function_over_column("grouping", col)
+    return _invoke_function_over_columns("grouping", col)
 
 
 def grouping_id(*cols: "ColumnOrName") -> Column:
@@ -1316,7 +1308,7 @@ def isnan(col: "ColumnOrName") -> Column:
     >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
-    return _invoke_function_over_column("isnan", col)
+    return _invoke_function_over_columns("isnan", col)
 
 
 def isnull(col: "ColumnOrName") -> Column:
@@ -1330,7 +1322,7 @@ def isnull(col: "ColumnOrName") -> Column:
     >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
     [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
-    return _invoke_function_over_column("isnull", col)
+    return _invoke_function_over_columns("isnull", col)
 
 
 def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
@@ -1745,7 +1737,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     ['0.69314', '1.60943']
     """
     if arg2 is None:
-        return _invoke_function_over_column("log", cast("ColumnOrName", arg1))
+        return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
     else:
         return _invoke_function("log", arg1, _to_java_column(arg2))
 
@@ -1760,7 +1752,7 @@ def log2(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([(4,)], ['a']).select(log2('a').alias('log2')).collect()
     [Row(log2=2.0)]
     """
-    return _invoke_function_over_column("log2", col)
+    return _invoke_function_over_columns("log2", col)
 
 
 def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
@@ -1790,7 +1782,7 @@ def factorial(col: "ColumnOrName") -> Column:
     >>> df.select(factorial(df.n).alias('f')).collect()
     [Row(f=120)]
     """
-    return _invoke_function_over_column("factorial", col)
+    return _invoke_function_over_columns("factorial", col)
 
 
 # ---------------  Window functions ------------------------
@@ -1941,7 +1933,7 @@ def year(col: "ColumnOrName") -> Column:
     >>> df.select(year('dt').alias('year')).collect()
     [Row(year=2015)]
     """
-    return _invoke_function_over_column("year", col)
+    return _invoke_function_over_columns("year", col)
 
 
 def quarter(col: "ColumnOrName") -> Column:
@@ -1956,7 +1948,7 @@ def quarter(col: "ColumnOrName") -> Column:
     >>> df.select(quarter('dt').alias('quarter')).collect()
     [Row(quarter=2)]
     """
-    return _invoke_function_over_column("quarter", col)
+    return _invoke_function_over_columns("quarter", col)
 
 
 def month(col: "ColumnOrName") -> Column:
@@ -1971,7 +1963,7 @@ def month(col: "ColumnOrName") -> Column:
     >>> df.select(month('dt').alias('month')).collect()
     [Row(month=4)]
     """
-    return _invoke_function_over_column("month", col)
+    return _invoke_function_over_columns("month", col)
 
 
 def dayofweek(col: "ColumnOrName") -> Column:
@@ -1987,7 +1979,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     >>> df.select(dayofweek('dt').alias('day')).collect()
     [Row(day=4)]
     """
-    return _invoke_function_over_column("dayofweek", col)
+    return _invoke_function_over_columns("dayofweek", col)
 
 
 def dayofmonth(col: "ColumnOrName") -> Column:
@@ -2002,7 +1994,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     >>> df.select(dayofmonth('dt').alias('day')).collect()
     [Row(day=8)]
     """
-    return _invoke_function_over_column("dayofmonth", col)
+    return _invoke_function_over_columns("dayofmonth", col)
 
 
 def dayofyear(col: "ColumnOrName") -> Column:
@@ -2017,7 +2009,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     >>> df.select(dayofyear('dt').alias('day')).collect()
     [Row(day=98)]
     """
-    return _invoke_function_over_column("dayofyear", col)
+    return _invoke_function_over_columns("dayofyear", col)
 
 
 def hour(col: "ColumnOrName") -> Column:
@@ -2032,7 +2024,7 @@ def hour(col: "ColumnOrName") -> Column:
     >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
     """
-    return _invoke_function_over_column("hour", col)
+    return _invoke_function_over_columns("hour", col)
 
 
 def minute(col: "ColumnOrName") -> Column:
@@ -2047,7 +2039,7 @@ def minute(col: "ColumnOrName") -> Column:
     >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
     """
-    return _invoke_function_over_column("minute", col)
+    return _invoke_function_over_columns("minute", col)
 
 
 def second(col: "ColumnOrName") -> Column:
@@ -2062,7 +2054,7 @@ def second(col: "ColumnOrName") -> Column:
     >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
     """
-    return _invoke_function_over_column("second", col)
+    return _invoke_function_over_columns("second", col)
 
 
 def weekofyear(col: "ColumnOrName") -> Column:
@@ -2079,7 +2071,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     >>> df.select(weekofyear(df.dt).alias('week')).collect()
     [Row(week=15)]
     """
-    return _invoke_function_over_column("weekofyear", col)
+    return _invoke_function_over_columns("weekofyear", col)
 
 
 def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") -> Column:
@@ -2219,7 +2211,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     [Row(date=datetime.date(1997, 2, 28))]
     """
     if format is None:
-        return _invoke_function_over_column("to_date", col)
+        return _invoke_function_over_columns("to_date", col)
     else:
         return _invoke_function("to_date", _to_java_column(col), format)
 
@@ -2255,7 +2247,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
     """
     if format is None:
-        return _invoke_function_over_column("to_timestamp", col)
+        return _invoke_function_over_columns("to_timestamp", col)
     else:
         return _invoke_function("to_timestamp", _to_java_column(col), format)
 
@@ -2507,7 +2499,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
-    return _invoke_function_over_column("timestamp_seconds", col)
+    return _invoke_function_over_columns("timestamp_seconds", col)
 
 
 def window(
@@ -2656,7 +2648,7 @@ def crc32(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
     [Row(crc32=2743272264)]
     """
-    return _invoke_function_over_column("crc32", col)
+    return _invoke_function_over_columns("crc32", col)
 
 
 def md5(col: "ColumnOrName") -> Column:
@@ -2669,7 +2661,7 @@ def md5(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
     [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
     """
-    return _invoke_function_over_column("md5", col)
+    return _invoke_function_over_columns("md5", col)
 
 
 def sha1(col: "ColumnOrName") -> Column:
@@ -2682,7 +2674,7 @@ def sha1(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
     [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
     """
-    return _invoke_function_over_column("sha1", col)
+    return _invoke_function_over_columns("sha1", col)
 
 
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
@@ -2782,7 +2774,7 @@ def upper(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to upper case.
     """
-    return _invoke_function_over_column("upper", col)
+    return _invoke_function_over_columns("upper", col)
 
 
 @since(1.5)
@@ -2790,7 +2782,7 @@ def lower(col: "ColumnOrName") -> Column:
     """
     Converts a string expression to lower case.
     """
-    return _invoke_function_over_column("lower", col)
+    return _invoke_function_over_columns("lower", col)
 
 
 @since(1.5)
@@ -2798,7 +2790,7 @@ def ascii(col: "ColumnOrName") -> Column:
     """
     Computes the numeric value of the first character of the string column.
     """
-    return _invoke_function_over_column("ascii", col)
+    return _invoke_function_over_columns("ascii", col)
 
 
 @since(1.5)
@@ -2806,7 +2798,7 @@ def base64(col: "ColumnOrName") -> Column:
     """
     Computes the BASE64 encoding of a binary column and returns it as a string column.
     """
-    return _invoke_function_over_column("base64", col)
+    return _invoke_function_over_columns("base64", col)
 
 
 @since(1.5)
@@ -2814,7 +2806,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
     """
-    return _invoke_function_over_column("unbase64", col)
+    return _invoke_function_over_columns("unbase64", col)
 
 
 @since(1.5)
@@ -2822,7 +2814,7 @@ def ltrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from left end for the specified string value.
     """
-    return _invoke_function_over_column("ltrim", col)
+    return _invoke_function_over_columns("ltrim", col)
 
 
 @since(1.5)
@@ -2830,7 +2822,7 @@ def rtrim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from right end for the specified string value.
     """
-    return _invoke_function_over_column("rtrim", col)
+    return _invoke_function_over_columns("rtrim", col)
 
 
 @since(1.5)
@@ -2838,7 +2830,7 @@ def trim(col: "ColumnOrName") -> Column:
     """
     Trim the spaces from both ends for the specified string column.
     """
-    return _invoke_function_over_column("trim", col)
+    return _invoke_function_over_columns("trim", col)
 
 
 def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
@@ -3225,7 +3217,7 @@ def initcap(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ab cd',)], ['a']).select(initcap("a").alias('v')).collect()
     [Row(v='Ab Cd')]
     """
-    return _invoke_function_over_column("initcap", col)
+    return _invoke_function_over_columns("initcap", col)
 
 
 def soundex(col: "ColumnOrName") -> Column:
@@ -3240,7 +3232,7 @@ def soundex(col: "ColumnOrName") -> Column:
     >>> df.select(soundex(df.name).alias("soundex")).collect()
     [Row(soundex='P362'), Row(soundex='U612')]
     """
-    return _invoke_function_over_column("soundex", col)
+    return _invoke_function_over_columns("soundex", col)
 
 
 def bin(col: "ColumnOrName") -> Column:
@@ -3253,7 +3245,7 @@ def bin(col: "ColumnOrName") -> Column:
     >>> df.select(bin(df.age).alias('c')).collect()
     [Row(c='10'), Row(c='101')]
     """
-    return _invoke_function_over_column("bin", col)
+    return _invoke_function_over_columns("bin", col)
 
 
 def hex(col: "ColumnOrName") -> Column:
@@ -3268,7 +3260,7 @@ def hex(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
     [Row(hex(a)='414243', hex(b)='3')]
     """
-    return _invoke_function_over_column("hex", col)
+    return _invoke_function_over_columns("hex", col)
 
 
 def unhex(col: "ColumnOrName") -> Column:
@@ -3282,7 +3274,7 @@ def unhex(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('414243',)], ['a']).select(unhex('a')).collect()
     [Row(unhex(a)=bytearray(b'ABC'))]
     """
-    return _invoke_function_over_column("unhex", col)
+    return _invoke_function_over_columns("unhex", col)
 
 
 def length(col: "ColumnOrName") -> Column:
@@ -3297,7 +3289,7 @@ def length(col: "ColumnOrName") -> Column:
     >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
     [Row(length=4)]
     """
-    return _invoke_function_over_column("length", col)
+    return _invoke_function_over_columns("length", col)
 
 
 def octet_length(col: "ColumnOrName") -> Column:
@@ -3323,7 +3315,7 @@ def octet_length(col: "ColumnOrName") -> Column:
     ...      .select(octet_length('cat')).collect()
         [Row(octet_length(cat)=3), Row(octet_length(cat)=4)]
     """
-    return _invoke_function_over_column("octet_length", col)
+    return _invoke_function_over_columns("octet_length", col)
 
 
 def bit_length(col: "ColumnOrName") -> Column:
@@ -3349,7 +3341,7 @@ def bit_length(col: "ColumnOrName") -> Column:
     ...      .select(bit_length('cat')).collect()
         [Row(bit_length(cat)=24), Row(bit_length(cat)=32)]
     """
-    return _invoke_function_over_column("bit_length", col)
+    return _invoke_function_over_columns("bit_length", col)
 
 
 def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
@@ -3652,7 +3644,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
     >>> df.select(array_distinct(df.data)).collect()
     [Row(array_distinct(data)=[1, 2, 3]), Row(array_distinct(data)=[4, 5])]
     """
-    return _invoke_function_over_column("array_distinct", col)
+    return _invoke_function_over_columns("array_distinct", col)
 
 
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -3749,7 +3741,7 @@ def explode(col: "ColumnOrName") -> Column:
     |  a|    b|
     +---+-----+
     """
-    return _invoke_function_over_column("explode", col)
+    return _invoke_function_over_columns("explode", col)
 
 
 def posexplode(col: "ColumnOrName") -> Column:
@@ -3774,7 +3766,7 @@ def posexplode(col: "ColumnOrName") -> Column:
     |  0|  a|    b|
     +---+---+-----+
     """
-    return _invoke_function_over_column("posexplode", col)
+    return _invoke_function_over_columns("posexplode", col)
 
 
 def explode_outer(col: "ColumnOrName") -> Column:
@@ -3811,7 +3803,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     |  3|      null|null|
     +---+----------+----+
     """
-    return _invoke_function_over_column("explode_outer", col)
+    return _invoke_function_over_columns("explode_outer", col)
 
 
 def posexplode_outer(col: "ColumnOrName") -> Column:
@@ -3847,7 +3839,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     |  3|      null|null|null|
     +---+----------+----+----+
     """
-    return _invoke_function_over_column("posexplode_outer", col)
+    return _invoke_function_over_columns("posexplode_outer", col)
 
 
 def get_json_object(col: "ColumnOrName", path: str) -> Column:
@@ -4131,7 +4123,7 @@ def size(col: "ColumnOrName") -> Column:
     >>> df.select(size(df.data)).collect()
     [Row(size(data)=3), Row(size(data)=1), Row(size(data)=0)]
     """
-    return _invoke_function_over_column("size", col)
+    return _invoke_function_over_columns("size", col)
 
 
 def array_min(col: "ColumnOrName") -> Column:
@@ -4151,7 +4143,7 @@ def array_min(col: "ColumnOrName") -> Column:
     >>> df.select(array_min(df.data).alias('min')).collect()
     [Row(min=1), Row(min=-1)]
     """
-    return _invoke_function_over_column("array_min", col)
+    return _invoke_function_over_columns("array_min", col)
 
 
 def array_max(col: "ColumnOrName") -> Column:
@@ -4171,7 +4163,7 @@ def array_max(col: "ColumnOrName") -> Column:
     >>> df.select(array_max(df.data).alias('max')).collect()
     [Row(max=3), Row(max=10)]
     """
-    return _invoke_function_over_column("array_max", col)
+    return _invoke_function_over_columns("array_max", col)
 
 
 def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
@@ -4242,7 +4234,7 @@ def shuffle(col: "ColumnOrName") -> Column:
     >>> df.select(shuffle(df.data).alias('s')).collect()  # doctest: +SKIP
     [Row(s=[3, 1, 5, 20]), Row(s=[20, None, 3, 1])]
     """
-    return _invoke_function_over_column("shuffle", col)
+    return _invoke_function_over_columns("shuffle", col)
 
 
 def reverse(col: "ColumnOrName") -> Column:
@@ -4265,7 +4257,7 @@ def reverse(col: "ColumnOrName") -> Column:
     >>> df.select(reverse(df.data).alias('r')).collect()
     [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
     """
-    return _invoke_function_over_column("reverse", col)
+    return _invoke_function_over_columns("reverse", col)
 
 
 def flatten(col: "ColumnOrName") -> Column:
@@ -4287,7 +4279,7 @@ def flatten(col: "ColumnOrName") -> Column:
     >>> df.select(flatten(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
     """
-    return _invoke_function_over_column("flatten", col)
+    return _invoke_function_over_columns("flatten", col)
 
 
 def map_keys(col: "ColumnOrName") -> Column:
@@ -4312,7 +4304,7 @@ def map_keys(col: "ColumnOrName") -> Column:
     |[1, 2]|
     +------+
     """
-    return _invoke_function_over_column("map_keys", col)
+    return _invoke_function_over_columns("map_keys", col)
 
 
 def map_values(col: "ColumnOrName") -> Column:
@@ -4337,7 +4329,7 @@ def map_values(col: "ColumnOrName") -> Column:
     |[a, b]|
     +------+
     """
-    return _invoke_function_over_column("map_values", col)
+    return _invoke_function_over_columns("map_values", col)
 
 
 def map_entries(col: "ColumnOrName") -> Column:
@@ -4362,7 +4354,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     |[{1, a}, {2, b}]|
     +----------------+
     """
-    return _invoke_function_over_column("map_entries", col)
+    return _invoke_function_over_columns("map_entries", col)
 
 
 def map_from_entries(col: "ColumnOrName") -> Column:
@@ -4387,7 +4379,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     |{1 -> a, 2 -> b}|
     +----------------+
     """
-    return _invoke_function_over_column("map_from_entries", col)
+    return _invoke_function_over_columns("map_from_entries", col)
 
 
 def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
@@ -5131,7 +5123,7 @@ def years(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_column("years", col)
+    return _invoke_function_over_columns("years", col)
 
 
 def months(col: "ColumnOrName") -> Column:
@@ -5154,7 +5146,7 @@ def months(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_column("months", col)
+    return _invoke_function_over_columns("months", col)
 
 
 def days(col: "ColumnOrName") -> Column:
@@ -5177,7 +5169,7 @@ def days(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_column("days", col)
+    return _invoke_function_over_columns("days", col)
 
 
 def hours(col: "ColumnOrName") -> Column:
@@ -5200,7 +5192,7 @@ def hours(col: "ColumnOrName") -> Column:
     method of the `DataFrameWriterV2`.
 
     """
-    return _invoke_function_over_column("hours", col)
+    return _invoke_function_over_columns("hours", col)
 
 
 def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
