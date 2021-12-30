@@ -46,6 +46,9 @@ from pyspark.sql.functions import (
     date_add,
     date_sub,
     add_months,
+    array_repeat,
+    size,
+    slice,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
@@ -486,8 +489,6 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(result[0], "")
 
     def test_slice(self):
-        from pyspark.sql.functions import lit, size, slice
-
         df = self.spark.createDataFrame(
             [
                 (
@@ -525,8 +526,6 @@ class FunctionsTests(ReusedSQLTestCase):
         )
 
     def test_array_repeat(self):
-        from pyspark.sql.functions import array_repeat, lit
-
         df = self.spark.range(1)
         df = df.withColumn("repeat_n", lit(3))
 
