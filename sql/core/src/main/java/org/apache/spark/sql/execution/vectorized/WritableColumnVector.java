@@ -375,7 +375,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putArray(int rowId, int offset, int length);
 
   /**
-   * Sets values from [value + offset, value + offset + count) to the values at rowId.
+   * Sets values from [value + offset, value + offset + length) to the values at rowId.
    */
   public abstract int putByteArray(int rowId, byte[] value, int offset, int length);
   public final int putByteArray(int rowId, byte[] value) {
