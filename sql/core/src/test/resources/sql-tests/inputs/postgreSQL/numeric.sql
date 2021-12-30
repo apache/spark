@@ -896,7 +896,7 @@ DROP TABLE width_bucket_test;
 --
 -- SET lc_numeric = 'C';
 SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999');
--- SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999');
+SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999');
 -- SELECT '' AS to_number_3,  to_number('<564646.654564>', '999999.999999PR');
 SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S');
 -- SELECT '' AS to_number_5,  to_number('5.01-', 'FM9.999999S');

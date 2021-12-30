@@ -39,8 +39,7 @@ class NumberUtilsSuite extends SparkFunSuite {
   }
 
   test("parse") {
-    failParseWithInvalidInput(UTF8String.fromString("454"), "",
-      "Format '' used for parsing string to number or formatting number to string is invalid")
+    invalidNumberFormat("", "Number format cannot be empty")
 
     // Test '9' and '0'
     failParseWithInvalidInput(UTF8String.fromString("454"), "9",
@@ -188,7 +187,6 @@ class NumberUtilsSuite extends SparkFunSuite {
   }
 
   test("format") {
-    assert(format(Decimal(454), "") === "")
 
     // Test '9' and '0'
     Seq(

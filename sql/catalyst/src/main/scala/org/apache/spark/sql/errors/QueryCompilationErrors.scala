@@ -2388,4 +2388,8 @@ object QueryCompilationErrors {
   def nonFistOrLastCharInNumberFormatError(message: String, numberFormat: String): Throwable = {
     new AnalysisException(s"$message must be the first or last char in '$numberFormat'")
   }
+
+  def emptyNumberFormatError(): Throwable = {
+    new AnalysisException("Number format cannot be empty")
+  }
 }

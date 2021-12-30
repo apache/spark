@@ -61,10 +61,10 @@ case class ToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val builder = new NumberFormatBuilder(numberFormat)
-  private lazy val (precision, scale) = builder.parsePrecisionAndScale()
+  private lazy val numberFormatbuilder = new NumberFormatBuilder(numberFormat)
+  private lazy val (precision, scale) = numberFormatbuilder.parsePrecisionAndScale()
 
-  override def dataType: DataType = DecimalType(precision, scale)
+  override def dataType: DataType = new DecimalType(precision, scale)
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
@@ -72,11 +72,7 @@ case class ToNumber(left: Expression, right: Expression)
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       if (right.foldable) {
-        if (builder.normalizedNumberFormat.length == 0) {
-          TypeCheckResult.TypeCheckFailure(s"Format expression cannot be empty")
-        } else {
-          builder.check()
-        }
+        numberFormatbuilder.check()
       } else {
         TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
       }
@@ -89,19 +85,18 @@ case class ToNumber(left: Expression, right: Expression)
 
   override def nullSafeEval(string: Any, format: Any): Any = {
     val input = string.asInstanceOf[UTF8String]
-    builder.parse(input)
+    numberFormatbuilder.parse(input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val builderClass = classOf[NumberFormatBuilder].getName
-    val builder = ctx.freshName("builder")
+    val builder =
+      ctx.addReferenceObj("builder", numberFormatbuilder, classOf[NumberFormatBuilder].getName)
     val eval = left.genCode(ctx)
     ev.copy(code = code"""
       ${eval.code}
       boolean ${ev.isNull} = ${eval.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        $builderClass $builder = new $builderClass("$numberFormat");
         ${ev.value} = $builder.parse(${eval.value});
       }
     """)

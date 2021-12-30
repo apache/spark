@@ -29,43 +29,65 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object NumberUtils {
 
-  private val pointSign = '.'
-  private val letterPointSign = 'D'
-  private val commaSign = ','
-  private val letterCommaSign = 'G'
-  private val minusSign = '-'
-  private val letterMinusSign = 'S'
-  private val dollarSign = '$'
+  private final val POINT_SIGN = '.'
+  private final val LETTER_POINT_SIGN = 'D'
+  private final val COMMA_SIGN = ','
+  private final val LETTER_COMMA_SIGN = 'G'
+  private final val MINUS_SIGN = '-'
+  private final val LETTER_MINUS_SIGN = 'S'
+  private final val DOLLAR_SIGN = '$'
+  private final val NINE_DIGIT = '9'
+  private final val ZERO_DIGIT = '0'
+  private final val POUND_SIGN = '#'
 
-  private val commaSignStr = commaSign.toString
+  private final val COMMA_SIGN_STRING = COMMA_SIGN.toString
+  private final val POUND_SIGN_STRING = POUND_SIGN.toString
 
+  private final val SIGN_SET = Set(POINT_SIGN, COMMA_SIGN, MINUS_SIGN, DOLLAR_SIGN)
+
+  /**
+   * DecimalFormat provides '#' and '0' as placeholder of digit, ',' as grouping separator,
+   * '.' as decimal separator, '-' as minus, '$' as dollar, but '9', 'G', 'D', 'S'. So we need
+   * replace them show below:
+   * 1. '9' -> '#'
+   * 2. 'G' -> ','
+   * 3. 'D' -> '.'
+   * 4. 'S' -> '-'
+   *
+   * Note: Because we want preserve the digits after decimal point, so the digits after
+   * decimal point should be replaced as '0'. For example: '999.9' will be normalized as '###.0'
+   * and '999.99' will be normalized as '###.00', so if the input is 454, so the output will be
+   * 454.0 and 454.00 respectively.
+   *
+   * @param format number format string
+   * @return normalized number format string
+   */
   private def normalize(format: String): String = {
-    var notFindDecimalPoint = true
+    var flag = true
     val normalizedFormat = format.toUpperCase(Locale.ROOT).map {
-      case '9' if notFindDecimalPoint => '#'
-      case '9' if !notFindDecimalPoint => '0'
-      case `letterPointSign` =>
-        notFindDecimalPoint = false
-        pointSign
-      case `letterCommaSign` => commaSign
-      case `letterMinusSign` => minusSign
-      case `pointSign` =>
-        notFindDecimalPoint = false
-        pointSign
+      case NINE_DIGIT if flag => POUND_SIGN
+      case NINE_DIGIT if !flag => ZERO_DIGIT
+      case LETTER_COMMA_SIGN => COMMA_SIGN
+      case LETTER_POINT_SIGN | POINT_SIGN =>
+        flag = false
+        POINT_SIGN
+      case LETTER_MINUS_SIGN => MINUS_SIGN
       case other => other
     }
     // If the comma is at the beginning or end of number format, then DecimalFormat will be invalid.
     // For example, "##,###," or ",###,###" for DecimalFormat is invalid, so we must use "##,###"
     // or "###,###".
-    normalizedFormat.stripPrefix(commaSignStr).stripSuffix(commaSignStr)
+    normalizedFormat.stripPrefix(COMMA_SIGN_STRING).stripSuffix(COMMA_SIGN_STRING)
   }
 
   private def isSign(c: Char): Boolean = {
-    Set(pointSign, commaSign, minusSign, dollarSign).contains(c)
+    SIGN_SET.contains(c)
   }
 
   private def transform(format: String): String = {
-    if (format.contains(minusSign)) {
+    if (format.contains(MINUS_SIGN)) {
+      // For example: '#.######' represents a positive number,
+      // but '#.######;#.######-' represents a negative number.
       val positiveFormatString = format.replaceAll("-", "")
       s"$positiveFormatString;$format"
     } else {
@@ -79,20 +101,22 @@ object NumberUtils {
       signIndex > 0 && signIndex < format.length - 1
     }
 
-    if (normalizedFormat.count(_ == pointSign) > 1) {
+    if (normalizedFormat.length == 0) {
+      throw QueryCompilationErrors.emptyNumberFormatError()
+    } else if (normalizedFormat.count(_ == POINT_SIGN) > 1) {
       throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$letterPointSign' or '$pointSign'", numberFormat)
-    } else if (normalizedFormat.count(_ == minusSign) > 1) {
+        s"'$LETTER_POINT_SIGN' or '$POINT_SIGN'", numberFormat)
+    } else if (normalizedFormat.count(_ == MINUS_SIGN) > 1) {
       throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$letterMinusSign' or '$minusSign'", numberFormat)
-    } else if (normalizedFormat.count(_ == dollarSign) > 1) {
-      throw QueryCompilationErrors.multipleSignInNumberFormatError(s"'$dollarSign'", numberFormat)
-    } else if (invalidSignPosition(normalizedFormat, minusSign)) {
+        s"'$LETTER_MINUS_SIGN' or '$MINUS_SIGN'", numberFormat)
+    } else if (normalizedFormat.count(_ == DOLLAR_SIGN) > 1) {
+      throw QueryCompilationErrors.multipleSignInNumberFormatError(s"'$DOLLAR_SIGN'", numberFormat)
+    } else if (invalidSignPosition(normalizedFormat, MINUS_SIGN)) {
       throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
-        s"'$letterMinusSign' or '$minusSign'", numberFormat)
-    } else if (invalidSignPosition(normalizedFormat, dollarSign)) {
+        s"'$LETTER_MINUS_SIGN' or '$MINUS_SIGN'", numberFormat)
+    } else if (invalidSignPosition(normalizedFormat, DOLLAR_SIGN)) {
       throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
-        s"'$dollarSign'", numberFormat)
+        s"'$DOLLAR_SIGN'", numberFormat)
     }
   }
 
@@ -100,7 +124,7 @@ object NumberUtils {
     numberFormat.filterNot(isSign).length
 
   private def getScale(numberFormat: String): Int = {
-    val formatSplits = numberFormat.split(pointSign)
+    val formatSplits = numberFormat.split(POINT_SIGN)
     if (formatSplits.length == 1) {
       0
     } else {
@@ -133,13 +157,8 @@ object NumberUtils {
       normalizedNumberFormat: String,
       precision: Int,
       scale: Int): Decimal = {
-    val transformedFormat = transform(normalizedNumberFormat)
-    val numberFormatInstance = NumberFormat.getInstance()
-    val numberDecimalFormat = numberFormatInstance.asInstanceOf[DecimalFormat]
-    numberDecimalFormat.setParseBigDecimal(true)
-    numberDecimalFormat.applyPattern(transformedFormat)
     val inputStr = input.toString.trim
-    val inputSplits = inputStr.split(pointSign)
+    val inputSplits = inputStr.split(POINT_SIGN)
     if (inputSplits.length == 1) {
       if (inputStr.filterNot(isSign).length > precision - scale) {
         throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
@@ -147,6 +166,18 @@ object NumberUtils {
     } else if (inputSplits(0).filterNot(isSign).length > precision - scale ||
       inputSplits(1).filterNot(isSign).length > scale) {
       throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+    }
+
+    val transformedFormat = transform(normalizedNumberFormat)
+    val numberFormatInstance = NumberFormat.getNumberInstance(Locale.ROOT)
+    assert(numberFormatInstance.isInstanceOf[DecimalFormat])
+    val numberDecimalFormat = numberFormatInstance.asInstanceOf[DecimalFormat]
+    numberDecimalFormat.setParseBigDecimal(true)
+    try {
+      numberDecimalFormat.applyLocalizedPattern(transformedFormat)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
     }
     val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
     Decimal(number.asInstanceOf[BigDecimal])
@@ -176,7 +207,7 @@ object NumberUtils {
     val bigDecimal = input.toJavaBigDecimal
     val decimalPlainStr = bigDecimal.toPlainString
     if (decimalPlainStr.length > transformedFormat.length) {
-      transformedFormat.replaceAll("0", "#")
+      transformedFormat.replaceAll("0", POUND_SIGN_STRING)
     } else {
       val decimalFormat = new DecimalFormat(transformedFormat)
       var resultStr = decimalFormat.format(bigDecimal)
@@ -187,11 +218,11 @@ object NumberUtils {
       // new DecimalFormat("##,###").parse(12454) and new DecimalFormat("###,###").parse(124546)
       // will return "12,454" and "124,546" respectively. So we add ',' at the end and head of
       // the result, then the final output are "12,454," or ",124,546".
-      if (numberFormat.last == commaSign || numberFormat.last == letterCommaSign) {
-        resultStr = resultStr + commaSign
+      if (numberFormat.last == COMMA_SIGN || numberFormat.last == LETTER_COMMA_SIGN) {
+        resultStr = resultStr + COMMA_SIGN
       }
-      if (numberFormat.charAt(0) == commaSign || numberFormat.charAt(0) == letterCommaSign) {
-        resultStr = commaSign + resultStr
+      if (numberFormat.charAt(0) == COMMA_SIGN || numberFormat.charAt(0) == LETTER_COMMA_SIGN) {
+        resultStr = COMMA_SIGN + resultStr
       }
 
       resultStr

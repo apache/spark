@@ -892,7 +892,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ToNumber") {
     ToNumber(Literal("454"), Literal("")).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("Format expression cannot be empty"))
+        assert(msg.contains("Number format cannot be empty"))
     }
 
     // Test '0' and '9'
