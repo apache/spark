@@ -1476,6 +1476,8 @@ case class RebalancePartitions(
   override def output: Seq[Attribute] = child.output
   override def optNumPartitions: Option[Int] = None
 
+  override val partitioning: Partitioning = super.partitioning
+
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
 }
