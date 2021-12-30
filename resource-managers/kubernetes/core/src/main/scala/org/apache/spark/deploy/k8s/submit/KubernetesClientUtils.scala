@@ -89,7 +89,8 @@ private[spark] object KubernetesClientUtils extends Logging {
    */
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
       withLabels: Map[String, String] = Map()): ConfigMap = {
-    val configMapNameSpace = confFileMap.getOrElse(KUBERNETES_NAMESPACE.key, "default")
+    val configMapNameSpace =
+      confFileMap.getOrElse(KUBERNETES_NAMESPACE.key, KUBERNETES_NAMESPACE.defaultValueString)
     new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
