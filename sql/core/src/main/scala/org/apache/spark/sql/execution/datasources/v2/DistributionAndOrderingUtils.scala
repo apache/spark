@@ -36,7 +36,7 @@ object DistributionAndOrderingUtils {
         case _: UnspecifiedDistribution => Array.empty[Expression]
       }
 
-      val (sortOrder, _) = distribution.partition(_.isInstanceOf[SortOrder])
+      val sortOrder = distribution.filter(_.isInstanceOf[SortOrder])
 
       val queryWithDistribution = if (distribution.nonEmpty) {
         // Spark can optimize the partition when

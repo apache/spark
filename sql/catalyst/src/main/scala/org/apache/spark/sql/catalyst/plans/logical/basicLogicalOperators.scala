@@ -1397,7 +1397,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 
 trait hasPartitionExpressions extends SQLConfHelper {
 
-  def partitionExpressions: Seq[Expression]
+  protected def partitionExpressions: Seq[Expression]
 
   def optNumPartitions: Option[Int]
 
@@ -1474,7 +1474,7 @@ case class RebalancePartitions(
     child: LogicalPlan) extends UnaryNode with hasPartitionExpressions {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def optNumPartitions: Option[Int] = Some(conf.numShufflePartitions)
+  override def optNumPartitions: Option[Int] = None
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
