@@ -1235,7 +1235,7 @@ class HiveDDLSuite
     if (tableExists && !cascade) {
       assertAnalysisError(
         sqlDropDatabase,
-        s"Database $dbName is not empty. One or more tables exist.")
+        s"Cannot drop a non-empty database: $dbName.")
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
