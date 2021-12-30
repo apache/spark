@@ -132,11 +132,11 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
         val df = spark.read.parquet(path.getAbsolutePath)
         val columnarToRowExec =
           df.queryExecution.executedPlan.collectFirst { case p: ColumnarToRowExec => p }.get
-        val serializer = SparkEnv.get.serializer.newInstance()
-        val readback =
-          serializer.deserialize[ColumnarToRowExec](serializer.serialize(columnarToRowExec))
         try {
-          readback.canonicalized
+          spark.range(1).foreach { _ =>
+            columnarToRowExec.canonicalized
+            ()
+          }
         } catch {
           case e: Throwable => fail("ColumnarToRowExec was not canonicalizable", e)
         }
