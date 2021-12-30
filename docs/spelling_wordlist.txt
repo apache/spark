@@ -39,6 +39,7 @@ BaseView
 BaseXCom
 Beauchemin
 Behaviour
+BigQueryHook
 Bigquery
 Bigtable
 Bitshift
