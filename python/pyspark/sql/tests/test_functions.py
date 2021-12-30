@@ -303,7 +303,7 @@ class FunctionsTests(ReusedSQLTestCase):
                     date_add(df.date, df.add) == datetime.date(2021, 12, 29),
                     date_add(df.date, "add") == datetime.date(2021, 12, 29),
                     date_add(df.date, 3) == datetime.date(2021, 12, 30),
-                ).first()[:]
+                ).first()
             )
         )
 
@@ -321,7 +321,7 @@ class FunctionsTests(ReusedSQLTestCase):
                     date_sub(df.date, df.sub) == datetime.date(2021, 12, 25),
                     date_sub(df.date, "sub") == datetime.date(2021, 12, 25),
                     date_sub(df.date, 3) == datetime.date(2021, 12, 24),
-                ).first()[:]
+                ).first()
             )
         )
 
@@ -339,7 +339,7 @@ class FunctionsTests(ReusedSQLTestCase):
                     add_months(df.date, df.add) == datetime.date(2022, 2, 27),
                     add_months(df.date, "add") == datetime.date(2022, 2, 27),
                     add_months(df.date, 3) == datetime.date(2022, 3, 27),
-                ).first()[:]
+                ).first()
             )
         )
 
