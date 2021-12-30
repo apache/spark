@@ -58,7 +58,8 @@ class ColumnarRule {
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
-  assert(child.supportsColumnar)
+  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
+  assert(TaskContext.get != null || child.supportsColumnar)
 
   override def output: Seq[Attribute] = child.output
 
