@@ -41,7 +41,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
+from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -1136,7 +1136,7 @@ def read_excel(
             na_values=na_values,
             keep_default_na=keep_default_na,
             verbose=verbose,
-            parse_dates=parse_dates,
+            parse_dates=parse_dates,  # type: ignore[arg-type]
             date_parser=date_parser,
             thousands=thousands,
             comment=comment,
@@ -1940,18 +1940,18 @@ def to_timedelta(
 
     >>> ps.to_timedelta('1 days 06:05:01.00003')
     Timedelta('1 days 06:05:01.000030')
-    >>> ps.to_timedelta('15.5us')
+    >>> ps.to_timedelta('15.5us')  # doctest: +SKIP
     Timedelta('0 days 00:00:00.000015500')
 
     Parsing a list or array of strings:
 
-    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +SKIP
     TimedeltaIndex(['1 days 06:05:01.000030', '0 days 00:00:00.000015500', NaT],
                    dtype='timedelta64[ns]', freq=None)
 
     Converting numbers by specifying the `unit` keyword argument:
 
-    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +SKIP
     TimedeltaIndex(['0 days 00:00:00', '0 days 00:00:01', '0 days 00:00:02',
                     '0 days 00:00:03', '0 days 00:00:04'],
                    dtype='timedelta64[ns]', freq=None)
@@ -2533,7 +2533,7 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
+            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))  # type: ignore[assignment]
 
         if sort:
             concat_psdf = concat_psdf.sort_index()

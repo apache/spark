@@ -325,6 +325,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
+    @scala.annotation.tailrec
     def findField(
         struct: StructType,
         searchPath: Seq[String],

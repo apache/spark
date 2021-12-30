@@ -29,6 +29,8 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.util.kvstore._
 
 private[spark] object KVUtils extends Logging {
@@ -36,7 +38,8 @@ private[spark] object KVUtils extends Logging {
   /** Use this to annotate constructor params to be used as KVStore indices. */
   type KVIndexParam = KVIndex @getter
 
-  private lazy val backend = new SparkConf().get(HYBRID_STORE_DISK_BACKEND)
+  private lazy val backend =
+    HybridStoreDiskBackend.withName(new SparkConf().get(HYBRID_STORE_DISK_BACKEND))
 
   /**
    * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
@@ -61,9 +64,8 @@ private[spark] object KVUtils extends Logging {
     require(metadata != null, "Metadata is required.")
 
     val db = backend match {
-      case "leveldb" => new LevelDB(path, new KVStoreScalaSerializer())
-      case "rocksdb" => new RocksDB(path, new KVStoreScalaSerializer())
-      case _ => throw new IllegalArgumentException(s"$backend is not supported.")
+      case LEVELDB => new LevelDB(path, new KVStoreScalaSerializer())
+      case ROCKSDB => new RocksDB(path, new KVStoreScalaSerializer())
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)
     if (dbMeta == null) {

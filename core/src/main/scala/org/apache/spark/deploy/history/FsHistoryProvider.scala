@@ -44,6 +44,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
@@ -131,14 +132,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
-  private val hybridStoreDiskBackend = conf.get(History.HYBRID_STORE_DISK_BACKEND)
+  private val hybridStoreDiskBackend =
+    HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dir = hybridStoreDiskBackend match {
-      case "leveldb" => "listing.ldb"
-      case "rocksdb" => "listing.rdb"
-      case db => throw new IllegalArgumentException(s"$db is not supported.")
+      case LEVELDB => "listing.ldb"
+      case ROCKSDB => "listing.rdb"
     }
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
@@ -590,11 +591,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       //
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
-      val stale = listing.view(classOf[LogInfo])
-        .index("lastProcessed")
-        .last(newLastScanTime - 1)
-        .asScala
-        .toList
+      val stale = listing.synchronized {
+        listing.view(classOf[LogInfo])
+          .index("lastProcessed")
+          .last(newLastScanTime - 1)
+          .asScala
+          .toList
+      }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
         .foreach { log =>
@@ -727,7 +730,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         markInaccessible(rootPath)
         // SPARK-28157 We should remove this inaccessible entry from the KVStore
         // to handle permission-only changes with the same file sizes later.
-        listing.delete(classOf[LogInfo], rootPath.toString)
+        listing.synchronized {
+          listing.delete(classOf[LogInfo], rootPath.toString)
+        }
       case e: Exception =>
         logError("Exception while merging application listings", e)
     } finally {
@@ -746,6 +751,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Visible for testing
    */
   private[history] def doMergeApplicationListing(
+      reader: EventLogFileReader,
+      scanTime: Long,
+      enableOptimizations: Boolean,
+      lastEvaluatedForCompaction: Option[Long]): Unit = doMergeApplicationListingInternal(
+    reader, scanTime, enableOptimizations, lastEvaluatedForCompaction)
+
+  @scala.annotation.tailrec
+  private def doMergeApplicationListingInternal(
       reader: EventLogFileReader,
       scanTime: Long,
       enableOptimizations: Boolean,
@@ -840,7 +853,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
             if (!fs.isFile(new Path(inProgressLog))) {
-              listing.delete(classOf[LogInfo], inProgressLog)
+              listing.synchronized {
+                listing.delete(classOf[LogInfo], inProgressLog)
+              }
             }
           } catch {
             case _: NoSuchElementException =>
@@ -852,7 +867,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // mean the end event is before the configured threshold, so call the method again to
         // re-parse the whole log.
         logInfo(s"Reparsing $logPath since end event was not found.")
-        doMergeApplicationListing(reader, scanTime, enableOptimizations = false,
+        doMergeApplicationListingInternal(reader, scanTime, enableOptimizations = false,
           lastEvaluatedForCompaction)
 
       case _ =>

@@ -329,11 +329,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'ORDER'(line 1, pos 27)
+mismatched input 'BY' expecting {')', ',', '-'}(line 1, pos 33)
 
 == SQL ==
 SELECT * FROM rank() OVER (ORDER BY random())
----------------------------^^^
+---------------------------------^^^
 
 
 -- !query
@@ -361,11 +361,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'ORDER'(line 1, pos 39)
+extraneous input 'BY' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}(line 1, pos 45)
 
 == SQL ==
 select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1
----------------------------------------^^^
+---------------------------------------------^^^
 
 
 -- !query

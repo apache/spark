@@ -19,10 +19,11 @@ package org.apache.spark.internal
 
 import scala.collection.JavaConverters._
 
-import org.apache.logging.log4j.{core, Level, LogManager, Marker}
+import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
-import org.apache.logging.log4j.message.Message
+import org.apache.logging.log4j.core.config.DefaultConfiguration
+import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -125,12 +126,18 @@ trait Logging {
   }
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
-    if (!Logging.isLog4j12()) {
-      // If Log4j is used but is not initialized, load a default properties file
-      val log4j12Initialized = !LogManager.getRootLogger
-        .asInstanceOf[org.apache.logging.log4j.core.Logger].getAppenders.isEmpty
+    if (Logging.isLog4j2()) {
+      val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+      // If Log4j 2 is used but is initialized by default configuration,
+      // load a default properties file
+      // (see org.apache.logging.log4j.core.config.DefaultConfiguration)
+      val needToInitializeLog4j2 = rootLogger.getAppenders.isEmpty ||
+        (rootLogger.getAppenders.size() == 1 &&
+          rootLogger.getLevel == Level.ERROR &&
+          LogManager.getContext.asInstanceOf[LoggerContext]
+            .getConfiguration.isInstanceOf[DefaultConfiguration])
       // scalastyle:off println
-      if (!log4j12Initialized) {
+      if (needToInitializeLog4j2) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
         Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
@@ -145,8 +152,6 @@ trait Logging {
         }
       }
 
-      val rootLogger = LogManager.getRootLogger()
-        .asInstanceOf[org.apache.logging.log4j.core.Logger]
       if (Logging.defaultRootLevel == null) {
         Logging.defaultRootLevel = rootLogger.getLevel()
       }
@@ -209,7 +214,7 @@ private[spark] object Logging {
    * initialization again.
    */
   def uninitialize(): Unit = initLock.synchronized {
-    if (!isLog4j12()) {
+    if (isLog4j2()) {
       if (defaultSparkLog4jConfig) {
         defaultSparkLog4jConfig = false
         val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
@@ -224,84 +229,17 @@ private[spark] object Logging {
     this.initialized = false
   }
 
-  private def isLog4j12(): Boolean = {
+  private def isLog4j2(): Boolean = {
     // This distinguishes the log4j 1.2 binding, currently
     // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
     // org.apache.logging.slf4j.Log4jLoggerFactory
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
-    "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
+    "org.apache.logging.slf4j.Log4jLoggerFactory".equals(binderClass)
   }
 
 
-  private class SparkShellLoggingFilter extends Filter {
+  private[spark] class SparkShellLoggingFilter extends AbstractFilter {
     private var status = LifeCycle.State.INITIALIZING
-
-    override def getOnMismatch: Filter.Result = Filter.Result.ACCEPT
-
-    override def getOnMatch: Filter.Result = Filter.Result.ACCEPT
-
-    // We don't use this with log4j2 `Marker`, currently all accept.
-    // If we need it, we should implement it.
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, msg: String, params: Object*): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object): Filter.Result = Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object): Filter.Result = Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Any, p3: Any, p4: Any): Filter.Result = Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object, p4: Object, p5: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    // scalastyle:off
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object, p4: Object, p5: Object, p6: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object, p4: Object, p5: Object, p6: Object, p7: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object, p4: Object, p5: Object, p6: Object, p7: Object,
-        p8: Object): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, message: String, p0: Object, p1: Object,
-        p2: Object, p3: Object, p4: Object, p5: Object, p6: Object, p7: Object,
-        p8: Object, p9: Object): Filter.Result =
-      Filter.Result.ACCEPT
-    // scalastyle:on
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, msg: Any, t: Throwable): Filter.Result =
-      Filter.Result.ACCEPT
-
-    override def filter(logger: core.Logger,
-        level: Level, marker: Marker, msg: Message, t: Throwable): Filter.Result =
-      Filter.Result.ACCEPT
 
     /**
      * If sparkShellThresholdLevel is not defined, this filter is a no-op.
