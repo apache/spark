@@ -488,11 +488,31 @@ class FunctionsTests(ReusedSQLTestCase):
     def test_slice(self):
         from pyspark.sql.functions import lit, size, slice
 
-        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ["x"])
+        df = self.spark.createDataFrame(
+            [
+                (
+                    [1, 2, 3],
+                    2,
+                    2,
+                ),
+                (
+                    [4, 5],
+                    2,
+                    2,
+                ),
+            ],
+            ["x", "index", "len"],
+        )
 
-        self.assertEqual(
-            df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
-            df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        expected = [Row(sliced=[2, 3]), Row(sliced=[5])]
+        self.assertTrue(
+            all(
+                [
+                    df.select(slice(df.x, 2, 2).alias("sliced")).collect() == expected,
+                    df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect() == expected,
+                    df.select(slice(df.x, "index", "len").alias("sliced")).collect() == expected,
+                ]
+            )
         )
 
         self.assertEqual(
@@ -508,10 +528,17 @@ class FunctionsTests(ReusedSQLTestCase):
         from pyspark.sql.functions import array_repeat, lit
 
         df = self.spark.range(1)
+        df = df.withColumn("repeat_n", lit(3))
 
-        self.assertEqual(
-            df.select(array_repeat("id", 3)).toDF("val").collect(),
-            df.select(array_repeat("id", lit(3))).toDF("val").collect(),
+        expected = [Row(val=[0, 0, 0])]
+        self.assertTrue(
+            all(
+                [
+                    df.select(array_repeat("id", 3).alias("val")).collect() == expected,
+                    df.select(array_repeat("id", lit(3)).alias("val")).collect() == expected,
+                    df.select(array_repeat("id", "repeat_n").alias("val")).collect() == expected,
+                ]
+            )
         )
 
     def test_input_file_name_udf(self):

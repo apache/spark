@@ -1715,7 +1715,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
-def least(*cols: Column) -> Column:
+def least(*cols: "ColumnOrName") -> Column:
     """
     Returns the least value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
@@ -1757,6 +1757,8 @@ def when(condition: Column, value: Any) -> Column:
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    # Have explicitly decided to not use ColumnOrName here in order to avoid confusion
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
@@ -3102,8 +3104,8 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
 def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
-    pos: Union[Column, int],
-    len: Union[Column, int] = -1,
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int] = -1,
 ) -> Column:
     """
     Overlay the specified portion of `src` with `replace`,
@@ -3707,7 +3709,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]) -> Column:
+def slice(x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
@@ -3734,8 +3736,8 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     return Column(
         sc._jvm.functions.slice(
             _to_java_column(x),
-            start._jc if isinstance(start, Column) else start,
-            length._jc if isinstance(length, Column) else length,
+            start if isinstance(start, int) else _to_java_column(start),
+            length if isinstance(length, int) else _to_java_column(length),
         )
     )
 
@@ -4687,7 +4689,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
+def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
 
@@ -4703,7 +4705,8 @@ def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     assert sc is not None and sc._jvm is not None
     return Column(
         sc._jvm.functions.array_repeat(
-            _to_java_column(col), _to_java_column(count) if isinstance(count, Column) else count
+            _to_java_column(col),
+            count if isinstance(count, int) else _to_java_column(count),
         )
     )
 
