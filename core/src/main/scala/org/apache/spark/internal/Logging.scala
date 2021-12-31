@@ -254,13 +254,9 @@ private[spark] object Logging {
       } else if (logEvent.getLevel.isMoreSpecificThan(Logging.sparkShellThresholdLevel)) {
         Filter.Result.NEUTRAL
       } else {
-        var logger = LogManager.getLogger(logEvent.getLoggerName)
-          .asInstanceOf[org.apache.logging.log4j.core.Logger]
-        while (logger.getParent() != null) {
-          if (!loggerWithoutConfig(logger)) {
+        val logger = LogManager.getLogger(logEvent.getLoggerName).asInstanceOf[Log4jLogger]
+        if (!loggerWithoutConfig(logger)) {
             return Filter.Result.NEUTRAL
-          }
-          logger = logger.getParent()
         }
         Filter.Result.DENY
       }
