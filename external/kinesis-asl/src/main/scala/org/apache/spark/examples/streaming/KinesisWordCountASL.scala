@@ -25,8 +25,7 @@ import scala.util.Random
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.PutRecordRequest
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.Logger
+import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.core.config.Configurator
 
 import org.apache.spark.SparkConf

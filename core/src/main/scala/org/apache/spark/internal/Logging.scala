@@ -20,7 +20,7 @@ package org.apache.spark.internal
 import scala.collection.JavaConverters._
 
 import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, LoggerContext}
+import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
@@ -127,7 +127,7 @@ trait Logging {
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     if (Logging.isLog4j2()) {
-      val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+      val rootLogger = LogManager.getRootLogger.asInstanceOf[Log4jLogger]
       // If Log4j 2 is used but is initialized by default configuration,
       // load a default properties file
       // scalastyle:off println
@@ -153,8 +153,7 @@ trait Logging {
       if (isInterpreter) {
         // Use the repl's main class to define the default log level when running the shell,
         // overriding the root logger's config if they're different.
-        val replLogger = LogManager.getLogger(logName)
-          .asInstanceOf[org.apache.logging.log4j.core.Logger]
+        val replLogger = LogManager.getLogger(logName).asInstanceOf[Log4jLogger]
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
         // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getLevel()) {
@@ -214,8 +213,7 @@ private[spark] object Logging {
         val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
         context.reconfigure()
       } else {
-        val rootLogger = LogManager.getRootLogger()
-          .asInstanceOf[org.apache.logging.log4j.core.Logger]
+        val rootLogger = LogManager.getRootLogger().asInstanceOf[Log4jLogger]
         rootLogger.setLevel(defaultRootLevel)
         sparkShellThresholdLevel = null
       }
@@ -236,7 +234,7 @@ private[spark] object Logging {
    * appender with error level. See `org.apache.logging.log4j.core.config.DefaultConfiguration`.
    */
   private[spark] def islog4j2DefaultConfigured(): Boolean = {
-    val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+    val rootLogger = LogManager.getRootLogger.asInstanceOf[Log4jLogger]
     rootLogger.getAppenders.isEmpty ||
       (rootLogger.getAppenders.size() == 1 &&
         rootLogger.getLevel == Level.ERROR &&
@@ -262,7 +260,7 @@ private[spark] object Logging {
         Filter.Result.NEUTRAL
       } else {
         var logger = LogManager.getLogger(logEvent.getLoggerName)
-          .asInstanceOf[org.apache.logging.log4j.core.Logger]
+          .asInstanceOf[Log4jLogger]
         while (logger.getParent() != null) {
           if (logger.getLevel != null || !logger.getAppenders.isEmpty) {
             return Filter.Result.NEUTRAL
