@@ -2744,11 +2744,11 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     Parameters
     ----------
-    timeColumn : :class:`~pyspark.sql.Column`
-        The column or the expression to use as the timestamp for windowing by time.
+    timeColumn : :class:`~pyspark.sql.Column`, or str
+        The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType.
     gapDuration : :class:`~pyspark.sql.Column` or str
-        A Python string literal or PySpark column specifying the timeout of the session. It could be static value,
+        A Python string literal or column specifying the timeout of the session. It could be static value,
         e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
 
@@ -2896,7 +2896,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     col : :class:`~pyspark.sql.Column` or str
         column name or column that represents the input column to test
     errMsg : :class:`~pyspark.sql.Column` or str
-        A Python string literal or PySpark column containing the error message
+        A Python string literal or column containing the error message
 
     Examples
     --------
@@ -2931,7 +2931,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     Parameters
     ----------
     errMsg : :class:`~pyspark.sql.Column` or str
-        A Python string literal or PySpark column containing the error message
+        A Python string literal or column containing the error message
     """
     if not isinstance(errMsg, (str, Column)):
         raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
@@ -4205,7 +4205,7 @@ def from_json(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in json format
+        a column or column name in CSV format
     schema : :class:`DataType` or str
         a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
         to use when parsing the json column
@@ -4845,9 +4845,9 @@ def from_csv(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in CSV format
+        a column or column name in CSV format
     schema :class:`~pyspark.sql.Column` or str
-        a PySpark column, or Python string literal with schema in DDL format, to use when parsing the CSV column.
+        a column, or Python string literal with schema in DDL format, to use when parsing the CSV column.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
