@@ -3136,9 +3136,9 @@ def overlay(
         column name or column containing the string that will be replaced
     replace : :class:`~pyspark.sql.Column` or str
         column name or column containing the substitution string
-    pos : :class:`~pyspark.sql.Column`, str, or int
+    pos : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the starting position in src
-    len : :class:`~pyspark.sql.Column`, str, or int
+    len : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the number of bytes to replace in src string by 'replace'
         defaults to -1, which represents the length of the 'replace' string
 
@@ -3751,9 +3751,9 @@ def slice(
     ----------
     x : :class:`~pyspark.sql.Column` or str
         column name or column containing the array to be sliced
-    start : :class:`~pyspark.sql.Column`, str, or int
+    start : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the starting index
-    length : :class:`~pyspark.sql.Column`, str, or int
+    length : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the length of the slice
 
     Examples
@@ -4728,7 +4728,7 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column name or column that contains the element to be repeated
-    count : :class:`~pyspark.sql.Column`, str, or int
+    count : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the number of times to repeat the first argument
 
     Examples
