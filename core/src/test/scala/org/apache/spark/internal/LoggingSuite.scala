@@ -36,18 +36,18 @@ class LoggingSuite extends SparkFunSuite {
     val originalThreshold = Logging.sparkShellThresholdLevel
     Logging.sparkShellThresholdLevel = Level.WARN
     try {
+      // without custom log level configured
       val logger1 = LogManager.getLogger("a.b.c.D")
         .asInstanceOf[Logger]
       val logEvent1 = new Builder().setLevel(Level.INFO)
         .setLoggerName(logger1.getName()).setMessage(new SimpleMessage("Test")).build()
-      // Logger's default level is not null in log4j2, and cannot be set to null too.
-      assert(ssf.filter(logEvent1) == Filter.Result.NEUTRAL)
+      assert(ssf.filter(logEvent1) == Filter.Result.DENY)
 
       // custom log level configured
       val parentLogger = LogManager.getLogger("a.b.c")
         .asInstanceOf[Logger]
       parentLogger.setLevel(Level.INFO)
-      assert(ssf.filter(logEvent1) == Filter.Result.NEUTRAL)
+      assert(ssf.filter(logEvent1) != Filter.Result.DENY)
 
       // log level is greater than or equal to threshold level
       val logger2 = LogManager.getLogger("a.b.E")
