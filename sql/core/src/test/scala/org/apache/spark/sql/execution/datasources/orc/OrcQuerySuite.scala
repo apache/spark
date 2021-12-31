@@ -726,14 +726,12 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }.toDF("record").repartition(1)
       df.write.format("orc").save(path)
 
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
-        SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10000") {
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
         val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
           case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
         }.isDefined
-        assert(vectorizationEnabled)
         checkAnswer(readDf, df)
       }
     }
