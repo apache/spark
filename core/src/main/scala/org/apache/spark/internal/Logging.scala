@@ -20,7 +20,7 @@ package org.apache.spark.internal
 import scala.collection.JavaConverters._
 
 import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, LoggerContext}
+import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
@@ -257,13 +257,17 @@ private[spark] object Logging {
         var logger = LogManager.getLogger(logEvent.getLoggerName)
           .asInstanceOf[org.apache.logging.log4j.core.Logger]
         while (logger.getParent() != null) {
-          if (logger.getLevel != null || !logger.getAppenders.isEmpty) {
+          if (!loggerWithoutConfig(logger)) {
             return Filter.Result.NEUTRAL
           }
           logger = logger.getParent()
         }
         Filter.Result.DENY
       }
+    }
+
+    private def loggerWithoutConfig(logger: Log4jLogger): Boolean = {
+      logger.get() == LogManager.getRootLogger.asInstanceOf[Log4jLogger].get()
     }
 
     override def getState: LifeCycle.State = status
