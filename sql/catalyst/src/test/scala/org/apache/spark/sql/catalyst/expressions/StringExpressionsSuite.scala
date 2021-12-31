@@ -894,6 +894,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("Number format cannot be empty"))
     }
+    ToNumber(Literal("454"), NonFoldableLiteral.create("999", StringType))
+      .checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Format expression must be foldable"))
+    }
 
     // Test '0' and '9'
     intercept[IllegalArgumentException] {
@@ -1012,16 +1017,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
     }
 
-    ToNumber(Literal("78$.12"), Literal("99$.99")).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("'$' must be the first or last char in '99$.99'"))
-    }
     ToNumber(Literal("$78$.12"), Literal("$99$.99")).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("Multiple '$' in '$99$.99'"))
     }
+    ToNumber(Literal("78$.12"), Literal("99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'$' must be the first or last char in '99$.99'"))
+    }
 
-    // Test 'S'
+    // Test '-' and 'S'
     Seq(
       ("454-", "999-") -> Decimal(-454),
       ("454-", "999S") -> Decimal(-454),
@@ -1037,16 +1042,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
     }
 
+    ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple 'S' or '-' in '999D9SS'"))
+    }
+
     Seq("9S99", "9-99").foreach { str =>
       ToNumber(Literal("-454"), Literal(str)).checkInputDataTypes() match {
         case TypeCheckResult.TypeCheckFailure(msg) =>
           assert(msg.contains(s"'S' or '-' must be the first or last char in '$str'"))
       }
-    }
-
-    ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("Multiple 'S' or '-' in '999D9SS'"))
     }
   }
 
