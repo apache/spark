@@ -522,17 +522,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     return result;
   }
 
-  @Override
-  public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
-    int result = arrayData().appendBytes(length, value, offset);
-    // copy the value once and then reference it for every row
-    for (int i = 0; i < count; ++i) {
-      arrayOffsets[i + rowId] = result;
-      arrayLengths[i + rowId] = length;
-    }
-    return result;
-  }
-
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {

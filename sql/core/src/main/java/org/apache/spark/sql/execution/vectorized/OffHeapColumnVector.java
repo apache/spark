@@ -548,17 +548,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return result;
   }
 
-  @Override
-  public int putByteArrays(int rowId, int count, byte[] value, int offset, int length) {
-    int result = arrayData().appendBytes(length, value, offset);
-    // copy the value once and then reference it for every row
-    for (int i = 0; i < count; ++i) {
-      Platform.putInt(null, lengthData + 4L * (i + rowId), length);
-      Platform.putInt(null, offsetData + 4L * (i + rowId), result);
-    }
-    return result;
-  }
-
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {

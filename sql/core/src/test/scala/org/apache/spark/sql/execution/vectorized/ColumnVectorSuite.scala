@@ -605,28 +605,5 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       }
     }
   }
-
-  testVectors("putByteArrays", 10, StringType) { testVector =>
-    val utf8 = s"test-str".getBytes("utf8")
-    testVector.putByteArrays(0, 10, utf8)
-
-    // all rows are pointing to the same offset (0) with the same length (utf8.length)
-    (0 until 10).foreach { i =>
-      assert(testVector.getArrayOffset(i) == 0)
-      assert(testVector.getArrayLength(i) == utf8.length)
-    }
-
-    // only 1 byte array is appended
-    assert(testVector.arrayData().getElementsAppended == utf8.length)
-
-    // check correctness
-    val array = new ColumnarArray(testVector, 0, 10)
-    val arrayCopy = array.copy()
-
-    (0 until 10).foreach { i =>
-      assert(array.get(i, StringType) === UTF8String.fromString(s"test-str"))
-      assert(arrayCopy.get(i, StringType) === UTF8String.fromString(s"test-str"))
-    }
-  }
 }
 
