@@ -538,9 +538,8 @@ private[hive] class TestHiveSparkSession(
       org.apache.logging.log4j.LogManager.getContext(false)
         .asInstanceOf[org.apache.logging.log4j.core.LoggerContext].getConfiguration.getLoggers()
         .asScala.foreach { case (_, log) =>
-        val logger = log.asInstanceOf[org.apache.logging.log4j.core.Logger]
-        if (!logger.getName.contains("org.apache.spark")) {
-          logger.setLevel(org.apache.logging.log4j.Level.WARN)
+        if (!log.getName.contains("org.apache.spark")) {
+          log.setLevel(org.apache.logging.log4j.Level.WARN)
         }
       }
 
