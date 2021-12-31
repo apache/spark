@@ -33,8 +33,8 @@ import org.apache.spark.unsafe.types.UTF8String
   usage = """
      _FUNC_(strExpr, formatExpr) - Convert `strExpr` to a number based on the `formatExpr`.
        The format can consist of the following characters:
-         '9':  digit position (can be dropped if insignificant)
-         '0':  digit position (will not be dropped, even if insignificant)
+         '9':  digit position
+         '0':  digit position too
          '.':  decimal point (only allowed once)
          ',':  group (thousands) separator
          'S':  sign anchored to number (uses locale)
