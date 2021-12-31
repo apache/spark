@@ -4207,7 +4207,7 @@ def from_json(
     col : :class:`~pyspark.sql.Column` or str
         string column in json format
     schema : :class:`DataType` or str
-        a StructType, ArrayType of StructType or or **Python string literal** with a DDL-formatted string
+        a StructType, ArrayType of StructType or **Python string literal** with a DDL-formatted string
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
