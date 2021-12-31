@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -221,8 +221,8 @@ case class FileSourceScanExec(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
-        // for column-based file format, append metadata struct column's vector type classes if any
-        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[OnHeapColumnVector].getName)
+        // for column-based file format, append metadata column's vector type classes if any
+        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
       }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
