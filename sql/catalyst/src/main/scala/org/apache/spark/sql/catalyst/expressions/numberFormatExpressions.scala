@@ -61,10 +61,10 @@ case class ToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatbuilder = new NumberFormatBuilder(numberFormat)
-  private lazy val (precision, scale) = numberFormatbuilder.parsePrecisionAndScale()
+  private lazy val numberFormatBuilder = new NumberFormatBuilder(numberFormat)
+  private lazy val (precision, scale) = numberFormatBuilder.parsePrecisionAndScale()
 
-  override def dataType: DataType = new DecimalType(precision, scale)
+  override def dataType: DataType = DecimalType(precision, scale)
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
@@ -72,7 +72,7 @@ case class ToNumber(left: Expression, right: Expression)
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       if (right.foldable) {
-        numberFormatbuilder.check()
+        numberFormatBuilder.check()
       } else {
         TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
       }
@@ -85,12 +85,12 @@ case class ToNumber(left: Expression, right: Expression)
 
   override def nullSafeEval(string: Any, format: Any): Any = {
     val input = string.asInstanceOf[UTF8String]
-    numberFormatbuilder.parse(input)
+    numberFormatBuilder.parse(input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builder =
-      ctx.addReferenceObj("builder", numberFormatbuilder, classOf[NumberFormatBuilder].getName)
+      ctx.addReferenceObj("builder", numberFormatBuilder, classOf[NumberFormatBuilder].getName)
     val eval = left.genCode(ctx)
     ev.copy(code = code"""
       ${eval.code}
