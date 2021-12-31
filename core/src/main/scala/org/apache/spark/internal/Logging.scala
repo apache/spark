@@ -130,14 +130,8 @@ trait Logging {
       val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
       // If Log4j 2 is used but is initialized by default configuration,
       // load a default properties file
-      // (see org.apache.logging.log4j.core.config.DefaultConfiguration)
-      val needToInitializeLog4j2 = rootLogger.getAppenders.isEmpty ||
-        (rootLogger.getAppenders.size() == 1 &&
-          rootLogger.getLevel == Level.ERROR &&
-          LogManager.getContext.asInstanceOf[LoggerContext]
-            .getConfiguration.isInstanceOf[DefaultConfiguration])
       // scalastyle:off println
-      if (needToInitializeLog4j2) {
+      if (Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
         Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
@@ -235,6 +229,19 @@ private[spark] object Logging {
     // org.apache.logging.slf4j.Log4jLoggerFactory
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
     "org.apache.logging.slf4j.Log4jLoggerFactory".equals(binderClass)
+  }
+
+  /**
+   * Return true if log4j2 is initialized by default configuration which has one
+   * appender with error level. See `org.apache.logging.log4j.core.config.DefaultConfiguration`.
+   */
+  private[spark] def islog4j2DefaultConfigured(): Boolean = {
+    val rootLogger = LogManager.getRootLogger.asInstanceOf[org.apache.logging.log4j.core.Logger]
+    rootLogger.getAppenders.isEmpty ||
+      (rootLogger.getAppenders.size() == 1 &&
+        rootLogger.getLevel == Level.ERROR &&
+        LogManager.getContext.asInstanceOf[LoggerContext]
+          .getConfiguration.isInstanceOf[DefaultConfiguration])
   }
 
 

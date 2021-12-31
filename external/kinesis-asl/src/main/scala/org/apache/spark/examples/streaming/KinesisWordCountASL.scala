@@ -272,8 +272,7 @@ object KinesisWordProducerASL {
 private[streaming] object StreamingExamples extends Logging {
   // Set reasonable logging levels for streaming if the user has not configured log4j.
   def setStreamingLogLevels(): Unit = {
-    val log4jInitialized = !LogManager.getRootLogger.asInstanceOf[Logger].getAppenders.isEmpty
-    if (!log4jInitialized) {
+    if (Logging.islog4j2DefaultConfigured()) {
       // We first log something to initialize Spark's default logging, then we override the
       // logging level.
       logInfo("Setting log level to [WARN] for streaming example." +
