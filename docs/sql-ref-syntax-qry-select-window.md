@@ -26,7 +26,7 @@ Window functions operate on a group of rows, referred to as a window, and calcul
 ### Syntax
 
 ```sql
-window_function OVER
+window_function [ { IGNORE | RESPECT } NULLS ] OVER
 ( [  { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] ) ]
   { ORDER | SORT } BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ]
   [ window_frame ] )
@@ -39,16 +39,20 @@ window_function OVER
     * Ranking Functions
 
       **Syntax:** `RANK | DENSE_RANK | PERCENT_RANK | NTILE | ROW_NUMBER`
+      
+      Note: Cannot append `[ { IGNORE | RESPECT } NULLS ]`
 
     * Analytic Functions
 
-      **Syntax:** `CUME_DIST | LAG | LEAD`
+      **Syntax:** `[ CUME_DIST | [ LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE ] [ { IGNORE | RESPECT } NULLS ] ]`
 
     * Aggregate Functions
 
       **Syntax:** `MAX | MIN | COUNT | SUM | AVG | ...`
 
       Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
+
+      Note: Cannot append `[ { IGNORE | RESPECT } NULLS ]`
 
 * **window_frame**
 
