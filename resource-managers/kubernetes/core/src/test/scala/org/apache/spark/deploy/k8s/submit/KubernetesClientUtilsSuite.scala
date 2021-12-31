@@ -20,6 +20,7 @@ package org.apache.spark.deploy.k8s.submit
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -81,8 +82,8 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("verify that configmap built as expected") {
-    val configMapName = java.util.UUID.randomUUID.toString
-    val configMapNameSpace = java.util.UUID.randomUUID.toString
+    val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
+    val configMapNameSpace = s"configmap-namespace-${UUID.randomUUID.toString}"
     val properties = Map(Config.KUBERNETES_NAMESPACE.key -> configMapNameSpace)
     val sparkConf =
       testSetup(properties.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
