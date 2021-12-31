@@ -1722,6 +1722,11 @@ def least(*cols: "ColumnOrName") -> Column:
 
     .. versionadded:: 1.5.0
 
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or columns to be compared
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
@@ -3113,15 +3118,27 @@ def overlay(
 
     .. versionadded:: 3.0.0
 
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string that will be replaced
+    replace : :class:`~pyspark.sql.Column` or str
+        column name or column containing the substitution string
+    pos : :class:`~pyspark.sql.Column`, str, or int
+        column name, column, or int containing the starting position in src
+    len : :class:`~pyspark.sql.Column`, str, or int
+        column name, column, or int containing the number of bytes to replace in src string by 'replace'
+        defaults to -1, which represents the length of the 'replace' string
+
     Examples
     --------
     >>> df = spark.createDataFrame([("SPARK_SQL", "CORE")], ("x", "y"))
-    >>> df.select(overlay("x", "y", 7).alias("overlayed")).show()
-    +----------+
-    | overlayed|
-    +----------+
-    |SPARK_CORE|
-    +----------+
+    >>> df.select(overlay("x", "y", 7).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORE')]
+    >>> df.select(overlay("x", "y", 7, 0).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORESQL')]
+    >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_COREL')]
     """
     if not isinstance(pos, (int, str, Column)):
         raise TypeError(
@@ -3721,11 +3738,11 @@ def slice(
     Parameters
     ----------
     x : :class:`~pyspark.sql.Column` or str
-        the array to be sliced
-    start : :class:`~pyspark.sql.Column` or int
-        the starting index
-    length : :class:`~pyspark.sql.Column` or int
-        the length of the slice
+        column name or column containing the array to be sliced
+    start : :class:`~pyspark.sql.Column`, str, or int
+        column name, column, or int containing the starting index
+    length : :class:`~pyspark.sql.Column`, str, or int
+        column name, column, or int containing the length of the slice
 
     Examples
     --------
@@ -4696,6 +4713,13 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     Collection function: creates an array containing a column repeated count times.
 
     .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that contains the element to be repeated
+    count : :class:`~pyspark.sql.Column`, str, or int
+        column name, column, or int containing the number of times to repeat the first argument
 
     Examples
     --------
