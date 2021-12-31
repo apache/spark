@@ -180,6 +180,7 @@ object NumberUtils {
         throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
     }
     val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
+    assert(number.isInstanceOf[BigDecimal])
     Decimal(number.asInstanceOf[BigDecimal])
   }
 
