@@ -596,12 +596,25 @@ private[spark] object Utils extends Logging {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
       FileUtil.unZip(source, dest)
+      setExec(dest)
     } else if (
       lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
       FileUtil.unTar(source, dest)
     } else {
       logWarning(s"Cannot unpack $source, just copying it to $dest.")
       copyRecursive(source, dest)
+    }
+  }
+
+  def setExec(dest: File): Unit = {
+    val files = dest.listFiles()
+    for (i <- files) {
+      if (i.isDirectory) {
+        setExec(i)
+      }
+      else {
+        i.setExecutable(true)
+      }
     }
   }
 
