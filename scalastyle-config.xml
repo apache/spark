@@ -335,6 +335,11 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+    <parameters><parameter name="illegalImports"><![CDATA[org.apache.log4j]]></parameter></parameters>
+  </check>
+
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
