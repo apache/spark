@@ -37,6 +37,8 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+    # PySpark ARM64
+    - cron: '0 20 * * *'
 
 jobs:
   configure-jobs:
@@ -87,6 +89,12 @@ jobs:
           echo '::set-output name=branch::master'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
+          echo '::set-output name=hadoop::hadoop3'
+        elif [ "${{ github.event.schedule }}" = "0 20 * * *" ]; then
+          echo '::set-output name=java::8'
+          echo '::set-output name=branch::master'
+          echo '::set-output name=type::pyspark-arm64-scheduled'
+          echo '::set-output name=envs::{}'
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
@@ -250,11 +258,20 @@ jobs:
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
       || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
+      || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-arm64-scheduled')
       || needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
-    runs-on: ubuntu-20.04
+    runs-on:  >-
+      ${{
+        (needs.configure-jobs.outputs.type == 'pyspark-arm64-scheduled' && 'ubuntu-20.04-arm64')
+        || 'ubuntu-20.04'
+      }}
     container:
-      image: dongjoon/apache-spark-github-action-image:20211228
+      image: >-
+        ${{
+          (needs.configure-jobs.outputs.type == 'pyspark-arm64-scheduled' && 'yikunkero/apache-spark-github-action-image:arm64')
+          || 'dongjoon/apache-spark-github-action-image:20211228'
+        }}
     strategy:
       fail-fast: false
       matrix:
@@ -314,6 +331,7 @@ jobs:
           pyspark-coursier-
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
+      if: needs.configure-jobs.outputs.type != 'pyspark-arm64-scheduled'
       with:
         java-version: ${{ matrix.java }}
     - name: List Python packages (Python 3.9)
@@ -321,8 +339,8 @@ jobs:
         python3.9 -m pip list
     - name: Install Conda for pip packaging test
       run: |
-        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-        bash miniconda.sh -b -p $HOME/miniconda
+        curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-`uname -m`.sh > miniconda.sh
+        bash miniconda.sh -u -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
