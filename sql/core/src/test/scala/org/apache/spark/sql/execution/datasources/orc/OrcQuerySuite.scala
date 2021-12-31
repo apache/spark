@@ -36,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -725,10 +726,11 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       }.toDF("record").repartition(1)
       df.write.format("orc").save(path)
 
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10000") {
         val readDf = spark.read.orc(path)
         val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
-          case scan @ (_: FileSourceScanExec) => scan.supportsColumnar
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
         }.isDefined
         assert(vectorizationEnabled)
