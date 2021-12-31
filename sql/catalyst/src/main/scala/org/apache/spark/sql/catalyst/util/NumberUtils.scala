@@ -30,11 +30,11 @@ import org.apache.spark.unsafe.types.UTF8String
 object NumberUtils {
 
   private final val POINT_SIGN = '.'
-  private final val LETTER_POINT_SIGN = 'D'
+  private final val POINT_LETTER = 'D'
   private final val COMMA_SIGN = ','
-  private final val LETTER_COMMA_SIGN = 'G'
+  private final val COMMA_LETTER = 'G'
   private final val MINUS_SIGN = '-'
-  private final val LETTER_MINUS_SIGN = 'S'
+  private final val MINUS_LETTER = 'S'
   private final val DOLLAR_SIGN = '$'
   private final val NINE_DIGIT = '9'
   private final val ZERO_DIGIT = '0'
@@ -67,11 +67,11 @@ object NumberUtils {
     val normalizedFormat = format.toUpperCase(Locale.ROOT).map {
       case NINE_DIGIT if flag => POUND_SIGN
       case NINE_DIGIT if !flag => ZERO_DIGIT
-      case LETTER_COMMA_SIGN => COMMA_SIGN
-      case LETTER_POINT_SIGN | POINT_SIGN =>
+      case COMMA_LETTER => COMMA_SIGN
+      case POINT_LETTER | POINT_SIGN =>
         flag = false
         POINT_SIGN
-      case LETTER_MINUS_SIGN => MINUS_SIGN
+      case MINUS_LETTER => MINUS_SIGN
       case other => other
     }
     // If the comma is at the beginning or end of number format, then DecimalFormat will be invalid.
@@ -105,15 +105,15 @@ object NumberUtils {
       throw QueryCompilationErrors.emptyNumberFormatError()
     } else if (normalizedFormat.count(_ == POINT_SIGN) > 1) {
       throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$LETTER_POINT_SIGN' or '$POINT_SIGN'", numberFormat)
+        s"'$POINT_LETTER' or '$POINT_SIGN'", numberFormat)
     } else if (normalizedFormat.count(_ == MINUS_SIGN) > 1) {
       throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$LETTER_MINUS_SIGN' or '$MINUS_SIGN'", numberFormat)
+        s"'$MINUS_LETTER' or '$MINUS_SIGN'", numberFormat)
     } else if (normalizedFormat.count(_ == DOLLAR_SIGN) > 1) {
       throw QueryCompilationErrors.multipleSignInNumberFormatError(s"'$DOLLAR_SIGN'", numberFormat)
     } else if (invalidSignPosition(normalizedFormat, MINUS_SIGN)) {
       throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
-        s"'$LETTER_MINUS_SIGN' or '$MINUS_SIGN'", numberFormat)
+        s"'$MINUS_LETTER' or '$MINUS_SIGN'", numberFormat)
     } else if (invalidSignPosition(normalizedFormat, DOLLAR_SIGN)) {
       throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
         s"'$DOLLAR_SIGN'", numberFormat)
@@ -218,10 +218,10 @@ object NumberUtils {
       // new DecimalFormat("##,###").parse(12454) and new DecimalFormat("###,###").parse(124546)
       // will return "12,454" and "124,546" respectively. So we add ',' at the end and head of
       // the result, then the final output are "12,454," or ",124,546".
-      if (numberFormat.last == COMMA_SIGN || numberFormat.last == LETTER_COMMA_SIGN) {
+      if (numberFormat.last == COMMA_SIGN || numberFormat.last == COMMA_LETTER) {
         resultStr = resultStr + COMMA_SIGN
       }
-      if (numberFormat.charAt(0) == COMMA_SIGN || numberFormat.charAt(0) == LETTER_COMMA_SIGN) {
+      if (numberFormat.charAt(0) == COMMA_SIGN || numberFormat.charAt(0) == COMMA_LETTER) {
         resultStr = COMMA_SIGN + resultStr
       }
 
