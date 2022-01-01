@@ -7636,6 +7636,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1.0  None
         1  2.0     x
         2  NaN     y
+
         Notes
         -----
         As described in #263, joining string columns currently returns None for missing values
