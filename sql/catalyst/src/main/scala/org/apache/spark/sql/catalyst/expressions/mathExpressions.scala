@@ -282,10 +282,15 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 
 object Ceil {
   def apply(child: Expression, scale: Expression): Expression = {
-    if (scale.eval(EmptyRow).asInstanceOf[Int] == 0) {
-      Ceil(child)
-    } else {
-      RoundCeil(child, scale)
+    val scaleV = scale.eval(EmptyRow)
+    if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+
+    (child.dataType, scaleV.asInstanceOf[Int]) match {
+      case (_, 0) => Ceil(child)
+      case (_, x) if x < 0 => RoundCeil(Cast(child, LongType), scale)
+      case (_: IntegralType | ShortType, _) => RoundCeil(Cast(child, LongType), scale)
+      case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
+      case _ => RoundCeil(child, scale)
     }
   }
 }
@@ -531,10 +536,15 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
 object Floor {
   def apply(child: Expression, scale: Expression): Expression = {
-    if (scale.eval(EmptyRow).asInstanceOf[Int] == 0) {
-      Floor(child)
-    } else {
-      RoundFloor(child, scale)
+    val scaleV = scale.eval(EmptyRow)
+    if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+
+    (child.dataType, scaleV.asInstanceOf[Int]) match {
+      case (_, 0) => Floor(child)
+      case (_, x) if x < 0 => RoundFloor(Cast(child, LongType), scale)
+      case (_: IntegralType | ShortType, _) => RoundFloor(Cast(child, LongType), scale)
+      case (_ : FloatType, _) => RoundFloor(Cast(child, DoubleType), scale)
+      case _ => RoundFloor(child, scale)
     }
   }
 }

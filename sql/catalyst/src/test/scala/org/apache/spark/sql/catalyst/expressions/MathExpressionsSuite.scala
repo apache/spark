@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
-
 import com.google.common.math.LongMath
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -673,37 +672,37 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def doubleResultsFloor(i: Int): Any = {
       val results = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3,
         3.1, 3.14, 3.141, 3.1415, 3.14159, 3.141592)
-      if (i == 6) results(i).toLong else results(i)
+      if (i <= 6) results(i).toLong else results(i)
     }
 
     def doubleResultsCeil(i: Int): Any = {
       val results = Seq(1000000.0, 100000.0, 10000.0, 1000.0, 100.0, 10.0,
         4L, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
-      if (i == 6) results(i).toLong else results(i)
+      if (i <= 6) results(i).toLong else results(i)
     }
 
     def floatResultsFloor(i: Int): Any = {
       val results = Seq(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3L,
-        3.1f, 3.14f, 3.141f, 3.1414f, 3.14149f, 3.141499f)
-      if (i == 6) results(i).toLong else results(i)
+        3.1d, 3.14d, 3.141d, 3.1414d, 3.14149d, 3.141499d)
+      if (i <= 6) results(i).toLong else results(i)
     }
 
     def floatResultsCeil(i: Int): Any = {
       val results = Seq(1000000.0f, 100000.0f, 10000.0f, 1000.0f, 100.0f, 10.0f,
-        4L, 3.2f, 3.15f, 3.142f, 3.1415f, 3.1415f, 3.1415f)
-      if (i == 6) results(i).toLong else results(i)
+        4L, 3.2d, 3.15d, 3.142d, 3.1415d, 3.1415d, 3.1415d)
+      if (i <= 6) results(i).toLong else results(i)
     }
 
     def shortResultsFloor(i: Int): Any = {
-      val results = Seq[Short](0.toShort, 0.toShort, 30000.toShort, 31000.toShort,
-        31400.toShort, 31410.toShort, 31415) ++ Seq.fill[Short](7)(31415)
-      if (i == 6) results(i).toLong else results(i)
+      val results = Seq[Long](0L, 0L, 30000L, 31000L,
+        31400L, 31410L, 31415L) ++ Seq.fill[Long](7)(31415)
+      results(i)
     }
 
     def shortResultsCeil(i: Int): Any = {
-      val results = Seq[Short](16960, -31072, -25536, 32000, 31500, 31420) ++
-        Seq.fill[Short](7)(31415)
-      if (i == 6) results(i).toLong else results(i)
+      val results = Seq[Long](1000000L, 100000L, 40000L, 32000L,
+        31500L, 31420L) ++ Seq.fill[Long](7)(31415)
+      results(i)
     }
 
     val longResultsFloor: Seq[Long] = Seq(31415926535000000L, 31415926535800000L,
@@ -717,13 +716,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def intResultsFloor(i: Int): Any = {
       val results = Seq(314000000, 314100000, 314150000, 314159000, 314159200,
         314159260) ++ Seq.fill(7)(314159265)
-      if (i == 6) results(i).toLong else results(i)
+      results(i).toLong
     }
 
     def intResultsCeil(i: Int): Any = {
       val results = Seq(315000000, 314200000, 314160000, 314160000, 314159300,
         314159270) ++ Seq.fill(7)(314159265)
-      if (i == 6) results(i).toLong else results(i)
+      results(i).toLong
     }
 
     scales.zipWithIndex.foreach { case (scale, i) =>
@@ -753,7 +752,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       BigDecimal("3.142"), BigDecimal("3.1416"), BigDecimal("3.14159"),
       BigDecimal("3.141593"), BigDecimal("3.1415927"))
 
-    val bdResultsFloor: Seq[BigDecimal] = Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
+    val bdResultsFloor: Seq[BigDecimal] =
+        Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
       BigDecimal("3.141"), BigDecimal("3.1415"), BigDecimal("3.14159"),
       BigDecimal("3.141592"), BigDecimal("3.1415927"))
 
@@ -782,11 +782,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(Literal.create(null, dataType),
         Literal.create(null, IntegerType)), null)
       checkEvaluation(checkDataTypeAndCast(Floor(Literal.create(null, dataType), Literal(2))), null)
-      checkEvaluation(checkDataTypeAndCast(Floor(Literal.create(null, dataType),
-        Literal.create(null, IntegerType))), null)
+      try {
+        checkEvaluation(checkDataTypeAndCast(Floor(Literal.create(null, dataType),
+          Literal.create(null, IntegerType))), null)
+        checkEvaluation(checkDataTypeAndCast(Ceil(Literal.create(null, dataType),
+          Literal.create(null, IntegerType))), null)
+      } catch {
+        case e: AnalysisException =>
+          assert(e.getMessage.contains("Scale parameter can not be null"))
+      }
       checkEvaluation(checkDataTypeAndCast(Ceil(Literal.create(null, dataType), Literal(2))), null)
-      checkEvaluation(checkDataTypeAndCast(Ceil(Literal.create(null, dataType),
-        Literal.create(null, IntegerType))), null)
     }
 
     checkEvaluation(Round(2.5, 0), 3.0)
@@ -806,19 +811,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(Floor(-2.5, 0)), -3L)
     checkEvaluation(checkDataTypeAndCast(Floor(-3.5, 0)), -4L)
     checkEvaluation(checkDataTypeAndCast(Floor(-0.35, 1)), -0.4)
-    checkEvaluation(checkDataTypeAndCast(Floor(-35, -1)), -40)
+    checkEvaluation(checkDataTypeAndCast(Floor(-35, -1)), -40L)
     checkEvaluation(checkDataTypeAndCast(Ceil(2.5, 0)), 3L)
     checkEvaluation(checkDataTypeAndCast(Ceil(3.5, 0)), 4L)
     checkEvaluation(checkDataTypeAndCast(Ceil(-2.5, 0)), -2L)
     checkEvaluation(checkDataTypeAndCast(Ceil(-3.5, 0)), -3L)
     checkEvaluation(checkDataTypeAndCast(Ceil(-0.35, 1)), -0.3)
-    checkEvaluation(checkDataTypeAndCast(Ceil(-35, -1)), -30)
+    checkEvaluation(checkDataTypeAndCast(Ceil(-35, -1)), -30L)
     checkEvaluation(checkDataTypeAndCast(Floor(-0.1, 0)), -1L)
     checkEvaluation(checkDataTypeAndCast(Floor(5, 0)), 5L)
-    checkEvaluation(checkDataTypeAndCast(Floor(3.1411, -3)), 0.0)
+    checkEvaluation(checkDataTypeAndCast(Floor(3.1411, -3)), 0L)
     checkEvaluation(checkDataTypeAndCast(Ceil(-0.1, 0)), 0L)
     checkEvaluation(checkDataTypeAndCast(Ceil(5, 0)), 5L)
-    checkEvaluation(checkDataTypeAndCast(Ceil(3.1411, -3)), 1000.0)
+    checkEvaluation(checkDataTypeAndCast(Ceil(3.1411, -3)), 1000L)
   }
 
   test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
