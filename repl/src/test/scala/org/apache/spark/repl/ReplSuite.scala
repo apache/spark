@@ -308,6 +308,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val errorLogMessage1 = "errorLogMessage1 should be output"
     val infoLogMessage1 = "infoLogMessage2 should be output"
     val infoLogMessage2 = "infoLogMessage3 should be output"
+    val debugLogMessage1 = "debugLogMessage1 should be output"
 
     val out = try {
       val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
@@ -352,6 +353,12 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
            |  val customLogger3 = LogManager.getLogger("customLogger2.child")
            |  customLogger3.info("$infoLogMessage2")
            |
+           |  // customLogger4 is programmingly configured its log level as DEBUG
+           |  // so debug level messages logged via customLogger4 should be output.
+           |  val customLogger4 = LogManager.getLogger("customLogger4").asInstanceOf[Logger]
+           |  customLogger4.setLevel(Level.DEBUG)
+           |  customLogger4.debug("$debugLogMessage1")
+           |
            |  // echo log messages
            |  bout.toString
            |} finally {
@@ -390,5 +397,6 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     assertContains(errorLogMessage1, out)
     assertContains(infoLogMessage1, out)
     assertContains(infoLogMessage2, out)
+    assertContains(debugLogMessage1, out)
   }
 }
