@@ -290,6 +290,9 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
         |# Set the log level for this class to ERROR same as the default setting.
         |logger.repl.name = org.apache.spark.repl.Main
         |logger.repl.level = error
+        |
+        |logger.customLogger2.name = customLogger2
+        |logger.customLogger2.level = info
         |""".stripMargin
 
     val log4jprops = Files.createTempFile("log4j2.properties.d", "log4j2.properties")
@@ -301,8 +304,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val originalReplThresholdLevel = Logging.sparkShellThresholdLevel
 
     val replLoggerLogMessage = "Log level for REPL: "
-    val debugLogMessage1 = "debugLogMessage1 should not be output"
-    val warnLogMessage1 = "warnLogMessage1 should be output"
+    val warnLogMessage1 = "warnLogMessage1 should not be output"
     val errorLogMessage1 = "errorLogMessage1 should be output"
     val infoLogMessage1 = "infoLogMessage2 should be output"
     val infoLogMessage2 = "infoLogMessage3 should be output"
@@ -337,14 +339,12 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
            |  // so this inherits the settings of rootLogger
            |  // but ConsoleAppender can use a different log level.
            |  val customLogger1 = LogManager.getLogger("customLogger1")
-           |  customLogger1.debug("$debugLogMessage1")
            |  customLogger1.warn("$warnLogMessage1")
            |  customLogger1.error("$errorLogMessage1")
            |
            |  // customLogger2 is explicitly configured its log level as INFO
            |  // so info level messages logged via customLogger2 should be output.
            |  val customLogger2 = LogManager.getLogger("customLogger2").asInstanceOf[Logger]
-           |  customLogger2.setLevel(Level.INFO)
            |  customLogger2.info("$infoLogMessage1")
            |
            |  // customLogger2 is explicitly configured its log level
@@ -386,8 +386,7 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Ensure log level threshold for REPL is ERROR.
     assertContains(replLoggerLogMessage + "ERROR", out)
 
-    assertDoesNotContain(debugLogMessage1, out)
-    assertContains(warnLogMessage1, out)
+    assertDoesNotContain(warnLogMessage1, out)
     assertContains(errorLogMessage1, out)
     assertContains(infoLogMessage1, out)
     assertContains(infoLogMessage2, out)
