@@ -269,13 +269,13 @@ private[spark] object Logging {
 
     // Return true if the logger has custom configuration. It depends on:
     // 1. If the logger isn't attached with root logger config (i.e., with custom configuration), or
-    // 2. the logger level is different to root config level (i.e., it is changed programmingly).
+    // 2. the logger level is different to root config level (i.e., it is changed programmatically).
     //
-    // Note that if a logger is programmingly changed log level but set to same level as root config
-    // level, we cannot tell if it is with custom configuration.
+    // Note that if a logger is programmatically changed log level but set to same level
+    // as root config level, we cannot tell if it is with custom configuration.
     private def loggerWithCustomConfig(logger: Log4jLogger): Boolean = {
       val rootConfig = LogManager.getRootLogger.asInstanceOf[Log4jLogger].get()
-      logger.get() != rootConfig || logger.getLevel != rootConfig.getLevel()
+      (logger.get() ne rootConfig) || (logger.getLevel != rootConfig.getLevel())
     }
 
     override def getState: LifeCycle.State = status
