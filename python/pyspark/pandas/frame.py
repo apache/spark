@@ -343,6 +343,70 @@ rectangle    16.0  2.348543e+108
 """
 
 
+def _to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
+    if os is None:
+        return []
+    elif is_name_like_tuple(os):
+        return [cast(Label, os)]
+    elif is_name_like_value(os):
+        return [(os,)]
+    else:
+        return [o if is_name_like_tuple(o) else (o,) for o in os]
+
+
+MERGE_PREFIX_TEMPLATE = '__{}_'
+RIGHT_MERGE_PREFIX = MERGE_PREFIX_TEMPLATE.format('right')
+
+
+def _resolve_internal_merge_frame(
+    internal: InternalFrame,
+    side: Optional[str] = None
+) -> InternalFrame:
+    internal = internal.resolved_copy
+    if side is None:
+        return internal
+
+    rename = lambda col: "{}{{}}".format(MERGE_PREFIX_TEMPLATE).format(side, col)
+    sdf = internal.spark_frame
+    sdf = sdf.select(
+        *[
+            scol_for(sdf, col).alias(rename(col))
+            for col in sdf.columns
+            if col not in HIDDEN_COLUMNS
+        ],
+        *HIDDEN_COLUMNS,
+    )
+    return internal.copy(
+        spark_frame=sdf,
+        index_spark_columns=[
+            scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
+        ],
+        index_fields=[
+            field.copy(name=rename(field.name)) for field in internal.index_fields
+        ],
+        data_spark_columns=[
+            scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
+        ],
+        data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
+    )
+
+
+def _resolve_merge_join_condition_from_key_names(
+    left_table: SparkDataFrame,
+    right_table: SparkDataFrame,
+    left_key_names: List[str],
+    right_key_names: List[str]
+) -> Column:
+    left_key_columns = [scol_for(left_table, label) for label in left_key_names]
+    right_key_columns = [scol_for(right_table, label) for label in right_key_names]
+
+    join_condition = reduce(
+        lambda x, y: x & y,
+        [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
+    )
+    return join_condition
+
+
 class DataFrame(Frame, Generic[T]):
     """
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
@@ -7548,7 +7612,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 not preserve the order of the left keys unlike pandas.
             cross: creates the cartesian product from both frames, preserves the order
                 of the left keys.
-        on: Column or index level names to join on or Callable. These must be found in both
+        on: Column or index level names to join on, or Callable. These must be found in both
             DataFrames. If on is None and not merging on indexes then this defaults to the
             intersection of the columns in both DataFrames.
             If Callable this will perform a conditional merge. This allows you to provide a custom
@@ -7642,58 +7706,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         As described in #263, joining string columns currently returns None for missing values
             instead of NaN.
         """
-        right_prefix = "__right_"
-
-        def to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
-            if os is None:
-                return []
-            elif is_name_like_tuple(os):
-                return [cast(Label, os)]
-            elif is_name_like_value(os):
-                return [(os,)]
-            else:
-                return [o if is_name_like_tuple(o) else (o,) for o in os]
-
-        def resolve(internal: InternalFrame, side: str) -> InternalFrame:
-            rename = lambda col: "__{}_{}".format(side, col)
-            internal = internal.resolved_copy
-            sdf = internal.spark_frame
-            sdf = sdf.select(
-                *[
-                    scol_for(sdf, col).alias(rename(col))
-                    for col in sdf.columns
-                    if col not in HIDDEN_COLUMNS
-                ],
-                *HIDDEN_COLUMNS,
-            )
-            return internal.copy(
-                spark_frame=sdf,
-                index_spark_columns=[
-                    scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
-                ],
-                index_fields=[
-                    field.copy(name=rename(field.name)) for field in internal.index_fields
-                ],
-                data_spark_columns=[
-                    scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
-                ],
-                data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
-            )
-
-        class _RightProxy:
-            def __init__(self, right_df):
-                self._right_df = right_df
-
-            def __getitem__(self, item):
-                return getattr(self._right_df, f'{right_prefix}{item}')
-
-            __getattr__ = __getitem__
-
         if isinstance(right, ps.Series):
             right = right.to_frame()
 
-        left_internal = self._internal.resolved_copy
-        right_internal = resolve(right._internal, "right")
+        left_internal = _resolve_internal_merge_frame(self._internal)
+        right_internal = _resolve_internal_merge_frame(right._internal, "right")
 
         left_table = left_internal.spark_frame.alias("left_table")
         right_table = right_internal.spark_frame.alias("right_table")
@@ -7704,63 +7721,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         right_key_names = []
         if how == "cross":
             if any((on, left_on, right_on, left_index, right_index)):
-                raise ValueError('Cannot pass join condition for `how="cross"`')
+                raise ValueError('Cannot provide any join conditions for `how="cross"`')
             join_condition = None
             how = "inner"
         else:
-            __empty = object()
-            join_condition = __empty
-            if on:
-                if left_on or right_on:
-                    raise ValueError(
-                        'Can only pass argument "on" OR "left_on" and "right_on", '
-                        "not a combination of both."
-                    )
-
-                if callable(on):
-                    join_condition = on(left_table, _RightProxy(right_table))
-                else:
-                    left_key_names = list(map(self._internal.spark_column_name_for, to_list(on)))
-                    right_key_names = list(map(right._internal.spark_column_name_for, to_list(on)))
+            if callable(on):
+                join_condition = on(left_table, right_table)
             else:
-                # TODO: need special handling for multi-index.
-                if left_index:
-                    left_key_names = self._internal.index_spark_column_names
-                else:
-                    left_key_names = list(map(self._internal.spark_column_name_for, to_list(left_on)))
-                if right_index:
-                    right_key_names = right._internal.index_spark_column_names
-                else:
-                    right_key_names = list(
-                        map(right._internal.spark_column_name_for, to_list(right_on))
-                    )
-
-                if left_key_names and not right_key_names:
-                    raise ValueError("Must pass right_on or right_index=True")
-                if right_key_names and not left_key_names:
-                    raise ValueError("Must pass left_on or left_index=True")
-                if not left_key_names and not right_key_names:
-                    common = list(self.columns.intersection(right.columns))
-                    if len(common) == 0:
-                        raise ValueError(
-                            "No common columns to perform merge on. Merge options: "
-                            "left_on=None, right_on=None, left_index=False, right_index=False"
-                        )
-                    left_key_names = list(map(self._internal.spark_column_name_for, to_list(common)))
-                    right_key_names = list(map(right._internal.spark_column_name_for, to_list(common)))
-                if len(left_key_names) != len(right_key_names):
-                    raise ValueError("len(left_keys) must equal len(right_keys)")
-
-            if join_condition is __empty:
-                # We should distinguish the name to avoid ambiguous column name after merging.
-                right_key_names = [right_prefix + right_key_name for right_key_name in right_key_names]
-
-                left_key_columns = [scol_for(left_table, label) for label in left_key_names]
-                right_key_columns = [scol_for(right_table, label) for label in right_key_names]
-
-                join_condition = reduce(
-                    lambda x, y: x & y,
-                    [lkey == rkey for lkey, rkey in zip(left_key_columns, right_key_columns)],
+                # join condition based on column names
+                left_key_names, right_key_names = self._resolve_merge_key_names(
+                    right, on, left_on, right_on, left_index, right_index
+                )
+                join_condition = _resolve_merge_join_condition_from_key_names(
+                    left_table, right_table, left_key_names, right_key_names
                 )
 
         joined_table = left_table.join(right_table, join_condition, how=how)
@@ -7790,7 +7763,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 spark_column_name = left_internal.spark_column_name_for(label)
                 if (
                     spark_column_name in left_key_names
-                    and (right_prefix + spark_column_name) in right_key_names
+                    and (RIGHT_MERGE_PREFIX + spark_column_name) in right_key_names
                 ):
                     right_scol = right_scol_for(label)
                     if how == "right":
@@ -7807,14 +7780,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             data_columns.append(col)
             column_labels.append(label)
         for label in right_internal.column_labels:
-            # recover `right_prefix` here.
-            col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
+            # recover `RIGHT_MERGE_PREFIX` here.
+            col = right_internal.spark_column_name_for(label)[len(RIGHT_MERGE_PREFIX) :]
             scol = right_scol_for(label).alias(col)
             if label in duplicate_columns:
                 spark_column_name = left_internal.spark_column_name_for(label)
                 if (
                     spark_column_name in left_key_names
-                    and (right_prefix + spark_column_name) in right_key_names
+                    and (RIGHT_MERGE_PREFIX + spark_column_name) in right_key_names
                 ):
                     continue
                 else:
@@ -7871,6 +7844,51 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             data_spark_columns=[scol_for(selected_columns, col) for col in data_columns],
         )
         return DataFrame(internal)
+
+    def _resolve_merge_key_names(self, right, on, left_on, right_on, left_index, right_index):
+        if on:
+            if left_on or right_on:
+                raise ValueError(
+                    'Can only pass argument "on" OR "left_on" and "right_on", '
+                    "not a combination of both."
+                )
+            left_key_names = list(map(self._internal.spark_column_name_for, _to_list(on)))
+            right_key_names = list(map(right._internal.spark_column_name_for, _to_list(on)))
+        else:
+            # TODO: need special handling for multi-index.
+            if left_index:
+                left_key_names = self._internal.index_spark_column_names
+            else:
+                left_key_names = list(map(self._internal.spark_column_name_for, _to_list(left_on)))
+            if right_index:
+                right_key_names = right._internal.index_spark_column_names
+            else:
+                right_key_names = list(
+                    map(right._internal.spark_column_name_for, _to_list(right_on))
+                )
+
+            if left_key_names and not right_key_names:
+                raise ValueError("Must pass right_on or right_index=True")
+            if right_key_names and not left_key_names:
+                raise ValueError("Must pass left_on or left_index=True")
+            if not left_key_names and not right_key_names:
+                common = list(self.columns.intersection(right.columns))
+                if len(common) == 0:
+                    raise ValueError(
+                        "No common columns to perform merge on. Merge options: "
+                        "left_on=None, right_on=None, left_index=False, right_index=False"
+                    )
+                left_key_names = list(map(self._internal.spark_column_name_for, _to_list(common)))
+                right_key_names = list(map(right._internal.spark_column_name_for, _to_list(common)))
+            if len(left_key_names) != len(right_key_names):
+                raise ValueError("len(left_keys) must equal len(right_keys)")
+
+        # We should distinguish the name to avoid ambiguous column name after merging.
+        right_key_names = [
+            RIGHT_MERGE_PREFIX + right_key_name for right_key_name in right_key_names
+        ]
+
+        return left_key_names, right_key_names
 
     def join(
         self,
