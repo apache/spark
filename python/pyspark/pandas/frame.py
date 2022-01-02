@@ -407,6 +407,16 @@ def _resolve_merge_join_condition_from_key_names(
     return join_condition
 
 
+class _RightMergeProxy:
+    def __init__(self, right_df):
+        self._right_df = right_df
+
+    def __getitem__(self, item):
+        return getattr(self._right_df, f"{RIGHT_MERGE_PREFIX}{item}")
+
+    __getattr__ = __getitem__
+
+
 class DataFrame(Frame, Generic[T]):
     """
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
@@ -7726,7 +7736,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             how = "inner"
         else:
             if callable(on):
-                join_condition = on(left_table, right_table)
+                join_condition = on(left_table, _RightMergeProxy(right_table))
             else:
                 # join condition based on column names
                 left_key_names, right_key_names = self._resolve_merge_key_names(
