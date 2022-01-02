@@ -21,7 +21,7 @@ FWDIR="$( cd "$DIR"/.. && pwd )"
 cd "$FWDIR"
 
 BLACK_BUILD="python -m black"
-BLACK_VERSION="21.5b2"
+BLACK_VERSION="21.12b0"
 $BLACK_BUILD 2> /dev/null
 if [ $? -ne 0 ]; then
     echo "The '$BLACK_BUILD' command was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."

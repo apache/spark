@@ -70,23 +70,21 @@ SELECT abs(-2147483648);
 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 
-The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
- straightforward type conversions which are disallowed as per the ANSI standard:
-* NumericType <=> BooleanType
-* StringType <=> BinaryType
-* ArrayType => String
-* MapType => String
-* StructType => String
+Besides, the ANSI SQL mode disallows the following type conversions which are allowed when ANSI mode is off:
+* Numeric <=> Binary
+* Date <=> Boolean
+* Timestamp <=> Boolean
+* Date => Numeric
 
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | <span style="color:red">**Y**</span> | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
 | Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
 | Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
 | Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
@@ -97,6 +95,8 @@ The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "c
 In the table above, all the `CAST`s that can cause runtime exceptions are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
+* CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
@@ -309,20 +309,19 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
 
-### SQL Keywords
+### SQL Keywords (optional, disabled by default)
 
-When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
-In this mode, Spark SQL has two kinds of keywords:
-* Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
+When both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are true, Spark SQL will use the ANSI mode parser.
+
+With the ANSI mode parser, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Keywords that have a special meaning only in particular contexts and can be used as identifiers in other contexts. For example, `EXPLAIN SELECT ...` is a command, but EXPLAIN can be used as identifiers in other places.
+* Reserved keywords: Keywords that are reserved and can't be used as identifiers for table, view, column, function, alias, etc.
 
-When the ANSI mode is disabled, Spark SQL has two kinds of keywords:
+With the default parser, Spark SQL has two kinds of keywords:
 * Non-reserved keywords: Same definition as the one when the ANSI mode enabled.
 * Strict-non-reserved keywords: A strict version of non-reserved keywords, which can not be used as table alias.
 
-If you want to still use reserved keywords as identifiers with ANSI mode, you can set `spark.sql.ansi.enforceReservedKeywords` to false.
-
-By default `spark.sql.ansi.enabled` is false and `spark.sql.ansi.enforceReservedKeywords` is true.
+By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are false.
 
 Below is a list of all the keywords in Spark SQL.
 
@@ -495,6 +494,7 @@ Below is a list of all the keywords in Spark SQL.
 |PARTITIONED|non-reserved|non-reserved|non-reserved|
 |PARTITIONS|non-reserved|non-reserved|non-reserved|
 |PERCENT|non-reserved|non-reserved|non-reserved|
+|PERCENTILE_CONT|reserved|non-reserved|non-reserved|
 |PIVOT|non-reserved|non-reserved|non-reserved|
 |PLACING|non-reserved|non-reserved|non-reserved|
 |POSITION|non-reserved|non-reserved|reserved|
@@ -595,5 +595,6 @@ Below is a list of all the keywords in Spark SQL.
 |WHERE|reserved|non-reserved|reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
+|WITHIN|reserved|non-reserved|reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
 |ZONE|non-reserved|non-reserved|non-reserved|

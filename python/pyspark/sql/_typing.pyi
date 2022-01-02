@@ -35,6 +35,7 @@ import pyspark.sql.types
 from pyspark.sql.column import Column
 
 ColumnOrName = Union[Column, str]
+ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
 LiteralType = PrimitiveType

@@ -3058,7 +3058,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
-    def transform(self, func: Callable[["DataFrame"], "DataFrame"]) -> "DataFrame":
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
@@ -3067,6 +3067,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         func : function
             a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+            .. versionadded:: 3.3.0
+        **kwargs
+            Keyword arguments to pass to func.
+
+            .. versionadded:: 3.3.0
 
         Examples
         --------
@@ -3083,8 +3091,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    1|  1|
         |    2|  2|
         +-----+---+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
         """
-        result = func(self)
+        result = func(self, *args, **kwargs)
         assert isinstance(
             result, DataFrame
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)

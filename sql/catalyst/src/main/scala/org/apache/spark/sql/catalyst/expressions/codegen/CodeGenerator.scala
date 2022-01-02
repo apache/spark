@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.io.ByteArrayInputStream
 import java.util.{Map => JavaMap}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -1622,6 +1623,7 @@ object CodeGenerator extends Logging {
   /**
    * Returns the specialized code to access a value from `inputRow` at `ordinal`.
    */
+  @tailrec
   def getValue(input: String, dataType: DataType, ordinal: String): String = {
     val jt = javaType(dataType)
     dataType match {
@@ -1695,6 +1697,7 @@ object CodeGenerator extends Logging {
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
+  @tailrec
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
@@ -1918,6 +1921,7 @@ object CodeGenerator extends Logging {
     case _ => "Object"
   }
 
+  @tailrec
   def javaClass(dt: DataType): Class[_] = dt match {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE

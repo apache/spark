@@ -19,7 +19,7 @@ from functools import partial
 from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 

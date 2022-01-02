@@ -198,8 +198,7 @@ object Cast {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
-    case (DateType, TimestampType) => true
-    case (TimestampType, DateType) => true
+    case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
@@ -1192,6 +1191,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
      """.stripMargin
   }
 
+  @scala.annotation.tailrec
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
@@ -2203,7 +2203,7 @@ object AnsiCast {
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
-    case (_: NumericType, TimestampType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
+    case (_: NumericType, TimestampType) => true
 
     case (StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
@@ -2223,8 +2223,7 @@ object AnsiCast {
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
-    case (TimestampType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
-    case (DateType, _: NumericType) => SQLConf.get.allowCastBetweenDatetimeAndNumericInAnsi
+    case (TimestampType, _: NumericType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&

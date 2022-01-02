@@ -65,6 +65,7 @@ object SelectedField {
   /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
+  @scala.annotation.tailrec
   private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
     expr match {
       case a: Attribute =>

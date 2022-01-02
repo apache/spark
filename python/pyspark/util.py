@@ -320,7 +320,7 @@ def inheritable_thread_target(f: Callable) -> Callable:
     """
     from pyspark import SparkContext
 
-    if isinstance(SparkContext._gateway, ClientServer):  # type: ignore[attr-defined]
+    if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
@@ -334,9 +334,7 @@ def inheritable_thread_target(f: Callable) -> Callable:
             try:
                 # Set local properties in child thread.
                 assert SparkContext._active_spark_context is not None
-                SparkContext._active_spark_context._jsc.sc().setLocalProperties(  # type: ignore[attr-defined]
-                    properties
-                )
+                SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
                 return f(*args, **kwargs)
             finally:
                 InheritableThread._clean_py4j_conn_for_current_thread()
@@ -372,15 +370,13 @@ class InheritableThread(threading.Thread):
     def __init__(self, target: Callable, *args: Any, **kwargs: Any):
         from pyspark import SparkContext
 
-        if isinstance(SparkContext._gateway, ClientServer):  # type: ignore[attr-defined]
+        if isinstance(SparkContext._gateway, ClientServer):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # self._props is set before starting the thread to match the behavior with JVM.
                 assert hasattr(self, "_props")
                 assert SparkContext._active_spark_context is not None
-                SparkContext._active_spark_context._jsc.sc().setLocalProperties(  # type: ignore[attr-defined]
-                    self._props
-                )
+                SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                 try:
                     return target(*a, **k)
                 finally:
@@ -397,7 +393,7 @@ class InheritableThread(threading.Thread):
     def start(self) -> None:
         from pyspark import SparkContext
 
-        if isinstance(SparkContext._gateway, ClientServer):  # type: ignore[attr-defined]
+        if isinstance(SparkContext._gateway, ClientServer):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
