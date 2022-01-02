@@ -3764,11 +3764,15 @@ def slice(
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    start = lit(start) if isinstance(start, int) else start
+    length = lit(length) if isinstance(length, int) else length
+
     return Column(
         sc._jvm.functions.slice(
             _to_java_column(x),
-            start if isinstance(start, int) else _to_java_column(start),
-            length if isinstance(length, int) else _to_java_column(length),
+            _to_java_column(start),
+            _to_java_column(length),
         )
     )
 
@@ -4739,12 +4743,10 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(
-        sc._jvm.functions.array_repeat(
-            _to_java_column(col),
-            count if isinstance(count, int) else _to_java_column(count),
-        )
-    )
+
+    count = lit(count) if isinstance(count, int) else count
+
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), _to_java_column(count)))
 
 
 def arrays_zip(*cols: "ColumnOrName") -> Column:
