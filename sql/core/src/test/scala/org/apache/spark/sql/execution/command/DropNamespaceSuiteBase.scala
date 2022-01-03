@@ -36,7 +36,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
   protected def isCasePreserving: Boolean = true
-  protected def assertDropFails(): Unit
+  protected def namespaceAlias: String = "namespace"
 
   protected def checkNamespace(expected: Seq[String]) = {
     val df = spark.sql(s"SHOW NAMESPACES IN $catalog")
@@ -72,7 +72,10 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkNamespace(Seq("ns") ++ builtinTopNamespaces)
 
     // $catalog.ns.table is present, thus $catalog.ns cannot be dropped.
-    assertDropFails()
+    val e = intercept[AnalysisException] {
+      sql(s"DROP NAMESPACE $catalog.ns")
+    }
+    assert(e.getMessage.contains(s"Cannot drop a non-empty $namespaceAlias: ns"))
     sql(s"DROP TABLE $catalog.ns.table")
 
     // Now that $catalog.ns is empty, it can be dropped.

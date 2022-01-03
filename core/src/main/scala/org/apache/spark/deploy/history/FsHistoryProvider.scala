@@ -754,6 +754,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       reader: EventLogFileReader,
       scanTime: Long,
       enableOptimizations: Boolean,
+      lastEvaluatedForCompaction: Option[Long]): Unit = doMergeApplicationListingInternal(
+    reader, scanTime, enableOptimizations, lastEvaluatedForCompaction)
+
+  @scala.annotation.tailrec
+  private def doMergeApplicationListingInternal(
+      reader: EventLogFileReader,
+      scanTime: Long,
+      enableOptimizations: Boolean,
       lastEvaluatedForCompaction: Option[Long]): Unit = {
     val eventsFilter: ReplayEventsFilter = { eventString =>
       eventString.startsWith(APPL_START_EVENT_PREFIX) ||
@@ -859,7 +867,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // mean the end event is before the configured threshold, so call the method again to
         // re-parse the whole log.
         logInfo(s"Reparsing $logPath since end event was not found.")
-        doMergeApplicationListing(reader, scanTime, enableOptimizations = false,
+        doMergeApplicationListingInternal(reader, scanTime, enableOptimizations = false,
           lastEvaluatedForCompaction)
 
       case _ =>

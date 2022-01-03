@@ -1043,6 +1043,7 @@ private[spark] object Executor {
    *                     checking only the exception but not the cause, and so on. This is to avoid
    *                     `StackOverflowError` when hitting a cycle in the exception chain.
    */
+  @scala.annotation.tailrec
   def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
     if (depthToCheck <= 0) {
       false
