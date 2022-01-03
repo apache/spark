@@ -322,6 +322,7 @@ case class RoundCeil(child: Expression, scale: Expression)
   def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundCeil = copy(child = newLeft, scale = newRight)
+  override def nodeName: String = "ceil"
 }
 
 @ExpressionDescription(
@@ -576,6 +577,7 @@ case class RoundFloor(child: Expression, scale: Expression)
   def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundFloor = copy(child = newLeft, scale = newRight)
+  override def nodeName: String = "floor"
 }
 
 object Factorial {

@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
+
 import com.google.common.math.LongMath
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
