@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import java.net.URI
+
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogUtils}
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command
 
 /**
@@ -31,6 +37,29 @@ import org.apache.spark.sql.execution.command
 trait CreateNamespaceSuiteBase extends command.CreateNamespaceSuiteBase
     with command.TestsV1AndV2Commands {
   override def notFoundMsgPrefix: String = "Database"
+
+  test("Create namespace using default warehouse path") {
+    val catalog = spark.sessionState.catalog
+    val dbName = "db1"
+    try {
+      sql(s"CREATE DATABASE $dbName")
+      val db1 = catalog.getDatabaseMetadata(dbName)
+      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) == CatalogDatabase(
+        dbName,
+        "",
+        getDBPath(dbName),
+        Map.empty))
+      sql(s"DROP DATABASE $dbName CASCADE")
+      assert(!catalog.databaseExists(dbName))
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  private def getDBPath(dbName: String): URI = {
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
+    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
+  }
 }
 
 /**

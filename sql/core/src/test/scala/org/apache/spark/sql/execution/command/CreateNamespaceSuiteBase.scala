@@ -35,4 +35,31 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "Create NAMESPACE"
 
   protected def notFoundMsgPrefix: String
+
+  test("Create namespace with location") {
+    val catalog = spark.sessionState.catalog
+    val dbName = "db1"
+    withTempDir { tmpDir =>
+      val path = new Path(tmpDir.getCanonicalPath).toUri
+      try {
+        val e = intercept[IllegalArgumentException] {
+          sql(s"CREATE DATABASE $dbName Location ''")
+        }
+        assert(e.getMessage.contains("Can not create a Path from an empty string"))
+
+        sql(s"CREATE DATABASE $dbName Location '$path'")
+        val db1 = catalog.getDatabaseMetadata(dbName)
+        val expPath = makeQualifiedPath(tmpDir.toString)
+        assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) == CatalogDatabase(
+          dbName,
+          "",
+          expPath,
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbName))
+      } finally {
+        catalog.reset()
+      }
+    }
+  }
 }
