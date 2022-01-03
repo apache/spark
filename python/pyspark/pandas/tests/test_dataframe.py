@@ -2236,7 +2236,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             ['Ted', 36, 'Senator', 30]
         ], columns=['name', 'age', 'job', 'min_age']))
 
-        result_psdf = left_psdf.merge(right_psdf, how="cross")
+        result_psdf = (
+            left_psdf.merge(right_psdf, how="cross")
+            .sort_values(['name', 'job'])
+            .reset_index(drop=True)
+        )
         self.assert_eq(result_psdf, expected_psdf)
 
         with self.assertRaisesRegex(

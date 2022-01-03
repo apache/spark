@@ -7620,8 +7620,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 lexicographically.
             inner: use intersection of keys from both frames, similar to a SQL inner join;
                 not preserve the order of the left keys unlike pandas.
-            cross: creates the cartesian product from both frames, preserves the order
-                of the left keys.
+            cross: creates the cartesian product from both frames; not preserve the order
+                of the left keys unlike pandas.
         on: Column or index level names to join on, or Callable. These must be found in both
             DataFrames. If on is None and not merging on indexes then this defaults to the
             intersection of the columns in both DataFrames.
