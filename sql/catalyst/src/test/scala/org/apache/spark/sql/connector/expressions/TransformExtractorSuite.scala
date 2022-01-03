@@ -40,6 +40,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     override def toString: String = names.mkString(".")
   }
 
+
   /**
    * Creates a Transform using an anonymous class.
    */
@@ -132,22 +133,14 @@ class TransformExtractorSuite extends SparkFunSuite {
 
   test("Bucket extractor") {
     val col = ref("a", "b")
-    val sortedCol = ref("c", "d")
-    val bucketTransform1 = new Transform {
+    val bucketTransform = new Transform {
       override def name: String = "bucket"
       override def references: Array[NamedReference] = Array(col)
       override def arguments: Array[Expression] = Array(lit(16), col)
       override def toString: String = s"bucket(16, ${col.describe})"
     }
 
-    val sortedBucketTransform1 = new Transform {
-      override def name: String = "bucket"
-      override def references: Array[NamedReference] = Array(col) ++ Array(sortedCol)
-      override def arguments: Array[Expression] = Array(lit(16), col, sortedCol)
-      override def describe: String = s"bucket(16, ${col.describe} ${sortedCol.describe})"
-    }
-
-    bucketTransform1 match {
+    bucketTransform match {
       case BucketTransform(numBuckets, FieldReference(seq), _) =>
         assert(numBuckets === 16)
         assert(seq === Seq("a", "b"))
@@ -161,8 +154,21 @@ class TransformExtractorSuite extends SparkFunSuite {
       case _ =>
       // expected
     }
+  }
 
-    sortedBucketTransform1 match {
+  test("Sorted Bucket extractor") {
+    val col = Array(ref("a"), ref("b"))
+    val sortedCol = Array(ref("c"), ref("d"))
+
+    val sortedBucketTransform = new Transform {
+      override def name: String = "sortedBucket"
+      override def references: Array[NamedReference] = col ++ sortedCol
+      override def arguments: Array[Expression] = (col :+ lit(16)) ++ sortedCol
+      override def describe: String = s"bucket(16, ${col(0).describe}, ${col(1).describe} " +
+        s"${sortedCol(0).describe} ${sortedCol(1).describe})"
+    }
+
+    sortedBucketTransform match {
       case BucketTransform(numBuckets, FieldReference(seq), FieldReference(sorted)) =>
         assert(numBuckets === 16)
         assert(seq === Seq("a", "b"))
@@ -170,24 +176,40 @@ class TransformExtractorSuite extends SparkFunSuite {
       case _ =>
         fail("Did not match BucketTransform extractor")
     }
+  }
 
-    val bucketTransform2 = bucket(16, Array(col))
-    val reference1 = bucketTransform2.references
-    assert(reference1.length == 1 && reference1(0).fieldNames() === Seq("a", "b"))
-    val arguments1 = bucketTransform2.arguments
-    assert(arguments1.length == 2)
+  test("test bucket") {
+    val col = Array(ref("a"), ref("b"))
+    val sortedCol = Array(ref("c"), ref("d"))
+
+    val bucketTransform = bucket(16, col)
+    val reference1 = bucketTransform.references
+    assert(reference1.length == 2)
+    assert(reference1(0).fieldNames() === Seq("a"))
+    assert(reference1(1).fieldNames() === Seq("b"))
+    val arguments1 = bucketTransform.arguments
+    assert(arguments1.length == 3)
     assert(arguments1(0).asInstanceOf[LiteralValue[Integer]].value === 16)
-    assert(arguments1(1).asInstanceOf[NamedReference].fieldNames() === Seq("a", "b"))
+    assert(arguments1(1).asInstanceOf[NamedReference].fieldNames() === Seq("a"))
+    assert(arguments1(2).asInstanceOf[NamedReference].fieldNames() === Seq("b"))
+    val copied1 = bucketTransform.withReferences(reference1)
+    assert(copied1.equals(bucketTransform))
 
-    val sortedBucketTransform2 = bucket(16, Array(col), Array(sortedCol))
-    val reference2 = sortedBucketTransform2.references
-    assert(reference2.length == 2)
-    assert(reference2(0).fieldNames() === Seq("a", "b"))
-    assert(reference2(1).fieldNames() === Seq("c", "d"))
-    val arguments2 = sortedBucketTransform2.arguments
-    assert(arguments2.length == 3)
-    assert(arguments2(0).asInstanceOf[LiteralValue[Integer]].value === 16)
-    assert(arguments2(1).asInstanceOf[NamedReference].fieldNames() === Seq("a", "b"))
-    assert(arguments2(2).asInstanceOf[NamedReference].fieldNames() === Seq("c", "d"))
+    val sortedBucketTransform = bucket(16, col, sortedCol)
+    val reference2 = sortedBucketTransform.references
+    assert(reference2.length == 4)
+    assert(reference2(0).fieldNames() === Seq("a"))
+    assert(reference2(1).fieldNames() === Seq("b"))
+    assert(reference2(2).fieldNames() === Seq("c"))
+    assert(reference2(3).fieldNames() === Seq("d"))
+    val arguments2 = sortedBucketTransform.arguments
+    assert(arguments2.length == 5)
+    assert(arguments2(0).asInstanceOf[NamedReference].fieldNames() === Seq("a"))
+    assert(arguments2(1).asInstanceOf[NamedReference].fieldNames() === Seq("b"))
+    assert(arguments2(2).asInstanceOf[LiteralValue[Integer]].value === 16)
+    assert(arguments2(3).asInstanceOf[NamedReference].fieldNames() === Seq("c"))
+    assert(arguments2(4).asInstanceOf[NamedReference].fieldNames() === Seq("d"))
+    val copied2 = sortedBucketTransform.withReferences(reference2)
+    assert(copied2.equals(sortedBucketTransform))
   }
 }
