@@ -354,13 +354,13 @@ def _to_list(os: Optional[Union[Name, List[Name]]]) -> List[Label]:
         return [o if is_name_like_tuple(o) else (o,) for o in os]
 
 
-MERGE_PREFIX_TEMPLATE = '__{}_'
-RIGHT_MERGE_PREFIX = MERGE_PREFIX_TEMPLATE.format('right')
+MERGE_PREFIX_TEMPLATE = "__{}_"
+RIGHT_MERGE_PREFIX = MERGE_PREFIX_TEMPLATE.format("right")
 
 
 def _resolve_internal_merge_frame(
     internal: InternalFrame,
-    side: Optional[str] = None
+    side: Optional[str] = None,
 ) -> InternalFrame:
     internal = internal.resolved_copy
     if side is None:
@@ -381,12 +381,8 @@ def _resolve_internal_merge_frame(
         index_spark_columns=[
             scol_for(sdf, rename(col)) for col in internal.index_spark_column_names
         ],
-        index_fields=[
-            field.copy(name=rename(field.name)) for field in internal.index_fields
-        ],
-        data_spark_columns=[
-            scol_for(sdf, rename(col)) for col in internal.data_spark_column_names
-        ],
+        index_fields=[field.copy(name=rename(field.name)) for field in internal.index_fields],
+        data_spark_columns=[scol_for(sdf, rename(col)) for col in internal.data_spark_column_names],
         data_fields=[field.copy(name=rename(field.name)) for field in internal.data_fields],
     )
 
@@ -395,7 +391,7 @@ def _resolve_merge_join_condition_from_key_names(
     left_table: SparkDataFrame,
     right_table: SparkDataFrame,
     left_key_names: List[str],
-    right_key_names: List[str]
+    right_key_names: List[str],
 ) -> Column:
     left_key_columns = [scol_for(left_table, label) for label in left_key_names]
     right_key_columns = [scol_for(right_table, label) for label in right_key_names]
@@ -7711,7 +7707,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0     x
         2  NaN     y
 
-        >>> left_psdf.merge(right_psdf, how="cross")
+        >>> left_psdf.merge(right_psdf, how="cross").sort_values(['A', 'B']).reset_index(drop=True)
            A  B
         0  1  x
         1  1  y
@@ -7723,7 +7719,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1.merge(
         ...     df2,
         ...     on=lambda left, right: (left.lkey == right.rkey) & (left.value < right.value)
-        ... )
+        ... ).sort_values(['value_x', 'value_y']).reset_index(drop=True)
           lkey  value_x rkey  value_y
         0  foo        1  foo        5
         1  foo        1  foo        8

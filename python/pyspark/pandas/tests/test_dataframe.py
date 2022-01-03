@@ -2222,45 +2222,65 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     def test_merge_cross(self):
-        left_pdf = pd.DataFrame([['Bill', 23], ['Mary', 33], ['Ted', 36]], columns=['name', 'age'])
-        right_pdf = pd.DataFrame([['President', 35], ['Senator', 30]], columns=['job', 'min_age'])
+        left_pdf = pd.DataFrame(
+            [["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"]
+        )
+        right_pdf = pd.DataFrame(
+            [["President", 35], ["Senator", 30]], columns=["job", "min_age"]
+        )
         left_psdf = ps.from_pandas(left_pdf)
         right_psdf = ps.from_pandas(right_pdf)
 
-        expected_psdf = ps.from_pandas(pd.DataFrame([
-            ['Bill', 23, 'President', 35],
-            ['Bill', 23, 'Senator', 30],
-            ['Mary', 33, 'President', 35],
-            ['Mary', 33, 'Senator', 30],
-            ['Ted', 36, 'President', 35],
-            ['Ted', 36, 'Senator', 30]
-        ], columns=['name', 'age', 'job', 'min_age']))
+        expected_psdf = ps.from_pandas(
+            pd.DataFrame(
+                [
+                    ["Bill", 23, "President", 35],
+                    ["Bill", 23, "Senator", 30],
+                    ["Mary", 33, "President", 35],
+                    ["Mary", 33, "Senator", 30],
+                    ["Ted", 36, "President", 35],
+                    ["Ted", 36, "Senator", 30],
+                ],
+                columns=["name", "age", "job", "min_age"],
+            )
+        )
 
         result_psdf = (
             left_psdf.merge(right_psdf, how="cross")
-            .sort_values(['name', 'job'])
+            .sort_values(["name", "job"])
             .reset_index(drop=True)
         )
         self.assert_eq(result_psdf, expected_psdf)
 
         with self.assertRaisesRegex(
-                ValueError, 'Cannot provide any join conditions for `how="cross"`'
+            ValueError, 'Cannot provide any join conditions for `how="cross"`'
         ):
             left_psdf.merge(right_psdf, left_on="age", right_on="min_age", how="cross")
 
     def test_condition_merge(self):
-        left_pdf = pd.DataFrame([['Bill', 23], ['Mary', 33], ['Ted', 36]], columns=['name', 'age'])
-        right_pdf = pd.DataFrame([['President', 35], ['Senator', 30]], columns=['job', 'min_age'])
+        left_pdf = pd.DataFrame(
+            [["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"]
+        )
+        right_pdf = pd.DataFrame(
+            [["President", 35], ["Senator", 30]], columns=["job", "min_age"]
+        )
         left_psdf = ps.from_pandas(left_pdf)
         right_psdf = ps.from_pandas(right_pdf)
 
-        expected_psdf = ps.from_pandas(pd.DataFrame([
-            ['Mary', 33, 'Senator', 30],
-            ['Ted', 36, 'President', 35],
-            ['Ted', 36, 'Senator', 30]
-        ], columns=['name', 'age', 'job', 'min_age']))
+        expected_psdf = ps.from_pandas(
+            pd.DataFrame(
+                [
+                    ["Mary", 33, "Senator", 30],
+                    ["Ted", 36, "President", 35],
+                    ["Ted", 36, "Senator", 30],
+                ],
+                columns=["name", "age", "job", "min_age"],
+            )
+        )
 
-        result_psdf = left_psdf.merge(right_psdf, on=lambda left, right: left.age >= right.min_age)
+        result_psdf = left_psdf.merge(
+            right_psdf, on=lambda left, right: left.age >= right.min_age
+        )
         self.assert_eq(result_psdf, expected_psdf)
 
     def test_merge_raises(self):
