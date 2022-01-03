@@ -610,12 +610,6 @@ object QueryExecutionErrors {
         "Schema of v1 relation: " + v1Schema)
   }
 
-  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
-    new SparkException(
-      s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-        "Use CASCADE option to drop a non-empty namespace.")
-  }
-
   def noRecordsFromEmptyDataReaderError(): Throwable = {
     new IOException("No records should be returned from EmptyDataReader")
   }
@@ -1919,5 +1913,11 @@ object QueryExecutionErrors {
         s", which is more than $maxDynamicPartitions" +
         s". To solve this try to set $maxDynamicPartitionsKey" +
         s" to at least $numWrittenParts.")
+  }
+
+  def invalidNumberFormatError(format: String): Throwable = {
+    new IllegalArgumentException(
+      s"Format '$format' used for parsing string to number or " +
+        "formatting number to string is invalid")
   }
 }

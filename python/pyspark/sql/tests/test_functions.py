@@ -43,6 +43,9 @@ from pyspark.sql.functions import (
     csc,
     cot,
     make_date,
+    date_add,
+    date_sub,
+    add_months,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
@@ -285,6 +288,60 @@ class FunctionsTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([Row(date=dt)])
         row = df.select(dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
+
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_date_add_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number var in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, add=2)], "date date, add integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    date_add(df.date, df.add) == datetime.date(2021, 12, 29),
+                    date_add(df.date, "add") == datetime.date(2021, 12, 29),
+                    date_add(df.date, 3) == datetime.date(2021, 12, 30),
+                ).first()
+            )
+        )
+
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_date_sub_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number var in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, sub=2)], "date date, sub integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    date_sub(df.date, df.sub) == datetime.date(2021, 12, 25),
+                    date_sub(df.date, "sub") == datetime.date(2021, 12, 25),
+                    date_sub(df.date, 3) == datetime.date(2021, 12, 24),
+                ).first()
+            )
+        )
+
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_add_months_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, add=2)], "date date, add integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    add_months(df.date, df.add) == datetime.date(2022, 2, 27),
+                    add_months(df.date, "add") == datetime.date(2022, 2, 27),
+                    add_months(df.date, 3) == datetime.date(2022, 3, 27),
+                ).first()
+            )
+        )
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression

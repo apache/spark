@@ -225,8 +225,8 @@ statement
     | SHOW VIEWS ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showViews
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
-    | SHOW identifier? FUNCTIONS
-        (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
+    | SHOW identifier? FUNCTIONS ((FROM | IN) ns=multipartIdentifier)?
+        (LIKE? (legacy=multipartIdentifier | pattern=STRING))?         #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs

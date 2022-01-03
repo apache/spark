@@ -832,6 +832,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
   }
 
+  @scala.annotation.tailrec
   private def isCausedBy(e: Throwable, matchMassage: String): Boolean = {
     if (e.getMessage.contains(matchMassage)) {
       true
