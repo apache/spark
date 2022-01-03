@@ -147,6 +147,8 @@ class OrcDeserializer(
         val containerUpdater = updater match {
           case r: RowUpdater => r
           case _ =>
+            // If the struct is contained by an array or map, we cannot reuse the same result row.
+            // We must copy the result row before setting it into the array or map
             new CatalystDataUpdater {
               override def set(ordinal: Int, value: Any) = {
                 updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
