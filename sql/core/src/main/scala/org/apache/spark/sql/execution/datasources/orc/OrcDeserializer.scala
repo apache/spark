@@ -144,14 +144,14 @@ class OrcDeserializer(
           newWriter(dt, fieldUpdater)
         }.toArray
 
-        val containerUpdater = if (updater.isInstanceOf[RowUpdater]) {
-          updater
-        } else {
-          new CatalystDataUpdater {
-            override def set(ordinal: Int, value: Any) = {
-              updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
+        val containerUpdater = updater match {
+          case r: RowUpdater => r
+          case _ =>
+            new CatalystDataUpdater {
+              override def set(ordinal: Int, value: Any) = {
+                updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
+              }
             }
-          }
         }
 
         (ordinal, value) =>

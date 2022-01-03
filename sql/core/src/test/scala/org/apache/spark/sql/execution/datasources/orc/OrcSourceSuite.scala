@@ -845,7 +845,70 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
-  test("struct in struct in array") {
+  // Test the various cases during deserialization where we may or may not copy
+  // a struct writer's result row
+  test("struct in an array") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  array(
+          |    named_struct(
+          |      'a1', 1,
+          |      'a2', 2),
+          |    named_struct(
+          |      'a1', 3,
+          |      'a2', 4)
+          |  ) as col1
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("struct in a map #1") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  map(
+          |    'ns1',
+          |    named_struct(
+          |      'a1', 1,
+          |      'a2', 2),
+          |    'ns2',
+          |    named_struct(
+          |      'a1', 3,
+          |      'a2', 4)
+          |  ) as col1
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("struct in a map #2") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  map(
+          |    named_struct(
+          |      'a1', 1,
+          |      'a2', 2),
+          |    1,
+          |    named_struct(
+          |      'a1', 3,
+          |      'a2', 4),
+          |    2
+          |  ) as col1
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("struct in a struct in an array") {
     withTempPath { file =>
       val df = sql(
         """SELECT
@@ -867,7 +930,68 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
           |        'b2', 8)
           |    )
           |  ) as col1
-          |
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("struct in a struct in a map #1") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  map(
+          |    'ns1',
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 1,
+          |        'a2', 2),
+          |      'b', named_struct(
+          |        'b1', 3,
+          |        'b2', 4)
+          |    ),
+          |    'ns2',
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 5,
+          |        'a2', 6),
+          |      'b', named_struct(
+          |        'b1', 7,
+          |        'b2', 8)
+          |    )
+          |  ) as col1
+          |""".stripMargin)
+      df.write.orc(file.getCanonicalPath)
+      val df2 = spark.read.orc(file.getCanonicalPath)
+      checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("struct in a struct in a map #2") {
+    withTempPath { file =>
+      val df = sql(
+        """SELECT
+          |  map(
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 1,
+          |        'a2', 2),
+          |      'b', named_struct(
+          |        'b1', 3,
+          |        'b2', 4)
+          |    ),
+          |    1,
+          |    named_struct(
+          |      'a', named_struct(
+          |        'a1', 5,
+          |        'a2', 6),
+          |      'b', named_struct(
+          |        'b1', 7,
+          |        'b2', 8)
+          |    ),
+          |    2
+          |  ) as col1
           |""".stripMargin)
       df.write.orc(file.getCanonicalPath)
       val df2 = spark.read.orc(file.getCanonicalPath)
