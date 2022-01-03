@@ -7711,6 +7711,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0     x
         2  NaN     y
 
+        >>> left_psdf.merge(right_psdf, how="cross")
+           A  B
+        0  1  x
+        1  1  y
+        2  2  x
+        3  2  y
+
+        Provide a custom match condition with a callable `on` parameter.
+
+        >>> df1.merge(
+        ...     df2,
+        ...     on=lambda left, right: (left.lkey == right.rkey) & (left.value < right.value)
+        ... )
+          lkey  value_x rkey  value_y
+        0  foo        1  foo        5
+        1  foo        1  foo        8
+        2  bar        2  bar        6
+        3  baz        3  baz        7
+        4  foo        5  foo        8
+
         Notes
         -----
         As described in #263, joining string columns currently returns None for missing values
