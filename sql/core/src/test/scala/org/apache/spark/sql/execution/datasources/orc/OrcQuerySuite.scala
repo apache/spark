@@ -34,7 +34,9 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -710,6 +712,27 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
         }
         assert(fileFormat == Some(classOf[OrcFileFormat]))
+      }
+    }
+  }
+
+  test("SPARK-37728: Reading nested columns with ORC vectorized reader should not " +
+    "cause ArrayIndexOutOfBoundsException") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(100).map { _ =>
+        val arrayColumn = (0 until 50).map(_ => (0 until 1000).map(k => k.toString))
+        arrayColumn
+      }.toDF("record").repartition(1)
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }.isDefined
+        checkAnswer(readDf, df)
       }
     }
   }
