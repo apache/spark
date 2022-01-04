@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.apache.logging.log4j.{Level, LogManager}
 import org.json4s.{DefaultFormats, Extraction}
 import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
@@ -612,15 +613,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("log level case-insensitive and reset log level") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    val originalLevel = LogManager.getRootLogger().getLevel
     try {
       sc.setLogLevel("debug")
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.DEBUG)
+      assert(LogManager.getRootLogger().getLevel === Level.DEBUG)
       sc.setLogLevel("INfo")
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.INFO)
+      assert(LogManager.getRootLogger().getLevel === Level.INFO)
     } finally {
       sc.setLogLevel(originalLevel.toString)
-      assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+      assert(LogManager.getRootLogger().getLevel === originalLevel)
       sc.stop()
     }
   }
@@ -1072,20 +1073,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
 
-      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "Added dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "Added dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      }
 
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
-      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
-      val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI " +
-          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
-        .head.getRenderedMessage
-      dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+          "The dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        val existMsg = logAppender.loggingEvents.filter(_.getMessage.getFormattedMessage.contains(
+          "The dependency jars of Ivy URI " +
+            "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+          .head.getMessage.getFormattedMessage
+        dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+      }
     }
   }
 
@@ -1130,9 +1135,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-      assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
-          "`invalidParam1=foo&invalidParam2=boo`.")))
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
+            "`invalidParam1=foo&invalidParam2=boo`.")))
+      }
     }
   }
 

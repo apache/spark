@@ -26,7 +26,7 @@ from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
 
 
-class PandasUDFType(object):
+class PandasUDFType:
     """Pandas UDF Types. See :meth:`pyspark.sql.functions.pandas_udf`."""
 
     SCALAR = PythonEvalType.SQL_SCALAR_PANDAS_UDF

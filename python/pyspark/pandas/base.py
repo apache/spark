@@ -25,7 +25,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype
+from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType
 

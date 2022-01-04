@@ -65,66 +65,102 @@ case class EnsureRequirements(
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
-    // Get the indexes of children which have specified distribution requirements and need to have
-    // same number of partitions.
+    // Get the indexes of children which have specified distribution requirements and need to be
+    // co-partitioned.
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
-      case (UnspecifiedDistribution, _) => false
-      case (_: BroadcastDistribution, _) => false
-      case _ => true
+      case (_: ClusteredDistribution, _) => true
+      case _ => false
     }.map(_._2)
 
-    val childrenNumPartitions =
-      childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
+    // If there are more than one children, we'll need to check partitioning & distribution of them
+    // and see if extra shuffles are necessary.
+    if (childrenIndexes.length > 1) {
+      val specs = childrenIndexes.map(i => {
+        val requiredDist = requiredChildDistributions(i)
+        assert(requiredDist.isInstanceOf[ClusteredDistribution],
+          s"Expected ClusteredDistribution but found ${requiredDist.getClass.getSimpleName}")
+        i -> children(i).outputPartitioning.createShuffleSpec(
+          requiredDist.asInstanceOf[ClusteredDistribution])
+      }).toMap
 
-    if (childrenNumPartitions.size > 1) {
-      // Get the number of partitions which is explicitly required by the distributions.
-      val requiredNumPartitions = {
-        val numPartitionsSet = childrenIndexes.flatMap {
-          index => requiredChildDistributions(index).requiredNumPartitions
-        }.toSet
-        assert(numPartitionsSet.size <= 1,
-          s"$requiredChildDistributions have incompatible requirements of the number of partitions")
-        numPartitionsSet.headOption
-      }
+      // Find out the shuffle spec that gives better parallelism. Currently this is done by
+      // picking the spec with the largest number of partitions.
+      //
+      // NOTE: this is not optimal for the case when there are more than 2 children. Consider:
+      //   (10, 10, 11)
+      // where the number represent the number of partitions for each child, it's better to pick 10
+      // here since we only need to shuffle one side - we'd need to shuffle two sides if we pick 11.
+      //
+      // However this should be sufficient for now since in Spark nodes with multiple children
+      // always have exactly 2 children.
 
-      // If there are non-shuffle children that satisfy the required distribution, we have
-      // some tradeoffs when picking the expected number of shuffle partitions:
-      // 1. We should avoid shuffling these children.
-      // 2. We should have a reasonable parallelism.
-      val nonShuffleChildrenNumPartitions =
-        childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
-          .map(_.outputPartitioning.numPartitions)
-      val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
-          // Here we pick the max number of partitions among these non-shuffle children.
-          nonShuffleChildrenNumPartitions.max
-        } else {
-          // Here we pick the max number of partitions among these non-shuffle children as the
-          // expected number of shuffle partitions. However, if it's smaller than
-          // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
-          // expected number of shuffle partitions.
-          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
-        }
+      // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
+      // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
+      // consider the minimum parallelism iff ALL children need to be re-shuffled.
+      //
+      // A child needs to be re-shuffled iff either one of below is true:
+      //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false
+      //      (as for the case of `RangePartitioning`), therefore it needs to be re-shuffled
+      //      according to other shuffle spec.
+      //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
+      //      introducing extra shuffle.
+      //
+      // On the other hand, in scenarios such as:
+      //   HashPartitioning(5) <-> HashPartitioning(6)
+      // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
+      // HashPartitioning(6).
+      val shouldConsiderMinParallelism = specs.forall(p =>
+        !p._2.canCreatePartitioning || children(p._1).isInstanceOf[ShuffleExchangeLike]
+      )
+      // Choose all the specs that can be used to shuffle other children
+      val candidateSpecs = specs
+          .filter(_._2.canCreatePartitioning)
+          .filter(p => !shouldConsiderMinParallelism ||
+              children(p._1).outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions)
+      val bestSpecOpt = if (candidateSpecs.isEmpty) {
+        None
       } else {
-        childrenNumPartitions.max
+        // When choosing specs, we should consider those children with no `ShuffleExchangeLike` node
+        // first. For instance, if we have:
+        //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
+        // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
+        // new shuffle for A.
+        val candidateSpecsWithoutShuffle = candidateSpecs.filter { case (k, _) =>
+          !children(k).isInstanceOf[ShuffleExchangeLike]
+        }
+        val finalCandidateSpecs = if (candidateSpecsWithoutShuffle.nonEmpty) {
+          candidateSpecsWithoutShuffle
+        } else {
+          candidateSpecs
+        }
+        // Pick the spec with the best parallelism
+        Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
-
-      val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, distribution), index) if childrenIndexes.contains(index) =>
-          if (child.outputPartitioning.numPartitions == targetNumPartitions) {
+        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+          child
+        case ((child, dist), idx) =>
+          if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             child
           } else {
-            val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
+            val newPartitioning = bestSpecOpt.map { bestSpec =>
+              // Use the best spec to create a new partitioning to re-shuffle this child
+              val clustering = dist.asInstanceOf[ClusteredDistribution].clustering
+              bestSpec.createPartitioning(clustering)
+            }.getOrElse {
+              // No best spec available, so we create default partitioning from the required
+              // distribution
+              val numPartitions = dist.requiredNumPartitions
+                  .getOrElse(conf.numShufflePartitions)
+              dist.createPartitioning(numPartitions)
+            }
+
             child match {
-              // If child is an exchange, we replace it with a new one having defaultPartitioning.
-              case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
-              case _ => ShuffleExchangeExec(defaultPartitioning, child)
+              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
+              case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
-
-        case ((child, _), _) => child
       }
     }
 

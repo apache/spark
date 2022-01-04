@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelper {
@@ -202,8 +203,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap casts should skip if downcast failed") {
-    val decimalValue = decimal2(123456.1234)
-    assertEquivalent(castDecimal2(f3) === decimalValue, castDecimal2(f3) === decimalValue)
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val decimalValue = decimal2(123456.1234)
+        assertEquivalent(castDecimal2(f3) === decimalValue, castDecimal2(f3) === decimalValue)
+      }
+    }
   }
 
   test("unwrap cast should skip if cannot coerce type") {

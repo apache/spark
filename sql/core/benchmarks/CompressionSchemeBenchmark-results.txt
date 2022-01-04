@@ -2,136 +2,136 @@
 Compression Scheme Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 BOOLEAN Encode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                    4              4           0      16463.0           0.1       1.0X
-RunLengthEncoding(2.493)                            732            733           0         91.6          10.9       0.0X
-BooleanBitSet(0.125)                                484            484           0        138.7           7.2       0.0X
+PassThrough(1.000)                                    4              4           0      17933.5           0.1       1.0X
+RunLengthEncoding(2.482)                            652            666          12        102.9           9.7       0.0X
+BooleanBitSet(0.125)                                475            479           4        141.2           7.1       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 BOOLEAN Decode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                         135            135           0        497.4           2.0       1.0X
-RunLengthEncoding                                   812            812           0         82.7          12.1       0.2X
-BooleanBitSet                                      1398           1398           0         48.0          20.8       0.1X
+PassThrough                                         146            154           8        460.2           2.2       1.0X
+RunLengthEncoding                                   780            787          10         86.1          11.6       0.2X
+BooleanBitSet                                      1443           1450          11         46.5          21.5       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SHORT Encode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   10             10           0       6540.8           0.2       1.0X
-RunLengthEncoding(1.501)                           1497           1497           0         44.8          22.3       0.0X
+PassThrough(1.000)                                    9             10           1       7807.4           0.1       1.0X
+RunLengthEncoding(1.507)                           1614           1622          12         41.6          24.0       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SHORT Decode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                        1225           1227           3         54.8          18.3       1.0X
-RunLengthEncoding                                  1516           1517           0         44.3          22.6       0.8X
+PassThrough                                        1040           1050          15         64.6          15.5       1.0X
+RunLengthEncoding                                  1583           1599          23         42.4          23.6       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SHORT Encode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                    8              8           0       8250.5           0.1       1.0X
-RunLengthEncoding(2.000)                           1568           1568           0         42.8          23.4       0.0X
+PassThrough(1.000)                                    9             10           0       7422.8           0.1       1.0X
+RunLengthEncoding(2.012)                           1654           1667          19         40.6          24.6       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 SHORT Decode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                        1226           1227           1         54.7          18.3       1.0X
-RunLengthEncoding                                  1505           1505           0         44.6          22.4       0.8X
+PassThrough                                        1044           1046           3         64.3          15.6       1.0X
+RunLengthEncoding                                  1643           1644           1         40.8          24.5       0.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 INT Encode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   16             16           0       4116.8           0.2       1.0X
-RunLengthEncoding(1.003)                           1375           1375           0         48.8          20.5       0.0X
-DictionaryEncoding(0.500)                          1221           1222           2         55.0          18.2       0.0X
-IntDelta(0.250)                                     337            337           0        199.0           5.0       0.0X
+PassThrough(1.000)                                   24             26           1       2807.5           0.4       1.0X
+RunLengthEncoding(0.999)                           1434           1439           8         46.8          21.4       0.0X
+DictionaryEncoding(0.500)                          1502           1507           7         44.7          22.4       0.0X
+IntDelta(0.250)                                     300            310           8        223.6           4.5       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 INT Decode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                         925            926           1         72.5          13.8       1.0X
-RunLengthEncoding                                  1575           1576           1         42.6          23.5       0.6X
-DictionaryEncoding                                  834            834           0         80.5          12.4       1.1X
-IntDelta                                            731            731           0         91.8          10.9       1.3X
+PassThrough                                         998           1016          25         67.3          14.9       1.0X
+RunLengthEncoding                                  1749           1762          19         38.4          26.1       0.6X
+DictionaryEncoding                                  896            907           9         74.9          13.4       1.1X
+IntDelta                                            774            792          24         86.7          11.5       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 INT Encode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   16             16           0       4162.0           0.2       1.0X
-RunLengthEncoding(1.340)                           1398           1399           1         48.0          20.8       0.0X
-DictionaryEncoding(0.501)                          1731           1731           0         38.8          25.8       0.0X
-IntDelta(0.250)                                     337            337           0        199.1           5.0       0.0X
+PassThrough(1.000)                                   24             26           1       2765.9           0.4       1.0X
+RunLengthEncoding(1.343)                           1505           1528          32         44.6          22.4       0.0X
+DictionaryEncoding(0.501)                          1693           1696           4         39.6          25.2       0.0X
+IntDelta(0.250)                                     311            321           6        215.9           4.6       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 INT Decode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                         978            979           0         68.6          14.6       1.0X
-RunLengthEncoding                                  1551           1551           1         43.3          23.1       0.6X
-DictionaryEncoding                                 1000           1001           1         67.1          14.9       1.0X
-IntDelta                                            794            796           2         84.5          11.8       1.2X
+PassThrough                                        1083           1093          14         62.0          16.1       1.0X
+RunLengthEncoding                                  1807           1808           1         37.1          26.9       0.6X
+DictionaryEncoding                                 1065           1086          29         63.0          15.9       1.0X
+IntDelta                                            947            952           5         70.9          14.1       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 LONG Encode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   32             32           0       2075.1           0.5       1.0X
-RunLengthEncoding(0.748)                           1477           1477           0         45.4          22.0       0.0X
-DictionaryEncoding(0.250)                          1470           1472           3         45.7          21.9       0.0X
-LongDelta(0.125)                                    496            496           0        135.2           7.4       0.1X
+PassThrough(1.000)                                   48             51           2       1400.5           0.7       1.0X
+RunLengthEncoding(0.753)                           1511           1530          28         44.4          22.5       0.0X
+DictionaryEncoding(0.250)                          1653           1668          21         40.6          24.6       0.0X
+LongDelta(0.125)                                    428            434           7        156.9           6.4       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 LONG Decode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                        1014           1015           1         66.2          15.1       1.0X
-RunLengthEncoding                                  1657           1658           1         40.5          24.7       0.6X
-DictionaryEncoding                                 1017           1020           4         66.0          15.2       1.0X
-LongDelta                                           697            697           0         96.3          10.4       1.5X
+PassThrough                                        1148           1150           3         58.4          17.1       1.0X
+RunLengthEncoding                                  1683           1694          14         39.9          25.1       0.7X
+DictionaryEncoding                                 1107           1111           6         60.6          16.5       1.0X
+LongDelta                                           764            770           5         87.8          11.4       1.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 LONG Encode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   32             32           0       2073.3           0.5       1.0X
-RunLengthEncoding(1.004)                           1559           1560           1         43.0          23.2       0.0X
-DictionaryEncoding(0.251)                          1656           1656           0         40.5          24.7       0.0X
-LongDelta(0.125)                                    496            496           0        135.3           7.4       0.1X
+PassThrough(1.000)                                   47             50           2       1433.1           0.7       1.0X
+RunLengthEncoding(1.006)                           1547           1547           1         43.4          23.0       0.0X
+DictionaryEncoding(0.251)                          1598           1601           6         42.0          23.8       0.0X
+LongDelta(0.125)                                    411            425          13        163.3           6.1       0.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 LONG Decode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                        1015           1016           1         66.1          15.1       1.0X
-RunLengthEncoding                                  1650           1653           4         40.7          24.6       0.6X
-DictionaryEncoding                                 1024           1025           1         65.5          15.3       1.0X
-LongDelta                                           832            837           5         80.7          12.4       1.2X
+PassThrough                                        1129           1138          12         59.4          16.8       1.0X
+RunLengthEncoding                                  1747           1753           8         38.4          26.0       0.6X
+DictionaryEncoding                                 1115           1123          12         60.2          16.6       1.0X
+LongDelta                                           929            967          47         72.3          13.8       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 STRING Encode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough(1.000)                                   63             63           0       1067.3           0.9       1.0X
-RunLengthEncoding(0.893)                           2337           2338           1         28.7          34.8       0.0X
-DictionaryEncoding(0.167)                          3541           3543           3         19.0          52.8       0.0X
+PassThrough(1.000)                                   72             74           2        936.5           1.1       1.0X
+RunLengthEncoding(0.894)                           2558           2620          89         26.2          38.1       0.0X
+DictionaryEncoding(0.167)                          3579           3655         107         18.7          53.3       0.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 STRING Decode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PassThrough                                        2628           2635           9         25.5          39.2       1.0X
-RunLengthEncoding                                  3126           3128           2         21.5          46.6       0.8X
-DictionaryEncoding                                 2977           2979           3         22.5          44.4       0.9X
+PassThrough                                        2906           2912           9         23.1          43.3       1.0X
+RunLengthEncoding                                  3275           3327          75         20.5          48.8       0.9X
+DictionaryEncoding                                 3313           3341          39         20.3          49.4       0.9X
 
 

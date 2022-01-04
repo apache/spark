@@ -28,7 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.spark.annotation.Private;
 
 /**
- * Serializer used to translate between app-defined types and the LevelDB store.
+ * Serializer used to translate between app-defined types and the disk-based stores.
  *
  * <p>
  * The serializer is based on Jackson, so values are written as JSON. It also allows "naked strings"

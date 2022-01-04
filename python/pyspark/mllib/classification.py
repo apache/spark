@@ -281,7 +281,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         return self._call_java("toString")
 
 
-class LogisticRegressionWithSGD(object):
+class LogisticRegressionWithSGD:
     """
     Train a classification model for Binary Logistic Regression using Stochastic Gradient Descent.
 
@@ -373,7 +373,7 @@ class LogisticRegressionWithSGD(object):
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
-class LogisticRegressionWithLBFGS(object):
+class LogisticRegressionWithLBFGS:
     """
     Train a classification model for Multinomial/Binary Logistic Regression
     using Limited-memory BFGS.
@@ -586,7 +586,7 @@ class SVMModel(LinearClassificationModel):
         return model
 
 
-class SVMWithSGD(object):
+class SVMWithSGD:
     """
     Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
 
@@ -771,7 +771,7 @@ class NaiveBayesModel(Saveable, Loader):
         return NaiveBayesModel(py_labels, py_pi, numpy.array(py_theta))
 
 
-class NaiveBayes(object):
+class NaiveBayes:
     """
     Train a Multinomial Naive Bayes model.
 

@@ -60,7 +60,7 @@ __all__ = ["SQLContext", "HiveContext"]
 
 
 # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-class SQLContext(object):
+class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
@@ -119,7 +119,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
-            sparkSession = SparkSession.builder.getOrCreate()
+            sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
@@ -169,11 +169,9 @@ class SQLContext(object):
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
+            assert sc._jvm is not None
             jsqlContext = (
-                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
-                .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
-                .getOrCreate()
-                .sqlContext()
+                sc._jvm.SparkSession.builder().sparkContext(sc._jsc.sc()).getOrCreate().sqlContext()
             )
             sparkSession = SparkSession(sc, jsqlContext.sparkSession())
             cls(sc, sparkSession, jsqlContext)
@@ -733,10 +731,9 @@ class HiveContext(SQLContext):
         you may end up launching multiple derby instances and encounter with incredibly
         confusing error messages.
         """
-        jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
-            jsc, False
-        )
+        jsc = sparkContext._jsc.sc()
+        assert sparkContext._jvm is not None
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:

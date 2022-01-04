@@ -41,7 +41,7 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class TestCasesUtils(object):
+class TestCasesUtils:
     """A utility holding common test cases for arithmetic operations of different data types."""
 
     @property

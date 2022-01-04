@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 
-class PandasConversionMixin(object):
+class PandasConversionMixin:
     """
     Min-in for the conversion from Spark to pandas. Currently, only :class:`DataFrame`
     can use this class.
@@ -361,7 +361,7 @@ class PandasConversionMixin(object):
         return [batches[i] for i in batch_order]
 
 
-class SparkConversionMixin(object):
+class SparkConversionMixin:
     """
     Min-in for the conversion from pandas to Spark. Currently, only :class:`SparkSession`
     can use this class.
@@ -561,7 +561,7 @@ class SparkConversionMixin(object):
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype  # type: ignore[attr-defined]
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types
@@ -614,12 +614,9 @@ class SparkConversionMixin(object):
             return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(  # type: ignore[attr-defined]
-            arrow_data, ser, reader_func, create_RDD_server
-        )
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(  # type: ignore[attr-defined]
-            jrdd, schema.json(), jsqlContext
-        )
+        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
+        assert self._jvm is not None
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df

@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps
 
 
-class StringMethods(object):
+class StringMethods:
     """String methods for pandas-on-Spark Series"""
 
     def __init__(self, series: "ps.Series"):

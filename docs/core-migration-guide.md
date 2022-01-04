@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 3.2 to 3.3
+
+- Since Spark 3.3, Spark migrates its log4j dependency from 1.x to 2.x because log4j 1.x has reached end of life and is no longer supported by the community. Vulnerabilities reported after August 2015 against log4j 1.x were not checked and will not be fixed. Users should rewrite original log4j properties files using log4j2 syntax (XML, JSON, YAML, or properties format). Spark rewrites the `conf/log4j.properties.template` which is included in Spark distribution, to `conf/log4j2.properties.template` with log4j2 properties format.
+
 ## Upgrading from Core 3.1 to 3.2
 
 - Since Spark 3.2, `spark.scheduler.allocation.file` supports read remote file using hadoop filesystem which means if the path has no scheme Spark will respect hadoop configuration to read it. To restore the behavior before Spark 3.2, you can specify the local scheme for `spark.scheduler.allocation.file` e.g. `file:///path/to/file`.

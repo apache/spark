@@ -35,7 +35,7 @@ def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
     return s.decode("utf-8")
 
 
-class KinesisUtils(object):
+class KinesisUtils:
     @staticmethod
     @overload
     def createStream(
@@ -188,5 +188,5 @@ class KinesisUtils(object):
         return stream.map(lambda v: decoder(v))
 
 
-class InitialPositionInStream(object):
+class InitialPositionInStream:
     LATEST, TRIM_HORIZON = (0, 1)

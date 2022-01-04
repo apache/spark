@@ -78,7 +78,7 @@ __all__ = [
 ]
 
 
-class SpecialLengths(object):
+class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
@@ -87,7 +87,7 @@ class SpecialLengths(object):
     START_ARROW_STREAM = -6
 
 
-class Serializer(object):
+class Serializer:
     def dump_stream(self, iterator, stream):
         """
         Serialize an iterator of objects to the output stream.
@@ -605,7 +605,7 @@ def write_with_length(obj, stream):
     stream.write(obj)
 
 
-class ChunkedStream(object):
+class ChunkedStream:
 
     """
     This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed

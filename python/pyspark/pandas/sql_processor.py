@@ -254,7 +254,7 @@ def escape_sql_string(value: str) -> str:
     return value.translate(_escape_table)
 
 
-class SQLProcessor(object):
+class SQLProcessor:
     def __init__(self, scope: Dict[str, Any], statement: str, session: SparkSession):
         self._scope = scope
         self._statement = statement
