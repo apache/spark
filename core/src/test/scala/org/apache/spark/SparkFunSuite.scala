@@ -284,5 +284,7 @@ abstract class SparkFunSuite
     def setThreshold(threshold: Level): Unit = {
       _threshold = threshold
     }
+
+    def nonNullLogEvents(): Seq[LogEvent] = loggingEvents.filterNot(_ == null)
   }
 }

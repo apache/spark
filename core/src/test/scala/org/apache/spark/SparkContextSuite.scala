@@ -1074,7 +1074,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
 
       eventually(timeout(10.seconds), interval(1.second)) {
-        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+        assert(logAppender.nonNullLogEvents().count(_.getMessage.getFormattedMessage.contains(
           "Added dependency jars of Ivy URI " +
             "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
       }
@@ -1082,10 +1082,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
       eventually(timeout(10.seconds), interval(1.second)) {
-        assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
+        assert(logAppender.nonNullLogEvents().count(_.getMessage.getFormattedMessage.contains(
           "The dependency jars of Ivy URI " +
             "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
-        val existMsg = logAppender.loggingEvents.filter(_.getMessage.getFormattedMessage.contains(
+        val existMsg = logAppender.nonNullLogEvents().filter(
+          _.getMessage.getFormattedMessage.contains(
           "The dependency jars of Ivy URI " +
             "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
           .head.getMessage.getFormattedMessage
