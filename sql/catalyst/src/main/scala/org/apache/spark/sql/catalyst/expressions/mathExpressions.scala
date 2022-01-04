@@ -269,19 +269,6 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
-object Ceil {
-  def apply(child: Expression, scale: Expression): Expression = {
-    val scaleV = scale.eval(EmptyRow)
-    if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
-
-    scaleV.asInstanceOf[Int] match {
-      case 0 => Ceil(child)
-      case x if x < 0 => RoundCeil(Cast(child, LongType), scale)
-      case _ => RoundCeil(child, scale)
-    }
-  }
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
   examples = """
@@ -300,7 +287,20 @@ object Ceil {
 object CeilExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) Ceil(expressions.head)
-    else if (expressions.length == 2) Ceil(expressions(0), expressions(1))
+    else if (expressions.length == 2) {
+      val child = expressions(0)
+      val scale = expressions(1)
+      val scaleV = scale.eval(EmptyRow)
+      if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+
+      (child.dataType, scaleV.asInstanceOf[Int]) match {
+        case (_, 0) => Ceil(child)
+        case (_, x) if x < 0 => RoundCeil(Cast(child, LongType), scale)
+        case (_: IntegralType | ShortType, _) => RoundCeil(Cast(child, LongType), scale)
+        case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
+        case _ => RoundCeil(child, scale)
+      }
+    }
     else throw new AnalysisException("Function ceil cannot take more than 2 parameters")
   }
 }
@@ -512,19 +512,6 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   copy(child = newChild)
 }
 
-object Floor {
-  def apply(child: Expression, scale: Expression): Expression = {
-    val scaleV = scale.eval(EmptyRow)
-    if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
-
-    scaleV.asInstanceOf[Int] match {
-      case 0 => Floor(child)
-      case x if x < 0 => RoundFloor(Cast(child, LongType), scale)
-      case _ => RoundFloor(child, scale)
-    }
-  }
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
   examples = """
@@ -543,7 +530,20 @@ object Floor {
 object FloorExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) Floor(expressions.head)
-    else if (expressions.length == 2) Floor(expressions(0), expressions(1))
+    else if (expressions.length == 2) {
+      val child = expressions(0)
+      val scale = expressions(1)
+      val scaleV = scale.eval(EmptyRow)
+      if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+
+      (child.dataType, scaleV.asInstanceOf[Int]) match {
+        case (_, 0) => Floor(child)
+        case (_, x) if x < 0 => RoundFloor(Cast(child, LongType), scale)
+        case (_: IntegralType | ShortType, _) => RoundFloor(Cast(child, LongType), scale)
+        case (_ : FloatType, _) => RoundFloor(Cast(child, DoubleType), scale)
+        case _ => RoundFloor(child, scale)
+      }
+    }
     else throw new AnalysisException("Function floor cannot take more than 2 parameters")
   }
 }

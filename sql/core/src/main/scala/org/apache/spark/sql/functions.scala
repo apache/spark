@@ -1773,7 +1773,9 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def ceil(e: Column, scale: Column): Column = withExpr { Ceil(e.expr, scale.expr) }
+  def ceil(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("ceil"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
 
   /**
    * Computes the ceiling of the given value of `e` to 0 decimal places.
@@ -1901,7 +1903,9 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    */
-  def floor(e: Column, scale: Column): Column = withExpr { Floor(e.expr, scale.expr) }
+  def floor(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("floor"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
 
   /**
    * Computes the floor of the given value of `e` to 0 decimal places.
