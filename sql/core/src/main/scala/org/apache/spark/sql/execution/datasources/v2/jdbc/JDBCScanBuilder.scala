@@ -73,11 +73,10 @@ case class JDBCScanBuilder(
   private var pushedGroupByCols: Option[Array[String]] = None
 
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    lazy val fieldNames = aggregation.groupByColumns().map(_.fieldNames.toSeq.quoted)
+    lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
-      (aggregation.groupByColumns().length == 1 &&
-      jdbcOptions.partitionColumn.map(fieldNames(0).equalsIgnoreCase(_)).get)
+      (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
+        jdbcOptions.partitionColumn.map(fieldNames(0).equalsIgnoreCase(_)).get)
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
