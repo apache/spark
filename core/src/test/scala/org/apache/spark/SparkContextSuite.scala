@@ -1085,8 +1085,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         assert(logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
           "The dependency jars of Ivy URI " +
             "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
-        val existMsg = logAppender.loggingEvents.filter(
-          _.getMessage.getFormattedMessage.contains(
+        val existMsg = logAppender.loggingEvents.filter(_.getMessage.getFormattedMessage.contains(
           "The dependency jars of Ivy URI " +
             "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
           .head.getMessage.getFormattedMessage
