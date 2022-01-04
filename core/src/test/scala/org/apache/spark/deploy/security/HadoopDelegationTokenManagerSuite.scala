@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.security
 
 import java.security.PrivilegedExceptionAction
+import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
@@ -30,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config.CREDENTIALS_RENEWAL_RETRY_WAIT
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 
@@ -47,6 +49,22 @@ private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationT
     hadoopConf: Configuration,
     sparkConf: SparkConf,
     creds: Credentials): Option[Long] = throw new IllegalArgumentException
+}
+
+private class CustomNextRenewalDelegationTokenProvider(nextRenewal: Option[Long]
+                 , customeServiceName: String = "testCustomNextRenewal" )
+  extends  HadoopDelegationTokenProvider{
+
+  override def serviceName: String = customeServiceName
+
+  override def delegationTokensRequired(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Boolean = true
+
+  override def obtainDelegationTokens(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = nextRenewal
 }
 
 private object ExceptionThrowingDelegationTokenProvider {
@@ -144,5 +162,36 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
       }
       UserGroupInformation.reset()
     }
+  }
+
+  test("SPARK-37787: Long running Spark Job(Spark ThriftServer) throw" +
+        " HDFS_DELEGATE_TOKEN not found in cache Exception") {
+    val sparkConf = new SparkConf(false)
+    val providerList = List(new CustomNextRenewalDelegationTokenProvider(None))
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+    val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
+    val now = System.currentTimeMillis()
+    val (_, nextRenewal) = manager.obtainDelegationTokens(providerList)
+    assert(nextRenewal != Long.MaxValue)
+    assert(nextRenewal >= now + delay)
+    assert(nextRenewal <= now + delay + 3000)
+
+    val customNextRenewal = now + 60*60
+    val providerList2 = List(new CustomNextRenewalDelegationTokenProvider(Some(customNextRenewal)))
+    val (_, nextRenewal2) = manager.obtainDelegationTokens(providerList2)
+    assert(nextRenewal2 == customNextRenewal)
+
+    val providerList3 = List(new CustomNextRenewalDelegationTokenProvider(None,
+      "test"))
+    val (_, nextRenewal3) = manager.obtainDelegationTokens(providerList3)
+    assert(nextRenewal3 == Long.MaxValue)
+
+    val providerList4 = List(new CustomNextRenewalDelegationTokenProvider(None ),
+      new CustomNextRenewalDelegationTokenProvider(Some(customNextRenewal)),
+      new CustomNextRenewalDelegationTokenProvider(None, "test")
+    )
+    val (_, nextRenewal4) = manager.obtainDelegationTokens(providerList4)
+    assert(nextRenewal4 == customNextRenewal)
+
   }
 }

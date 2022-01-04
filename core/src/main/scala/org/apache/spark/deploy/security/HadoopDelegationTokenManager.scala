@@ -145,7 +145,7 @@ private[spark] class HadoopDelegationTokenManager(
       val freshUGI = doLogin()
       freshUGI.doAs(new PrivilegedExceptionAction[Unit]() {
         override def run(): Unit = {
-          val (newTokens, _) = obtainDelegationTokens()
+          val (newTokens, _) = obtainDelegationTokens(delegationTokenProviders.values)
           creds.addAll(newTokens)
         }
       })
@@ -157,11 +157,24 @@ private[spark] class HadoopDelegationTokenManager(
    *
    * @return 2-tuple (credentials with new tokens, time by which the tokens must be renewed)
    */
-  private def obtainDelegationTokens(): (Credentials, Long) = {
+  // Visible for testing.
+  def obtainDelegationTokens(delegationTokenProviders: Iterable[HadoopDelegationTokenProvider]
+                            ): (Credentials, Long) = {
     val creds = new Credentials()
-    val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
+    val nextRenewal = delegationTokenProviders.flatMap { provider =>
       if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+        // Fix Bug, SPARK-37787: Long running Spark Job
+        // throw HDFS_DELEGATE_TOKEN not found in cache Exception
+        var providerNextRenewal = provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+        if (providerNextRenewal.isEmpty && isRenewalProvider(provider)) {
+          val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
+          providerNextRenewal = Some(System.currentTimeMillis() + delay)
+          logWarning(s"The Service ${provider.serviceName}  nextRenewal is None, " +
+            s"Exceptions may occur.  Check whether the service is normal." +
+            s"replace with SparkConf ${CREDENTIALS_RENEWAL_RETRY_WAIT} , " +
+            s"nextRenewal is ${providerNextRenewal}")
+        }
+        providerNextRenewal
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -169,6 +182,10 @@ private[spark] class HadoopDelegationTokenManager(
       }
     }.foldLeft(Long.MaxValue)(math.min)
     (creds, nextRenewal)
+  }
+
+  private def isRenewalProvider(provider: HadoopDelegationTokenProvider): Boolean = {
+    provider.serviceName == "hadoopfs"||provider.serviceName == "testCustomNextRenewal"
   }
 
   // Visible for testing.
@@ -223,7 +240,7 @@ private[spark] class HadoopDelegationTokenManager(
   private def obtainTokensAndScheduleRenewal(ugi: UserGroupInformation): Credentials = {
     ugi.doAs(new PrivilegedExceptionAction[Credentials]() {
       override def run(): Credentials = {
-        val (creds, nextRenewal) = obtainDelegationTokens()
+        val (creds, nextRenewal) = obtainDelegationTokens(delegationTokenProviders.values)
 
         // Calculate the time when new credentials should be created, based on the configured
         // ratio.
