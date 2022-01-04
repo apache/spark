@@ -342,11 +342,11 @@ private[spark] class CoarseGrainedExecutorBackend(
           if (initialSleepMillis > 0) {
             Thread.sleep(initialSleepMillis)
           }
+          logInfo("Checking to see if we can shutdown.")
           while (true) {
-            logInfo("Checking to see if we can shutdown.")
             if (executor == null || executor.numRunningTasks == 0) {
               if (migrationEnabled) {
-                logInfo("No running tasks, checking migrations")
+                logDebug("No running tasks, checking migrations")
                 val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
                 // since the start of computing it.
@@ -354,7 +354,7 @@ private[spark] class CoarseGrainedExecutorBackend(
                   logInfo("No running tasks, all blocks migrated, stopping.")
                   exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
-                  logInfo("All blocks not yet migrated.")
+                  logDebug("All blocks not yet migrated.")
                 }
               } else {
                 logInfo("No running tasks, no block migration configured, stopping.")
