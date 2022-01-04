@@ -49,6 +49,7 @@ from pyspark.sql.functions import (
     array_repeat,
     size,
     slice,
+    least,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
@@ -546,6 +547,20 @@ class FunctionsTests(ReusedSQLTestCase):
         file_name = df.collect()[0].file
         self.assertTrue("python/test_support/hello/hello.txt" in file_name)
 
+    def test_least(self):
+        df = self.spark.createDataFrame([(1, 4, 3)], ["a", "b", "c"])
+
+        expected = [Row(least=1)]
+        self.assertTrue(
+            all(
+                [
+                    df.select(least(df.a, df.b, df.c).alias("least")).collect() == expected,
+                    df.select(least(lit(3), lit(5), lit(1)).alias("least")).collect() == expected,
+                    df.select(least("a", "b", "c").alias("least")).collect() == expected,
+                ]
+            )
+        )
+
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
         from itertools import chain
@@ -576,7 +591,23 @@ class FunctionsTests(ReusedSQLTestCase):
             "overlay(x, y, 2, 5)",
         ]
 
+        # check parameter resolution
         self.assertListEqual(actual, expected)
+
+        df = self.spark.createDataFrame([("SPARK_SQL", "CORE", 7, 0)], ("x", "y", "pos", "len"))
+
+        expected = [Row(overlayed="SPARK_CORESQL")]
+        self.assertTrue(
+            all(
+                [
+                    df.select(slice(df.x, df.y, 7, 0).alias("overlayed")).collect() == expected,
+                    df.select(slice(df.x, df.y, lit(7), lit(0)).alias("overlayed")).collect()
+                    == expected,
+                    df.select(slice("x", "y", "pos", "len").alias("overlayed")).collect()
+                    == expected,
+                ]
+            )
+        )
 
     def test_percentile_approx(self):
         actual = list(
