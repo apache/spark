@@ -163,11 +163,27 @@ struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=false
+set spark.sql.ansi.strictIndexOperator=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	false
+spark.sql.ansi.strictIndexOperator	false
+
+
+-- !query
+select array(1, 2, 3)[5]
+-- !query schema
+struct<array(1, 2, 3)[5]:int>
+-- !query output
+NULL
+
+
+-- !query
+select array(1, 2, 3)[-1]
+-- !query schema
+struct<array(1, 2, 3)[-1]:int>
+-- !query output
+NULL
 
 
 -- !query
@@ -193,22 +209,6 @@ struct<>
 -- !query output
 java.lang.ArrayIndexOutOfBoundsException
 SQL array indices start at 1
-
-
--- !query
-select array(1, 2, 3)[5]
--- !query schema
-struct<array(1, 2, 3)[5]:int>
--- !query output
-NULL
-
-
--- !query
-select array(1, 2, 3)[-1]
--- !query schema
-struct<array(1, 2, 3)[-1]:int>
--- !query output
-NULL
 
 
 -- !query
@@ -236,11 +236,27 @@ NULL
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=true
+set spark.sql.ansi.strictIndexOperator=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	true
+spark.sql.ansi.strictIndexOperator	true
+
+
+-- !query
+select array(1, 2, 3)[5]
+-- !query schema
+struct<array(1, 2, 3)[5]:int>
+-- !query output
+NULL
+
+
+-- !query
+select array(1, 2, 3)[-1]
+-- !query schema
+struct<array(1, 2, 3)[-1]:int>
+-- !query output
+NULL
 
 
 -- !query
@@ -266,22 +282,6 @@ struct<>
 -- !query output
 java.lang.ArrayIndexOutOfBoundsException
 SQL array indices start at 1
-
-
--- !query
-select array(1, 2, 3)[5]
--- !query schema
-struct<array(1, 2, 3)[5]:int>
--- !query output
-NULL
-
-
--- !query
-select array(1, 2, 3)[-1]
--- !query schema
-struct<array(1, 2, 3)[-1]:int>
--- !query output
-NULL
 
 
 -- !query

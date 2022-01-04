@@ -11,17 +11,17 @@ spark.sql.ansi.failOnElementNotExists	false
 
 
 -- !query
-select element_at(map(1, 'a', 2, 'b'), 5)
+select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<element_at(map(1, a, 2, b), 5):string>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
 NULL
 
 
 -- !query
-select map(1, 'a', 2, 'b')[5]
+select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<map(1, a, 2, b)[5]:string>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
 NULL
 
@@ -35,17 +35,17 @@ spark.sql.ansi.failOnElementNotExists	true
 
 
 -- !query
-select element_at(map(1, 'a', 2, 'b'), 5)
+select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<element_at(map(1, a, 2, b), 5):string>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
 NULL
 
 
 -- !query
-select map(1, 'a', 2, 'b')[5]
+select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query schema
-struct<map(1, a, 2, b)[5]:string>
+struct<element_at(map(1, a, 2, b), 5):string>
 -- !query output
 NULL
 

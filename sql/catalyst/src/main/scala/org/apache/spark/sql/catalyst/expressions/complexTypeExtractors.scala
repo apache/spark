@@ -341,6 +341,8 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
+  protected val isElementAtFunction: Boolean = false
+
   // todo: current search is O(n), improve it.
   def getValueEval(
       value: Any,
@@ -365,7 +367,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction)
       } else {
         null
       }
@@ -400,7 +402,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $isElementAtFunction);"
       } else {
         s"${ev.isNull} = true;"
       }

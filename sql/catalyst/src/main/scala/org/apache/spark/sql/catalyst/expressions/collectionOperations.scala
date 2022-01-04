@@ -2049,11 +2049,11 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiFailOnElementNotExists)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.ansiFailOnElementNotExists)
+    this(left, right, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -2068,6 +2068,8 @@ case class ElementAt(
     case ArrayType(elementType, _) => elementType
     case MapType(_, valueType, _) => valueType
   }
+
+  override val isElementAtFunction: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
@@ -2130,7 +2132,7 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw QueryExecutionErrors.invalidArrayIndexError(index, array.numElements())
+            throw QueryExecutionErrors.invalidElementAtIndexError(index, array.numElements())
           } else {
             null
           }
@@ -2169,7 +2171,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
+            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements());"
           } else {
             s"${ev.isNull} = true;"
           }

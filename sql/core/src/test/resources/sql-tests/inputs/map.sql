@@ -1,15 +1,16 @@
 -- test cases for map functions
 
 -- key does not exist
--- the following queries should return null results.
+-- return null results if the map key in [] operator doesn't exist
 set spark.sql.ansi.failOnElementNotExists=false;
-select element_at(map(1, 'a', 2, 'b'), 5);
 select map(1, 'a', 2, 'b')[5];
+-- the configuration spark.sql.ansi.strictIndexOperator doesn't control function element_at
+select element_at(map(1, 'a', 2, 'b'), 5);
 
--- the following queries should throw exceptions under ANSI mode.
+-- throw exception if the map key in [] operator doesn't exist
 set spark.sql.ansi.failOnElementNotExists=true;
-select element_at(map(1, 'a', 2, 'b'), 5);
 select map(1, 'a', 2, 'b')[5];
+select element_at(map(1, 'a', 2, 'b'), 5);
 
 -- map_contains_key
 select map_contains_key(map(1, 'a', 2, 'b'), 5);
