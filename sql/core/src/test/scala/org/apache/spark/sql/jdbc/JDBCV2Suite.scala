@@ -424,6 +424,23 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df, Seq(Row(2, 1.0)))
   }
 
+  test("partitioned scan with aggregate push-down: complete push-down only") {
+    withTempView("v") {
+      spark.read
+        .option("partitionColumn", "dept")
+        .option("lowerBound", "0")
+        .option("upperBound", "2")
+        .option("numPartitions", "2")
+        .table("h2.test.employee")
+        .createTempView("v")
+      val df = sql("select AVG(SALARY) FROM v GROUP BY name")
+      // Partitioned JDBC Scan doesn't support complete aggregate push-down, and AVG requires
+      // complete push-down so aggregate is not pushed at the end.
+      checkAggregateRemoved(df, removed = false)
+      checkAnswer(df, Seq(Row(9000.0), Row(10000.0), Row(10000.0), Row(12000.0), Row(12000.0)))
+    }
+  }
+
   test("scan with aggregate push-down: aggregate + number") {
     val df = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
     checkAggregateRemoved(df)
