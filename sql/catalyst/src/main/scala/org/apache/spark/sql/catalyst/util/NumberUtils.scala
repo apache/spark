@@ -136,12 +136,10 @@ object NumberUtils {
    * Convert string to numeric based on the given number format.
    * The format can consist of the following characters:
    * '0' or '9': digit position
-   * '.':  decimal point (only allowed once)
-   * ',':  group (thousands) separator
-   * 'S':  sign anchored to number
-   * 'D':  decimal point
-   * 'G':  group separator
-   * '$':  specifies that the input value has a leading $ (Dollar) sign.
+   * '.' or 'D': decimal point (only allowed once)
+   * ',' or 'G': group (thousands) separator
+   * '-' or 'S': sign anchored to number
+   * '$': returns value with a leading dollar sign
    *
    * @param input the string need to converted
    * @param numberFormat the given number format
@@ -186,14 +184,12 @@ object NumberUtils {
   /**
    * Convert numeric to string based on the given number format.
    * The format can consist of the following characters:
-   * '9':  digit position (can be dropped if insignificant)
-   * '0':  digit position (will not be dropped, even if insignificant)
-   * '.':  decimal point (only allowed once)
-   * ',':  group (thousands) separator
-   * 'S':  sign anchored to number
-   * 'D':  decimal point
-   * 'G':  group separator
-   * '$':  specifies that the input value has a leading $ (Dollar) sign.
+   * '9': digit position (can be dropped if insignificant)
+   * '0': digit position (will not be dropped, even if insignificant)
+   * '.' or 'D': decimal point (only allowed once)
+   * ',' or 'G': group (thousands) separator
+   * '-' or 'S': sign anchored to number
+   * '$': returns value with a leading dollar sign
    *
    * @param input the decimal to format
    * @param numberFormat the format string

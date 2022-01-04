@@ -34,12 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
      _FUNC_(strExpr, formatExpr) - Convert `strExpr` to a number based on the `formatExpr`.
        The format can consist of the following characters:
          '0' or '9': digit position
-         '.':  decimal point (only allowed once)
-         ',':  group (thousands) separator
-         'S':  sign anchored to number
-         'D':  decimal point
-         'G':  group separator
-         '$':  specifies that the input value has a leading $ (Dollar) sign.
+         '.' or 'D':  decimal point (only allowed once)
+         ',' or 'G':  group (thousands) separator
+         '-' or 'S':  sign anchored to number
+         '$': returns value with a leading dollar sign
   """,
   examples = """
     Examples:
