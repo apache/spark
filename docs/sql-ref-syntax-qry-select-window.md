@@ -52,7 +52,7 @@ window_function [ nulls_option ] OVER
 
 * **nulls_option**
 
-    Specified to indicate whether skip null values in the determination of which row to use.
+    Specified to indicate whether skip null values in the determination of which row to use. `RESPECT NULLS` is supported by default if you do not specify `IGNORE NULLS`.
 
     **Syntax:**
 
