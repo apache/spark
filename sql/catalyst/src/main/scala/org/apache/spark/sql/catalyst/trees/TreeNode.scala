@@ -788,7 +788,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
     case set: Set[_] =>
       // Sort elements for deterministic behaviours
-      truncatedString(set.toSeq.map(formatArg(_, maxFields).sorted), "{", ", ", "}", maxFields)
+      truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
       truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
     case other =>
@@ -803,15 +803,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] =>
-      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
-    case set: Set[_] =>
-      // Sort elements for deterministic behaviours
-      val sortedSeq = set.toSeq.map(formatArg(_, maxFields).sorted)
-      truncatedString(sortedSeq, "{", ", ", "}", maxFields) :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
+    case xs @ (_: Seq[_] | _: Set[_] | _: Array[_]) =>
+      formatArg(xs, maxFields) :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
