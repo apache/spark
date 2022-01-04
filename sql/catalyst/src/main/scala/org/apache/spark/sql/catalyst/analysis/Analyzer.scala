@@ -877,6 +877,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
         a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
@@ -972,7 +974,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         p.copy(
           projectList = p.metadataOutput ++ p.projectList,
@@ -2598,6 +2600,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      @scala.annotation.tailrec
       def hasInnerGenerator(g: Generator): Boolean = g match {
         // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
         case go: GeneratorOuter =>

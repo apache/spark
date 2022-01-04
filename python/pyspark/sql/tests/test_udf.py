@@ -570,7 +570,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
-        class F(object):
+        class F:
             """Identity"""
 
             def __call__(self, x):

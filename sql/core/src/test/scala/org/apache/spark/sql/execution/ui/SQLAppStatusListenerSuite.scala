@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -900,6 +900,46 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       assert(innerMetric.isDefined)
     }
   }
+
+  test("SPARK-37578: Update output metrics from Datasource v2") {
+    withTempDir { dir =>
+      val statusStore = spark.sharedState.statusStore
+      val oldCount = statusStore.executionsCount()
+
+      val bytesWritten = new ArrayBuffer[Long]()
+      val recordsWritten = new ArrayBuffer[Long]()
+
+      val bytesWrittenListener = new SparkListener() {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          bytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
+          recordsWritten += taskEnd.taskMetrics.outputMetrics.recordsWritten
+        }
+      }
+      spark.sparkContext.addSparkListener(bytesWrittenListener)
+
+      try {
+        val cls = classOf[CustomMetricsDataSource].getName
+        spark.range(0, 10, 1, 2).select('id as 'i, -'id as 'j).write.format(cls)
+          .option("path", dir.getCanonicalPath).mode("append").save()
+
+        // Wait until the new execution is started and being tracked.
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(statusStore.executionsCount() > oldCount)
+        }
+
+        // Wait for listener to finish computing the metrics for the execution.
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(statusStore.executionsList().nonEmpty &&
+            statusStore.executionsList().last.metricValues != null)
+        }
+
+        assert(bytesWritten.sum == 246)
+        assert(recordsWritten.sum == 20)
+      } finally {
+        spark.sparkContext.removeSparkListener(bytesWrittenListener)
+      }
+    }
+  }
 }
 
 
@@ -993,6 +1033,22 @@ class SimpleCustomMetric extends CustomMetric {
   }
 }
 
+class BytesWrittenCustomMetric extends CustomMetric {
+  override def name(): String = "bytesWritten"
+  override def description(): String = "bytesWritten metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"bytesWritten: ${taskMetrics.mkString(", ")}"
+  }
+}
+
+class RecordsWrittenCustomMetric extends CustomMetric {
+  override def name(): String = "recordsWritten"
+  override def description(): String = "recordsWritten metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"recordsWritten: ${taskMetrics.mkString(", ")}"
+  }
+}
+
 // The followings are for custom metrics of V2 data source.
 object CustomMetricReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -1046,7 +1102,15 @@ class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWrit
       override def name(): String = "inner_metric"
       override def value(): Long = 54321;
     }
-    Array(metric, innerMetric)
+    val bytesWrittenMetric = new CustomTaskMetric {
+      override def name(): String = "bytesWritten"
+      override def value(): Long = 123;
+    }
+    val recordsWrittenMetric = new CustomTaskMetric {
+      override def name(): String = "recordsWritten"
+      override def value(): Long = 10;
+    }
+    Array(metric, innerMetric, bytesWrittenMetric, recordsWrittenMetric)
   }
 }
 
@@ -1088,7 +1152,8 @@ class CustomMetricsDataSource extends SimpleWritableDataSource {
         }
 
         override def supportedCustomMetrics(): Array[CustomMetric] = {
-          Array(new SimpleCustomMetric, new Outer.InnerCustomMetric)
+          Array(new SimpleCustomMetric, new Outer.InnerCustomMetric,
+            new BytesWrittenCustomMetric, new RecordsWrittenCustomMetric)
         }
       }
     }

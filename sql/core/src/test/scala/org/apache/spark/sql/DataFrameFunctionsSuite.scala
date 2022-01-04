@@ -286,10 +286,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (key32, encryptedText32, encryptedEmptyText32)).foreach {
       case (key, encryptedText, encryptedEmptyText) =>
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(value, '$key'))"),
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key', 'ECB'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key'))"),
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', 'ECB'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
     }
 
@@ -336,10 +336,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ("value32", key32)).foreach {
       case (colName, key) =>
         checkAnswer(
-          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key') as string)"),
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key', 'ECB') as string)"),
           Seq(Row("Spark"), Row("")))
         checkAnswer(
-          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key')) as string)"),
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key'), 'ECB') as string)"),
           Seq(Row("Spark"), Row("")))
     }
 
@@ -380,7 +380,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ("value32", dummyKey32)).foreach {
       case (colName, key) =>
         val e = intercept[Exception] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'))").collect
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
         }
         assert(e.getMessage.contains("BadPaddingException"))
     }

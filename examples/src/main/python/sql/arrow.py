@@ -33,7 +33,7 @@ require_minimum_pyarrow_version()
 
 def dataframe_with_arrow_example(spark):
     import numpy as np
-    import pandas as pd  # type: ignore[import]
+    import pandas as pd
 
     # Enable Arrow-based columnar data transfers
     spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")

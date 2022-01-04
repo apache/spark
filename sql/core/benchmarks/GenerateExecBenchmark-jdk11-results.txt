@@ -2,11 +2,11 @@
 GenerateExec benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 GenerateExec Benchmark:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-GenerateExec Benchmark wholestage off            130659         131394        1040          0.8        1306.6       1.0X
-GenerateExec Benchmark wholestage on              64031          64151          90          1.6         640.3       2.0X
+GenerateExec Benchmark wholestage off            110194         110327         188          0.9        1101.9       1.0X
+GenerateExec Benchmark wholestage on              55786          60898         NaN          1.8         557.9       2.0X
 
 

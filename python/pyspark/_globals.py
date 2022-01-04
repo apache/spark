@@ -42,7 +42,7 @@ if "_is_loaded" in globals():
 _is_loaded = True
 
 
-class _NoValueType(object):
+class _NoValueType:
     """Special keyword value.
 
     The instance of this class may be used as the default value assigned to a

@@ -223,6 +223,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             "loc must be int",
             lambda: psdf.insert((1,), "b", 10),
         )
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "Assigning column name as tuple is only supported for MultiIndex columns for now.",
+            lambda: psdf.insert(0, ("e",), 10),
+        )
+
         self.assertRaises(ValueError, lambda: psdf.insert(0, "e", [7, 8, 9, 10]))
         self.assertRaises(ValueError, lambda: psdf.insert(0, "f", ps.Series([7, 8])))
         self.assertRaises(AssertionError, lambda: psdf.insert(100, "y", psser))
@@ -246,6 +252,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assertRaisesRegex(
             ValueError, "cannot insert d, already exists", lambda: psdf.insert(4, "d", 11)
+        )
+        self.assertRaisesRegex(
+            ValueError,
+            r"cannot insert \('x', 'a', 'b'\), already exists",
+            lambda: psdf.insert(4, ("x", "a", "b"), 11),
         )
         self.assertRaisesRegex(
             ValueError,
@@ -1478,14 +1489,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
 
-        if sys.version_info >= (3, 6):
-            # flaky in Python 3.5.
-            self.assert_eq(
-                psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
-            )
-            self.assert_eq(
-                psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
-            )
+        self.assert_eq(
+            psdf.fillna({"x": -1, ("x", "b"): -2}), pdf.fillna({"x": -1, ("x", "b"): -2})
+        )
+        self.assert_eq(
+            psdf.fillna({("x", "b"): -2, "x": -1}), pdf.fillna({("x", "b"): -2, "x": -1})
+        )
 
         # check multi index
         pdf = pdf.set_index([("x", "a"), ("x", "b")])
@@ -5781,17 +5790,397 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.astype({"c": float})
 
     def test_describe(self):
-        psdf = self.psdf
+        pdf, psdf = self.df_pair
+
+        # numeric columns
+        self.assert_eq(psdf.describe(), pdf.describe())
+        psdf.a += psdf.a
+        pdf.a += pdf.a
+        self.assert_eq(psdf.describe(), pdf.describe())
+
+        # string columns
+        psdf = ps.DataFrame({"A": ["a", "b", "b", "c"], "B": ["d", "e", "f", "f"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+        psdf.A += psdf.A
+        pdf.A += pdf.A
+        self.assert_eq(psdf.describe(), pdf.describe().astype(str))
+
+        # timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [
+                    pd.Timestamp("2020-10-20"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2021-06-02"),
+                    pd.Timestamp("2022-07-11"),
+                ],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # NOTE: Set `datetime_is_numeric=True` for pandas:
+        # FutureWarning: Treating datetime data as categorical rather than numeric in `.describe` is deprecated
+        # and will be removed in a future version of pandas. Specify `datetime_is_numeric=True` to silence this
+        # warning and adopt the future behavior now.
+        # NOTE: Compare the result except percentiles, since we use approximate percentile
+        # so the result is different from pandas.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pdf.describe(datetime_is_numeric=True)
+                .astype(str)
+                .loc[["count", "mean", "min", "max"]],
+            )
+        else:
+            self.assert_eq(
+                psdf.describe(),
+                ps.DataFrame(
+                    {
+                        "A": [
+                            "4",
+                            "2021-07-16 18:00:00",
+                            "2020-10-20 00:00:00",
+                            "2020-10-20 00:00:00",
+                            "2021-06-02 00:00:00",
+                            "2021-06-02 00:00:00",
+                            "2022-07-11 00:00:00",
+                        ],
+                        "B": [
+                            "4",
+                            "2024-08-02 18:00:00",
+                            "2021-11-20 00:00:00",
+                            "2021-11-20 00:00:00",
+                            "2023-06-02 00:00:00",
+                            "2026-07-11 00:00:00",
+                            "2026-07-11 00:00:00",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
+                ),
+            )
+
+        # String & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": ["a", "b", "b", "c"],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pdf.describe(datetime_is_numeric=True)
+                .astype(str)
+                .loc[["count", "mean", "min", "max"]],
+            )
+            psdf.A += psdf.A
+            pdf.A += pdf.A
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pdf.describe(datetime_is_numeric=True)
+                .astype(str)
+                .loc[["count", "mean", "min", "max"]],
+            )
+        else:
+            expected_result = ps.DataFrame(
+                {
+                    "B": [
+                        "4",
+                        "2024-08-02 18:00:00",
+                        "2021-11-20 00:00:00",
+                        "2021-11-20 00:00:00",
+                        "2023-06-02 00:00:00",
+                        "2026-07-11 00:00:00",
+                        "2026-07-11 00:00:00",
+                    ]
+                },
+                index=["count", "mean", "min", "25%", "50%", "75%", "max"],
+            )
+            self.assert_eq(
+                psdf.describe(),
+                expected_result,
+            )
+            psdf.A += psdf.A
+            self.assert_eq(
+                psdf.describe(),
+                expected_result,
+            )
+
+        # Numeric & timestamp columns
+        psdf = ps.DataFrame(
+            {
+                "A": [1, 2, 2, 3],
+                "B": [
+                    pd.Timestamp("2021-11-20"),
+                    pd.Timestamp("2023-06-02"),
+                    pd.Timestamp("2026-07-11"),
+                    pd.Timestamp("2026-07-11"),
+                ],
+            }
+        )
+        pdf = psdf.to_pandas()
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result.B = pandas_result.B.astype(str)
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pandas_result.loc[["count", "mean", "min", "max"]],
+            )
+            psdf.A += psdf.A
+            pdf.A += pdf.A
+            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result.B = pandas_result.B.astype(str)
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pandas_result.loc[["count", "mean", "min", "max"]],
+            )
+        else:
+            self.assert_eq(
+                psdf.describe(),
+                ps.DataFrame(
+                    {
+                        "A": [4, 2, 1, 1, 2, 2, 3, 0.816497],
+                        "B": [
+                            "4",
+                            "2024-08-02 18:00:00",
+                            "2021-11-20 00:00:00",
+                            "2021-11-20 00:00:00",
+                            "2023-06-02 00:00:00",
+                            "2026-07-11 00:00:00",
+                            "2026-07-11 00:00:00",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
+                ),
+            )
+            psdf.A += psdf.A
+            self.assert_eq(
+                psdf.describe(),
+                ps.DataFrame(
+                    {
+                        "A": [4, 4, 2, 2, 4, 4, 6, 1.632993],
+                        "B": [
+                            "4",
+                            "2024-08-02 18:00:00",
+                            "2021-11-20 00:00:00",
+                            "2021-11-20 00:00:00",
+                            "2023-06-02 00:00:00",
+                            "2026-07-11 00:00:00",
+                            "2026-07-11 00:00:00",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
+                ),
+            )
+
+        # Include None column
+        psdf = ps.DataFrame(
+            {
+                "a": [1, 2, 3],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "c": [None, None, None],
+            }
+        )
+        pdf = psdf.to_pandas()
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            pandas_result = pdf.describe(datetime_is_numeric=True)
+            pandas_result.b = pandas_result.b.astype(str)
+            self.assert_eq(
+                psdf.describe().loc[["count", "mean", "min", "max"]],
+                pandas_result.loc[["count", "mean", "min", "max"]],
+            )
+        else:
+            self.assert_eq(
+                psdf.describe(),
+                ps.DataFrame(
+                    {
+                        "a": [3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 3.0, 1.0],
+                        "b": [
+                            "3",
+                            "1970-01-01 00:00:00.000001",
+                            "1970-01-01 00:00:00.000001",
+                            "1970-01-01 00:00:00.000001",
+                            "1970-01-01 00:00:00.000001",
+                            "1970-01-01 00:00:00.000001",
+                            "1970-01-01 00:00:00.000001",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
+                ),
+            )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe(percentiles=[1.1])
 
-        psdf = ps.DataFrame({"A": ["a", "b", "c"], "B": ["d", "e", "f"]})
-
+        psdf = ps.DataFrame()
         msg = "Cannot describe a DataFrame without columns"
         with self.assertRaisesRegex(ValueError, msg):
             psdf.describe()
+
+    def test_describe_empty(self):
+        # Empty DataFrame
+        psdf = ps.DataFrame(columns=["A", "B"])
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf.describe(),
+            pdf.describe().astype(float),
+        )
+
+        # Explicit empty DataFrame numeric only
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string only
+        psdf = ps.DataFrame({"a": ["a", "b", "c"], "b": ["q", "w", "e"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe().astype(float),
+        )
+
+        # Explicit empty DataFrame timestamp only
+        psdf = ps.DataFrame(
+            {
+                "a": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+            }
+        )
+        pdf = psdf.to_pandas()
+        # For timestamp type, we should convert NaT to None in pandas result
+        # since pandas API on Spark doesn't support the NaT for object type.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                pdf_result.where(pdf_result.notnull(), None).astype(str),
+            )
+        else:
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                ps.DataFrame(
+                    {
+                        "a": [
+                            "0",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                        ],
+                        "b": [
+                            "0",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
+                ),
+            )
+
+        # Explicit empty DataFrame numeric & timestamp
+        psdf = ps.DataFrame(
+            {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                pdf_result,
+            )
+        else:
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                ps.DataFrame(
+                    {
+                        "a": [
+                            0,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        ],
+                        "b": [
+                            "0",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
+                ),
+            )
+
+        # Explicit empty DataFrame numeric & string
+        psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
+        pdf = psdf.to_pandas()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf[pdf.a != pdf.a].describe(),
+        )
+
+        # Explicit empty DataFrame string & timestamp
+        psdf = ps.DataFrame(
+            {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
+        )
+        pdf = psdf.to_pandas()
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                pdf_result.where(pdf_result.notnull(), None).astype(str),
+            )
+        else:
+            self.assert_eq(
+                psdf[psdf.a != psdf.a].describe(),
+                ps.DataFrame(
+                    {
+                        "b": [
+                            "0",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                            "None",
+                        ],
+                    },
+                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
+                ),
+            )
 
     def test_getitem_with_none_key(self):
         psdf = self.psdf

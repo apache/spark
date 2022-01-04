@@ -301,7 +301,7 @@ class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
         return DataFrame(self._data._internal.resolved_copy).index
 
 
-class SparkFrameMethods(object):
+class SparkFrameMethods:
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 

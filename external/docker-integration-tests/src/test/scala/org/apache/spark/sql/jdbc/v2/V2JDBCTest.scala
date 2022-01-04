@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.DataFrame
@@ -173,7 +173,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === notSupportsTableComment)
     }
@@ -190,6 +190,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   def supportsIndex: Boolean = false
+
+  def indexOptions: String = ""
 
   test("SPARK-36895: Test INDEX Using SQL") {
     if (supportsIndex) {
@@ -208,11 +210,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +
-          s" The supported Index Types are: BTREE and HASH"))
+          s" The supported Index Types are:"))
 
         sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
         sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
-          s" OPTIONS (KEY_BLOCK_SIZE=10)")
+          s" OPTIONS ($indexOptions)")
 
         assert(jdbcTable.indexExists("i1") == true)
         assert(jdbcTable.indexExists("i2") == true)

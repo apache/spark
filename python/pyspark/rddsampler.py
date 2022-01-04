@@ -20,7 +20,7 @@ import random
 import math
 
 
-class RDDSamplerBase(object):
+class RDDSamplerBase:
     def __init__(self, withReplacement, seed=None):
         self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
         self._withReplacement = withReplacement

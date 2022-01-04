@@ -490,19 +490,14 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
-    if "GITHUB_ACTIONS" in os.environ:
-        # See SPARK-33565. Python 3.9 was temporarily removed as its default Python executables
-        # to test because of Jenkins environment issue. Once Jenkins has Python 3.9 to test,
-        # we should remove this change back and add python3.9 into python/run-tests.py script.
-        command.append("--python-executable=%s" % ','.join(
-            x for x in ["python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
 
 def run_python_packaging_tests():
-    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
-    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
-    run_cmd(command)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+        command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+        run_cmd(command)
 
 
 def run_build_tests():
