@@ -285,6 +285,6 @@ abstract class SparkFunSuite
       _threshold = threshold
     }
 
-    def nonNullLogEvents(): Seq[LogEvent] = loggingEvents.filterNot(_ == null)
+    def nonNullLogEvents(): ArrayBuffer[LogEvent] = loggingEvents.filterNot(_ == null)
   }
 }
