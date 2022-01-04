@@ -47,7 +47,7 @@ object MimaExcludes {
 
     // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
-    // [SPARK-37786][SQL] [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
+    // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this")
   )
 

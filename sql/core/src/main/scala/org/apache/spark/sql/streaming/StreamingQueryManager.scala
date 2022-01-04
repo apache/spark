@@ -74,10 +74,10 @@ class StreamingQueryManager private[sql] (
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
       SQLConf.withExistingConf(sqlConf) {
         Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
-          sparkSession.sparkContext.conf).foreach(listener => {
+          sparkSession.sparkContext.conf).foreach { listener =>
           addListener(listener)
           logInfo(s"Registered listener ${listener.getClass.getName}")
-        })
+        }
       }
     }
     sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
