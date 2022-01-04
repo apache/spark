@@ -302,6 +302,11 @@ object QueryParsingErrors {
     new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
   }
 
+  def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
+      "a string literal.", ctx)
+  }
+
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(s"CTE definition can't have duplicate names: $duplicateNames.", ctx)
   }

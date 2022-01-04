@@ -20,7 +20,8 @@ package org.apache.spark.examples.mllib
 
 import java.util.Locale
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -111,7 +112,7 @@ object LDAExample {
     val conf = new SparkConf().setAppName(s"LDAExample with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     // Load documents, and prepare them for LDA.
     val preprocessStart = System.nanoTime()

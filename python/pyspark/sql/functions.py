@@ -2200,7 +2200,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     return Column(jc)
 
 
-def date_add(start: "ColumnOrName", days: int) -> Column:
+def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days after `start`
 
@@ -2208,16 +2208,21 @@ def date_add(start: "ColumnOrName", days: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
     >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
+    >>> df.select(date_add(df.dt, df.add.cast('integer')).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 10))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
+
+    days = lit(days) if isinstance(days, int) else days
+
+    return Column(sc._jvm.functions.date_add(_to_java_column(start), _to_java_column(days)))
 
 
-def date_sub(start: "ColumnOrName", days: int) -> Column:
+def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days before `start`
 
@@ -2225,13 +2230,18 @@ def date_sub(start: "ColumnOrName", days: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'sub'])
     >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
+    >>> df.select(date_sub(df.dt, df.sub.cast('integer')).alias('prev_date')).collect()
+    [Row(prev_date=datetime.date(2015, 4, 6))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
+
+    days = lit(days) if isinstance(days, int) else days
+
+    return Column(sc._jvm.functions.date_sub(_to_java_column(start), _to_java_column(days)))
 
 
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
@@ -2251,7 +2261,7 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
-def add_months(start: "ColumnOrName", months: int) -> Column:
+def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `months` months after `start`
 
@@ -2259,13 +2269,18 @@ def add_months(start: "ColumnOrName", months: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2)], ['dt', 'add'])
     >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 5, 8))]
+    >>> df.select(add_months(df.dt, df.add.cast('integer')).alias('next_month')).collect()
+    [Row(next_month=datetime.date(2015, 6, 8))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
+
+    months = lit(months) if isinstance(months, int) else months
+
+    return Column(sc._jvm.functions.add_months(_to_java_column(start), _to_java_column(months)))
 
 
 def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:

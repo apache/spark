@@ -195,4 +195,16 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
   }
+
+  test("SPARK-36703: Remove the global Sort if it is the child of RepartitionByExpression") {
+    val originalQuery1 = testRelation
+      .orderBy('a.asc, 'b.asc)
+      .distribute('a)(20)
+    comparePlans(Optimize.execute(originalQuery1.analyze), testRelation.distribute('a)(20).analyze)
+
+    val originalQuery2 = testRelation.distribute('a)(10)
+      .sortBy('a.asc, 'b.asc)
+      .distribute('a)(20)
+    comparePlans(Optimize.execute(originalQuery2.analyze), originalQuery2.analyze)
+  }
 }

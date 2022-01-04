@@ -2,15 +2,15 @@
 byte array comparisons
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.8.0-1042-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Byte Array compareTo:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-2-7 byte                                            407            418           9        161.1           6.2       1.0X
-8-16 byte                                           867            919          30         75.6          13.2       0.5X
-16-32 byte                                          882            916          23         74.3          13.5       0.5X
-512-1024 byte                                      1123           1167          31         58.4          17.1       0.4X
-512 byte slow                                      4054           4611         506         16.2          61.9       0.1X
-2-7 byte                                            430            450          16        152.4           6.6       0.9X
+2-7 byte                                            394            397           6        166.2           6.0       1.0X
+8-16 byte                                           816            832          14         80.3          12.5       0.5X
+16-32 byte                                          821            822           2         79.8          12.5       0.5X
+512-1024 byte                                      1059           1061           2         61.9          16.2       0.4X
+512 byte slow                                      4092           4137          32         16.0          62.4       0.1X
+2-7 byte                                            402            403           0        162.8           6.1       1.0X
 
 

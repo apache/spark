@@ -875,6 +875,11 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns if the current codes are running in a Spark task, e.g., in executors.
+   */
+  def isInRunningSparkTask: Boolean = TaskContext.get() != null
+
+  /**
    * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
    * and returns only the directories that exist / could be created.
    *
@@ -3034,6 +3039,7 @@ private[spark] object Utils extends Logging {
    * Remove trailing dollar signs from qualified class name,
    * and return the trailing part after the last dollar sign in the middle
    */
+  @scala.annotation.tailrec
   private def stripDollars(s: String): String = {
     val lastDollarIndex = s.lastIndexOf('$')
     if (lastDollarIndex < s.length - 1) {
