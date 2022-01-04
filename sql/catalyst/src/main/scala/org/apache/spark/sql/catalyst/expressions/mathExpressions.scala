@@ -285,11 +285,9 @@ object Ceil {
     val scaleV = scale.eval(EmptyRow)
     if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
 
-    (child.dataType, scaleV.asInstanceOf[Int]) match {
-      case (_, 0) => Ceil(child)
-      case (_, x) if x < 0 => RoundCeil(Cast(child, LongType), scale)
-      case (_: IntegralType | ShortType, _) => RoundCeil(Cast(child, LongType), scale)
-      case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
+    scaleV.asInstanceOf[Int] match {
+      case 0 => Ceil(child)
+      case x if x < 0 => RoundCeil(Cast(child, LongType), scale)
       case _ => RoundCeil(child, scale)
     }
   }
@@ -540,11 +538,9 @@ object Floor {
     val scaleV = scale.eval(EmptyRow)
     if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
 
-    (child.dataType, scaleV.asInstanceOf[Int]) match {
-      case (_, 0) => Floor(child)
-      case (_, x) if x < 0 => RoundFloor(Cast(child, LongType), scale)
-      case (_: IntegralType | ShortType, _) => RoundFloor(Cast(child, LongType), scale)
-      case (_ : FloatType, _) => RoundFloor(Cast(child, DoubleType), scale)
+    scaleV.asInstanceOf[Int] match {
+      case 0 => Floor(child)
+      case x if x < 0 => RoundFloor(Cast(child, LongType), scale)
       case _ => RoundFloor(child, scale)
     }
   }
