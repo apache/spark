@@ -40,7 +40,6 @@ class TransformExtractorSuite extends SparkFunSuite {
     override def toString: String = names.mkString(".")
   }
 
-
   /**
    * Creates a Transform using an anonymous class.
    */
