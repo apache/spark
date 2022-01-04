@@ -32,8 +32,8 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(STREAMING_QUERY_LISTENERS.key,
-      "org.apache.spark.sql.streaming.TestListener," +
-        classOf[TestSQLConfStreamingQueryListener].getCanonicalName)
+      Seq(classOf[TestListener].getCanonicalName,
+        classOf[TestSQLConfStreamingQueryListener].getCanonicalName).mkString(","))
       .set("spark.aaa", "aaa")
       .set("spark.bbb", "bbb")
 
