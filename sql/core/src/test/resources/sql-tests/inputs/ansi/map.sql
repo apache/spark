@@ -1,5 +1,6 @@
 --IMPORT map.sql
 
+-- key does not exist
 -- return null results if the map key in [] operator doesn't exist
 set spark.sql.ansi.strictIndexOperator=false;
 select map(1, 'a', 2, 'b')[5];
