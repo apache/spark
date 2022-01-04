@@ -1154,11 +1154,7 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
-        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
-        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
-        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
       s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },

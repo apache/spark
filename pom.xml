@@ -118,7 +118,7 @@
     <maven.version>3.8.4</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.30</slf4j.version>
+    <slf4j.version>1.7.32</slf4j.version>
     <log4j.version>2.17.1</log4j.version>
     <hadoop.version>3.3.1</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -285,11 +285,6 @@
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
 
     <!-- SPARK-36796 for JDK-17 test-->
-    <!--
-      SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
-      to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
-      is added. Should remove it when `mockito` can mock `j.u.Random` directly.
-    -->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
       --add-opens=java.base/java.lang=ALL-UNNAMED
@@ -305,7 +300,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      --add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED
     </extraJavaTestArgs>
   </properties>
   <repositories>
@@ -399,7 +393,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
+      <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1092,8 +1086,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
+        <version>3.2.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1105,7 +1099,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>3.4.6</version>
+        <version>3.12.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-inline</artifactId>
+        <version>3.12.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>

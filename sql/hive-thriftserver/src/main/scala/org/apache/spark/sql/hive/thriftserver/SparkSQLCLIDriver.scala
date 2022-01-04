@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
@@ -327,7 +326,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   if (!isRemoteMode) {
     SparkSQLEnv.init()
     if (sessionState.getIsSilent) {
-      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+      SparkSQLEnv.sparkContext.setLogLevel("warn")
     }
   } else {
     // Hive 1.2 + not supported in CLI
