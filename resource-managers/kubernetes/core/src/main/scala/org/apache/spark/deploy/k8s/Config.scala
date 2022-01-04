@@ -171,7 +171,7 @@ private[spark] object Config extends Logging {
   val MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING =
     ConfigBuilder("spark.kubernetes.executor.minTasksPerExecutorBeforeRolling")
       .doc("The minimum number of tasks per executor before rolling. " +
-        "Spark will not roll newly created executors whose total number of tasks is smaller" +
+        "Spark will not roll executors whose total number of tasks is smaller " +
         "than this configuration. The default value is zero.")
       .version("3.3.0")
       .intConf
