@@ -591,20 +591,17 @@ class FunctionsTests(ReusedSQLTestCase):
             "overlay(x, y, 2, 5)",
         ]
 
-        # check parameter resolution
         self.assertListEqual(actual, expected)
 
         df = self.spark.createDataFrame([("SPARK_SQL", "CORE", 7, 0)], ("x", "y", "pos", "len"))
 
-        expected = [Row(overlayed="SPARK_CORESQL")]
+        exp = [Row(ol="SPARK_CORESQL")]
         self.assertTrue(
             all(
                 [
-                    df.select(slice(df.x, df.y, 7, 0).alias("overlayed")).collect() == expected,
-                    df.select(slice(df.x, df.y, lit(7), lit(0)).alias("overlayed")).collect()
-                    == expected,
-                    df.select(slice("x", "y", "pos", "len").alias("overlayed")).collect()
-                    == expected,
+                    df.select(overlay(df.x, df.y, 7, 0).alias("ol")).collect() == exp,
+                    df.select(overlay(df.x, df.y, lit(7), lit(0)).alias("ol")).collect() == exp,
+                    df.select(overlay("x", "y", "pos", "len").alias("ol")).collect() == exp,
                 ]
             )
         )
