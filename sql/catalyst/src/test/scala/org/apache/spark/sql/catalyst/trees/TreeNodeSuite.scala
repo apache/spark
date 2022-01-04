@@ -810,4 +810,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         fail("TreeNode.nodeName should not throw malformed class name error")
     }
   }
+
+  test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
+    case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LogicalPlan with LeafNode {
+      val output: Seq[Attribute] = Nil
+    }
+    val node = Node(Set("second", "first"), Seq(Set(3, 1), Set(2, 1)))
+    assert(node.argString(10) == "{first, second}, [{1, 3}, {1, 2}]")
+  }
 }
