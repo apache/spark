@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override val command = "Create NAMESPACE"
+  override val command = "CREATE NAMESPACE"
 
   protected def namespace: String
 
@@ -68,12 +68,12 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(!path.startsWith("file:/"))
 
         val e = intercept[IllegalArgumentException] {
-          sql(s"CREATE NAMESPACE $ns Location ''")
+          sql(s"CREATE NAMESPACE $ns LOCATION ''")
         }
         assert(e.getMessage.contains("Can not create a Path from an empty string"))
 
         val uri = new Path(path).toUri
-        sql(s"CREATE NAMESPACE $ns Location '$uri'")
+        sql(s"CREATE NAMESPACE $ns LOCATION '$uri'")
 
         // Make sure the location is qualified.
         val expected = makeQualifiedPath(tmpDir.toString)
@@ -88,25 +88,12 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
 
-      // TODO: HiveExternalCatalog throws DatabaseAlreadyExistsException.
+      // TODO: HiveExternalCatalog throws DatabaseAlreadyExistsException, and
+      //   non-Hive catalogs throw NamespaceAlreadyExistsException.
       val e = intercept[AnalysisException] {
         sql(s"CREATE NAMESPACE $ns")
       }
       assert(e.getMessage.contains(alreadyExistErrorMessage))
-    }
-  }
-
-  test("test handling of 'IF NOT EXIST'") {
-    val ns = s"$catalog.$namespace"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")
-
-      // The namespace already exists, so this should fail.
-      // TODO: non-Hive catalogs throw NamespaceAlreadyExistsException.
-      val exception = intercept[AnalysisException] {
-        sql(s"CREATE NAMESPACE $ns")
-      }
-      assert(exception.getMessage.contains(alreadyExistErrorMessage))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")

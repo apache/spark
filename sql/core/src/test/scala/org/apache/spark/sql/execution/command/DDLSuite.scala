@@ -333,32 +333,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("Create Database - database already exists") {
-    val catalog = spark.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
-
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1.copy(properties = db1.properties -- reversedProperties) == CatalogDatabase(
-          dbNameWithoutBackTicks,
-          "",
-          getDBPath(dbNameWithoutBackTicks),
-          Map.empty))
-
-        // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
-        val e = intercept[AnalysisException] {
-          sql(s"CREATE DATABASE $dbName")
-        }.getMessage
-        assert(e.contains(s"already exists"))
-      } finally {
-        catalog.reset()
-      }
-    }
-  }
-
   private def withEmptyDirInTablePath(dirName: String)(f : File => Unit): Unit = {
     val tableLoc =
       new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(dirName)))
