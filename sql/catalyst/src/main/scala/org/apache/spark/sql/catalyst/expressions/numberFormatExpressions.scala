@@ -36,9 +36,9 @@ import org.apache.spark.unsafe.types.UTF8String
          '0' or '9': digit position
          '.':  decimal point (only allowed once)
          ',':  group (thousands) separator
-         'S':  sign anchored to number (uses locale)
-         'D':  decimal point (uses locale)
-         'G':  group separator (uses locale)
+         'S':  sign anchored to number
+         'D':  decimal point
+         'G':  group separator
          '$':  specifies that the input value has a leading $ (Dollar) sign.
   """,
   examples = """

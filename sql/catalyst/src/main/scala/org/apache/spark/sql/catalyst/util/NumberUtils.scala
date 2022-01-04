@@ -138,9 +138,9 @@ object NumberUtils {
    * '0' or '9': digit position
    * '.':  decimal point (only allowed once)
    * ',':  group (thousands) separator
-   * 'S':  sign anchored to number (uses locale)
-   * 'D':  decimal point (uses locale)
-   * 'G':  group separator (uses locale)
+   * 'S':  sign anchored to number
+   * 'D':  decimal point
+   * 'G':  group separator
    * '$':  specifies that the input value has a leading $ (Dollar) sign.
    *
    * @param input the string need to converted
@@ -190,9 +190,9 @@ object NumberUtils {
    * '0':  digit position (will not be dropped, even if insignificant)
    * '.':  decimal point (only allowed once)
    * ',':  group (thousands) separator
-   * 'S':  sign anchored to number (uses locale)
-   * 'D':  decimal point (uses locale)
-   * 'G':  group separator (uses locale)
+   * 'S':  sign anchored to number
+   * 'D':  decimal point
+   * 'G':  group separator
    * '$':  specifies that the input value has a leading $ (Dollar) sign.
    *
    * @param input the decimal to format
