@@ -135,8 +135,7 @@ object NumberUtils {
   /**
    * Convert string to numeric based on the given number format.
    * The format can consist of the following characters:
-   * '9':  digit position (can be dropped if insignificant)
-   * '0':  digit position (will not be dropped, even if insignificant)
+   * '0' or '9': digit position
    * '.':  decimal point (only allowed once)
    * ',':  group (thousands) separator
    * 'S':  sign anchored to number (uses locale)
