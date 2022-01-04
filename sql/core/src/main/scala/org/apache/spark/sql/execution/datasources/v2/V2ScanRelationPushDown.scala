@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, GeneralAggregateFunc}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
@@ -109,6 +109,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 r, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
+              } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
+                !r.supportCompletePushDown()) {
+                aggNode // return original plan node
               } else {
                 // No need to do column pruning because only the aggregate columns are used as
                 // DataSourceV2ScanRelation output columns. All the other columns are not
@@ -145,9 +148,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                       """.stripMargin)
 
                 val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
-
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-
                 if (r.supportCompletePushDown()) {
                   val projectExpressions = resultExpressions.map { expr =>
                     // TODO At present, only push down group by attribute is supported.
@@ -209,6 +210,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
+    // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
+    agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
+  }
+
   private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =
     if (aggAttribute.dataType == aggDataType) {
       aggAttribute
@@ -256,7 +262,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
-      case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.length == 0 =>
+      case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
         val tableSample = TableSampleInfo(
           sample.lowerBound,
           sample.upperBound,
@@ -282,7 +288,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       operation
     case s @ Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
-      if filter.isEmpty =>
+        if filter.isEmpty =>
       val orders = DataSourceStrategy.translateSortOrders(order)
       if (orders.length == order.length) {
         val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)

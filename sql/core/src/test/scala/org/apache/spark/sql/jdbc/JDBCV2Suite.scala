@@ -386,20 +386,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("scan with aggregate push-down: MAX MIN with filter and group by") {
-    val df = sql("select MAX(SaLaRY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+  test("scan with aggregate push-down: MAX AVG with filter and group by") {
+    val df = sql("select MAX(SaLaRY), AVG(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DePt")
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
+          "PushedAggregates: [MAX(SALARY), AVG(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
+    checkAnswer(df, Seq(Row(10000, 1100.0), Row(12000, 1250.0), Row(12000, 1200.0)))
   }
 
   private def checkFiltersRemoved(df: DataFrame): Unit = {
@@ -409,19 +409,36 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(filters.isEmpty)
   }
 
-  test("scan with aggregate push-down: MAX MIN with filter without group by") {
-    val df = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+  test("scan with aggregate push-down: MAX AVG with filter without group by") {
+    val df = sql("select MAX(ID), AVG(ID) FROM h2.test.people where id > 0")
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [MAX(ID), MIN(ID)], " +
+          "PushedAggregates: [MAX(ID), AVG(ID)], " +
             "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
             "PushedGroupByColumns: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(2, 1)))
+    checkAnswer(df, Seq(Row(2, 1.0)))
+  }
+
+  test("partitioned scan with aggregate push-down: complete push-down only") {
+    withTempView("v") {
+      spark.read
+        .option("partitionColumn", "dept")
+        .option("lowerBound", "0")
+        .option("upperBound", "2")
+        .option("numPartitions", "2")
+        .table("h2.test.employee")
+        .createTempView("v")
+      val df = sql("select AVG(SALARY) FROM v GROUP BY name")
+      // Partitioned JDBC Scan doesn't support complete aggregate push-down, and AVG requires
+      // complete push-down so aggregate is not pushed at the end.
+      checkAggregateRemoved(df, removed = false)
+      checkAnswer(df, Seq(Row(9000.0), Row(10000.0), Row(10000.0), Row(12000.0), Row(12000.0)))
+    }
   }
 
   test("scan with aggregate push-down: aggregate + number") {
