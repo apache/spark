@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.execution.command.v1
 
 /**
- * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 Hive external
+ * The class contains tests for the `CREATE NAMESPACE` command to check V1 Hive external
  * table catalog.
  */
 class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
