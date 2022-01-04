@@ -174,13 +174,13 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
   @Override
   public final void readLongsWithRebase(
-      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+      int total, WritableColumnVector c, int rowId, boolean failIfRebase, String timeZone) {
     readValues(total, c, rowId, (w, r, v) -> {
       if (v < RebaseDateTime.lastSwitchJulianTs()) {
         if (failIfRebase) {
           throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
         } else {
-          w.putLong(r, RebaseDateTime.rebaseJulianToGregorianMicros(v));
+          w.putLong(r, RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, v));
         }
       } else {
         w.putLong(r, v);

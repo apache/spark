@@ -89,7 +89,7 @@ public class VectorizedReaderBase extends ValuesReader implements VectorizedValu
 
   @Override
   public void readLongsWithRebase(int total, WritableColumnVector c, int rowId,
-      boolean failIfRebase) {
+      boolean failIfRebase, String timeZone) {
     throw new UnsupportedOperationException();
   }
 
