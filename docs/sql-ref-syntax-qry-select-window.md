@@ -58,7 +58,7 @@ window_function [ nulls_option ] OVER
 
     `{ IGNORE | RESPECT } NULLS`
 
-    **Note:**: Only `LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE` could append `{ IGNORE | RESPECT } NULLS`.
+    **Note:** Only `LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE` could append `{ IGNORE | RESPECT } NULLS`.
 
 * **window_frame**
 
