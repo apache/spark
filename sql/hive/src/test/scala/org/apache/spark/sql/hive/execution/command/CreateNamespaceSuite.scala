@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v2
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
+ * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 Hive external
+ * table catalog.
  */
-class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
-  override def namespace: String = "ns1.ns2"
-  override def notFoundMsgPrefix: String = "Namespace"
+class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
+  override def alreadyExistErrorMessage: String = s"$notFoundMsgPrefix $namespace already exists"
 }
