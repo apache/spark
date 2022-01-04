@@ -24,7 +24,7 @@ import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale, Properties}
+import java.util.{Arrays, EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
@@ -41,9 +41,9 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
-// scalastyle:off
-import org.apache.log4j.PropertyConfigurator
-// scalastyle:on
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
 import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
@@ -421,14 +421,17 @@ private[spark] object TestUtils {
    * config a log4j properties used for testsuite
    */
   def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
+    val configuration = ConfigurationBuilderFactory.newConfigurationBuilder()
+      .addRootProperty("rootLogger.level", s"$level")
+      .addRootProperty("rootLogger.appenderRef.stdout.ref", "console")
+      .addProperty("appender.console.type", "Console")
+      .addProperty("appender.console.name", "console")
+      .addProperty("appender.console.target", "SYSTEM_ERR")
+      .addProperty("appender.console.layout.type", "PatternLayout")
+      .addProperty("appender.console.layout.pattern",
+        "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
+      .build()
+    LogManager.getContext(false).asInstanceOf[LoggerContext].reconfigure(configuration)
   }
 
   /**
