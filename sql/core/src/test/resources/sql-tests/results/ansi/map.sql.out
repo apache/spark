@@ -3,20 +3,19 @@
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=false
+set spark.sql.ansi.strictIndexOperator=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	false
+spark.sql.ansi.strictIndexOperator	false
 
 
 -- !query
 select map(1, 'a', 2, 'b')[5]
 -- !query schema
-struct<>
+struct<map(1, a, 2, b)[5]:string>
 -- !query output
-org.apache.spark.SparkNoSuchElementException
-Key 5 does not exist. If necessary set spark.sql.ansi.strictIndexOperator to false to bypass this error.
+NULL
 
 
 -- !query
@@ -29,11 +28,11 @@ Key 5 does not exist. To return NULL instead, use 'try_element_at'. If necessary
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=true
+set spark.sql.ansi.strictIndexOperator=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	true
+spark.sql.ansi.strictIndexOperator	true
 
 
 -- !query

@@ -2,13 +2,13 @@
 
 -- key does not exist
 -- return null results if the map key in [] operator doesn't exist
-set spark.sql.ansi.failOnElementNotExists=false;
+set spark.sql.ansi.strictIndexOperator=false;
 select map(1, 'a', 2, 'b')[5];
 -- the configuration spark.sql.ansi.strictIndexOperator doesn't control function element_at
 select element_at(map(1, 'a', 2, 'b'), 5);
 
 -- throw exception if the map key in [] operator doesn't exist
-set spark.sql.ansi.failOnElementNotExists=true;
+set spark.sql.ansi.strictIndexOperator=true;
 select map(1, 'a', 2, 'b')[5];
 select element_at(map(1, 'a', 2, 'b'), 5);
 

@@ -3,11 +3,11 @@
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=false
+set spark.sql.ansi.strictIndexOperator=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	false
+spark.sql.ansi.strictIndexOperator	false
 
 
 -- !query
@@ -27,11 +27,11 @@ NULL
 
 
 -- !query
-set spark.sql.ansi.failOnElementNotExists=true
+set spark.sql.ansi.strictIndexOperator=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.ansi.failOnElementNotExists	true
+spark.sql.ansi.strictIndexOperator	true
 
 
 -- !query
