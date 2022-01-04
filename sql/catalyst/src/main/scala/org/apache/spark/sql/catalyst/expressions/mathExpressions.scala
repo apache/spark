@@ -239,17 +239,6 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       0
-      > SELECT _FUNC_(5);
-       5
-  """,
-  since = "1.4.0",
-  group = "math_funcs")
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -303,6 +292,8 @@ object Ceil {
        5
       > SELECT _FUNC_(3.1411, 3);
        3.142
+      > SELECT _FUNC_(3.1411, -3);
+       1000
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -317,7 +308,6 @@ object CeilExpressionBuilder extends ExpressionBuilder {
 case class RoundCeil(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
     with Serializable with ImplicitCastInputTypes {
-  def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundCeil = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "ceil"
@@ -492,17 +482,6 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       -1
-      > SELECT _FUNC_(5);
-       5
-  """,
-  since = "1.4.0",
-  group = "math_funcs")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -556,6 +535,8 @@ object Floor {
        5
       > SELECT _FUNC_(3.1411, 3);
        3.141
+      > SELECT _FUNC_(3.1411, -3);
+       0
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -570,7 +551,6 @@ object FloorExpressionBuilder extends ExpressionBuilder {
 case class RoundFloor(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
     with Serializable with ImplicitCastInputTypes {
-  def this(child: Expression) = this(child, Literal(0))
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
   : RoundFloor = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "floor"
