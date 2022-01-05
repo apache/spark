@@ -4209,7 +4209,7 @@ def from_json(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        a column or column name in CSV format
+        a column or column name in JSON format
     schema : :class:`DataType` or str
         a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
         to use when parsing the json column
