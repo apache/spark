@@ -164,7 +164,7 @@ private[sql] object BucketTransform {
       Some((value, FieldReference(partCols), FieldReference(Seq.empty[String])))
     case _ =>
       None
-    }
+  }
 }
 
 private[sql] final case class ApplyTransform(
