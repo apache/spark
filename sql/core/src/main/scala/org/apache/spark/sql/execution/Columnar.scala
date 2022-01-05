@@ -64,8 +64,7 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
-  assert(TaskContext.get != null || child.supportsColumnar)
+  assert(child.supportsColumnar)
 
   override def output: Seq[Attribute] = child.output
 
