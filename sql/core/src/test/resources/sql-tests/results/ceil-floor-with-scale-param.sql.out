@@ -75,6 +75,33 @@ struct<ceil(3.14115, -3):bigint>
 
 
 -- !query
+SELECT CEIL(2.5, null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Invalid scale parameter for the function ceil; line 1 pos 7
+
+
+-- !query
+SELECT CEIL(2.5, 'a')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Invalid scale parameter for the function ceil; line 1 pos 7
+
+
+-- !query
+SELECT CEIL(2.5, 0, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Function ceil cannot take more than 2 parameters; line 1 pos 7
+
+
+-- !query
 SELECT FLOOR(2.5, 0)
 -- !query schema
 struct<FLOOR(2.5):decimal(2,0)>
@@ -144,3 +171,30 @@ SELECT FLOOR(3.14115, -3)
 struct<floor(3.14115, -3):bigint>
 -- !query output
 0
+
+
+-- !query
+SELECT FLOOR(2.5, null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Invalid scale parameter for the function floor; line 1 pos 7
+
+
+-- !query
+SELECT FLOOR(2.5, 'a')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Invalid scale parameter for the function floor; line 1 pos 7
+
+
+-- !query
+SELECT FLOOR(2.5, 0, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+Function floor cannot take more than 2 parameters; line 1 pos 7

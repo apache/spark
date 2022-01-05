@@ -24,7 +24,6 @@ import java.time.temporal.ChronoUnit
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -338,10 +337,10 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ceil") {
-    testUnary(Ceil.apply, (d: Double) => math.ceil(d).toLong)
+    testUnary(Ceil, (d: Double) => math.ceil(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
 
-    testUnary(Ceil.apply, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
+    testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
@@ -362,8 +361,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(Ceil(floatNullLit)), null, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(0)), 0L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(1)), 1L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(
-      Ceil(1234567890123456L)), 1234567890123456L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Ceil(1234567890123456L)), 1234567890123456L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(0.01)), 1L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Ceil(-0.10)), 0L, EmptyRow)
   }
@@ -805,15 +803,6 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal.create(null, IntegerType)), null)
       checkEvaluation(checkDataTypeAndCast(
         RoundFloor(Literal.create(null, dataType), Literal(2))), null)
-      try {
-        checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal.create(null, dataType),
-          Literal.create(null, IntegerType))), null)
-        checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal.create(null, dataType),
-          Literal.create(null, IntegerType))), null)
-      } catch {
-        case e: AnalysisException =>
-          assert(e.getMessage.contains("Scale parameter can not be null"))
-      }
       checkEvaluation(checkDataTypeAndCast(
         RoundCeil(Literal.create(null, dataType), Literal(2))), null)
     }

@@ -270,7 +270,9 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that" +
+    " is not smaller than `expr`. A optional `scale` parameter can be specified to" +
+    " control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -286,12 +288,18 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   group = "math_funcs")
 object CeilExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) Ceil(expressions.head)
-    else if (expressions.length == 2) {
+    if (expressions.length == 1) {
+      Ceil(expressions.head)
+    } else if (expressions.length == 2) {
       val child = expressions(0)
       val scale = expressions(1)
+      if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
+        throw new AnalysisException("Invalid scale parameter for the function ceil")
+      }
       val scaleV = scale.eval(EmptyRow)
-      if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+      if (scaleV == null) {
+        throw new AnalysisException("Invalid scale parameter for the function ceil")
+      }
 
       (child.dataType, scaleV.asInstanceOf[Int]) match {
         case (_, 0) => Ceil(child)
@@ -300,8 +308,9 @@ object CeilExpressionBuilder extends ExpressionBuilder {
         case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
         case _ => RoundCeil(child, scale)
       }
+    } else {
+      throw new AnalysisException("Function ceil cannot take more than 2 parameters")
     }
-    else throw new AnalysisException("Function ceil cannot take more than 2 parameters")
   }
 }
 
@@ -513,7 +522,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
+  usage = "_FUNC_(expr[, scale]) - Returns the largest number after rounding down that" +
+    " is not greater than `expr`. An optional `scale` parameter can be specified to" +
+    " control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -529,12 +540,18 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   group = "math_funcs")
 object FloorExpressionBuilder extends ExpressionBuilder {
   def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) Floor(expressions.head)
-    else if (expressions.length == 2) {
+    if (expressions.length == 1) {
+      Floor(expressions.head)
+    } else if (expressions.length == 2) {
       val child = expressions(0)
       val scale = expressions(1)
+      if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
+        throw new AnalysisException("Invalid scale parameter for the function floor")
+      }
       val scaleV = scale.eval(EmptyRow)
-      if (scaleV == null) throw new AnalysisException("Scale parameter can not be null")
+      if (scaleV == null) {
+        throw new AnalysisException("Invalid scale parameter for the function floor")
+      }
 
       (child.dataType, scaleV.asInstanceOf[Int]) match {
         case (_, 0) => Floor(child)
@@ -543,8 +560,9 @@ object FloorExpressionBuilder extends ExpressionBuilder {
         case (_ : FloatType, _) => RoundFloor(Cast(child, DoubleType), scale)
         case _ => RoundFloor(child, scale)
       }
+    } else {
+      throw new AnalysisException("Function floor cannot take more than 2 parameters")
     }
-    else throw new AnalysisException("Function floor cannot take more than 2 parameters")
   }
 }
 
