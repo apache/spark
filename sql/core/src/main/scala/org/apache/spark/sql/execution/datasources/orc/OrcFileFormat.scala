@@ -142,10 +142,11 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val (resultedColPruneInfo, reader) =
+      val (resultedColPruneInfo, orcSchema) =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
+          val orcSchema = reader.getSchema
           (OrcUtils.requestedColumnIds(
-            isCaseSensitive, dataSchema, requiredSchema, reader, conf), reader)
+            isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf), orcSchema)
         }
 
       if (resultedColPruneInfo.isEmpty) {
@@ -161,7 +162,7 @@ class OrcFileFormat
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-        val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
+        val orcCatalystSchema = OrcUtils.toCatalystSchema(orcSchema)
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
           dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,

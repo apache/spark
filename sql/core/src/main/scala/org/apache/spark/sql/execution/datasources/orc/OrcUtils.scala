@@ -197,7 +197,7 @@ object OrcUtils extends Logging {
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
-      reader: Reader,
+      orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
     def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
@@ -210,7 +210,6 @@ object OrcUtils extends Logging {
       }
     }
 
-    val orcSchema = reader.getSchema
     checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
     val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
@@ -259,7 +258,6 @@ object OrcUtils extends Logging {
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                  reader.close()
                   throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
                     requiredFieldName, matchedOrcFieldsString)
                 } else {
@@ -284,33 +282,33 @@ object OrcUtils extends Logging {
    * in ORC. The second `StructType` used to change the `TimestampNTZType` as LongType in result
    * schema string when reading `TimestampNTZ` as `TimestampLTZ`.
    */
-  def orcTypeDescriptionString(
+  def getOrcSchemaString(
       dt: DataType, orcDt: Option[DataType] = None): String = (dt, orcDt) match {
     case (s1: StructType, Some(s2: StructType)) =>
       val fieldTypes = s1.fields.map { f =>
         val idx = s2.fieldNames.indexWhere(caseSensitiveResolution(_, f.name))
         if (idx == -1) {
-          s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+          s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
         } else {
           s"${quoteIdentifier(f.name)}:" +
-            s"${orcTypeDescriptionString(f.dataType, Some(s2(idx).dataType))}"
+            s"${getOrcSchemaString(f.dataType, Some(s2(idx).dataType))}"
         }
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case (s: StructType, None) =>
       val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+        s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case (a1: ArrayType, Some(a2: ArrayType)) =>
-      s"array<${orcTypeDescriptionString(a1.elementType, Some(a2.elementType))}>"
+      s"array<${getOrcSchemaString(a1.elementType, Some(a2.elementType))}>"
     case (a: ArrayType, None) =>
-      s"array<${orcTypeDescriptionString(a.elementType)}>"
+      s"array<${getOrcSchemaString(a.elementType)}>"
     case (m1: MapType, Some(m2: MapType)) =>
-      s"map<${orcTypeDescriptionString(m1.keyType, Some(m2.keyType))}," +
-        s"${orcTypeDescriptionString(m1.valueType, Some(m2.valueType))}>"
+      s"map<${getOrcSchemaString(m1.keyType, Some(m2.keyType))}," +
+        s"${getOrcSchemaString(m1.valueType, Some(m2.valueType))}>"
     case (m: MapType, None) =>
-      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+      s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
     case (_: DayTimeIntervalType | _: TimestampNTZType, _) => LongType.catalogString
     case (_: YearMonthIntervalType, _) => IntegerType.catalogString
     case (TimestampType, Some(TimestampNTZType)) => LongType.catalogString
@@ -393,9 +391,9 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.orcTypeDescriptionString(resultSchema, Some(orcCatalystSchema))
+      OrcUtils.getOrcSchemaString(resultSchema, Some(orcCatalystSchema))
     } else {
-      OrcUtils.orcTypeDescriptionString(
+      OrcUtils.getOrcSchemaString(
         StructType(dataSchema.fields ++ partitionSchema.fields), Some(orcCatalystSchema))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)

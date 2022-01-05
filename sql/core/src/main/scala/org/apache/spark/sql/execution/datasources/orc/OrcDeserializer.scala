@@ -127,6 +127,8 @@ class OrcDeserializer(
         updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
       case TimestampType => (ordinal, value) =>
+        // When reading as Spark LTZ, the ORC value can be either `OrcTimestamp`
+        // (which maps to Spark LTZ) or `LongWritable` (which maps to Spark NTZ)
         if (value.isInstanceOf[OrcTimestamp]) {
           // Spark takes Orc timestamp as timestampLTZ, so read it as the Timestamp.
           updater.setLong(ordinal,

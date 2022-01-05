@@ -43,8 +43,7 @@ case class OrcWrite(
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute,
-      OrcUtils.orcTypeDescriptionString(dataSchema, None))
+    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcUtils.getOrcSchemaString(dataSchema, None))
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 
