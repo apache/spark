@@ -652,9 +652,9 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
         StructField("50",
           StructType(
             StructField("20", StringType) ::
-            StructField("30",
-              StructType(
-                StructField("40", StringType) :: Nil)) :: Nil))))
+              StructField("30",
+                StructType(
+                  StructField("40", StringType) :: Nil)) :: Nil))))
     }
 
     // test for struct in array
@@ -845,157 +845,151 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
-  // Test the various cases during deserialization where we may or may not copy
-  // a struct writer's result row
-  test("struct in an array") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  array(
-          |    named_struct(
-          |      'a1', 1,
-          |      'a2', 2),
-          |    named_struct(
-          |      'a1', 3,
-          |      'a2', 4)
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
-    }
-  }
+  test("SPARK-37812: Reuse result row when deserializing a struct") {
+    val queries = Seq(
+      // struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
 
-  test("struct in a map #1") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  map(
-          |    'ns1',
-          |    named_struct(
-          |      'a1', 1,
-          |      'a2', 2),
-          |    'ns2',
-          |    named_struct(
-          |      'a1', 3,
-          |      'a2', 4)
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
-    }
-  }
+      // struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    'ns2',
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
 
-  test("struct in a map #2") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  map(
-          |    named_struct(
-          |      'a1', 1,
-          |      'a2', 2),
-          |    1,
-          |    named_struct(
-          |      'a1', 3,
-          |      'a2', 4),
-          |    2
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
-    }
-  }
+      // struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    1,
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
 
-  test("struct in a struct in an array") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  array(
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 1,
-          |        'a2', 2),
-          |      'b', named_struct(
-          |        'b1', 3,
-          |        'b2', 4)
-          |    ),
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 5,
-          |        'a2', 6),
-          |      'b', named_struct(
-          |        'b1', 7,
-          |        'b2', 8)
-          |    )
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
-    }
-  }
+      // struct in a struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
 
-  test("struct in a struct in a map #1") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  map(
-          |    'ns1',
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 1,
-          |        'a2', 2),
-          |      'b', named_struct(
-          |        'b1', 3,
-          |        'b2', 4)
-          |    ),
-          |    'ns2',
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 5,
-          |        'a2', 6),
-          |      'b', named_struct(
-          |        'b1', 7,
-          |        'b2', 8)
-          |    )
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
-    }
-  }
+      // struct in a struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    'ns2',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
 
-  test("struct in a struct in a map #2") {
-    withTempPath { file =>
-      val df = sql(
-        """SELECT
-          |  map(
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 1,
-          |        'a2', 2),
-          |      'b', named_struct(
-          |        'b1', 3,
-          |        'b2', 4)
-          |    ),
-          |    1,
-          |    named_struct(
-          |      'a', named_struct(
-          |        'a1', 5,
-          |        'a2', 6),
-          |      'b', named_struct(
-          |        'b1', 7,
-          |        'b2', 8)
-          |    ),
-          |    2
-          |  ) as col1
-          |""".stripMargin)
-      df.write.orc(file.getCanonicalPath)
-      val df2 = spark.read.orc(file.getCanonicalPath)
-      checkAnswer(df2, df.collect().toSeq)
+      // struct in a struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    1,
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    ),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
+
+      // multi-row test
+      """SELECT * FROM VALUES
+        |  (named_struct(
+        |    'a', 1,
+        |    'b', 2)),
+        |  (named_struct(
+        |    'a', 3,
+        |    'b', 4)),
+        |  (named_struct(
+        |    'a', 5,
+        |    'b', 6))
+        |tbl(c1)
+        |""".stripMargin
+    )
+
+    queries.foreach { query =>
+      withAllNativeOrcReaders {
+        Seq(true, false).foreach { vecReaderNestedColEnabled =>
+          // SPARK-37812 only applies to the configuration where
+          // ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED is false. However, these
+          // are good general correctness tests for the other configurations as well.
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
+            withTempPath { file =>
+              val df = sql(query)
+              // use coalesce so we write just 1 file for the multi-row case
+              df.coalesce(1).write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
+      }
     }
   }
 }
