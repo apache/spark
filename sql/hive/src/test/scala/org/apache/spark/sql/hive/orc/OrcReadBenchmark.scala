@@ -314,7 +314,9 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
@@ -351,7 +353,9 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
         }
 
         benchmark.addCase("Hive built-in ORC") { _ =>
