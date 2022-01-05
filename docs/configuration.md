@@ -3268,4 +3268,20 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.push.minShuffleSizeToWait</code></td>
+  <td><code>500m</code></td>
+  <td>
+    Driver will wait for merge finalization to complete only if total shuffle data size is more than this threshold. If total shuffle size is less, driver will immediately finalize the shuffle output.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.push.minCompletedPushRatio</code></td>
+  <td><code>1.0</code></td>
+  <td>
+    Fraction of minimum map partitions that should be push complete before driver starts shuffle merge finalization during push based shuffle.
+  </td>
+  <td>3.3.0</td>
+</tr>
 </table>

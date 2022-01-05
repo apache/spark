@@ -843,16 +843,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
-  test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      val rest = sql("SHOW CREATE TABLE t").head().getString(0)
-      assert(rest.contains("VARCHAR(3)"))
-      assert(rest.contains("CHAR(5)"))
-    }
-  }
-
   test("SPARK-34114: should not trim right for read-side length check and char padding") {
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>

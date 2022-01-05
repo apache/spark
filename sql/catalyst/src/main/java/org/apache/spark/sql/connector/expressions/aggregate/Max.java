@@ -35,7 +35,4 @@ public final class Max implements AggregateFunc {
 
   @Override
   public String toString() { return "MAX(" + column.describe() + ")"; }
-
-  @Override
-  public String describe() { return this.toString(); }
 }

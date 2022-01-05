@@ -2665,6 +2665,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
+      "operator will throw an exception if array index is out of bound, or map key does not " +
+      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -4129,6 +4137,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

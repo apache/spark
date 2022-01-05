@@ -266,23 +266,25 @@ abstract class SparkFunSuite
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
       extends AbstractAppender("logAppender", null, null) {
-    val loggingEvents = new ArrayBuffer[LogEvent]()
+    private val _loggingEvents = new ArrayBuffer[LogEvent]()
     private var _threshold: Level = Level.INFO
 
     override def append(loggingEvent: LogEvent): Unit = loggingEvent.synchronized {
       val copyEvent = loggingEvent.toImmutable
       if (copyEvent.getLevel.isMoreSpecificThan(_threshold)) {
-        if (loggingEvents.size >= maxEvents) {
+        if (_loggingEvents.size >= maxEvents) {
           val loggingInfo = if (msg == "") "." else s" while logging $msg."
           throw new IllegalStateException(
             s"Number of events reached the limit of $maxEvents$loggingInfo")
         }
-        loggingEvents.append(copyEvent)
+        _loggingEvents.append(copyEvent)
       }
     }
 
     def setThreshold(threshold: Level): Unit = {
       _threshold = threshold
     }
+
+    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.filterNot(_ == null)
   }
 }

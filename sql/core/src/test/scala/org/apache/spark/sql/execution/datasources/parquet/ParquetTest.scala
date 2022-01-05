@@ -26,8 +26,9 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.HadoopReadOptions
+import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.format.converter.ParquetMetadataConverter
-import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter, ParquetOutputFormat}
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
@@ -166,6 +167,15 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
     // test the vectorized reader
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
+  }
+
+  def withAllParquetWriters(code: => Unit): Unit = {
+    // Parquet version 1
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_1_0.toString)(code)
+    // Parquet version 2
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString)(code)
   }
 
   def getMetaData(dir: java.io.File): Map[String, String] = {
