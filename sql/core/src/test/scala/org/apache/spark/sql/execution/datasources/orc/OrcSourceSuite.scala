@@ -652,9 +652,9 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
         StructField("50",
           StructType(
             StructField("20", StringType) ::
-              StructField("30",
-                StructType(
-                  StructField("40", StringType) :: Nil)) :: Nil))))
+            StructField("30",
+              StructType(
+                StructField("40", StringType) :: Nil)) :: Nil))))
     }
 
     // test for struct in array
