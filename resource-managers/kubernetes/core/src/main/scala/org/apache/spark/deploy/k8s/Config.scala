@@ -153,7 +153,7 @@ private[spark] object Config extends Logging {
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
-        "TOTAL_DURATION, FAILED_TASKS, OUTLIER (default). " +
+        "TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default). " +
         "When executor roll happens, Spark uses this policy to choose " +
         "an executor and decommission it. The built-in policies are based on executor summary." +
         "ID policy chooses an executor with the smallest executor ID. " +
