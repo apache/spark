@@ -23,7 +23,6 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Config.ExecutorRollPolicy
-import org.apache.spark.status.api.v1
 import org.apache.spark.status.api.v1.ExecutorSummary
 
 class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
@@ -31,7 +30,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val plugin = new ExecutorRollPlugin().driverPlugin()
 
   private val _choose = PrivateMethod[Option[String]](Symbol("choose"))
-  private val _outliers = PrivateMethod[Option[Seq[v1.ExecutorSummary]]](Symbol("outliers"))
+  private val _outliers = PrivateMethod[Option[Seq[ExecutorSummary]]](Symbol("outliers"))
 
   val driverSummary = new ExecutorSummary("driver", "host:port", true, 1,
     10, 10, 1, 1, 1,
