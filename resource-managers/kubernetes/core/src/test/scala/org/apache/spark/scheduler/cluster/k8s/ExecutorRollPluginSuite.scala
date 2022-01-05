@@ -35,8 +35,8 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
 
   val driverSummary = new ExecutorSummary("driver", "host:port", true, 1,
     10, 10, 1, 1, 1,
-    1, 0, 1, 100,
-    0, 100, 100,
+    0, 0, 1, 100,
+    1, 100, 100,
     10, false, 20, new Date(1639300000000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
