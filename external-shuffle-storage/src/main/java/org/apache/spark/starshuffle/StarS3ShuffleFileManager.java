@@ -64,7 +64,7 @@ public class StarS3ShuffleFileManager implements StarShuffleFileManager {
     public static final String DEFAULT_AWS_REGION = Regions.US_WEST_2.getName();
 
     private static TransferManager transferManager;
-    private static Object transferManagerLock = new Object();
+    private static final Object transferManagerLock = new Object();
 
     private final String awsRegion;
     private final int maxThreads;
@@ -158,8 +158,6 @@ public class StarS3ShuffleFileManager implements StarShuffleFileManager {
                     s3Url, size, totalTransferredBytes.get(), mbs);
         } catch (InterruptedException e) {
             throw new RuntimeException("Failed to upload to s3: " + key, e);
-        } finally {
-            transferManager.shutdownNow();
         }
     }
 
@@ -212,6 +210,7 @@ public class StarS3ShuffleFileManager implements StarShuffleFileManager {
             throw new RuntimeException(String.format(
                     "Failed to download shuffle file %s", s3Url));
         } finally {
+            // TODO
             transferManager.shutdownNow();
         }
 

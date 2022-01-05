@@ -31,7 +31,6 @@ import org.apache.spark.shuffle.StarBypassMergeSortShuffleHandle;
 import org.apache.spark.shuffle.StarOpts;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
-import org.apache.spark.shuffle.sort.SortShuffleManager;
 import org.apache.spark.storage.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +41,8 @@ import scala.Tuple2;
 import scala.collection.Iterator;
 
 import javax.annotation.Nullable;
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 
 /**
  * This class is copied from BypassMergeSortShuffleWriter for a quick prototype.

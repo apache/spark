@@ -94,7 +94,8 @@ public class StarBlockStoreClient extends BlockStoreClient {
                     throw new RuntimeException(String.format(
                             "Failed to read file %s for shuffle block %s",
                             mapResultFileInfo.getLocation(),
-                            blockId));
+                            blockId),
+                            e);
                 }
             } else {
                 try (InputStream inputStream = streamProvider.read(mapResultFileInfo.getLocation(), offset, size)) {
@@ -114,7 +115,8 @@ public class StarBlockStoreClient extends BlockStoreClient {
                     throw new RuntimeException(String.format(
                             "Failed to read file %s for shuffle block %s",
                             mapResultFileInfo.getLocation(),
-                            blockId));
+                            blockId),
+                            e);
                 }
             }
             logger.info("Fetch blocks: {}, {}", host, execId);
