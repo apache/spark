@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlread
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, SortedBucketTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
@@ -318,7 +318,11 @@ private[sql] object V2SessionCatalog {
       case IdentityTransform(FieldReference(Seq(col))) =>
         identityCols += col
 
-      case BucketTransform(numBuckets, FieldReference(Seq(col)), FieldReference(Seq(sortCol))) =>
+      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
+        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
+
+      case SortedBucketTransform(
+          numBuckets, FieldReference(Seq(col)), FieldReference(Seq(sortCol))) =>
         bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, sortCol :: Nil))
 
       case transform =>

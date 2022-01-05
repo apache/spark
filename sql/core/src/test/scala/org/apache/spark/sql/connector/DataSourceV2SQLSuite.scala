@@ -1569,7 +1569,6 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $identifier (a int, b string, c int, d int, e int, f int) USING" +
         s" $v2Source PARTITIONED BY (a, b) CLUSTERED BY (c, d) SORTED by (e, f) INTO 4 BUCKETS")
       val describe = spark.sql(s"DESCRIBE $identifier")
-      describe.show(false)
       val part1 = describe
         .filter("col_name = 'Part 0'")
         .select("data_type").head.getString(0)
