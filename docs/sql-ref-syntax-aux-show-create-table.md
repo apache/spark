@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-SHOW CREATE TABLE table_identifier
+SHOW CREATE TABLE table_identifier [ AS SERDE ]
 ```
 
 ### Parameters
@@ -36,6 +36,10 @@ SHOW CREATE TABLE table_identifier
     Specifies a table or view name, which may be optionally qualified with a database name.
 
     **Syntax:** `[ database_name. ] table_name`
+
+* **AS SERDE**
+
+    Just for generating Hive DDL for a Hive SerDe table.
 
 ### Examples
 
