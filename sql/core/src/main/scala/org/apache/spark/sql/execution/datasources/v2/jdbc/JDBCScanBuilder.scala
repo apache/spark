@@ -76,7 +76,7 @@ case class JDBCScanBuilder(
     lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
       (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
-        jdbcOptions.partitionColumn.map(fieldNames(0).equalsIgnoreCase(_)).get)
+        jdbcOptions.partitionColumn.exists(fieldNames(0).equalsIgnoreCase(_)))
   }
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
