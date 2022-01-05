@@ -314,8 +314,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true",
-              SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
             spark.sql(s"SELECT * FROM nativeOrcTable").noop()
           }
         }
@@ -354,8 +353,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("Native ORC Vectorized") { _ =>
-          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true",
-              SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
             spark.sql(s"SELECT * FROM nativeOrcTable").noop()
           }
         }
