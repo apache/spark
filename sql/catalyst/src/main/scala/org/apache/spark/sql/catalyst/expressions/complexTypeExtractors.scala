@@ -236,8 +236,6 @@ case class GetArrayItem(
     failOnError: Boolean = SQLConf.get.strictIndexOperator)
   extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
 
-  def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
-
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
 
@@ -443,8 +441,6 @@ case class GetMapValue(
     key: Expression,
     failOnError: Boolean = SQLConf.get.strictIndexOperator)
   extends GetMapValueUtil with ExtractValue {
-
-  def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)
