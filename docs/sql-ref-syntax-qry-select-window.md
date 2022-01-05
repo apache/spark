@@ -52,13 +52,13 @@ window_function [ nulls_option ] OVER
 
 * **nulls_option**
 
-    Specified to indicate whether skip null values in the determination of which row to use. `RESPECT NULLS` is supported by default if you do not specify `IGNORE NULLS`.
+    Specifies whether or not to skip null values when evaluating the window function. `RESECT NULLS` means not skipping null values, while `IGNORE NULLS` means skipping. If not specified, the default is `RESECT NULLS`.
 
     **Syntax:**
 
     `{ IGNORE | RESPECT } NULLS`
 
-    **Note:** Only `LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE` could append `{ IGNORE | RESPECT } NULLS`.
+    **Note:** Only `LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE` can be used with `IGNORE NULLS`.
 
 * **window_frame**
 
