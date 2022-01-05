@@ -104,24 +104,29 @@ private[sql] final case class BucketTransform(
     columns: Seq[NamedReference],
     sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference]) extends RewritableTransform {
 
-  override val name: String = "bucket"
+  override val name: String = if (sortedColumns.nonEmpty) "sortedBucket" else "bucket"
 
   override def references: Array[NamedReference] = {
     arguments.collect { case named: NamedReference => named }
   }
 
-  override def arguments: Array[Expression] = numBuckets +: columns.toArray
-
-  override def toString: String =
+  override def arguments: Array[Expression] = {
     if (sortedColumns.nonEmpty) {
-      s"bucket(${arguments.map(_.describe).mkString(", ")}," +
-        s" ${sortedColumns.map(_.describe).mkString(", ")})"
+      (columns.toArray :+ numBuckets) ++ sortedColumns
     } else {
-      s"bucket(${arguments.map(_.describe).mkString(", ")})"
+      numBuckets +: columns.toArray
     }
+  }
+
+  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
-    this.copy(columns = newReferences)
+    if (sortedColumns.isEmpty) {
+      this.copy(columns = newReferences)
+    } else {
+      val splits = newReferences.grouped(columns.length).toList
+      this.copy(columns = splits(0), sortedColumns = splits(1))
+    }
   }
 }
 
@@ -140,19 +145,26 @@ private[sql] object BucketTransform {
   }
 
   def unapply(transform: Transform): Option[(Int, NamedReference, NamedReference)] =
-      transform match {
-    case NamedTransform("bucket", Seq(
-        Lit(value: Int, IntegerType),
-        Ref(partCols: Seq[String]),
-        Ref(sortCols: Seq[String]))) =>
-      Some((value, FieldReference(partCols), FieldReference(sortCols)))
-    case NamedTransform("bucket", Seq(
-        Lit(value: Int, IntegerType),
-        Ref(partCols: Seq[String]))) =>
+    transform match {
+      case NamedTransform("sortedBucket", s) =>
+        var index: Int = -1
+        var posOfLit: Int = -1
+        var numOfBucket: Int = -1
+        s.foreach {
+          case Lit(value: Int, IntegerType) =>
+            numOfBucket = value
+            index = index + 1
+            posOfLit = index
+          case _ => index = index + 1
+        }
+        val splits = s.splitAt(posOfLit)
+        Some(numOfBucket, FieldReference(
+          splits._1.map(_.describe)), FieldReference(splits._2.drop(1).map(_.describe)))
+    case NamedTransform("bucket", Seq(Lit(value: Int, IntegerType), Ref(partCols: Seq[String]))) =>
       Some((value, FieldReference(partCols), FieldReference(Seq.empty[String])))
     case _ =>
       None
-  }
+    }
 }
 
 private[sql] final case class ApplyTransform(
