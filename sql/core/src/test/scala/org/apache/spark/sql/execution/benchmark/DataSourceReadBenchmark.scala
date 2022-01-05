@@ -21,6 +21,9 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
@@ -76,6 +79,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
     saveAsJsonTable(testDf, dir.getCanonicalPath + "/json")
     saveAsParquetTable(testDf, dir.getCanonicalPath + "/parquet")
+    saveAsParquetV2Table(testDf, dir.getCanonicalPath + "/parquetV2")
     saveAsOrcTable(testDf, dir.getCanonicalPath + "/orc")
   }
 
@@ -92,6 +96,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   private def saveAsParquetTable(df: DataFrameWriter[Row], dir: String): Unit = {
     df.mode("overwrite").option("compression", "snappy").parquet(dir)
     spark.read.parquet(dir).createOrReplaceTempView("parquetTable")
+  }
+
+  private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
+      df.mode("overwrite").option("compression", "snappy").parquet(dir)
+      spark.read.parquet(dir).createOrReplaceTempView("parquetV2Table")
+    }
   }
 
   private def saveAsOrcTable(df: DataFrameWriter[Row], dir: String): Unit = {
