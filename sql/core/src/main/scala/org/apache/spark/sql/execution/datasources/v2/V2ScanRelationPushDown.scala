@@ -110,7 +110,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
-                !r.supportCompletePushDown()) {
+                !r.supportCompletePushDown(pushedAggregates.get)) {
                 aggNode // return original plan node
               } else {
                 // No need to do column pruning because only the aggregate columns are used as
@@ -149,7 +149,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
                 val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                 val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-                if (r.supportCompletePushDown()) {
+                if (r.supportCompletePushDown(pushedAggregates.get)) {
                   val projectExpressions = resultExpressions.map { expr =>
                     // TODO At present, only push down group by attribute is supported.
                     // In future, more attribute conversion is extended here. e.g. GetStructField
