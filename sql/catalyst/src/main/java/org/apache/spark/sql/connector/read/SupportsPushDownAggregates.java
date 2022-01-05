@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
  * push down aggregates.
  * <p>
  * If the data source can't fully complete the grouping work, then
- * {@link #supportCompletePushDown()} should return false, and Spark will group the data source
+ * {@link #supportCompletePushDown(Aggregation)} should return false, and Spark will group the data source
  * output again. For queries like "SELECT min(value) AS m FROM t GROUP BY key", after pushing down
  * the aggregate to the data source, the data source can still output data with duplicated keys,
  * which is OK as Spark will do GROUP BY key again. The final query plan can be something like this:
