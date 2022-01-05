@@ -23,6 +23,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Config.ExecutorRollPolicy
+import org.apache.spark.status.api.v1
 import org.apache.spark.status.api.v1.ExecutorSummary
 
 class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
@@ -30,11 +31,12 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val plugin = new ExecutorRollPlugin().driverPlugin()
 
   private val _choose = PrivateMethod[Option[String]](Symbol("choose"))
+  private val _outliers = PrivateMethod[Option[Seq[v1.ExecutorSummary]]](Symbol("outliers"))
 
   val driverSummary = new ExecutorSummary("driver", "host:port", true, 1,
     10, 10, 1, 1, 1,
-    0, 0, 1, 100,
-    1, 100, 100,
+    1, 0, 1, 100,
+    0, 100, 100,
     10, false, 20, new Date(1639300000000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -42,7 +44,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithSmallestID = new ExecutorSummary("1", "host:port", true, 1,
     10, 10, 1, 1, 1,
     0, 0, 1, 100,
-    1, 100, 100,
+    20, 100, 100,
     10, false, 20, new Date(1639300001000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -51,7 +53,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithSmallestAddTime = new ExecutorSummary("2", "host:port", true, 1,
     10, 10, 1, 1, 1,
     0, 0, 1, 100,
-    1, 100, 100,
+    20, 100, 100,
     10, false, 20, new Date(1639300000000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -60,7 +62,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithBiggestTotalGCTime = new ExecutorSummary("3", "host:port", true, 1,
     10, 10, 1, 1, 1,
     0, 0, 1, 100,
-    4, 100, 100,
+    40, 100, 100,
     10, false, 20, new Date(1639300002000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -69,7 +71,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithBiggestTotalDuration = new ExecutorSummary("4", "host:port", true, 1,
     10, 10, 1, 1, 1,
     0, 0, 4, 400,
-    1, 100, 100,
+    20, 100, 100,
     10, false, 20, new Date(1639300003000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -78,7 +80,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithBiggestFailedTasks = new ExecutorSummary("5", "host:port", true, 1,
     10, 10, 1, 1, 1,
     5, 0, 1, 100,
-    1, 100, 100,
+    20, 100, 100,
     10, false, 20, new Date(1639300003000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -87,7 +89,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val execWithBiggestAverageDuration = new ExecutorSummary("6", "host:port", true, 1,
     10, 10, 1, 1, 1,
     0, 0, 2, 300,
-    1, 100, 100,
+    20, 100, 100,
     10, false, 20, new Date(1639300003000L),
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
@@ -101,9 +103,18 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
 
+  // This is used to stabilize 'mean' and 'sd' in OUTLIER test cases.
+  val execNormal = new ExecutorSummary("8", "host:port", true, 1,
+    10, 10, 1, 1, 1,
+    4, 0, 2, 280,
+    30, 100, 100,
+    10, false, 20, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+    false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
     execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
-    execWithBiggestAverageDuration, execWithoutTasks)
+    execWithBiggestAverageDuration, execWithoutTasks, execNormal)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -161,5 +172,50 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     assertEquals(
       Some("6"),
       plugin.invokePrivate(_choose(list, ExecutorRollPolicy.AVERAGE_DURATION)))
+  }
+
+  test("Policy: OUTLIER - Work like TOTAL_DURATION if there is no outlier") {
+    assertEquals(
+      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)),
+      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER)))
+  }
+
+  test("Policy: OUTLIER - Detect an average task duration outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1, 300,
+      20, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+  }
+
+  test("Policy: OUTLIER - Detect a total task duration outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1000, 1000,
+      0, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+  }
+
+  test("Policy: OUTLIER - Detect a total GC time outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1, 100,
+      1000, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
   }
 }
