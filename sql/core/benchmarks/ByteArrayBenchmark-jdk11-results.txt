@@ -14,3 +14,13 @@ Byte Array compareTo:                     Best Time(ms)   Avg Time(ms)   Stdev(m
 2-7 byte                                            548            564           9        119.5           8.4       0.9X
 
 
+================================================================================================
+byte array equals
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Byte Array equals:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Byte Array equals                                  1860           1891          15         86.0          11.6       1.0X
+

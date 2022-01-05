@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -196,7 +197,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
-    client.dropDatabase(db, ignoreIfNotExists, cascade)
+    try {
+      client.dropDatabase(db, ignoreIfNotExists, cascade)
+    } catch {
+      case NonFatal(exception) =>
+        if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
+          && exception.getMessage.contains(s"Database $db is not empty.")) {
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
+        } else throw exception
+    }
   }
 
   /**

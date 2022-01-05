@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy}
+import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
@@ -51,6 +51,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   private val periodicService: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-roller")
 
+  private[k8s] var minTasks: Int = 0
+
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     val interval = sc.conf.get(EXECUTOR_ROLL_INTERVAL)
     if (interval <= 0) {
@@ -58,6 +60,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
     } else if (!sc.conf.get(DECOMMISSION_ENABLED)) {
       logWarning(s"Disabled because ${DECOMMISSION_ENABLED.key} is false.")
     } else {
+      minTasks = sparkContext.conf.get(MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING)
       // Scheduler is not created yet
       sparkContext = sc
 
@@ -97,7 +100,9 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
 
   private def choose(list: Seq[v1.ExecutorSummary], policy: ExecutorRollPolicy.Value)
       : Option[String] = {
-    val listWithoutDriver = list.filterNot(_.id.equals(SparkContext.DRIVER_IDENTIFIER))
+    val listWithoutDriver = list
+      .filterNot(_.id.equals(SparkContext.DRIVER_IDENTIFIER))
+      .filter(_.totalTasks >= minTasks)
     val sortedList = policy match {
       case ExecutorRollPolicy.ID =>
         listWithoutDriver.sortBy(_.id)

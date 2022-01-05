@@ -92,9 +92,23 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
     false, Set())
 
+  // The executor with no tasks
+  val execWithoutTasks = new ExecutorSummary("7", "host:port", true, 1,
+    0, 0, 1, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0,
+    0, false, 0, new Date(1639300001000L),
+    Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+    false, Set())
+
   val list = Seq(driverSummary, execWithSmallestID, execWithSmallestAddTime,
     execWithBiggestTotalGCTime, execWithBiggestTotalDuration, execWithBiggestFailedTasks,
-    execWithBiggestAverageDuration)
+    execWithBiggestAverageDuration, execWithoutTasks)
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    plugin.asInstanceOf[ExecutorRollDriverPlugin].minTasks = 0
+  }
 
   test("Empty executor list") {
     ExecutorRollPolicy.values.foreach { value =>
@@ -113,6 +127,13 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       assertEquals(
         Some(execWithSmallestID.id),
         plugin.invokePrivate(_choose(Seq(execWithSmallestID), value)))
+    }
+  }
+
+  test("SPARK-37806: All policy should ignore executor if totalTasks < minTasks") {
+    plugin.asInstanceOf[ExecutorRollDriverPlugin].minTasks = 1000
+    ExecutorRollPolicy.values.foreach { value =>
+      assertEquals(None, plugin.invokePrivate(_choose(list, value)))
     }
   }
 

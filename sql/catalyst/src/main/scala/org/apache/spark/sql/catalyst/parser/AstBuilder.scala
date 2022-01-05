@@ -4404,11 +4404,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case Some("user") => (true, false)
         case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
-    val pattern = Option(ctx.pattern).map(string(_))
-    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
-      .map(visitMultipartIdentifier)
-      .map(UnresolvedFunc(_))
-    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
+
+    val ns = Option(ctx.ns).map(visitMultipartIdentifier)
+    val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)
+    val nsPlan = if (ns.isDefined) {
+      if (legacy.isDefined) {
+        throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
+      }
+      UnresolvedNamespace(ns.get)
+    } else if (legacy.isDefined) {
+      UnresolvedNamespace(legacy.get.dropRight(1))
+    } else {
+      UnresolvedNamespace(Nil)
+    }
+    val pattern = Option(ctx.pattern).map(string).orElse(legacy.map(_.last))
+    ShowFunctions(nsPlan, userScope, systemScope, pattern)
   }
 
   /**

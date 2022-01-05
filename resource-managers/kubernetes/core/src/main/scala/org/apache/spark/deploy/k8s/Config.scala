@@ -168,6 +168,16 @@ private[spark] object Config extends Logging {
       .checkValues(ExecutorRollPolicy.values.map(_.toString))
       .createWithDefault(ExecutorRollPolicy.TOTAL_GC_TIME.toString)
 
+  val MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING =
+    ConfigBuilder("spark.kubernetes.executor.minTasksPerExecutorBeforeRolling")
+      .doc("The minimum number of tasks per executor before rolling. " +
+        "Spark will not roll executors whose total number of tasks is smaller " +
+        "than this configuration. The default value is zero.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
+      .createWithDefault(0)
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"

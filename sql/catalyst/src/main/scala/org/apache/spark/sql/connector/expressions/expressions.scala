@@ -88,9 +88,7 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference) extends R
 
   override def arguments: Array[Expression] = Array(ref)
 
-  override def describe: String = name + "(" + reference.describe + ")"
-
-  override def toString: String = describe
+  override def toString: String = name + "(" + reference.describe + ")"
 
   protected def withNewRef(ref: NamedReference): Transform
 
@@ -114,15 +112,13 @@ private[sql] final case class BucketTransform(
 
   override def arguments: Array[Expression] = numBuckets +: columns.toArray
 
-  override def describe: String =
+  override def toString: String =
     if (sortedColumns.nonEmpty) {
       s"bucket(${arguments.map(_.describe).mkString(", ")}," +
         s" ${sortedColumns.map(_.describe).mkString(", ")})"
     } else {
       s"bucket(${arguments.map(_.describe).mkString(", ")})"
     }
-
-  override def toString: String = describe
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
     this.copy(columns = newReferences)
@@ -169,9 +165,7 @@ private[sql] final case class ApplyTransform(
     arguments.collect { case named: NamedReference => named }
   }
 
-  override def describe: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
-
-  override def toString: String = describe
+  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
 }
 
 /**
@@ -338,21 +332,19 @@ private[sql] object HoursTransform {
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
-  override def describe: String = {
+  override def toString: String = {
     if (dataType.isInstanceOf[StringType]) {
       s"'$value'"
     } else {
       s"$value"
     }
   }
-  override def toString: String = describe
 }
 
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
-  override def describe: String = parts.quoted
-  override def toString: String = describe
+  override def toString: String = parts.quoted
 }
 
 private[sql] object FieldReference {
@@ -366,7 +358,7 @@ private[sql] final case class SortValue(
     direction: SortDirection,
     nullOrdering: NullOrdering) extends SortOrder {
 
-  override def describe(): String = s"$expression $direction $nullOrdering"
+  override def toString(): String = s"$expression $direction $nullOrdering"
 }
 
 private[sql] object SortValue {

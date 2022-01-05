@@ -316,9 +316,10 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java }}
-    - name: List Python packages (Python 3.9)
+    - name: List Python packages (Python 3.9, PyPy3)
       run: |
         python3.9 -m pip list
+        pypy3 -m pip list
     - name: Install Conda for pip packaging test
       run: |
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
