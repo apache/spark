@@ -349,12 +349,7 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
 
 private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
-    val c = if (column.contains(" ")) {
-      "`" + column + "`"
-    } else {
-      column
-    }
-    LogicalExpressions.parseReference(c)
+    LogicalExpressions.parseReference("`" + column + "`")
   }
 }
 
