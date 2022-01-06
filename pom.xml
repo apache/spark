@@ -120,6 +120,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.32</slf4j.version>
     <log4j.version>2.17.1</log4j.version>
+    <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.2</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
@@ -3438,6 +3439,7 @@
     <profile>
       <id>hadoop-2</id>
       <properties>
+        <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
