@@ -2464,7 +2464,7 @@ Apart from these, the following properties are also available, and may be useful
     Number of continuous failures of any particular task before giving up on the job.
     The total number of failures spread across different tasks will not cause the job
     to fail; a particular task has to fail this number of attempts continuously.
-    Be aware that if one of attempts succeed, current count of task failures will be reset.
+    If any attempt succeeds, the failure count for the task will be reset.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
   <td>0.8.0</td>
