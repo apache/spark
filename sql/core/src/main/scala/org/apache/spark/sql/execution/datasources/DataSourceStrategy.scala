@@ -739,7 +739,7 @@ object DataSourceStrategy
             Array(FieldReference(left), FieldReference(right))))
         case aggregate.Corr(PushableColumnWithoutNestedColumn(left),
         PushableColumnWithoutNestedColumn(right), _) =>
-          Some(new GeneralAggregateFunc("CORR1", agg.isDistinct,
+          Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
             Array(FieldReference(left), FieldReference(right))))
         case _ => None
       }
