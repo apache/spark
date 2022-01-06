@@ -543,6 +543,16 @@ abstract class OrcSuite
       assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
     }
   }
+
+  test("SPARK-33978: Write and read a file with ZSTD compression") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "zstd").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
+    }
+  }
 }
 
 abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -597,16 +607,6 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
-  }
-
-  test("SPARK-33978: Write and read a file with ZSTD compression") {
-    withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(3).write.option("compression", "zstd").orc(path)
-      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
-      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
-      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
-    }
   }
 
   test("SPARK-34897: Support reconcile schemas based on index after nested column pruning") {
