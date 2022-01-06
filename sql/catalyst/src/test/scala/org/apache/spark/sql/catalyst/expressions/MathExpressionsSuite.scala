@@ -367,10 +367,10 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("floor") {
-    testUnary(Floor.apply, (d: Double) => math.floor(d).toLong)
+    testUnary(Floor, (d: Double) => math.floor(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
 
-    testUnary(Floor.apply, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
+    testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
@@ -378,7 +378,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val doublePi: Double = 3.1415
     val floatPi: Float = 3.1415f
     val longLit: Long = 12345678901234567L
-     val nullLit = Literal.create(null, NullType)
+    val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     checkEvaluation(checkDataTypeAndCast(Floor(doublePi)), 3L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(floatPi)), 3L, EmptyRow)
@@ -391,8 +391,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(Floor(floatNullLit)), null, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(0)), 0L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(1)), 1L, EmptyRow)
-    checkEvaluation(checkDataTypeAndCast(
-      Floor(1234567890123456L)), 1234567890123456L, EmptyRow)
+    checkEvaluation(checkDataTypeAndCast(Floor(1234567890123456L)), 1234567890123456L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(0.01)), 0L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(-0.10)), -1L, EmptyRow)
   }

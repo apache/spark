@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -270,9 +270,9 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that" +
-    " is not smaller than `expr`. A optional `scale` parameter can be specified to" +
-    " control the rounding behavior.",
+  usage = """
+  _FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller
+  than `expr`. A optional `scale` parameter can be specified to control the rounding behavior.""",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -294,22 +294,22 @@ object CeilExpressionBuilder extends ExpressionBuilder {
       val child = expressions(0)
       val scale = expressions(1)
       if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
-        throw new AnalysisException("Invalid scale parameter for the function ceil")
+        throw QueryCompilationErrors.invalidScaleParameterRoundBase("ceil")
       }
       val scaleV = scale.eval(EmptyRow)
       if (scaleV == null) {
-        throw new AnalysisException("Invalid scale parameter for the function ceil")
+        throw QueryCompilationErrors.invalidScaleParameterRoundBase("ceil")
       }
 
       (child.dataType, scaleV.asInstanceOf[Int]) match {
         case (_, 0) => Ceil(child)
         case (_, x) if x < 0 => RoundCeil(Cast(child, LongType), scale)
-        case (_: IntegralType | ShortType, _) => RoundCeil(Cast(child, LongType), scale)
+        case (_: IntegralType, _) => RoundCeil(Cast(child, LongType), scale)
         case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
         case _ => RoundCeil(child, scale)
       }
     } else {
-      throw new AnalysisException("Function ceil cannot take more than 2 parameters")
+      throw QueryCompilationErrors.invalidNumberOfFunctionParameters("ceil")
     }
   }
 }
@@ -522,9 +522,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, scale]) - Returns the largest number after rounding down that" +
-    " is not greater than `expr`. An optional `scale` parameter can be specified to" +
-    " control the rounding behavior.",
+  usage = """
+  _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater
+  than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.""",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -546,11 +546,11 @@ object FloorExpressionBuilder extends ExpressionBuilder {
       val child = expressions(0)
       val scale = expressions(1)
       if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
-        throw new AnalysisException("Invalid scale parameter for the function floor")
+        throw QueryCompilationErrors.invalidScaleParameterRoundBase("floor")
       }
       val scaleV = scale.eval(EmptyRow)
       if (scaleV == null) {
-        throw new AnalysisException("Invalid scale parameter for the function floor")
+        throw QueryCompilationErrors.invalidScaleParameterRoundBase("floor")
       }
 
       (child.dataType, scaleV.asInstanceOf[Int]) match {
@@ -561,7 +561,7 @@ object FloorExpressionBuilder extends ExpressionBuilder {
         case _ => RoundFloor(child, scale)
       }
     } else {
-      throw new AnalysisException("Function floor cannot take more than 2 parameters")
+      throw QueryCompilationErrors.invalidNumberOfFunctionParameters("floor")
     }
   }
 }

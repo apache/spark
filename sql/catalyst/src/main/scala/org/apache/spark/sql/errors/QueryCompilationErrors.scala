@@ -2378,4 +2378,12 @@ object QueryCompilationErrors {
   def nonFistOrLastCharInNumberFormatError(message: String, numberFormat: String): Throwable = {
     new AnalysisException(s"$message must be the first or last char in '$numberFormat'")
   }
+
+  def invalidScaleParameterRoundBase(function: String): Throwable = {
+    new AnalysisException(s"The 'scale' parameter of function '$function' must be an int constant.")
+  }
+
+  def invalidNumberOfFunctionParameters(function: String): Throwable = {
+    new AnalysisException(s"Invalid number of parameters to the function '$function'.")
+  }
 }
