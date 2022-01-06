@@ -32,6 +32,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * The currently supported SQL aggregate functions:
  * <ol>
  *  <li><pre>AVG(input1)</pre> Since 3.3.0</li>
+ *  <li><pre>VAR_POP(input1)</pre> Since 3.3.0</li>
+ *  <li><pre>VAR_SAMP(input1)</pre> Since 3.3.0</li>
+ *  <li><pre>STDDEV_POP(input1)</pre> Since 3.3.0</li>
+ *  <li><pre>STDDEV_SAMP(input1)</pre> Since 3.3.0</li>
+ *  <li><pre>COVAR_POP(input1, input2)</pre> Since 3.3.0</li>
+ *  <li><pre>COVAR_SAMP(input1, input2)</pre> Since 3.3.0</li>
+ *  <li><pre>CORR(input1, input2)</pre> Since 3.3.0</li>
  * </ol>
  *
  * @since 3.3.0
