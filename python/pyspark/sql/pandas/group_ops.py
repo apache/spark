@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from pyspark.sql.group import GroupedData
 
 
-class PandasGroupedOpsMixin(object):
+class PandasGroupedOpsMixin:
     """
     Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
@@ -199,12 +199,6 @@ class PandasGroupedOpsMixin(object):
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
-
         This API is experimental.
 
         See Also
@@ -237,7 +231,7 @@ class PandasGroupedOpsMixin(object):
         return PandasCogroupedOps(self, other)
 
 
-class PandasCogroupedOps(object):
+class PandasCogroupedOps:
     """
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.
@@ -332,12 +326,6 @@ class PandasCogroupedOps(object):
         This function requires a full shuffle. All the data of a cogroup will be loaded
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
-
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
 
         This API is experimental.
 

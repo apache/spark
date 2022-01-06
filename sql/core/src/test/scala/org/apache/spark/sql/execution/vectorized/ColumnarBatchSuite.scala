@@ -25,9 +25,11 @@ import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.arrow.vector.IntVector
+import org.apache.parquet.bytes.ByteBufferInputStream
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
@@ -36,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
@@ -127,6 +130,97 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1 == column.isNullAt(v._2))
+      }
+  }
+
+  testVector("Boolean APIs", 1024, BooleanType) {
+    column =>
+      val reference = mutable.ArrayBuffer.empty[Boolean]
+
+      var values = Array(true, false, true, false, false)
+      var bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.appendBooleans(2, bits, 0)
+      reference ++= values.slice(0, 2)
+
+      column.appendBooleans(3, bits, 2)
+      reference ++= values.slice(2, 5)
+
+      column.appendBooleans(6, true)
+      reference ++= Array.fill(6)(true)
+
+      column.appendBoolean(false)
+      reference += false
+
+      var idx = column.elementsAppended
+
+      values = Array(true, true, false, true, false, true, false, true)
+      bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.putBooleans(idx, 2, bits, 0)
+      reference ++= values.slice(0, 2)
+      idx += 2
+
+      column.putBooleans(idx, 3, bits, 2)
+      reference ++= values.slice(2, 5)
+      idx += 3
+
+      column.putBooleans(idx, bits)
+      reference ++= values
+      idx += 8
+
+      column.putBoolean(idx, false)
+      reference += false
+      idx += 1
+
+      column.putBooleans(idx, 3, true)
+      reference ++= Array.fill(3)(true)
+      idx += 3
+
+      implicit def intToByte(i: Int): Byte = i.toByte
+      val buf = ByteBuffer.wrap(Array(0x33, 0x5A, 0xA5, 0xCC, 0x0F, 0xF0, 0xEE, 0x77, 0x88))
+      val reader = new VectorizedPlainValuesReader()
+      reader.initFromPage(0, ByteBufferInputStream.wrap(buf))
+
+      reader.skipBooleans(1) // bit index 0
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 1
+      reference += true
+      idx += 1
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 2
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(5) // bit index [3, 7]
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 8
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(8) // bit index [9, 16]
+      reader.skipBooleans(0) // no-op
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 17
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(16) // bit index [18, 33]
+
+      reader.readBooleans(4, column, idx) // bit index [34, 37]
+      reference ++= Array(true, true, false, false)
+      idx += 4
+
+      reader.readBooleans(11, column, idx) // bit index [38, 48]
+      reference ++= Array(false, false, false, false, false, false, true, true, true, true, false)
+      idx += 11
+
+      reader.skipBooleans(7) // bit index [49, 55]
+
+      reader.readBooleans(9, column, idx) // bit index [56, 64]
+      reference ++= Array(true, true, true, false, true, true, true, false, false)
+      idx += 9
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getBoolean(v._2), "VectorType=" + column.getClass.getSimpleName)
       }
   }
 

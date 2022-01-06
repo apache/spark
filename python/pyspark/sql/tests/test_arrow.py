@@ -26,7 +26,7 @@ from typing import cast
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import rand, udf
+from pyspark.sql.functions import rand, udf, assert_true, lit
 from pyspark.sql.types import (
     StructType,
     StringType,
@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     NullType,
+    DayTimeIntervalType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -205,6 +206,53 @@ class ArrowTests(ReusedSQLTestCase):
                 with self.assertRaisesRegex(Exception, "Unsupported type"):
                     df.toPandas()
 
+    def test_toPandas_empty_df_arrow_enabled(self):
+        # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
+        # when arrow is enabled
+        from datetime import date
+        from decimal import Decimal
+
+        schema = StructType(
+            [
+                StructField("a", StringType(), True),
+                StructField("a", IntegerType(), True),
+                StructField("c", TimestampType(), True),
+                StructField("d", NullType(), True),
+                StructField("e", LongType(), True),
+                StructField("f", FloatType(), True),
+                StructField("g", DateType(), True),
+                StructField("h", BinaryType(), True),
+                StructField("i", DecimalType(38, 18), True),
+                StructField("k", TimestampNTZType(), True),
+                StructField("L", DayTimeIntervalType(0, 3), True),
+            ]
+        )
+        df = self.spark.createDataFrame(self.spark.sparkContext.emptyRDD(), schema=schema)
+        non_empty_df = self.spark.createDataFrame(
+            [
+                (
+                    "a",
+                    1,
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    None,
+                    10,
+                    0.2,
+                    date(1969, 1, 1),
+                    bytearray(b"a"),
+                    Decimal("2.0"),
+                    datetime.datetime(1969, 1, 1, 1, 1, 1),
+                    datetime.timedelta(microseconds=123),
+                )
+            ],
+            schema=schema,
+        )
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        pdf_non_empty, pdf_arrow_non_empty = self._toPandas_arrow_toggle(non_empty_df)
+        assert_frame_equal(pdf, pdf_arrow)
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_arrow_non_empty.dtypes))
+        self.assertTrue(pdf_arrow.dtypes.equals(pdf_non_empty.dtypes))
+
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame(
             [tuple([None for _ in range(len(self.data_wo_null[0]))])] + self.data_wo_null
@@ -240,6 +288,18 @@ class ArrowTests(ReusedSQLTestCase):
             pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
             assert_frame_equal(origin, pdf)
             assert_frame_equal(pdf, pdf_arrow)
+
+    def test_create_data_frame_to_pandas_day_time_internal(self):
+        # SPARK-37279: Test DayTimeInterval in createDataFrame and toPandas
+        origin = pd.DataFrame({"a": [datetime.timedelta(microseconds=123)]})
+        df = self.spark.createDataFrame(origin)
+        df.select(
+            assert_true(lit("INTERVAL '0 00:00:00.000123' DAY TO SECOND") == df.a.cast("string"))
+        ).collect()
+
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+        assert_frame_equal(origin, pdf)
+        assert_frame_equal(pdf, pdf_arrow)
 
     def test_toPandas_respect_session_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
@@ -487,6 +547,27 @@ class ArrowTests(ReusedSQLTestCase):
                 _, m_arrow = row_arrow
                 self.assertEqual(m, map_data[i])
                 self.assertEqual(m_arrow, map_data[i])
+
+    def test_createDataFrame_with_string_dtype(self):
+        # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            data = [["abc"], ["def"], [None], ["ghi"], [None]]
+            pandas_df = pd.DataFrame(data, columns=["col"], dtype="string")
+            schema = StructType([StructField("col", StringType(), True)])
+            df = self.spark.createDataFrame(pandas_df, schema=schema)
+
+            # dtypes won't match. Pandas has two different ways to store string columns:
+            # using ndarray (when dtype isn't specified) or using a StringArray when dtype="string".
+            # When calling dataframe#toPandas() it will use the ndarray version.
+            # Changing that to use a StringArray would be backwards incompatible.
+            assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
+
+    def test_createDataFrame_with_int64(self):
+        # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+            pandas_df = pd.DataFrame({"col": [1, 2, 3, None]}, dtype="Int64")
+            df = self.spark.createDataFrame(pandas_df)
+            assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
     def test_toPandas_with_map_type(self):
         pdf = pd.DataFrame(

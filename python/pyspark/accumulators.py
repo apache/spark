@@ -20,13 +20,13 @@ import select
 import struct
 import socketserver as SocketServer
 import threading
-from pyspark.serializers import read_int, PickleSerializer
+from pyspark.serializers import read_int, CPickleSerializer
 
 
 __all__ = ["Accumulator", "AccumulatorParam"]
 
 
-pickleSer = PickleSerializer()
+pickleSer = CPickleSerializer()
 
 # Holds accumulators registered on the current machine, keyed by ID. This is then used to send
 # the local accumulator updates back to the driver program at the end of a task.
@@ -46,7 +46,7 @@ def _deserialize_accumulator(aid, zero_value, accum_param):
         return accum
 
 
-class Accumulator(object):
+class Accumulator:
 
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
@@ -151,7 +151,7 @@ class Accumulator(object):
         return "Accumulator<id=%i, value=%s>" % (self.aid, self._value)
 
 
-class AccumulatorParam(object):
+class AccumulatorParam:
 
     """
     Helper object that defines how to accumulate values of a given type.

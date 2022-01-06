@@ -59,7 +59,7 @@ class Function(NamedTuple):
     isTemporary: bool
 
 
-class Catalog(object):
+class Catalog:
     """User-facing catalog API, accessible through `SparkSession.catalog`.
 
     This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.

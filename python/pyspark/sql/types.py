@@ -18,6 +18,7 @@
 import sys
 import decimal
 import time
+import math
 import datetime
 import calendar
 import json
@@ -65,6 +66,7 @@ __all__ = [
     "ByteType",
     "IntegerType",
     "LongType",
+    "DayTimeIntervalType",
     "Row",
     "ShortType",
     "ArrayType",
@@ -74,7 +76,7 @@ __all__ = [
 ]
 
 
-class DataType(object):
+class DataType:
     """Base class for data types."""
 
     def __repr__(self) -> str:
@@ -315,6 +317,65 @@ class LongType(IntegralType):
 
     def simpleString(self) -> str:
         return "bigint"
+
+
+class DayTimeIntervalType(AtomicType):
+    """DayTimeIntervalType (datetime.timedelta)."""
+
+    DAY = 0
+    HOUR = 1
+    MINUTE = 2
+    SECOND = 3
+
+    _fields = {
+        DAY: "day",
+        HOUR: "hour",
+        MINUTE: "minute",
+        SECOND: "second",
+    }
+
+    _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
+
+    def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        if startField is None and endField is None:
+            # Default matched to scala side.
+            startField = DayTimeIntervalType.DAY
+            endField = DayTimeIntervalType.SECOND
+        elif startField is not None and endField is None:
+            endField = startField
+
+        fields = DayTimeIntervalType._fields
+        if startField not in fields.keys() or endField not in fields.keys():
+            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+        self.startField = cast(int, startField)
+        self.endField = cast(int, endField)
+
+    def _str_repr(self) -> str:
+        fields = DayTimeIntervalType._fields
+        start_field_name = fields[self.startField]
+        end_field_name = fields[self.endField]
+        if start_field_name == end_field_name:
+            return "interval %s" % start_field_name
+        else:
+            return "interval %s to %s" % (start_field_name, end_field_name)
+
+    simpleString = _str_repr
+
+    jsonValue = _str_repr
+
+    def __repr__(self) -> str:
+        return "%s(%d,%d)" % (type(self).__name__, self.startField, self.endField)
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, dt: datetime.timedelta) -> Optional[int]:
+        if dt is not None:
+            return (math.floor(dt.total_seconds()) * 1000000) + dt.microseconds
+
+    def fromInternal(self, micros: int) -> Optional[datetime.timedelta]:
+        if micros is not None:
+            return datetime.timedelta(microseconds=micros)
 
 
 class ShortType(IntegralType):
@@ -905,6 +966,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
 
 
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
+_INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 
 
 def _parse_datatype_string(s: str) -> DataType:
@@ -950,13 +1012,16 @@ def _parse_datatype_string(s: str) -> DataType:
     from pyspark import SparkContext
 
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    assert sc is not None
 
     def from_ddl_schema(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
+        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
         )
@@ -1034,11 +1099,17 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return _all_atomic_types[json_value]()
         elif json_value == "decimal":
             return DecimalType()
-        elif json_value == "timestamp_ntz":
-            return TimestampNTZType()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _INTERVAL_DAYTIME.match(json_value):
+            m = _INTERVAL_DAYTIME.match(json_value)
+            inverted_fields = DayTimeIntervalType._inverted_fields
+            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
+            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            if first_field is not None and second_field is None:
+                return DayTimeIntervalType(first_field)
+            return DayTimeIntervalType(first_field, second_field)
         else:
             raise ValueError("Could not parse datatype: %s" % json_value)
     else:
@@ -1063,6 +1134,7 @@ _type_mappings = {
     datetime.date: DateType,
     datetime.datetime: TimestampType,  # can be TimestampNTZType
     datetime.time: TimestampType,  # can be TimestampNTZType
+    datetime.timedelta: DayTimeIntervalType,
     bytes: BinaryType,
 }
 
@@ -1163,6 +1235,8 @@ def _infer_type(
         return DecimalType(38, 18)
     if dataType is TimestampType and prefer_timestamp_ntz and obj.tzinfo is None:
         return TimestampNTZType()
+    if dataType is DayTimeIntervalType:
+        return DayTimeIntervalType()
     elif dataType is not None:
         return dataType()
 
@@ -1409,6 +1483,7 @@ _acceptable_types = {
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     TimestampNTZType: (datetime.datetime,),
+    DayTimeIntervalType: (datetime.timedelta,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
@@ -1838,7 +1913,7 @@ class Row(tuple):
             return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
-class DateConverter(object):
+class DateConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.date)
 
@@ -1847,7 +1922,7 @@ class DateConverter(object):
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
-class DatetimeConverter(object):
+class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
 
@@ -1861,7 +1936,7 @@ class DatetimeConverter(object):
         return t
 
 
-class DatetimeNTZConverter(object):
+class DatetimeNTZConverter:
     def can_convert(self, obj: Any) -> bool:
         from pyspark.sql.utils import is_timestamp_ntz_preferred
 
@@ -1875,9 +1950,24 @@ class DatetimeNTZConverter(object):
         from pyspark import SparkContext
 
         seconds = calendar.timegm(obj.utctimetuple())
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
+        assert jvm is not None
         return jvm.org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToLocalDateTime(
             int(seconds) * 1000000 + obj.microsecond
+        )
+
+
+class DayTimeIntervalTypeConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.timedelta)
+
+    def convert(self, obj: datetime.timedelta, gateway_client: JavaGateway) -> JavaObject:
+        from pyspark import SparkContext
+
+        jvm = SparkContext._jvm
+        assert jvm is not None
+        return jvm.org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration(
+            (math.floor(obj.total_seconds()) * 1000000) + obj.microseconds
         )
 
 
@@ -1885,6 +1975,7 @@ class DatetimeNTZConverter(object):
 register_input_converter(DatetimeNTZConverter())
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
+register_input_converter(DayTimeIntervalTypeConverter())
 
 
 def _test() -> None:

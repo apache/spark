@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.NamespaceChange
@@ -48,7 +48,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
     }
     val createCommentWarning = logAppender.loggingEvents
       .filter(_.getLevel == Level.WARN)
-      .map(_.getRenderedMessage)
+      .map(_.getMessage.getFormattedMessage)
       .exists(_.contains("catalog comment"))
     assert(createCommentWarning === false)
 

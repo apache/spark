@@ -41,7 +41,9 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
+// scalastyle:off
 import org.apache.log4j.PropertyConfigurator
+// scalastyle:on
 import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler

@@ -16,12 +16,23 @@
 #
 
 from functools import partial
-from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+    no_type_check,
+    TYPE_CHECKING,
+)
 import warnings
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import (
+from pandas.api.types import (  # type: ignore[attr-defined]
     is_list_like,
     is_interval_dtype,
     is_bool_dtype,
@@ -33,11 +44,17 @@ from pandas.api.types import (
 )
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import CategoricalDtype, is_hashable
+from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import FractionalType, IntegralType, TimestampType, TimestampNTZType
+from pyspark.sql.types import (
+    DayTimeIntervalType,
+    FractionalType,
+    IntegralType,
+    TimestampType,
+    TimestampNTZType,
+)
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Dtype, Label, Name, Scalar
@@ -66,6 +83,9 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
+
+if TYPE_CHECKING:
+    from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
 
 class Index(IndexOpsMixin):
@@ -178,6 +198,7 @@ class Index(IndexOpsMixin):
         from pyspark.pandas.indexes.datetimes import DatetimeIndex
         from pyspark.pandas.indexes.multi import MultiIndex
         from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
+        from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 
         instance: Index
         if anchor._internal.index_level > 1:
@@ -197,6 +218,11 @@ class Index(IndexOpsMixin):
             (TimestampType, TimestampNTZType),
         ):
             instance = object.__new__(DatetimeIndex)
+        elif isinstance(
+            anchor._internal.spark_type_for(anchor._internal.index_spark_columns[0]),
+            DayTimeIntervalType,
+        ):
+            instance = object.__new__(TimedeltaIndex)
         else:
             instance = object.__new__(Index)
 
@@ -241,7 +267,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark = CachedAccessor("spark", SparkIndexMethods)
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkIndexMethods)  # type: ignore[assignment]
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
@@ -493,7 +519,7 @@ class Index(IndexOpsMixin):
             "`to_pandas` loads all data into the driver's memory. "
             "It should only be used if the resulting pandas Index is expected to be small."
         )
-        return self._to_internal_pandas().copy()
+        return self._to_pandas()
 
     def _to_pandas(self) -> pd.Index:
         """
@@ -533,7 +559,7 @@ class Index(IndexOpsMixin):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
+        result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)  # type: ignore[arg-type,attr-defined]
         if copy:
             result = result.copy()
         return result
@@ -2429,24 +2455,24 @@ class Index(IndexOpsMixin):
             return self._psdf.head(0).index.rename(None)
         elif isinstance(other, Index):
             other_idx = other
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = self.name == other_idx.name
         elif isinstance(other, Series):
             other_idx = Index(other)
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         elif is_list_like(other):
             other_idx = Index(other)
             if isinstance(other_idx, MultiIndex):
                 return other_idx.to_frame().head(0).index
-            spark_frame_other = other_idx.to_frame().to_spark()
+            spark_frame_other = other_idx.to_frame()._to_spark()
             keep_name = True
         else:
             raise TypeError("Input must be Index or array-like")
 
         index_fields = self._index_fields_for_union_like(other_idx, func_name="intersection")
 
-        spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME).to_spark()
+        spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME)._to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names
@@ -2517,9 +2543,9 @@ class Index(IndexOpsMixin):
             loc = 0 if loc < 0 else loc
 
         index_name = self._internal.index_spark_column_names[0]
-        sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
-        sdf_middle = Index([item], dtype=self.dtype).to_frame(name=index_name).to_spark()
-        sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
+        sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
+        sdf_middle = Index([item], dtype=self.dtype).to_frame(name=index_name)._to_spark()
+        sdf_after = self.to_frame(name=index_name)[loc:]._to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
         internal = InternalFrame(

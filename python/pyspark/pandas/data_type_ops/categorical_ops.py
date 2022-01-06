@@ -20,7 +20,7 @@ from typing import cast, Any, Callable, Union
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import is_list_like, CategoricalDtype
+from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin

@@ -378,6 +378,31 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-37219: time travel is unsupported") {
+    val viewName = createView("testView", "SELECT 1 col")
+    withView(viewName) {
+      val e1 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
+      )
+      assert(e1.message.contains("Cannot time travel views"))
+
+      val e2 = intercept[AnalysisException](
+        sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
+      )
+      assert(e2.message.contains("Cannot time travel views"))
+    }
+  }
+
+  test("SPARK-37569: view should report correct nullability information for nested fields") {
+    val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+    val viewName = createView("testView", sql)
+    withView(viewName) {
+      val df = spark.sql(sql)
+      val dfFromView = spark.table(viewName)
+      assert(df.schema == dfFromView.schema)
+    }
+  }
 }
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {

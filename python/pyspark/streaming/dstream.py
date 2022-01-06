@@ -31,7 +31,7 @@ from pyspark.resultiterable import ResultIterable
 __all__ = ["DStream"]
 
 
-class DStream(object):
+class DStream:
     """
     A Discretized Stream (DStream), the basic abstraction in Spark Streaming,
     is a continuous sequence of RDDs (of the same type) representing a

@@ -42,7 +42,7 @@ __all__ = [
 ]
 
 
-class LabeledPoint(object):
+class LabeledPoint:
 
     """
     Class that represents the features and labels of a data point.
@@ -76,7 +76,7 @@ class LabeledPoint(object):
         return "LabeledPoint(%s, %s)" % (self.label, self.features)
 
 
-class LinearModel(object):
+class LinearModel:
 
     """
     A linear model that has a vector of coefficients and an intercept.
@@ -245,7 +245,7 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
         return modelClass(weights, intercept)
 
 
-class LinearRegressionWithSGD(object):
+class LinearRegressionWithSGD:
     """
     Train a linear regression model with no regularization using Stochastic Gradient Descent.
 
@@ -425,7 +425,7 @@ class LassoModel(LinearRegressionModelBase):
         return model
 
 
-class LassoWithSGD(object):
+class LassoWithSGD:
     """
     Train a regression model with L1-regularization using Stochastic Gradient Descent.
 
@@ -601,7 +601,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
         return model
 
 
-class RidgeRegressionWithSGD(object):
+class RidgeRegressionWithSGD:
     """
     Train a regression model with L2-regularization using Stochastic Gradient Descent.
 
@@ -794,7 +794,7 @@ class IsotonicRegressionModel(Saveable, Loader):
         return IsotonicRegressionModel(py_boundaries, py_predictions, java_model.isotonic)
 
 
-class IsotonicRegression(object):
+class IsotonicRegression:
     """
     Isotonic regression.
     Currently implemented using parallelized pool adjacent violators
@@ -843,7 +843,7 @@ class IsotonicRegression(object):
         return IsotonicRegressionModel(boundaries.toArray(), predictions.toArray(), isotonic)
 
 
-class StreamingLinearAlgorithm(object):
+class StreamingLinearAlgorithm:
     """
     Base class that has to be inherited by any StreamingLinearAlgorithm.
 

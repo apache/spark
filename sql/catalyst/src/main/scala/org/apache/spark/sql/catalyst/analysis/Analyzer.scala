@@ -877,6 +877,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
         a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
@@ -972,7 +974,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case s: ExposesMetadataColumns => s.withMetadataColumns()
       case p: Project =>
         p.copy(
           projectList = p.metadataOutput ++ p.projectList,
@@ -1063,6 +1065,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u: UnresolvedRelation =>
         lookupRelation(u).map(resolveViews).getOrElse(u)
 
+      case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
+          if timestamp.forall(_.resolved) =>
+        lookupRelation(u, TimeTravelSpec.create(timestamp, version, conf)).getOrElse(r)
+
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
@@ -1093,7 +1099,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def lookupTempView(
         identifier: Seq[String],
-        isStreaming: Boolean = false): Option[LogicalPlan] = {
+        isStreaming: Boolean = false,
+        isTimeTravel: Boolean = false): Option[LogicalPlan] = {
       // We are resolving a view and this name is not a temp view when that view was created. We
       // return None earlier here.
       if (isResolvingView && !isReferredTempViewName(identifier)) return None
@@ -1104,8 +1111,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         case _ => None
       }
 
-      if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
+      tmpView.foreach { v =>
+        if (isStreaming && !v.isStreaming) {
+          throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
+        }
+        if (isTimeTravel) {
+          val target = if (v.isStreaming) "streams" else "views"
+          throw QueryCompilationErrors.timeTravelUnsupportedError(target)
+        }
       }
       tmpView
     }
@@ -1175,8 +1188,10 @@ class Analyzer(override val catalogManager: CatalogManager)
      * Resolves relations to v1 relation if it's a v1 table from the session catalog, or to v2
      * relation. This is for resolving DML commands and SELECT queries.
      */
-    private def lookupRelation(u: UnresolvedRelation): Option[LogicalPlan] = {
-      lookupTempView(u.multipartIdentifier, u.isStreaming).orElse {
+    private def lookupRelation(
+        u: UnresolvedRelation,
+        timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
+      lookupTempView(u.multipartIdentifier, u.isStreaming, timeTravelSpec.isDefined).orElse {
         expandIdentifier(u.multipartIdentifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             val key = catalog.name +: ident.namespace :+ ident.name
@@ -1186,8 +1201,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                 newRelation.copyTagsFrom(multi)
                 newRelation
             }).orElse {
-              val loaded = createRelation(
-                catalog, ident, CatalogV2Util.loadTable(catalog, ident), u.options, u.isStreaming)
+              val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
+              val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
               loaded
             }
@@ -2585,6 +2600,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      @scala.annotation.tailrec
       def hasInnerGenerator(g: Generator): Boolean = g match {
         // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
         case go: GeneratorOuter =>
@@ -3530,7 +3546,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, walkedTypePath) if !Cast.canUpCast(child.dataType, u.dataType) =>
           fail(child, u.dataType, walkedTypePath)
 
-        case u @ UpCast(child, _, _) => Cast(child, u.dataType.asNullable)
+        case u @ UpCast(child, _, _) => Cast(child, u.dataType)
       }
     }
   }

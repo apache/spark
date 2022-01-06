@@ -257,7 +257,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
         {
@@ -273,7 +273,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
       }
@@ -706,14 +706,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
              SortExec(_, _,
-               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+               DummySparkPlan(_, _, HashPartitioning(leftPartitioningExpressions, _), _, _), _),
              SortExec(_, _,
                ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _),
                _, _), _), _) =>
         assert(leftKeys === smjExec.leftKeys)
         assert(rightKeys === smjExec.rightKeys)
-        assert(leftKeys === leftPartitioningExpressions)
-        assert(rightKeys === rightPartitioningExpressions)
+        assert(leftPartitioningExpressions == Seq(exprA, exprB, exprA))
+        assert(rightPartitioningExpressions == Seq(exprA, exprC, exprA))
       case _ => fail(outputPlan.toString)
     }
   }

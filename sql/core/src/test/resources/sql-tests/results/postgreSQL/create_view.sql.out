@@ -65,14 +65,8 @@ CREATE VIEW key_dependent_view_no_cols AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'FROM'(line 2, pos 10)
-
-== SQL ==
-CREATE VIEW key_dependent_view_no_cols AS
-   SELECT FROM view_base_table GROUP BY key HAVING length(data) > 0
-----------^^^
+org.apache.spark.sql.AnalysisException
+Column 'FROM' does not exist. Did you mean one of the following? []; line 2 pos 10
 
 
 -- !query

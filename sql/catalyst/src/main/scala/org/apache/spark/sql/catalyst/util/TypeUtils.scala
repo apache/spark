@@ -78,6 +78,7 @@ object TypeUtils {
     }
   }
 
+  @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
@@ -98,8 +99,8 @@ object TypeUtils {
     case _ => false
   }
 
-  def failWithIntervalType(dataType: DataType, forbidAnsiIntervals: Boolean = true): Unit = {
-    invokeOnceForInterval(dataType, forbidAnsiIntervals) {
+  def failWithIntervalType(dataType: DataType): Unit = {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals = false) {
       throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
     }
   }

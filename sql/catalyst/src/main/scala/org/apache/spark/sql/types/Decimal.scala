@@ -602,7 +602,8 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
         null
       } else {
         Decimal(bigDecimal)
@@ -618,7 +619,8 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
         throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)
