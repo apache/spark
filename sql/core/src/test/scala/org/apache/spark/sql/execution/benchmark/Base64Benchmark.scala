@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for measuring perf of different Base64 implementation
+ * Benchmark for measuring perf of different Base64 implementations
  * To run this benchmark:
  * {{{
  *   1. without sbt:
