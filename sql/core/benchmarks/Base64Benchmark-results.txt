@@ -1,0 +1,56 @@
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+encode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               4479           4607         178          4.5         224.0       1.0X
+apache                                            13219          15017         NaN          1.5         661.0       0.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+encode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               5592           5920         349          3.6         279.6       1.0X
+apache                                            14732          14797          62          1.4         736.6       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+encode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               5818           6043         210          3.4         290.9       1.0X
+apache                                            16450          16875         550          1.2         822.5       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+encode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               7175           7382         231          2.8         358.8       1.0X
+apache                                            18694          18821         138          1.1         934.7       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+decode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               5112           5218         135          3.9         255.6       1.0X
+apache                                            14546          14742         239          1.4         727.3       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+decode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               7071           7294         195          2.8         353.6       1.0X
+apache                                            16702          16795          98          1.2         835.1       0.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+decode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                               8968           9204         396          2.2         448.4       1.0X
+apache                                            19000          19045          43          1.1         950.0       0.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+decode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+java                                              10085          10292         179          2.0         504.3       1.0X
+apache                                            20670          20783         109          1.0        1033.5       0.5X
+
