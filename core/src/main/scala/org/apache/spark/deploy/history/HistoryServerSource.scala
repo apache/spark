@@ -62,7 +62,7 @@ private[spark] class HistoryServerSource(
     })
   }
 
-  metricRegistry.register(MetricRegistry.name("diskAndMemory.total"), new Gauge[Long] {
+  metricRegistry.register(MetricRegistry.name("diskAndMemoryManager.total"), new Gauge[Long] {
     override def getValue: Long =
       diskManager.map(_.committed()).getOrElse(0L) + memoryManager.map(_.current()).getOrElse(0L)
   })
