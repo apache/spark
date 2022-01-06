@@ -30,7 +30,8 @@ public class SparkClassCommandBuilderSuite extends BaseSuite {
   @Test
   public void testBeelineBuilder() throws Exception {
     List<String> args = Arrays.asList("myBeelineArg");
-    SparkClassCommandBuilder builder = new SparkClassCommandBuilder("org.apache.hive.beeline.BeeLine", args);
+    SparkClassCommandBuilder builder =
+      new SparkClassCommandBuilder("org.apache.hive.beeline.BeeLine", args);
     List<String> strings = builder.buildCommand(new HashMap<>());
     assertTrue(strings.contains("-DmyKey=yourValue"));
     assertTrue(strings.contains("myBeelineArg"));
