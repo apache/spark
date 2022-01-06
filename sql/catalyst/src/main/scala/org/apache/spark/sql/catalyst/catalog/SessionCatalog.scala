@@ -1518,10 +1518,7 @@ class SessionCatalog(
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function
-    name.database.isEmpty &&
-      (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)) &&
-      !FunctionRegistry.builtin.functionExists(name) &&
-      !TableFunctionRegistry.builtin.functionExists(name)
+    name.database.isEmpty && isRegisteredFunction(name) && !isBuiltinFunction(name)
   }
 
   /**
@@ -1540,6 +1537,14 @@ class SessionCatalog(
     databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
 
+  /**
+   * Returns whether it is a built-in function.
+   */
+  def isBuiltinFunction(name: FunctionIdentifier): Boolean = {
+    FunctionRegistry.builtin.functionExists(name) ||
+      TableFunctionRegistry.builtin.functionExists(name)
+  }
+
   protected[sql] def failFunctionLookup(
       name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
     throw new NoSuchFunctionException(
@@ -1552,20 +1557,16 @@ class SessionCatalog(
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      def isBuiltin(ident: FunctionIdentifier): Boolean = {
-        FunctionRegistry.builtin.functionExists(ident) ||
-          TableFunctionRegistry.builtin.functionExists(ident)
-      }
       def lookup(ident: FunctionIdentifier): Option[ExpressionInfo] = {
         functionRegistry.lookupFunction(ident).orElse(
           tableFunctionRegistry.lookupFunction(ident))
       }
-      synchronized(lookupTempFuncWithViewContext(name, isBuiltin, lookup))
+      synchronized(lookupTempFuncWithViewContext(name, isBuiltinFunction, lookup))
     }
   }
 
   /**
-   * Looks up a built-in or temp scalar function by name and resolves it to an Expression if such
+   * Look up a built-in or temp scalar function by name and resolves it to an Expression if such
    * a function exists.
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
@@ -1574,7 +1575,7 @@ class SessionCatalog(
   }
 
   /**
-   * Looks up a built-in or temp table function by name and resolves it to a LogicalPlan if such
+   * Look up a built-in or temp table function by name and resolves it to a LogicalPlan if such
    * a function exists.
    */
   def resolveBuiltinOrTempTableFunction(
@@ -1649,7 +1650,7 @@ class SessionCatalog(
   }
 
   /**
-   * Looks up a persistent scalar function by name and resolves it to an Expression.
+   * Look up a persistent scalar function by name and resolves it to an Expression.
    */
   def resolvePersistentFunction(
       name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
@@ -1657,7 +1658,7 @@ class SessionCatalog(
   }
 
   /**
-   * Looks up a persistent table function by name and resolves it to a LogicalPlan.
+   * Look up a persistent table function by name and resolves it to a LogicalPlan.
    */
   def resolvePersistentTableFunction(
       name: FunctionIdentifier,
@@ -1714,13 +1715,24 @@ class SessionCatalog(
     }
   }
 
-  // Test only
+  // Test only. The actual function lookup logic looks up temp/built-in function first, then
+  // persistent function from either v1 or v2 catalog. This method only look up v1 catalog and is
+  // no longer valid.
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     if (name.database.isEmpty) {
       resolveBuiltinOrTempFunction(name.funcName, children)
         .getOrElse(resolvePersistentFunction(name, children))
     } else {
       resolvePersistentFunction(name, children)
+    }
+  }
+
+  def lookupTableFunction(name: FunctionIdentifier, children: Seq[Expression]): LogicalPlan = {
+    if (name.database.isEmpty) {
+      resolveBuiltinOrTempTableFunction(name.funcName, children)
+        .getOrElse(resolvePersistentTableFunction(name, children))
+    } else {
+      resolvePersistentTableFunction(name, children)
     }
   }
 

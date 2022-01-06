@@ -2050,7 +2050,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
         lookupBuiltinOrTempFunction(nameParts).map { info =>
           if (requirePersistentFunc) {
-            throw QueryCompilationErrors.expectPersistentFunc(nameParts.head, cmd, mismatchHint, u)
+            throw QueryCompilationErrors.expectPersistentFuncError(
+              nameParts.head, cmd, mismatchHint, u)
           } else {
             ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
           }

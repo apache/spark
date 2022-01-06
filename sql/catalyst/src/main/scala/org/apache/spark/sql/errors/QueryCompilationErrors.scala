@@ -258,7 +258,7 @@ object QueryCompilationErrors {
       t.origin.line, t.origin.startPosition)
   }
 
-  def expectPersistentFunc(
+  def expectPersistentFuncError(
       name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(

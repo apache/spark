@@ -30,14 +30,8 @@ case class ResolveTableValuedFunctions(catalog: SessionCatalog) extends Rule[Log
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
       withPosition(u) {
-        val maybeBuiltinOrTempFunc = if (u.name.database.isEmpty) {
-          catalog.resolveBuiltinOrTempTableFunction(u.name.funcName, u.functionArgs)
-        } else {
-          None
-        }
         val resolvedFunc = try {
-          maybeBuiltinOrTempFunc.getOrElse(
-            catalog.resolvePersistentTableFunction(u.name, u.functionArgs))
+          catalog.lookupTableFunction(u.name, u.functionArgs)
         } catch {
           case _: NoSuchFunctionException =>
             u.failAnalysis(s"could not resolve `${u.name}` to a table-valued function")
