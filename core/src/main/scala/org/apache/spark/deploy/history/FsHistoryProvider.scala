@@ -135,8 +135,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val hybridStoreDiskBackend =
     HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
 
-  private val historySource = new HistoryServerSource(this)
-
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
     val dir = hybridStoreDiskBackend match {
@@ -175,6 +173,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   if (hybridStoreEnabled) {
     memoryManager = new HistoryServerMemoryManager(conf)
   }
+
+  private val historySource = new HistoryServerSource(this, diskManager, Option(memoryManager))
 
   private val fileCompactor = new EventLogFileCompactor(conf, hadoopConf, fs,
     conf.get(EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN), conf.get(EVENT_LOG_COMPACTION_SCORE_THRESHOLD))

@@ -21,7 +21,10 @@ import com.codahale.metrics.{Gauge, MetricRegistry, Timer}
 
 import org.apache.spark.metrics.source.Source
 
-private[spark] class HistoryServerSource(val history: ApplicationHistoryProvider) extends Source {
+private[spark] class HistoryServerSource(
+    history: ApplicationHistoryProvider,
+    diskManager: Option[HistoryServerDiskManager],
+    memoryManager: Option[HistoryServerMemoryManager]) extends Source {
   override val sourceName: String = "HistoryServer"
   override val metricRegistry: MetricRegistry = new MetricRegistry()
 
@@ -37,6 +40,31 @@ private[spark] class HistoryServerSource(val history: ApplicationHistoryProvider
 
   metricRegistry.register(MetricRegistry.name("under.process"), new Gauge[Int] {
     override def getValue: Int = history.getEventLogsUnderProcess()
+  })
+
+  if (diskManager.isDefined) {
+    metricRegistry.register(MetricRegistry.name("diskManager.free"), new Gauge[Long] {
+      override def getValue: Long = diskManager.get.free()
+    })
+
+    metricRegistry.register(MetricRegistry.name("diskManager.committed"), new Gauge[Long] {
+      override def getValue: Long = diskManager.get.committed()
+    })
+  }
+
+  if (memoryManager.isDefined) {
+    metricRegistry.register(MetricRegistry.name("memoryManager.free"), new Gauge[Long] {
+      override def getValue: Long = memoryManager.get.free()
+    })
+
+    metricRegistry.register(MetricRegistry.name("memoryManager.committed"), new Gauge[Long] {
+      override def getValue: Long = memoryManager.get.current()
+    })
+  }
+
+  metricRegistry.register(MetricRegistry.name("diskAndMemory.total"), new Gauge[Long] {
+    override def getValue: Long =
+      diskManager.map(_.committed()).getOrElse(0L) + memoryManager.map(_.current()).getOrElse(0L)
   })
 
   private val checkForLogsTimer: Timer =

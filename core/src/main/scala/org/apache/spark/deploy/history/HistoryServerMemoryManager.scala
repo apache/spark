@@ -73,6 +73,10 @@ private class HistoryServerMemoryManager(
     }
   }
 
+  def free(): Long = maxUsage - current()
+
+  def current(): Long = currentUsage.get()
+
   private def approximateMemoryUsage(eventLogSize: Long, codec: Option[String]): Long = {
     codec match {
       case Some("zstd") =>
