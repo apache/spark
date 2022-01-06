@@ -22,11 +22,9 @@ import uuid
 import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from multiprocessing.pool import ThreadPool
-
 from typing import Any, List, Optional, Type, TYPE_CHECKING
 if TYPE_CHECKING:
     from pyspark.ml._typing import M, P, ParamMap
-
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import (
