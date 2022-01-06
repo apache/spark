@@ -17,9 +17,12 @@
 # limitations under the License.
 #
 
+import os
+import sys
 from argparse import ArgumentParser
-from utils import *
+from sparktestsupport.utils import determine_modules_for_files, determine_modules_to_test, identify_changed_files_from_git_commits
 import sparktestsupport.modules as modules
+
 
 def parse_opts():
     parser = ArgumentParser(

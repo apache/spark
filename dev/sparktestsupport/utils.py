@@ -20,12 +20,14 @@
 import os
 import sys
 import subprocess
-import sparktestsupport.modules as modules
+from sparktestsupport import modules
+from sparktestsupport.shellutils import run_cmd
 from sparktestsupport.toposort import toposort_flatten
 
 # -------------------------------------------------------------------------------------------------
 # Functions for traversing module dependency graph
 # -------------------------------------------------------------------------------------------------
+
 
 def determine_modules_for_files(filenames):
     """

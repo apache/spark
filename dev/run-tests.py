@@ -23,11 +23,10 @@ import os
 import re
 import sys
 import subprocess
-from utils import *
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten
+from sparktestsupport.utils import determine_modules_for_files, determine_modules_to_test, determine_tags_to_exclude, identify_changed_files_from_git_commits
 import sparktestsupport.modules as modules
 
 
