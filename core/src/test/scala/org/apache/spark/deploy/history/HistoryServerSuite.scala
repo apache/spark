@@ -747,7 +747,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     var json = parse(jsonOpt.get)
-    assert(getMetricsValue(json, "gauges", "HistoryServer.applications") == 14)
+    assert(getMetricsValue(json, "gauges", "HistoryServer.applications") == 15)
     assert(getMetricsValue(json, "timers", "HistoryServer.check.logs.timer") == 1)
     assert(getMetricsValue(json, "timers", "HistoryServer.clean.logs.timer") == 0)
 
