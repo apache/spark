@@ -130,11 +130,9 @@ class OrcDeserializer(
         // When reading as Spark LTZ, the ORC value can be either `OrcTimestamp`
         // (which maps to Spark LTZ) or `LongWritable` (which maps to Spark NTZ)
         if (value.isInstanceOf[OrcTimestamp]) {
-          // Spark takes Orc timestamp as timestampLTZ, so read it as the Timestamp.
           updater.setLong(ordinal,
             DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
         } else {
-          // Spark takes Orc bigint as timestampNTZ, so read the original value directly.
           updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
         }
 
