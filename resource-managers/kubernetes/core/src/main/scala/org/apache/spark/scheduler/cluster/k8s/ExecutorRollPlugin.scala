@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.lang.Math.sqrt
 import java.util.{Map => JMap}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
@@ -116,7 +117,42 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
         listWithoutDriver.sortBy(e => e.totalDuration.toFloat / Math.max(1, e.totalTasks)).reverse
       case ExecutorRollPolicy.FAILED_TASKS =>
         listWithoutDriver.sortBy(_.failedTasks).reverse
+      case ExecutorRollPolicy.OUTLIER =>
+        // We build multiple outlier lists and concat in the following importance order to find
+        // outliers in various perspective:
+        //   AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS
+        // Since we will choose only first item, the duplication is okay. If there is no outlier,
+        // We fallback to TOTAL_DURATION policy.
+        outliers(listWithoutDriver.filter(_.totalTasks > 0), e => e.totalDuration / e.totalTasks) ++
+          outliers(listWithoutDriver, e => e.totalDuration) ++
+          outliers(listWithoutDriver, e => e.totalGCTime) ++
+          outliers(listWithoutDriver, e => e.failedTasks) ++
+          listWithoutDriver.sortBy(_.totalDuration).reverse
     }
     sortedList.headOption.map(_.id)
+  }
+
+  /**
+   * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is
+   * a best-effort approach because the snapshot of ExecutorSummary is not a normal distribution.
+   * Outliers can be defined in several ways (https://en.wikipedia.org/wiki/Outlier).
+   * Here, we borrowed 2-sigma idea from https://en.wikipedia.org/wiki/68-95-99.7_rule.
+   * In case of normal distribution, this is known to be 2.5 percent roughly.
+   */
+  private def outliers(
+      list: Seq[v1.ExecutorSummary],
+      get: v1.ExecutorSummary => Float): Seq[v1.ExecutorSummary] = {
+    if (list.isEmpty) {
+      list
+    } else {
+      val size = list.size
+      val values = list.map(get)
+      val mean = values.sum / size
+      val sd = sqrt(values.map(v => (v - mean) * (v - mean)).sum / size)
+      list
+        .filter(e => (get(e) - mean) > 2 * sd)
+        .sortBy(e => get(e))
+        .reverse
+    }
   }
 }
