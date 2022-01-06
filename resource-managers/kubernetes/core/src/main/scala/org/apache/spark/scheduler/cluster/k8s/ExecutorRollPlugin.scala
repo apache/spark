@@ -146,8 +146,9 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       list
     } else {
       val size = list.size
-      val mean = list.map(get).sum / size
-      val sd = sqrt(list.map(e => (get(e) - mean) * (get(e) - mean)).sum / size)
+      val values = list.map(get)
+      val mean = values.sum / size
+      val sd = sqrt(values.map(v => (v - mean) * (v - mean)).sum / size)
       list
         .filter(e => (get(e) - mean) > 2 * sd)
         .sortBy(e => get(e))
