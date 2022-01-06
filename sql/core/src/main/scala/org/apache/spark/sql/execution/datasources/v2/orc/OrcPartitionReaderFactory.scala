@@ -88,17 +88,18 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val (resultedColPruneInfo, reader) =
+    val (resultedColPruneInfo, orcSchema) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+        val orcSchema = reader.getSchema
         (OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf), reader)
+          isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
       }
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
+      val orcCatalystSchema = OrcUtils.toCatalystSchema(orcSchema)
       OrcUtils.orcResultSchemaString(canPruneCols,
         dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
       assert(requestedColIds.length == readDataSchema.length,
@@ -133,17 +134,18 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val (resultedColPruneInfo, reader) =
+    val (resultedColPruneInfo, orcSchema) =
       Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+        val orcSchema = reader.getSchema
         (OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, reader, conf), reader)
+          isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
       }
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
     } else {
       val (requestedDataColIds, canPruneCols) = resultedColPruneInfo.get
-      val orcCatalystSchema = OrcUtils.toCatalystSchema(reader.getSchema)
+      val orcCatalystSchema = OrcUtils.toCatalystSchema(orcSchema)
       val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
         dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
       val requestedColIds = requestedDataColIds ++ Array.fill(partitionSchema.length)(-1)
