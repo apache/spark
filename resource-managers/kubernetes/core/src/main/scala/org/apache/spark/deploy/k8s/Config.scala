@@ -162,7 +162,9 @@ private[spark] object Config extends Logging {
         "TOTAL_DURATION policy chooses an executor with the biggest total task time. " +
         "AVERAGE_DURATION policy chooses an executor with the biggest average task time. " +
         "FAILED_TASKS policy chooses an executor with the most number of failed tasks. " +
-        "OUTLIER policy chooses an executor with outstanding statistics if exists. " +
+        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
+        "at least two standard deviation from the mean in average task time, " +
+        "total task time, total task GC time, and the number of failed tasks if exists. " +
         "If there is no outlier, it works like TOTAL_DURATION policy.")
       .version("3.3.0")
       .stringConf

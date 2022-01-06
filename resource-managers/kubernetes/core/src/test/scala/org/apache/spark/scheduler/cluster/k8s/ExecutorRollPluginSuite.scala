@@ -30,7 +30,6 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   val plugin = new ExecutorRollPlugin().driverPlugin()
 
   private val _choose = PrivateMethod[Option[String]](Symbol("choose"))
-  private val _outliers = PrivateMethod[Option[Seq[ExecutorSummary]]](Symbol("outliers"))
 
   val driverSummary = new ExecutorSummary("driver", "host:port", true, 1,
     10, 10, 1, 1, 1,

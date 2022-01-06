@@ -133,9 +133,11 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   }
 
   /**
-   * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is a
-   * best-effort approach because the snapshot of ExecutorSummary is not a normal distribution.
-   * In case of normal distribution, this is known to be 2.5 percent.
+   * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is
+   * a best-effort approach because the snapshot of ExecutorSummary is not a normal distribution.
+   * Outliers can be defined in several ways (https://en.wikipedia.org/wiki/Outlier).
+   * Here, we borrowed 2-sigma idea from https://en.wikipedia.org/wiki/68-95-99.7_rule.
+   * In case of normal distribution, this is known to be 2.5 percent roughly.
    */
   private def outliers(
       list: Seq[v1.ExecutorSummary],
