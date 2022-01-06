@@ -28,14 +28,21 @@ import org.apache.spark.sql.internal.SQLConf
 trait TestsV1AndV2Commands extends DDLCommandTestUtils {
   private var _version: String = ""
   override def commandVersion: String = _version
+  def runningV1Command: Boolean = commandVersion == "V1"
 
   // Tests using V1 catalogs will run with `spark.sql.legacy.useV1Command` on and off
   // to test both V1 and V2 commands.
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     Seq(true, false).foreach { useV1Command =>
-      _version = if (useV1Command) "V1" else "V2"
+      def setCommandVersion(): Unit = {
+        _version = if (useV1Command) "V1" else "V2"
+      }
+      setCommandVersion()
       super.test(testName, testTags: _*) {
+        // Need to set command version inside this test function so that
+        // the correct command version is available in each test.
+        setCommandVersion()
         withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
           testFun
         }

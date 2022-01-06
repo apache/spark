@@ -25,5 +25,7 @@ import org.apache.spark.sql.execution.command.v1
  */
 class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
-  override def alreadyExistErrorMessage: String = s"$notFoundMsgPrefix $namespace already exists"
+  override def alreadyExistErrorMessage: String =
+    s"$notFoundMsgPrefix $namespaceMessage already exists"
+  private def namespaceMessage: String = if (runningV1Command) s"$namespace" else s"'$namespace'"
 }
