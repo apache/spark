@@ -23,6 +23,7 @@ import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from multiprocessing.pool import ThreadPool
 from typing import Any, List, Optional, Type, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from pyspark.ml._typing import M, P, ParamMap
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
@@ -393,7 +394,7 @@ class _ClassificationSummary(JavaWrapper):
         return self._call_java("recallByLabel")
 
     @since("3.1.0")
-    def fMeasureByLabel(self, beta: float =1.0) -> List[float]:
+    def fMeasureByLabel(self, beta: float = 1.0) -> List[float]:
         """
         Returns f-measure for each label (category).
         """
@@ -805,11 +806,7 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
 
 
 class LinearSVCModel(
-    _JavaClassificationModel,
-    _LinearSVCParams,
-    JavaMLWritable,
-    JavaMLReadable,
-    HasTrainingSummary
+    _JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable, HasTrainingSummary
 ):
     """
     Model fitted by LinearSVC.
@@ -1698,7 +1695,7 @@ class DecisionTreeClassifier(
     def _create_model(self, java_model):
         return DecisionTreeClassificationModel(java_model)
 
-    def setMaxDepth(self, value: int) -> "DecisionTreeClassifier" :
+    def setMaxDepth(self, value: int) -> "DecisionTreeClassifier":
         """
         Sets the value of :py:attr:`maxDepth`.
         """
