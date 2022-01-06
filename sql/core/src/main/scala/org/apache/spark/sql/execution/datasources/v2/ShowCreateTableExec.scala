@@ -109,7 +109,7 @@ case class ShowCreateTableExec(
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= "TBLPROPERTIES"
+      builder ++= "TBLPROPERTIES "
       builder ++= concatByMultiLines(props)
     }
   }

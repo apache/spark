@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
@@ -1092,93 +1092,6 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("Catalog testcat does not support SHOW VIEWS"))
   }
 
-  test("CreateNameSpace: basic tests") {
-    // Session catalog is used.
-    withNamespace("ns") {
-      sql("CREATE NAMESPACE ns")
-      testShowNamespaces("SHOW NAMESPACES", Seq("default", "ns"))
-    }
-
-    // V2 non-session catalog is used.
-    withNamespace("testcat.ns1.ns2") {
-      sql("CREATE NAMESPACE testcat.ns1.ns2")
-      testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1"))
-      testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns2"))
-    }
-
-    withNamespace("testcat.test") {
-      withTempDir { tmpDir =>
-        val path = tmpDir.getCanonicalPath
-        sql(s"CREATE NAMESPACE testcat.test LOCATION '$path'")
-        val metadata =
-          catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("test")).asScala
-        val catalogPath = metadata(SupportsNamespaces.PROP_LOCATION)
-        assert(catalogPath.equals(catalogPath))
-      }
-    }
-  }
-
-  test("CreateNameSpace: test handling of 'IF NOT EXIST'") {
-    withNamespace("testcat.ns1") {
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
-
-      // The 'ns1' namespace already exists, so this should fail.
-      val exception = intercept[NamespaceAlreadyExistsException] {
-        sql("CREATE NAMESPACE testcat.ns1")
-      }
-      assert(exception.getMessage.contains("Namespace 'ns1' already exists"))
-
-      // The following will be no-op since the namespace already exists.
-      sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1")
-    }
-  }
-
-  test("CreateNameSpace: reserved properties") {
-    import SupportsNamespaces._
-    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
-        val exception = intercept[ParseException] {
-          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='dummyVal')")
-        }
-        assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
-      }
-    }
-    withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
-        withNamespace("testcat.reservedTest") {
-          sql(s"CREATE NAMESPACE testcat.reservedTest WITH DBPROPERTIES('$key'='foo')")
-          assert(sql("DESC NAMESPACE EXTENDED testcat.reservedTest")
-            .toDF("k", "v")
-            .where("k='Properties'")
-            .where("v=''")
-            .count == 1, s"$key is a reserved namespace property and ignored")
-          val meta =
-            catalog("testcat").asNamespaceCatalog.loadNamespaceMetadata(Array("reservedTest"))
-          assert(meta.get(key) == null || !meta.get(key).contains("foo"),
-            "reserved properties should not have side effects")
-        }
-      }
-    }
-  }
-
-  test("SPARK-37456: Location in CreateNamespace should be qualified") {
-    withNamespace("testcat.ns1.ns2") {
-      val e = intercept[IllegalArgumentException] {
-        sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION ''")
-      }
-      assert(e.getMessage.contains("Can not create a Path from an empty string"))
-
-      sql("CREATE NAMESPACE testcat.ns1.ns2 LOCATION '/tmp/ns_test'")
-      val descriptionDf = sql("DESCRIBE NAMESPACE EXTENDED testcat.ns1.ns2")
-      assert(descriptionDf.collect() === Seq(
-        Row("Namespace Name", "ns2"),
-        Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser),
-        Row("Properties", ""))
-      )
-    }
-  }
-
   test("create/replace/alter table - reserved properties") {
     import TableCatalog._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
@@ -1990,7 +1903,7 @@ class DataSourceV2SQLSuite
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
         "LOCATION 'file:/tmp'",
-        "TBLPROPERTIES(",
+        "TBLPROPERTIES (",
         "'prop1' = '1',",
         "'prop2' = '2',",
         "'prop3' = '3',",

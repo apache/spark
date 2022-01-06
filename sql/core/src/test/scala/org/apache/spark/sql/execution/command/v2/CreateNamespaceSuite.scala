@@ -15,21 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.aggregate;
+package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.command
 
 /**
- * An aggregate function that returns the number of rows in a group.
- *
- * @since 3.2.0
+ * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
  */
-@Evolving
-public final class CountStar implements AggregateFunc {
-
-  public CountStar() {
-  }
-
-  @Override
-  public String toString() { return "COUNT(*)"; }
+class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
+  override def namespace: String = "ns1.ns2"
+  override def notFoundMsgPrefix: String = "Namespace"
 }

@@ -259,16 +259,23 @@ private[spark] object Logging {
       } else if (logEvent.getLevel.isMoreSpecificThan(Logging.sparkShellThresholdLevel)) {
         Filter.Result.NEUTRAL
       } else {
-        var logger = LogManager.getLogger(logEvent.getLoggerName)
-          .asInstanceOf[Log4jLogger]
-        while (logger.getParent() != null) {
-          if (logger.getLevel != null || !logger.getAppenders.isEmpty) {
+        val logger = LogManager.getLogger(logEvent.getLoggerName).asInstanceOf[Log4jLogger]
+        if (loggerWithCustomConfig(logger)) {
             return Filter.Result.NEUTRAL
-          }
-          logger = logger.getParent()
         }
         Filter.Result.DENY
       }
+    }
+
+    // Return true if the logger has custom configuration. It depends on:
+    // 1. If the logger isn't attached with root logger config (i.e., with custom configuration), or
+    // 2. the logger level is different to root config level (i.e., it is changed programmatically).
+    //
+    // Note that if a logger is programmatically changed log level but set to same level
+    // as root config level, we cannot tell if it is with custom configuration.
+    private def loggerWithCustomConfig(logger: Log4jLogger): Boolean = {
+      val rootConfig = LogManager.getRootLogger.asInstanceOf[Log4jLogger].get()
+      (logger.get() ne rootConfig) || (logger.getLevel != rootConfig.getLevel())
     }
 
     override def getState: LifeCycle.State = status

@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.aggregate;
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * An aggregate function that returns the number of rows in a group.
- *
- * @since 3.2.0
+ * The class contains tests for the `CREATE NAMESPACE` command to check V1 Hive external
+ * table catalog.
  */
-@Evolving
-public final class CountStar implements AggregateFunc {
-
-  public CountStar() {
-  }
-
-  @Override
-  public String toString() { return "COUNT(*)"; }
+class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
+  override def alreadyExistErrorMessage: String = s"$notFoundMsgPrefix $namespace already exists"
 }
