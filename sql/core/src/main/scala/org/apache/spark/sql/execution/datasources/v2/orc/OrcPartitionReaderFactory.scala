@@ -88,12 +88,7 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val (resultedColPruneInfo, orcSchema) =
-      Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        val orcSchema = reader.getSchema
-        (OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
-      }
+    val (resultedColPruneInfo, orcSchema) = getResultedColPruneInfoAndOrcSchema(filePath, conf)
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader[InternalRow]
@@ -134,12 +129,7 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = new Path(new URI(file.filePath))
 
-    val (resultedColPruneInfo, orcSchema) =
-      Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-        val orcSchema = reader.getSchema
-        (OrcUtils.requestedColumnIds(
-          isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
-      }
+    val (resultedColPruneInfo, orcSchema) = getResultedColPruneInfoAndOrcSchema(filePath, conf)
 
     if (resultedColPruneInfo.isEmpty) {
       new EmptyPartitionReader
@@ -180,6 +170,15 @@ case class OrcPartitionReaderFactory(
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     OrcFile.createReader(filePath, readerOptions)
+  }
+
+  private def getResultedColPruneInfoAndOrcSchema(
+      filePath: Path, conf: Configuration): (Option[(Array[Int], Boolean)], TypeDescription) = {
+    Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
+      val orcSchema = reader.getSchema
+      (OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
+    }
   }
 
   /**
