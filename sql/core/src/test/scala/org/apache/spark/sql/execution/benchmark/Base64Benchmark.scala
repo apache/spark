@@ -28,13 +28,12 @@ import org.apache.spark.benchmark.Benchmark
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/IntervalBenchmark-results.txt".
+ *      Results will be written to "benchmarks/Base64Benchmark-results.txt".
  * }}}
  */
 object Base64Benchmark extends SqlBasedBenchmark {
   import spark.implicits._
   private val N = 20L * 1000 * 1000
-
 
   private def doEncode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
     spark.range(N).map(_ => "Spark" * len).foreach { s =>
@@ -76,5 +75,4 @@ object Base64Benchmark extends SqlBasedBenchmark {
       benchmark
     }.foreach(_.run())
   }
-
 }
