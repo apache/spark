@@ -23,32 +23,30 @@ from argparse import ArgumentParser
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
-    identify_changed_files_from_git_commits
+    identify_changed_files_from_git_commits,
 )
 import sparktestsupport.modules as modules
 
 
 def parse_opts():
-    parser = ArgumentParser(
-        prog="is-changed"
-    )
+    parser = ArgumentParser(prog="is-changed")
 
     parser.add_argument(
-        "-f", "--fail", action='store_true',
-        help="Exit with 1 if there is no relevant change."
+        "-f", "--fail", action="store_true", help="Exit with 1 if there is no relevant change."
     )
 
     default_value = ",".join(sorted([m.name for m in modules.all_modules]))
     parser.add_argument(
-        "-m", "--modules", type=str,
+        "-m",
+        "--modules",
+        type=str,
         default=default_value,
-        help="A comma-separated list of modules to test "
-             "(default: %s)" % default_value
+        help="A comma-separated list of modules to test " "(default: %s)" % default_value,
     )
 
     args, unknown = parser.parse_known_args()
     if unknown:
-        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+        parser.error("Unsupported arguments: %s" % " ".join(unknown))
     return args
 
 
@@ -57,15 +55,17 @@ def main():
 
     test_modules = opts.modules.split(",")
     changed_files = identify_changed_files_from_git_commits(
-        "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
+        "HEAD", target_ref=os.environ["APACHE_SPARK_REF"]
+    )
     changed_modules = determine_modules_to_test(
-        determine_modules_for_files(changed_files), deduplicated=False)
+        determine_modules_for_files(changed_files), deduplicated=False
+    )
     module_names = [m.name for m in changed_modules]
     if len(changed_modules) == 0:
         print("false")
         if opts.fail:
             sys.exit(1)
-    elif 'root' in test_modules or modules.root in changed_modules:
+    elif "root" in test_modules or modules.root in changed_modules:
         print("true")
     elif len(set(test_modules).intersection(module_names)) == 0:
         print("false")
