@@ -1214,6 +1214,29 @@ package object config {
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
 
+  private[spark] val REDUCER_SHUFFLE_FETCH_SLOW_LOG_THRESHOLD_MS =
+    ConfigBuilder("spark.reducer.shuffleFetchSlowLogThreshold.time")
+      .doc("When fetching blocks from an external shuffle service is slower than expected, the " +
+        "fetch will be logged to allow for subsequent investigation. A fetch is determined " +
+        "to be slow if it has a total duration of at least this value, and a transfer rate " +
+        // cannot reference val REDUCER_SHUFFLE_FETCH_SLOW_LOG_THRESHOLD_BPS since its uninitialized
+        "less than spark.reducer.shuffleFetchSlowLogThreshold.bytesPerSec")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The shuffle fetch slow log threshold time must be greater than 0")
+      .createWithDefaultString("1s")
+
+  private[spark] val REDUCER_SHUFFLE_FETCH_SLOW_LOG_THRESHOLD_BPS =
+    ConfigBuilder("spark.reducer.shuffleFetchSlowLogThreshold.bytesPerSec")
+      .doc("When fetching blocks from an external shuffle service is slower than expected, the " +
+        "fetch will be logged to allow for subsequent investigation. A fetch is determined " +
+        "to be slow if it has a total duration of at least " +
+        s"${REDUCER_SHUFFLE_FETCH_SLOW_LOG_THRESHOLD_MS.key}, and a transfer rate less than this")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The shuffle fetch slow log threshold rate must non-negative")
+      .createWithDefaultString("1k")
+
   private[spark] val MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
     ConfigBuilder("spark.network.maxRemoteBlockSizeFetchToMem")
       .doc("Remote block will be fetched to disk when size of the block is above this threshold " +

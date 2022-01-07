@@ -40,8 +40,8 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
-import org.apache.spark.shuffle.ShuffleReadMetricsReporter
-import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.util.{Clock, CompletionIterator, SystemClock, TaskCompletionListener, Utils}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -72,6 +72,12 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param maxAttemptsOnNettyOOM The max number of a block could retry due to Netty OOM before
  *                              throwing the fetch failure.
+ * @param slowFetchThresholdMs  Threshold for logging slow fetches. A fetch which takes longer than
+ *                              this duration, and transfers slower than `slowFetchThresholdBps`,
+ *                              will be logged as a slow fetch.
+ * @param slowFetchThresholdBps Threshold for logging slow fetches. A fetch which takes longer than
+ *                              `slowFetchThresholdMs`, and transfers slower than this rate,
+ *                              will be logged as a slow fetch.
  * @param detectCorrupt         whether to detect any corruption in fetched blocks.
  * @param checksumEnabled whether the shuffle checksum is enabled. When enabled, Spark will try to
  *                        diagnose the cause of the block corruption.
@@ -80,6 +86,7 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
  *                     side supports.
+ * @param clock The clock used to obtain timing information. Useful for mocking in tests.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -94,12 +101,15 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     val maxReqSizeShuffleToMem: Long,
     maxAttemptsOnNettyOOM: Int,
+    slowFetchThresholdMs: Long,
+    slowFetchThresholdBps: Long,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
     checksumEnabled: Boolean,
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    doBatchFetch: Boolean)
+    doBatchFetch: Boolean,
+    clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -120,7 +130,7 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] var numBlocksProcessed = 0
 
-  private[this] val startTimeNs = System.nanoTime()
+  private[this] val startTimeNs = clock.nanoTime()
 
   /** Host local blocks to fetch, excluding zero-sized blocks. */
   private[this] val hostLocalBlocks = scala.collection.mutable.LinkedHashSet[(BlockId, Int)]()
@@ -269,6 +279,7 @@ final class ShuffleBlockFetcherIterator(
     val deferredBlocks = new ArrayBuffer[String]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
+    val requestStartTime = clock.nanoTime()
 
     @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
       if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
@@ -278,6 +289,13 @@ final class ShuffleBlockFetcherIterator(
         }
         results.put(DeferFetchRequestResult(FetchRequest(address, blocks.toSeq)))
         deferredBlocks.clear()
+      }
+    }
+
+    @inline def logFetchOnCompletionIfSlow(): Unit = {
+      if (remainingBlocks.isEmpty) {
+        logFetchIfSlow(TimeUnit.NANOSECONDS.toMillis(clock.nanoTime() - requestStartTime),
+          infoMap.values.map(_._1).sum, blockIds.size, address)
       }
     }
 
@@ -291,6 +309,7 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             remainingBlocks -= blockId
+            logFetchOnCompletionIfSlow()
             blockOOMRetryCounts.remove(blockId)
             results.put(new SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
@@ -334,6 +353,7 @@ final class ShuffleBlockFetcherIterator(
                     s"due to Netty OOM, will retry")
                 }
                 remainingBlocks -= blockId
+                logFetchOnCompletionIfSlow()
                 deferredBlocks += blockId
                 enqueueDeferredFetchRequestIfNecessary()
               }
@@ -342,6 +362,7 @@ final class ShuffleBlockFetcherIterator(
               val block = BlockId(blockId)
               if (block.isShuffleChunk) {
                 remainingBlocks -= blockId
+                logFetchOnCompletionIfSlow()
                 results.put(FallbackOnPushMergedFailureResult(
                   block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
@@ -749,9 +770,9 @@ final class ShuffleBlockFetcherIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (result == null) {
-      val startFetchWait = System.nanoTime()
+      val startFetchWait = clock.nanoTime()
       result = results.take()
-      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(clock.nanoTime() - startFetchWait)
       shuffleMetrics.incFetchWaitTime(fetchWaitTime)
 
       result match {
@@ -1245,6 +1266,23 @@ final class ShuffleBlockFetcherIterator(
       if (defRequests.isEmpty) deferredFetchRequests.remove(address)
     }
     removedChunkIds
+  }
+
+  private[storage] def logFetchIfSlow(
+      durationMs: Long,
+      totalRequestSize: Long,
+      blockCount: Int,
+      blockManagerId: BlockManagerId): Unit = {
+    val transferBps = if (durationMs > 0) {
+      (totalRequestSize.toDouble / durationMs * 1000).toLong
+    } else {
+      Long.MaxValue
+    }
+    if (durationMs > slowFetchThresholdMs && transferBps < slowFetchThresholdBps) {
+      logWarning(s"Slow shuffle block fetch detected: Fetching blocks took longer than expected " +
+        s"( blockCount = $blockCount , totalRequestSize = $totalRequestSize , blockManagerId = " +
+        s"$blockManagerId , durationMs = $durationMs , transferBps = $transferBps )")
+    }
   }
 }
 

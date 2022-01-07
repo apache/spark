@@ -46,7 +46,7 @@ import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
 import org.apache.spark.storage.ShuffleBlockFetcherIterator._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 
 class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodTester {
@@ -185,12 +185,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxBlocksInFlightPerAddress: Int = Int.MaxValue,
       maxReqSizeShuffleToMem: Int = Int.MaxValue,
       maxAttemptsOnNettyOOM: Int = 10,
+      slowFetchThresholdMs: Long = Long.MaxValue,
+      slowFetchThresholdBps: Long = Long.MaxValue,
       detectCorrupt: Boolean = true,
       detectCorruptUseExtraMemory: Boolean = true,
       checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
-      doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
+      doBatchFetch: Boolean = false,
+      clock: Clock = new SystemClock()): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
     new ShuffleBlockFetcherIterator(
       tContext,
@@ -204,12 +207,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxBlocksInFlightPerAddress,
       maxReqSizeShuffleToMem,
       maxAttemptsOnNettyOOM,
+      slowFetchThresholdMs,
+      slowFetchThresholdBps,
       detectCorrupt,
       detectCorruptUseExtraMemory,
       checksumEnabled,
       checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
-      doBatchFetch)
+      doBatchFetch,
+      clock)
   }
   // scalastyle:on argcount
 
@@ -1782,4 +1788,40 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)))
   }
 
+  test("SPARK-36215: logging of slow block fetches") {
+    val thresholdBps = 1024
+    val thresholdMs = 1000
+    val fetcher = createShuffleBlockIteratorWithDefaults(
+      Map.empty,
+      slowFetchThresholdMs = thresholdMs,
+      slowFetchThresholdBps = thresholdBps)
+    val totalBytes = 10000
+    val blockCount = 3
+    val bmId = BlockManagerId("execID", "hostname", 1234)
+
+    val appender = new LogAppender()
+    withLogAppender(appender,
+        loggerNames = Seq(classOf[ShuffleBlockFetcherIterator].getName.stripSuffix("$"))) {
+      // Fetch with a read that is slightly slower than the threshold
+      val elapsedMs = 1000 * totalBytes / thresholdBps + 1
+      fetcher.logFetchIfSlow(elapsedMs, totalBytes, blockCount, bmId)
+      val expectedMessage = s"Slow shuffle block fetch detected: Fetching blocks took longer " +
+        s"than expected ( blockCount = $blockCount , totalRequestSize = $totalBytes , " +
+        s"blockManagerId = BlockManagerId(execID, hostname, 1234, None) , " +
+        s"durationMs = $elapsedMs , " +
+        s"transferBps = ${(totalBytes.toDouble / elapsedMs * 1000).toLong} )"
+      assert(1 === appender.loggingEvents.size)
+      assert(1 === appender.loggingEvents.count(_.getRenderedMessage === expectedMessage))
+
+      // Fetch with a read that is slightly faster than the threshold
+      fetcher.logFetchIfSlow(1000 * totalBytes / thresholdBps - 1, totalBytes, blockCount, bmId)
+      assert(1 === appender.loggingEvents.size)
+
+      // When the number of bytes is too small, even though the transfer rate is slow, the
+      // thresholdMillis will not be satisfied
+      val smallBytes = 10
+      fetcher.logFetchIfSlow(1000 * smallBytes / thresholdBps + 1, smallBytes, blockCount, bmId)
+      assert(1 === appender.loggingEvents.size)
+    }
+  }
 }
