@@ -140,7 +140,8 @@ object StaticSQLConf {
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
     .doc("List of class names implementing QueryExecutionListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
-      "or a constructor that expects a SparkConf argument.")
+      "or a constructor that expects a SparkConf argument. User can use SQLConf.get() to get the " +
+      "corresponding SessionState's conf when initialize QueryExecutionListener.")
     .version("2.3.0")
     .stringConf
     .toSequence
@@ -149,7 +150,8 @@ object StaticSQLConf {
   val STREAMING_QUERY_LISTENERS = buildStaticConf("spark.sql.streaming.streamingQueryListeners")
     .doc("List of class names implementing StreamingQueryListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
-      "or a constructor that expects a SparkConf argument.")
+      "or a constructor that expects a SparkConf argument. User can use SQLConf.get() to get the " +
+      "corresponding SessionState's conf when initialize QueryExecutionListener.")
     .version("2.4.0")
     .stringConf
     .toSequence
