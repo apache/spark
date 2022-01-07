@@ -24,7 +24,7 @@ Spark uses pattern letters in the following table for number parsing and formatt
 |Symbol|Meaning|Examples|
 |------|-------|--------|
 |**9**|digit position (can be dropped if insignificant)|9999|
-|**0**|digit position (will not be dropped, even if insignificant)|0999|
+|**0**|digit position (will not be dropped, even if insignificant)|0000|
 |**.**|decimal point (only allowed once)|99.99|
 |**D**|decimal point (only allowed once)|99D99|
 |**,**|group (thousands) separator|9,999|
