@@ -2095,25 +2095,25 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.reducer.shuffleFetchSlowLogThreshold.time</code></td>
-  <td>value of <code>spark.reducer.shuffleFetchSlowLogThreshold.time</code></td>
+  <td>1s</td>
   <td>
     When fetching blocks from an external shuffle service is slower than expected, the
     fetch will be logged to allow for subsequent investigation. A fetch is determined
     to be slow if it has a total duration of at least this value, and a transfer rate
     less than <code>spark.reducer.shuffleFetchSlowLogThreshold.bytesPerSec</code>.
   </td>
-  <td>3.2.0</td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.reducer.shuffleFetchSlowLogThreshold.bytesPerSec</code></td>
-  <td>value of <code>spark.reducer.shuffleFetchSlowLogThreshold.bytesPerSec</code></td>
+  <td>1k</td>
   <td>
     When fetching blocks from an external shuffle service is slower than expected, the
     fetch will be logged to allow for subsequent investigation. A fetch is determined
     to be slow if it has a total duration of at least <code>spark.reducer.shuffleFetchSlowLogThreshold.time</code>,
     and a transfer rate less than this.
   </td>
-  <td>3.2.0</td>
+  <td>3.3.0</td>
 </tr>
 </table>
 

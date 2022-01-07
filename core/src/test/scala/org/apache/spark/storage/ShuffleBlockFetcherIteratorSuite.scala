@@ -1811,17 +1811,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         s"durationMs = $elapsedMs , " +
         s"transferBps = ${(totalBytes.toDouble / elapsedMs * 1000).toLong} )"
       assert(1 === appender.loggingEvents.size)
-      assert(1 === appender.loggingEvents.count(_.getRenderedMessage === expectedMessage))
+      assert(expectedMessage === appender.loggingEvents(0).getMessage.getFormattedMessage)
 
       // Fetch with a read that is slightly faster than the threshold
       fetcher.logFetchIfSlow(1000 * totalBytes / thresholdBps - 1, totalBytes, blockCount, bmId)
-      assert(1 === appender.loggingEvents.size)
+      assert(1 === appender.loggingEvents.size) // no new events
 
       // When the number of bytes is too small, even though the transfer rate is slow, the
       // thresholdMillis will not be satisfied
       val smallBytes = 10
       fetcher.logFetchIfSlow(1000 * smallBytes / thresholdBps + 1, smallBytes, blockCount, bmId)
-      assert(1 === appender.loggingEvents.size)
+      assert(1 === appender.loggingEvents.size) // no new events
     }
   }
 }
