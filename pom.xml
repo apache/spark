@@ -1075,13 +1075,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.9</version>
+        <version>3.3.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1093,7 +1093,7 @@
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
