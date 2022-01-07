@@ -28,4 +28,4 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-$BLACK_BUILD --config dev/pyproject.toml python/pyspark
+$BLACK_BUILD --config dev/pyproject.toml python/pyspark dev

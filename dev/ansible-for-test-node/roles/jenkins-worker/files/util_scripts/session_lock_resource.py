@@ -24,10 +24,12 @@ _LOCK_DIR = "/tmp/session_locked_resources"
 def _parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--timeout-secs", type=int,
-                        help="How long to wait for lock acquisition, in seconds")
-    parser.add_argument("-p", "--pid", type=int,
-                        help="PID to wait for exit (defaults to parent pid)")
+    parser.add_argument(
+        "-t", "--timeout-secs", type=int, help="How long to wait for lock acquisition, in seconds"
+    )
+    parser.add_argument(
+        "-p", "--pid", type=int, help="PID to wait for exit (defaults to parent pid)"
+    )
     parser.add_argument("resource", help="Resource to lock")
     return parser.parse_args()
 
@@ -63,13 +65,13 @@ def _daemonize(child_body):
     argument, which is a function that is called with a boolean
     that indicates that the child succeeded/failed in its initialization
     """
-    CHILD_FAIL = '\2'
-    CHILD_SUCCESS = '\0'
+    CHILD_FAIL = "\2"
+    CHILD_SUCCESS = "\0"
     r_fd, w_fd = os.pipe()
     if os.fork() != 0:
         # We are the original script. Read success/fail from the final
         # child and log an error message if needed.
-        child_code = os.read(r_fd, 1) # .decode('utf-8')
+        child_code = os.read(r_fd, 1)  # .decode('utf-8')
         return child_code == CHILD_SUCCESS
     # First child
     os.setsid()
@@ -82,6 +84,7 @@ def _daemonize(child_body):
     def _write_to_parent(success):
         parent_message = CHILD_SUCCESS if success else CHILD_FAIL
         os.write(w_fd, parent_message)
+
     child_body(_write_to_parent)
     os._exit(0)
 
@@ -114,15 +117,15 @@ def _is_pid_running(pid):
     return True
 
 
-def _lock_and_wait(lock_success_callback, resource, timeout_secs,
-                   controlling_pid):
+def _lock_and_wait(lock_success_callback, resource, timeout_secs, controlling_pid):
     """Attempt to lock the file then wait.
 
     lock_success_callback will be called if the locking worked.
     """
     lock_filename = os.path.join(_LOCK_DIR, resource)
-    lock_message = ("Session lock on " + resource
-        + ", controlling pid " + str(controlling_pid) + "\n")
+    lock_message = (
+        "Session lock on " + resource + ", controlling pid " + str(controlling_pid) + "\n"
+    )
     try:
         f = _acquire_lock(lock_filename, timeout_secs, lock_message)
     except IOError:
@@ -139,8 +142,8 @@ def main():
         os.mkdir(_LOCK_DIR)
     controlling_pid = args.pid or os.getppid()
     child_body_func = lambda success_callback: _lock_and_wait(
-        success_callback, args.resource, args.timeout_secs,
-        controlling_pid)
+        success_callback, args.resource, args.timeout_secs, controlling_pid
+    )
     if _daemonize(child_body_func):
         return 0
     else:

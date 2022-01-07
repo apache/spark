@@ -30,7 +30,7 @@ from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
     determine_tags_to_exclude,
-    identify_changed_files_from_git_commits
+    identify_changed_files_from_git_commits,
 )
 import sparktestsupport.modules as modules
 
@@ -70,9 +70,9 @@ def determine_java_executable():
 
 def set_title_and_block(title, err_block):
     os.environ["CURRENT_BLOCK"] = str(ERROR_CODES[err_block])
-    line_str = '=' * 72
+    line_str = "=" * 72
 
-    print('')
+    print("")
     print(line_str)
     print(title)
     print(line_str)
@@ -126,8 +126,10 @@ def build_spark_documentation():
     bundle_bin = which("bundle")
 
     if not bundle_bin:
-        print("[error] Cannot find a version of `bundle` on the system; please",
-              " install one with `gem install bundler` and retry to build documentation.")
+        print(
+            "[error] Cannot find a version of `bundle` on the system; please",
+            " install one with `gem install bundler` and retry to build documentation.",
+        )
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
         run_cmd([bundle_bin, "install"])
@@ -150,22 +152,20 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
-    sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
-                                   b"^.*[warn].*Merging" + b"|" +
-                                   b"^.*[info].*Including")
+    sbt_output_filter = re.compile(
+        b"^.*[info].*Resolving" + b"|" + b"^.*[warn].*Merging" + b"|" + b"^.*[info].*Including"
+    )
 
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
     # not block.
-    echo_proc = subprocess.Popen(["echo", "\"q\n\""], stdout=subprocess.PIPE)
-    sbt_proc = subprocess.Popen(sbt_cmd,
-                                stdin=echo_proc.stdout,
-                                stdout=subprocess.PIPE)
+    echo_proc = subprocess.Popen(["echo", '"q\n"'], stdout=subprocess.PIPE)
+    sbt_proc = subprocess.Popen(sbt_cmd, stdin=echo_proc.stdout, stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, b''):
+    for line in iter(sbt_proc.stdout.readline, b""):
         if not sbt_output_filter.match(line):
-            print(line.decode('utf-8'), end='')
+            print(line.decode("utf-8"), end="")
     retcode = sbt_proc.wait()
 
     if retcode != 0:
@@ -188,8 +188,13 @@ def get_scala_profiles(scala_version):
     if scala_version in sbt_maven_scala_profiles:
         return sbt_maven_scala_profiles[scala_version]
     else:
-        print("[error] Could not find", scala_version, "in the list. Valid options",
-              " are", sbt_maven_scala_profiles.keys())
+        print(
+            "[error] Could not find",
+            scala_version,
+            "in the list. Valid options",
+            " are",
+            sbt_maven_scala_profiles.keys(),
+        )
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -197,8 +202,7 @@ def switch_scala_version(scala_version):
     """
     Switch the code base to use the given Scala version.
     """
-    set_title_and_block(
-        "Switch the Scala version to %s" % scala_version, "BLOCK_SCALA_VERSION")
+    set_title_and_block("Switch the Scala version to %s" % scala_version, "BLOCK_SCALA_VERSION")
 
     assert scala_version is not None
     ver_num = scala_version[-4:]  # Simply extract. e.g.) 2.13 from scala2.13
@@ -220,8 +224,13 @@ def get_hadoop_profiles(hadoop_version):
     if hadoop_version in sbt_maven_hadoop_profiles:
         return sbt_maven_hadoop_profiles[hadoop_version]
     else:
-        print("[error] Could not find", hadoop_version, "in the list. Valid options",
-              " are", sbt_maven_hadoop_profiles.keys())
+        print(
+            "[error] Could not find",
+            hadoop_version,
+            "in the list. Valid options",
+            " are",
+            sbt_maven_hadoop_profiles.keys(),
+        )
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -239,8 +248,10 @@ def build_spark_maven(extra_profiles):
 def build_spark_sbt(extra_profiles):
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
-    sbt_goals = ["test:package",  # Build test jars as some tests depend on them
-                 "streaming-kinesis-asl-assembly/assembly"]
+    sbt_goals = [
+        "test:package",  # Build test jars as some tests depend on them
+        "streaming-kinesis-asl-assembly/assembly",
+    ]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark using SBT with these arguments: ", " ".join(profiles_and_goals))
@@ -255,8 +266,10 @@ def build_spark_unidoc_sbt(extra_profiles):
     sbt_goals = ["unidoc"]
     profiles_and_goals = build_profiles + sbt_goals
 
-    print("[info] Building Spark unidoc using SBT with these arguments: ",
-          " ".join(profiles_and_goals))
+    print(
+        "[info] Building Spark unidoc using SBT with these arguments: ",
+        " ".join(profiles_and_goals),
+    )
 
     exec_sbt(profiles_and_goals)
 
@@ -266,8 +279,10 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
     profiles_and_goals = build_profiles + sbt_goals
-    print("[info] Building Spark assembly using SBT with these arguments: ",
-          " ".join(profiles_and_goals))
+    print(
+        "[info] Building Spark assembly using SBT with these arguments: ",
+        " ".join(profiles_and_goals),
+    )
     exec_sbt(profiles_and_goals)
 
     if checkstyle:
@@ -295,8 +310,10 @@ def detect_binary_inop_with_mima(extra_profiles):
     build_profiles = extra_profiles + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
     profiles = " ".join(build_profiles)
-    print("[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
-          profiles)
+    print(
+        "[info] Detecting binary incompatibilities with MiMa using SBT with these profiles: ",
+        profiles,
+    )
     run_cmd([os.path.join(SPARK_HOME, "dev", "mima"), profiles])
 
 
@@ -305,8 +322,10 @@ def run_scala_tests_maven(test_profiles):
 
     profiles_and_goals = test_profiles + mvn_test_goals
 
-    print("[info] Running Spark tests using Maven with these arguments: ",
-          " ".join(profiles_and_goals))
+    print(
+        "[info] Running Spark tests using Maven with these arguments: ",
+        " ".join(profiles_and_goals),
+    )
 
     exec_maven(profiles_and_goals)
 
@@ -320,8 +339,9 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     profiles_and_goals = test_profiles + sbt_test_goals
 
-    print("[info] Running Spark tests using SBT with these arguments: ",
-          " ".join(profiles_and_goals))
+    print(
+        "[info] Running Spark tests using SBT with these arguments: ", " ".join(profiles_and_goals)
+    )
 
     exec_sbt(profiles_and_goals)
 
@@ -334,20 +354,21 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     # Remove duplicates while keeping the test module order
     test_modules = list(dict.fromkeys(test_modules))
 
-    test_profiles = extra_profiles + \
-        list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
+    test_profiles = extra_profiles + list(
+        set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules))
+    )
 
     if included_tags:
-        test_profiles += ['-Dtest.include.tags=' + ",".join(included_tags)]
+        test_profiles += ["-Dtest.include.tags=" + ",".join(included_tags)]
     if excluded_tags:
-        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
+        test_profiles += ["-Dtest.exclude.tags=" + ",".join(excluded_tags)]
 
     # set up java11 env if this is a pull request build with 'test-java11' in the title
     if "ghprbPullTitle" in os.environ:
         if "test-java11" in os.environ["ghprbPullTitle"].lower():
             os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
             os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
-            test_profiles += ['-Djava.version=11']
+            test_profiles += ["-Djava.version=11"]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
@@ -368,7 +389,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
         script = "run-tests"
     command = [os.path.join(SPARK_HOME, "python", script)]
     if test_modules != [modules.root]:
-        command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+        command.append("--modules=%s" % ",".join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 
@@ -395,35 +416,42 @@ def run_sparkr_tests():
 
 
 def parse_opts():
-    parser = ArgumentParser(
-        prog="run-tests"
+    parser = ArgumentParser(prog="run-tests")
+    parser.add_argument(
+        "-p",
+        "--parallelism",
+        type=int,
+        default=8,
+        help="The number of suites to test in parallel (default %(default)d)",
     )
     parser.add_argument(
-        "-p", "--parallelism", type=int, default=8,
-        help="The number of suites to test in parallel (default %(default)d)"
-    )
-    parser.add_argument(
-        "-m", "--modules", type=str,
+        "-m",
+        "--modules",
+        type=str,
         default=None,
         help="A comma-separated list of modules to test "
-             "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules]))
+        "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules])),
     )
     parser.add_argument(
-        "-e", "--excluded-tags", type=str,
+        "-e",
+        "--excluded-tags",
+        type=str,
         default=None,
         help="A comma-separated list of tags to exclude in the tests, "
-             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+        "e.g., org.apache.spark.tags.ExtendedHiveTest ",
     )
     parser.add_argument(
-        "-i", "--included-tags", type=str,
+        "-i",
+        "--included-tags",
+        type=str,
         default=None,
         help="A comma-separated list of tags to include in the tests, "
-             "e.g., org.apache.spark.tags.ExtendedHiveTest "
+        "e.g., org.apache.spark.tags.ExtendedHiveTest ",
     )
 
     args, unknown = parser.parse_known_args()
     if unknown:
-        parser.error("Unsupported arguments: %s" % ' '.join(unknown))
+        parser.error("Unsupported arguments: %s" % " ".join(unknown))
     if args.parallelism < 1:
         parser.error("Parallelism cannot be less than 1")
     return args
@@ -433,8 +461,10 @@ def main():
     opts = parse_opts()
     # Ensure the user home directory (HOME) is valid and is an absolute directory
     if not USER_HOME or not os.path.isabs(USER_HOME):
-        print("[error] Cannot determine your home directory as an absolute path;",
-              " ensure the $HOME environment variable is set properly.")
+        print(
+            "[error] Cannot determine your home directory as an absolute path;",
+            " ensure the $HOME environment variable is set properly.",
+        )
         sys.exit(1)
 
     os.chdir(SPARK_HOME)
@@ -448,8 +478,10 @@ def main():
     java_exe = determine_java_executable()
 
     if not java_exe:
-        print("[error] Cannot find a version of `java` on the system; please",
-              " install one and retry.")
+        print(
+            "[error] Cannot find a version of `java` on the system; please",
+            " install one and retry.",
+        )
         sys.exit(2)
 
     # Install SparkR
@@ -490,8 +522,12 @@ def main():
 
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
-    print("[info] Using build tool", build_tool, "with profiles",
-          *(extra_profiles + ["under environment", test_env]))
+    print(
+        "[info] Using build tool",
+        build_tool,
+        "with profiles",
+        *(extra_profiles + ["under environment", test_env]),
+    )
 
     changed_modules = []
     changed_files = []
@@ -509,13 +545,16 @@ def main():
         if test_env == "github_actions" and (is_apache_spark_ref or is_github_prev_sha):
             if is_apache_spark_ref:
                 changed_files = identify_changed_files_from_git_commits(
-                    "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
+                    "HEAD", target_ref=os.environ["APACHE_SPARK_REF"]
+                )
             elif is_github_prev_sha:
                 changed_files = identify_changed_files_from_git_commits(
-                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"])
+                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
+                )
 
             modules_to_test = determine_modules_to_test(
-                determine_modules_for_files(changed_files), deduplicated=False)
+                determine_modules_for_files(changed_files), deduplicated=False
+            )
 
             if modules.root not in modules_to_test:
                 # If root module is not found, only test the intersected modules.
@@ -547,8 +586,7 @@ def main():
     if opts.included_tags:
         included_tags.extend([t.strip() for t in opts.included_tags.split(",")])
 
-    print("[info] Found the following changed modules:",
-          ", ".join(x.name for x in changed_modules))
+    print("[info] Found the following changed modules:", ", ".join(x.name for x in changed_modules))
 
     # setup environment variables
     # note - the 'root' module doesn't collect environment variables for all modules. Because the
@@ -569,25 +607,26 @@ def main():
         run_apache_rat_checks()
 
         # style checks
-        if not changed_files or any(f.endswith(".scala")
-                                    or f.endswith("scalastyle-config.xml")
-                                    for f in changed_files):
+        if not changed_files or any(
+            f.endswith(".scala") or f.endswith("scalastyle-config.xml") for f in changed_files
+        ):
             run_scala_style_checks(extra_profiles)
-        if not changed_files or any(f.endswith(".java")
-                                    or f.endswith("checkstyle.xml")
-                                    or f.endswith("checkstyle-suppressions.xml")
-                                    for f in changed_files):
+        if not changed_files or any(
+            f.endswith(".java")
+            or f.endswith("checkstyle.xml")
+            or f.endswith("checkstyle-suppressions.xml")
+            for f in changed_files
+        ):
             # Run SBT Checkstyle after the build to prevent a side-effect to the build.
             should_run_java_style_checks = True
-        if not changed_files or any(f.endswith("lint-python")
-                                    or f.endswith("tox.ini")
-                                    or f.endswith(".py")
-                                    for f in changed_files):
+        if not changed_files or any(
+            f.endswith("lint-python") or f.endswith("tox.ini") or f.endswith(".py")
+            for f in changed_files
+        ):
             run_python_style_checks()
-        if not changed_files or any(f.endswith(".R")
-                                    or f.endswith("lint-r")
-                                    or f.endswith(".lintr")
-                                    for f in changed_files):
+        if not changed_files or any(
+            f.endswith(".R") or f.endswith("lint-r") or f.endswith(".lintr") for f in changed_files
+        ):
             run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
@@ -618,7 +657,8 @@ def main():
         run_python_tests(
             modules_with_python_tests,
             opts.parallelism,
-            with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true")
+            with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
+        )
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
@@ -627,6 +667,7 @@ def main():
 def _test():
     import doctest
     import sparktestsupport.utils
+
     failure_count = doctest.testmod(sparktestsupport.utils)[0] + doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
