@@ -156,7 +156,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
         $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").prop("checked", true);
         var executorSumCheckBoxId = $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").attr('exec-sum-idx');
         var selectedExecutorSummaryMetrics = executorSummaryMetricsTableArray.filter(row => (row.executorSumCheckBoxId).toString() == executorSumCheckBoxId)
-        for(value in selectedExecutorSummaryMetrics) {
+        for(var value in selectedExecutorSummaryMetrics) {
           executorSummaryMetricsTableCurrentStateArray.push(selectedExecutorSummaryMetrics[value]);
         }
         executorSummaryMetricsTableCurrentFilteredArray = executorSummaryMetricsTableCurrentStateArray.slice();
@@ -805,10 +805,10 @@ $(document).ready(function () {
             switch(columnKey) {
 
               case "JVMHeapMemory":
-                 row = createRowMetadataForColumn(
-                   columnKey, executorMetricsResponse[columnKey], 3);
-                 executorSummaryMetricsTableArray.push(row);
-                 break;
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 3);
+                executorSummaryMetricsTableArray.push(row);
+                break;
 
               case "JVMOffHeapMemory":
                 row = createRowMetadataForColumn(
@@ -1084,9 +1084,10 @@ $(document).ready(function () {
             }
             var para = thisBox.attr('exec-sum-idx');
             if(para != '') {
+              var executorSummaryMetricsTableFilteredArray = []
               if (thisBox.is(":checked")) {
                 var selectedExecutorSummaryMetrics = executorSummaryMetricsTableArray.filter(row => (row.executorSumCheckBoxId).toString() == para)
-                for(value in selectedExecutorSummaryMetrics) {
+                for(var value in selectedExecutorSummaryMetrics) {
                   executorSummaryMetricsTableCurrentStateArray.push(selectedExecutorSummaryMetrics[value]);
                 }
                 executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableCurrentStateArray.slice();
