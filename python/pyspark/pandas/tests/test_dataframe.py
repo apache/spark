@@ -2222,12 +2222,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
     def test_merge_cross(self):
-        left_pdf = pd.DataFrame(
-            [["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"]
-        )
-        right_pdf = pd.DataFrame(
-            [["President", 35], ["Senator", 30]], columns=["job", "min_age"]
-        )
+        left_pdf = pd.DataFrame([["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"])
+        right_pdf = pd.DataFrame([["President", 35], ["Senator", 30]], columns=["job", "min_age"])
         left_psdf = ps.from_pandas(left_pdf)
         right_psdf = ps.from_pandas(right_pdf)
 
@@ -2257,13 +2253,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             left_psdf.merge(right_psdf, left_on="age", right_on="min_age", how="cross")
 
-    def test_condition_merge(self):
-        left_pdf = pd.DataFrame(
-            [["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"]
-        )
-        right_pdf = pd.DataFrame(
-            [["President", 35], ["Senator", 30]], columns=["job", "min_age"]
-        )
+    def test_conditional_merge(self):
+        left_pdf = pd.DataFrame([["Bill", 23], ["Mary", 33], ["Ted", 36]], columns=["name", "age"])
+        right_pdf = pd.DataFrame([["President", 35], ["Senator", 30]], columns=["job", "min_age"])
         left_psdf = ps.from_pandas(left_pdf)
         right_psdf = ps.from_pandas(right_pdf)
 
@@ -2278,9 +2270,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             )
         )
 
-        result_psdf = left_psdf.merge(
-            right_psdf, on=lambda left, right: left.age >= right.min_age
-        )
+        result_psdf = left_psdf.merge(right_psdf, on=lambda left, right: left.age >= right.min_age)
         self.assert_eq(result_psdf, expected_psdf)
 
     def test_merge_raises(self):
