@@ -17,7 +17,6 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
@@ -34,7 +33,6 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
-import org.apache.hadoop.hive.ql.CommandNeedRetryException;
 import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.ExplainTask;
