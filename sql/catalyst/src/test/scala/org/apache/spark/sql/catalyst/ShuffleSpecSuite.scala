@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
-/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.internal.SQLConf
 
-class ShuffleSpecSuite extends SparkFunSuite {
+class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   protected def checkCompatible(
       left: ShuffleSpec,
       right: ShuffleSpec,
@@ -349,7 +350,15 @@ class ShuffleSpecSuite extends SparkFunSuite {
 
   test("canCreatePartitioning") {
     val distribution = ClusteredDistribution(Seq($"a", $"b"))
-    assert(HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution).canCreatePartitioning)
+    withSQLConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS.key -> "false") {
+      assert(HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution).canCreatePartitioning)
+    }
+    withSQLConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS.key -> "true") {
+      assert(!HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution)
+        .canCreatePartitioning)
+      assert(HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10), distribution)
+        .canCreatePartitioning)
+    }
     assert(SinglePartitionShuffleSpec.canCreatePartitioning)
     assert(ShuffleSpecCollection(Seq(
         HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),

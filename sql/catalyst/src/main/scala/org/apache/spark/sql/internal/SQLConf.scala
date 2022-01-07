@@ -396,6 +396,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS =
+    buildConf("spark.sql.join.requireAllJoinKeysAsPartitionKeys")
+      .internal()
+      .doc("When true, the planner requires full join keys as the hash partition keys of the " +
+        "children, to eliminate the shuffles of the shuffle join. This is to avoid data skews " +
+        "which can lead to significant performance regression if shuffles are eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
