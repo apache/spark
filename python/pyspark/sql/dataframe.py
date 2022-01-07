@@ -764,7 +764,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.collect()
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
         return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
@@ -787,7 +787,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> list(df.toLocalIterator())
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
 

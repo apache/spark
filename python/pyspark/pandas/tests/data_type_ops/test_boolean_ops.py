@@ -235,9 +235,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** b_psser)
 
     def test_rmod(self):
-        pdf, psdf = self.pdf, self.psdf
+        psdf = self.psdf
 
-        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        b_psser = psdf["bool"]
         # 1 % False is 0.0 in pandas
         self.assert_eq(pd.Series([0, 0, None], dtype=float, name="bool"), 1 % b_psser)
         # 0.1 / True is 0.1 in pandas

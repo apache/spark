@@ -77,13 +77,14 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         raise AttributeError("must specify either target_branch or target_ref, not both")
     if target_branch is not None:
         diff_target = target_branch
-        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
+        run_cmd(["git", "fetch", "origin", str(target_branch + ":" + target_branch)])
     else:
         diff_target = target_ref
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
-                                         universal_newlines=True)
+    raw_output = subprocess.check_output(
+        ["git", "diff", "--name-only", patch_sha, diff_target], universal_newlines=True
+    )
     # Remove any empty strings
-    return [f for f in raw_output.split('\n') if f]
+    return [f for f in raw_output.split("\n") if f]
 
 
 def determine_modules_to_test(changed_modules, deduplicated=True):
@@ -128,7 +129,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(
-            determine_modules_to_test(module.dependent_modules, deduplicated))
+            determine_modules_to_test(module.dependent_modules, deduplicated)
+        )
     modules_to_test = modules_to_test.union(set(changed_modules))
 
     if not deduplicated:
@@ -138,7 +140,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     if modules.root in modules_to_test:
         return [modules.root]
     return toposort_flatten(
-        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
+        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True
+    )
 
 
 def determine_tags_to_exclude(changed_modules):
@@ -151,9 +154,11 @@ def determine_tags_to_exclude(changed_modules):
 
 def _test():
     import doctest
+
     failure_count = doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()
