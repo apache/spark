@@ -200,7 +200,8 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+  def compileAggregate(
+      aggFunction: AggregateFunc, supportCompletePushDown: Boolean = true): Option[String] = {
     aggFunction match {
       case min: Min =>
         if (min.column.fieldNames.length != 1) return None
@@ -223,7 +224,11 @@ abstract class JdbcDialect extends Serializable with Logging{
       case f: GeneralAggregateFunc if f.name() == "AVG" =>
         assert(f.inputs().length == 1)
         val distinct = if (f.isDistinct) "DISTINCT " else ""
-        Some(s"AVG($distinct${f.inputs().head})")
+        if (supportCompletePushDown) {
+          Some(s"AVG($distinct${f.inputs().head})")
+        } else {
+          Some(s"Sum($distinct${f.inputs().head}), Count($distinct${f.inputs().head})")
+        }
       case _ => None
     }
   }

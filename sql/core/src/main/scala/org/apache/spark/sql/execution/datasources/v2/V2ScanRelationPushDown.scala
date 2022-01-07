@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -129,7 +129,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
-                assert(newOutput.length == groupingExpressions.length + aggregates.length)
                 val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
@@ -184,10 +183,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
                   // scalastyle:on
-                  plan.transformExpressions {
+                  var skip = 0
+                  plan.transformExpressionsUp {
                     case agg: AggregateExpression =>
                       val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                      val aggAttribute = aggOutput(ordinal)
+                      val aggAttribute = aggOutput(ordinal + skip)
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
                           case max: aggregate.Max =>
@@ -200,7 +200,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                             aggregate.Sum(addCastIfNeeded(aggAttribute, LongType))
                           case other => other
                         }
-                      agg.copy(aggregateFunction = aggFunction)
+
+                      aggFunction match {
+                        case avg: aggregate.Average =>
+                          skip += 1
+                          val countAttribute = aggOutput(ordinal + skip)
+                          val divide = Divide(
+                            aggregate.Sum(addCastIfNeeded(aggAttribute, avg.dataType))
+                              .toAggregateExpression(),
+                            aggregate.Sum(addCastIfNeeded(countAttribute, avg.dataType))
+                              .toAggregateExpression())
+                          Cast(divide, avg.dataType)
+                        case _ => agg.copy(aggregateFunction = aggFunction)
+                      }
                   }
                 }
               }
@@ -212,7 +224,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
-    agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
+    agg.aggregateExpressions().forall { aggregateFunc =>
+      !aggregateFunc.isInstanceOf[GeneralAggregateFunc] ||
+        aggregateFunc.asInstanceOf[GeneralAggregateFunc].name() == "AVG"
+    }
   }
 
   private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =

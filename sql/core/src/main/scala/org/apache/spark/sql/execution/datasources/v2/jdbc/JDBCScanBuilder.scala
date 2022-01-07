@@ -83,7 +83,8 @@ case class JDBCScanBuilder(
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(
+      dialect.compileAggregate(_, supportCompletePushDown(aggregation)))
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val groupByCols = aggregation.groupByColumns.map { col =>
