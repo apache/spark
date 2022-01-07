@@ -1567,7 +1567,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
     [Row(r=21)]
     """
-    return _invoke_function("shiftRight", _to_java_column(col), numBits)
+    return _invoke_function("shiftright", _to_java_column(col), numBits)
 
 
 def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
@@ -1593,7 +1593,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
-    return _invoke_function("shiftRightUnsigned", _to_java_column(col), numBits)
+    return _invoke_function("shiftrightunsigned", _to_java_column(col), numBits)
 
 
 def spark_partition_id() -> Column:
