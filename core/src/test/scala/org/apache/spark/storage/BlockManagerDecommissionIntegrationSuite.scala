@@ -81,25 +81,25 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
   }
 
-  testRetry(s"verify that an already running task which is going to cache data succeeds " +
-    s"on a decommissioned executor after task start") {
+  testRetry("verify that an already running task which is going to cache data succeeds " +
+    "on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)
   }
 
-  test(s"verify that an already running task which is going to cache data succeeds " +
-    s"on a decommissioned executor after one task ends but before job ends") {
+  test("verify that an already running task which is going to cache data succeeds " +
+    "on a decommissioned executor after one task ends but before job ends") {
     runDecomTest(true, false, TaskEnded)
   }
 
-  test(s"verify that shuffle blocks are migrated") {
+  test("verify that shuffle blocks are migrated") {
     runDecomTest(false, true, JobEnded)
   }
 
-  test(s"verify that both migrations can work at the same time") {
+  test("verify that both migrations can work at the same time") {
     runDecomTest(true, true, JobEnded)
   }
 
-  test(s"SPARK-36782 not deadlock if MapOutput uses broadcast") {
+  test("SPARK-36782 not deadlock if MapOutput uses broadcast") {
     runDecomTest(false, true, JobEnded, forceMapOutputBroadcast = true)
   }
 
