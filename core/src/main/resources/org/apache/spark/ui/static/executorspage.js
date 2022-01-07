@@ -149,15 +149,24 @@ var executorSummaryMetricsDataTable;
 
 function reselectCheckboxesBasedOnTaskTableState() {
   var allChecked = true;
+  var executorSummaryMetricsTableCurrentFilteredArray = executorSummaryMetricsTableCurrentStateArray.slice();
   if (typeof execDataTable !== "undefined") {
     for (var k = 0; k < execOptionalColumns.length; k++) {
       if (execDataTable.column(execOptionalColumns[k]).visible()) {
         $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").prop("checked", true);
+        var executorSumCheckBoxId = $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").attr('exec-sum-idx');
+        var selectedExecutorSummaryMetrics = executorSummaryMetricsTableArray.filter(row => (row.executorSumCheckBoxId).toString() == executorSumCheckBoxId)
+        for(value in selectedExecutorSummaryMetrics) {
+          executorSummaryMetricsTableCurrentStateArray.push(selectedExecutorSummaryMetrics[value]);
+        }
+        executorSummaryMetricsTableCurrentFilteredArray = executorSummaryMetricsTableCurrentStateArray.slice();
       } else {
         allChecked = false;
       }
     }
   }
+
+  createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableCurrentFilteredArray)
 
   if (allChecked) {
     $("#select-all-box").prop("checked", true);
@@ -195,6 +204,24 @@ function getColumnNameForExecutorMetricSummary(columnKey) {
 
     case "MappedPoolMemory":
       return "Peak Mapped Pool Memory";
+
+    case "ProcessTreeJVMVMemory":
+      return "Process Tree JVM VMemory";
+
+    case "ProcessTreeJVMRSSMemory":
+      return "Process Tree JVM RSS Memory";
+
+    case "ProcessTreePythonVMemory":
+      return "Process Tree Python VMemory";
+
+    case "ProcessTreePythonRSSMemory":
+      return "Process Tree Python RSS Memory";
+
+    case "ProcessTreeOtherVMemory":
+      return "Process Tree Other VMemory";
+
+    case "ProcessTreeOtherRSSMemory":
+      return "Process Tree Other RSS Memory";
 
     case "MinorGCCount":
       return "Peak Minor GC Count";
@@ -837,27 +864,63 @@ $(document).ready(function () {
                 executorSummaryMetricsTableArray.push(row);
                 break;
 
-              case "MinorGCCount":
+              case "ProcessTreeJVMVMemory":
                 row = createRowMetadataForColumn(
                   columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "ProcessTreeJVMRSSMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "ProcessTreePythonVMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "ProcessTreePythonRSSMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "ProcessTreeOtherVMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "ProcessTreeOtherRSSMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MinorGCCount":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 8);
                 executorSummaryMetricsTableArray.push(row);
                 break;
 
               case "MinorGCTime":
                 row = createRowMetadataForColumn(
-                  columnKey, executorMetricsResponse[columnKey], 7);
+                  columnKey, executorMetricsResponse[columnKey], 8);
                 executorSummaryMetricsTableArray.push(row);
                 break;
 
               case "MajorGCCount":
                 row = createRowMetadataForColumn(
-                  columnKey, executorMetricsResponse[columnKey], 7);
+                  columnKey, executorMetricsResponse[columnKey], 8);
                 executorSummaryMetricsTableArray.push(row);
                 break;
 
               case "MajorGCTime":
                 row = createRowMetadataForColumn(
-                  columnKey, executorMetricsResponse[columnKey], 7);
+                  columnKey, executorMetricsResponse[columnKey], 8);
                 executorSummaryMetricsTableArray.push(row);
                 break;
 
@@ -872,6 +935,7 @@ $(document).ready(function () {
           });
           var executorSummaryMetricsTableFilteredArray = []
           executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
+          reselectCheckboxesBasedOnTaskTableState();
         });
 
         var sumSelector = "#summary-execs-table";
@@ -976,7 +1040,8 @@ $(document).ready(function () {
           "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8' exec-sum-idx='4'> Peak Execution Memory OnHeap / OffHeap</div>" +
           "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9' exec-sum-idx='5'> Peak Storage Memory OnHeap / OffHeap</div>" +
           "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10' exec-sum-idx='6'> Peak Pool Memory Direct / Mapped</div>" +
-          "<div id='gc_count_times' class='gc_count_times_checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' exec-sum-idx='7'> Peak GC Count / Times </div>" +
+          "<div id='process_tree_memory' class='process_tree_memory_checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' exec-sum-idx='7'> Peak Process Tree Memory </div>" +
+          "<div id='gc_count_times' class='gc_count_times_checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' exec-sum-idx='8'> Peak GC Count / Times </div>" +
           "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13' exec-sum-idx=''> Resources</div>" +
           "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14' exec-sum-idx=''> Resource Profile Id</div>" +
           "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25' exec-sum-idx=''> Exec Loss Reason</div>" +
