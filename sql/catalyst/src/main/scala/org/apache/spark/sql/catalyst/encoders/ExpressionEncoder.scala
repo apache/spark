@@ -87,9 +87,13 @@ object ExpressionEncoder {
 
     encoders.foreach(_.assertUnresolved())
 
+    val schema = StructType(encoders.zipWithIndex.map {
+      case (e, i) =>
+        StructField(s"_${i + 1}", e.objSerializer.dataType, e.objSerializer.nullable)
+    })
+
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val newSerializerInput = BoundReference(0, ObjectType(cls), nullable = true)
     val serializers = encoders.zipWithIndex.map { case (enc, index) =>
       val boundRefs = enc.objSerializer.collect { case b: BoundReference => b }.distinct
       assert(boundRefs.size == 1, "object serializer should have only one bound reference but " +
@@ -97,39 +101,42 @@ object ExpressionEncoder {
 
       val originalInputObject = boundRefs.head
       val newInputObject = Invoke(
-        newSerializerInput,
+        BoundReference(0, ObjectType(cls), nullable = true),
         s"_${index + 1}",
         originalInputObject.dataType,
         returnNullable = originalInputObject.nullable)
 
       val newSerializer = enc.objSerializer.transformUp {
-        case BoundReference(0, _, _) => newInputObject
+        case b: BoundReference => newInputObject
       }
 
       Alias(newSerializer, s"_${index + 1}")()
     }
-    val newSerializer = CreateStruct(serializers)
 
-    val newDeserializerInput = GetColumnByOrdinal(0, newSerializer.dataType)
-    val deserializers = encoders.zipWithIndex.map { case (enc, index) =>
+    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
       val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
       assert(getColExprs.size == 1, "object deserializer should have only one " +
         s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
 
-      val input = GetStructField(newDeserializerInput, index)
-      enc.objDeserializer.transformUp {
+      val input = GetStructField(GetColumnByOrdinal(0, schema), index)
+      val newDeserializer = enc.objDeserializer.transformUp {
         case GetColumnByOrdinal(0, _) => input
       }
+      if (schema(index).nullable) {
+        If(IsNull(input), Literal.create(null, newDeserializer.dataType), newDeserializer)
+      } else {
+        newDeserializer
+      }
     }
-    val newDeserializer = NewInstance(cls, deserializers, ObjectType(cls), propagateNull = false)
 
-    def nullSafe(input: Expression, result: Expression): Expression = {
-      If(IsNull(input), Literal.create(null, result.dataType), result)
-    }
+    val serializer = If(IsNull(BoundReference(0, ObjectType(cls), nullable = true)),
+      Literal.create(null, schema), CreateStruct(serializers))
+    val deserializer =
+      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
 
     new ExpressionEncoder[Any](
-      nullSafe(newSerializerInput, newSerializer),
-      nullSafe(newDeserializerInput, newDeserializer),
+      serializer,
+      deserializer,
       ClassTag(cls))
   }
 
