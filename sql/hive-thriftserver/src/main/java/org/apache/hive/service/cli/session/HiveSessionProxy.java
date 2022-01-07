@@ -74,9 +74,7 @@ public class HiveSessionProxy implements InvocationHandler {
         throw (HiveSQLException)e.getCause();
       }
       throw new RuntimeException(e.getCause());
-    } catch (IllegalArgumentException e) {
-      throw new RuntimeException(e);
-    } catch (IllegalAccessException e) {
+    } catch (IllegalArgumentException | IllegalAccessException e) {
       throw new RuntimeException(e);
     }
   }

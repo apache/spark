@@ -104,10 +104,8 @@ public class PlainSaslServer implements SaslServer {
       }
     } catch (IllegalStateException eL) {
       throw new SaslException("Invalid message format", eL);
-    } catch (IOException eI) {
-      throw new SaslException("Error validating the login", eI);
-    } catch (UnsupportedCallbackException eU) {
-      throw new SaslException("Error validating the login", eU);
+    } catch (IOException | UnsupportedCallbackException e) {
+      throw new SaslException("Error validating the login", e);
     }
     return null;
   }

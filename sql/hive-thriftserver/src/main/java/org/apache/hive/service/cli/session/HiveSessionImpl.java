@@ -414,9 +414,7 @@ public class HiveSessionImpl implements HiveSession {
   public IMetaStoreClient getMetaStoreClient() throws HiveSQLException {
     try {
       return Hive.get(getHiveConf()).getMSC();
-    } catch (HiveException e) {
-      throw new HiveSQLException("Failed to get metastore connection", e);
-    } catch (MetaException e) {
+    } catch (HiveException | MetaException e) {
       throw new HiveSQLException("Failed to get metastore connection", e);
     }
   }

@@ -329,10 +329,6 @@ public class SQLOperation extends ExecuteStatementOperation {
         return decode(convey, rowSet);
       }
       return rowSet;
-    } catch (IOException e) {
-      throw new HiveSQLException(e);
-    } catch (CommandNeedRetryException e) {
-      throw new HiveSQLException(e);
     } catch (Exception e) {
       throw new HiveSQLException(e);
     } finally {
