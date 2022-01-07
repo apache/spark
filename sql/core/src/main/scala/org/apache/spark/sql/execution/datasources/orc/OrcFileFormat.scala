@@ -142,12 +142,10 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-      val (resultedColPruneInfo, orcSchema) =
-        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
-          val orcSchema = reader.getSchema
-          (OrcUtils.requestedColumnIds(
-            isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf), orcSchema)
-        }
+      val orcSchema =
+        Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions))(_.getSchema)
+      val resultedColPruneInfo = OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, requiredSchema, orcSchema, conf)
 
       if (resultedColPruneInfo.isEmpty) {
         Iterator.empty
