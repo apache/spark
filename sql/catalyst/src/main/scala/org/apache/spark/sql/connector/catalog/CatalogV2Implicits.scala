@@ -41,7 +41,7 @@ private[sql] object CatalogV2Implicits {
       val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
       if (spec.sortColumnNames.nonEmpty) {
         val sortedCol = spec.sortColumnNames.map(col => reference(Seq(col)))
-        sortedBucket(spec.numBuckets, references.toArray, sortedCol.toArray)
+        bucket(spec.numBuckets, references.toArray, sortedCol.toArray)
       } else {
         bucket(spec.numBuckets, references.toArray)
       }

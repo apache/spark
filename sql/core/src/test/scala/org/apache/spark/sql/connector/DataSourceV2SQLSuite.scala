@@ -1580,7 +1580,7 @@ class DataSourceV2SQLSuite
       val part3 = describe
         .filter("col_name = 'Part 2'")
         .select("data_type").head.getString(0)
-      assert(part3 === "sortedBucket(c, d, 4, e, f)")
+      assert(part3 === "sorted_bucket(c, d, 4, e, f)")
     }
   }
 

@@ -45,7 +45,7 @@ private[sql] object LogicalExpressions {
   def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform =
     BucketTransform(literal(numBuckets, IntegerType), references)
 
-  def sortedBucket(
+  def bucket(
       numBuckets: Int,
       references: Array[NamedReference],
       sortedCols: Array[NamedReference]): SortedBucketTransform =
@@ -121,11 +121,11 @@ private[sql] final case class BucketTransform(
 }
 
 private[sql] object BucketTransform {
-  def unapply(expr: Expression): Option[(Int, FieldReference)] = expr match {
+  def unapply(expr: Expression): Option[(Int, FieldReference, FieldReference)] = expr match {
     case transform: Transform =>
       transform match {
-        case BucketTransform(n, FieldReference(parts)) =>
-          Some((n, FieldReference(parts)))
+        case BucketTransform(n, FieldReference(parts), _) =>
+          Some((n, FieldReference(parts), FieldReference(Seq.empty[String])))
         case _ =>
           None
       }
@@ -133,11 +133,23 @@ private[sql] object BucketTransform {
       None
   }
 
-  def unapply(transform: Transform): Option[(Int, NamedReference)] = transform match {
-    case NamedTransform("bucket", Seq(
-    Lit(value: Int, IntegerType),
-    Ref(seq: Seq[String]))) =>
-      Some((value, FieldReference(seq)))
+  def unapply(transform: Transform): Option[(Int, NamedReference, NamedReference)] =
+      transform match {
+    case NamedTransform("sorted_bucket", arguments) =>
+      var index: Int = -1
+      var posOfLit: Int = -1
+      var numOfBucket: Int = -1
+      arguments.foreach {
+        case Lit(value: Int, IntegerType) =>
+          numOfBucket = value
+          index = index + 1
+          posOfLit = index
+        case _ => index = index + 1
+      }
+      Some(numOfBucket, FieldReference(arguments.take(posOfLit).map(_.describe)),
+        FieldReference(arguments.drop(posOfLit + 1).map(_.describe)))
+    case NamedTransform("bucket", Seq(Lit(value: Int, IntegerType), Ref(seq: Seq[String]))) =>
+      Some(value, FieldReference(seq), FieldReference(Seq.empty[String]))
     case _ =>
       None
   }
@@ -148,7 +160,7 @@ private[sql] final case class SortedBucketTransform(
     columns: Seq[NamedReference],
     sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference]) extends RewritableTransform {
 
-  override val name: String = "sortedBucket"
+  override val name: String = "sorted_bucket"
 
   override def references: Array[NamedReference] = {
     arguments.collect { case named: NamedReference => named }
@@ -161,40 +173,6 @@ private[sql] final case class SortedBucketTransform(
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
     this.copy(columns = newReferences.take(columns.length),
       sortedColumns = newReferences.drop(columns.length))
-  }
-}
-
-private[sql] object SortedBucketTransform {
-  def unapply(expr: Expression): Option[(Int, FieldReference, FieldReference)] =
-      expr match {
-    case transform: Transform =>
-      transform match {
-        case SortedBucketTransform(n, FieldReference(parts), FieldReference(sortCols)) =>
-          Some((n, FieldReference(parts), FieldReference(sortCols)))
-        case _ =>
-          None
-      }
-    case _ =>
-      None
-  }
-
-  def unapply(transform: Transform): Option[(Int, NamedReference, NamedReference)] =
-    transform match {
-      case NamedTransform("sortedBucket", arguments) =>
-        var index: Int = -1
-        var posOfLit: Int = -1
-        var numOfBucket: Int = -1
-        arguments.foreach {
-          case Lit(value: Int, IntegerType) =>
-            numOfBucket = value
-            index = index + 1
-            posOfLit = index
-          case _ => index = index + 1
-        }
-        Some(numOfBucket, FieldReference(arguments.take(posOfLit).map(_.describe)),
-          FieldReference(arguments.drop(posOfLit + 1).map(_.describe)))
-    case _ =>
-      None
   }
 }
 
