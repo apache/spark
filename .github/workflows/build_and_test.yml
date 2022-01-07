@@ -96,46 +96,15 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         fi
 
-  precondition:
-    name: Check changes
-    runs-on: ubuntu-20.04
-    outputs:
-      required: ${{ steps.set-outputs.outputs.required }}
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: master
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-    - name: Check all modules
-      id: set-outputs
-      run: |
-        build=`./dev/is-changed.py -m avro,build,catalyst,core,docker-integration-tests,examples,graphx,hadoop-cloud,hive,hive-thriftserver,kubernetes,kvstore,launcher,mesos,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,spark-ganglia-lgpl,sparkr,sql,sql-kafka-0-10,streaming,streaming-kafka-0-10,streaming-kinesis-asl,tags,unsafe,yarn`
-        pyspark=`./dev/is-changed.py -m avro,build,catalyst,core,graphx,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,pyspark-core,pyspark-ml,pyspark-mllib,pyspark-pandas,pyspark-pandas-slow,pyspark-resource,pyspark-sql,pyspark-streaming,repl,sketch,sql,tags,unsafe`
-        sparkr=`./dev/is-changed.py -m avro,build,catalyst,core,hive,kvstore,launcher,mllib,mllib-local,network-common,network-shuffle,repl,sketch,sparkr,sql,tags,unsafe`
-        tpcds=`./dev/is-changed.py -m build,catalyst,core,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
-        docker=`./dev/is-changed.py -m build,catalyst,core,docker-integration-tests,hive,kvstore,launcher,network-common,network-shuffle,repl,sketch,sql,tags,unsafe`
-        echo "{\"build\": \"$build\", \"pyspark\": \"$pyspark\", \"sparkr\": \"$sparkr\", \"tpcds\": \"$tpcds\", \"docker\": \"$docker\"}" > required.json
-        cat required.json
-        echo "::set-output name=required::$(cat required.json)"
-
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
-    needs: [configure-jobs, precondition]
+    needs: configure-jobs
     # Run scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true')
+      || needs.configure-jobs.outputs.type == 'regular'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -273,16 +242,15 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
 
-
   pyspark:
-    needs: [configure-jobs, precondition]
+    needs: configure-jobs
     # Run PySpark coverage scheduled jobs for Apache Spark only
     # Run scheduled jobs with JDK 17 in Apache Spark
     # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
       || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
-      || (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).pyspark == 'true')
+      || needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
@@ -383,9 +351,9 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [configure-jobs, precondition]
+    needs: configure-jobs
     if: >-
-      (needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).sparkr == 'true')
+      needs.configure-jobs.outputs.type == 'regular'
       || (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled' && needs.configure-jobs.outputs.java == '17')
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
@@ -564,8 +532,8 @@ jobs:
         bundle exec jekyll build
 
   java-11-17:
-    needs: [configure-jobs, precondition]
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Java ${{ matrix.java }} build with Maven
     strategy:
       fail-fast: false
@@ -619,8 +587,8 @@ jobs:
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
-    needs: [configure-jobs, precondition]
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
@@ -664,8 +632,8 @@ jobs:
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   tpcds-1g:
-    needs: [configure-jobs, precondition]
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).tpcds == 'true'
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
@@ -758,8 +726,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
-    needs: [configure-jobs, precondition]
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).docker == 'true'
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Run Docker integration tests
     runs-on: ubuntu-20.04
     env:
