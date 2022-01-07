@@ -3998,7 +3998,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     raise ValueError('"column" must have length equal to number of column levels.')
             else:
                 raise NotImplementedError(
-                    "Assigning column name as tuple is only supported for MultiIndex columns for now."
+                    "Assigning column name as tuple is only supported for MultiIndex columns "
+                    "for now."
                 )
 
         if column in self.columns:
@@ -6476,14 +6477,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for inc in include_list:
             try:
                 include_spark_type.append(_parse_datatype_string(inc))
-            except:
+            except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
                 exclude_spark_type.append(_parse_datatype_string(exc))
-            except:
+            except BaseException:
                 pass
 
         # Handle pandas types
@@ -6491,14 +6492,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for inc in include_list:
             try:
                 include_numpy_type.append(infer_dtype_from_object(inc))
-            except:
+            except BaseException:
                 pass
 
         exclude_numpy_type = []
         for exc in exclude_list:
             try:
                 exclude_numpy_type.append(infer_dtype_from_object(exc))
-            except:
+            except BaseException:
                 pass
 
         column_labels = []
@@ -8932,8 +8933,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # Here we try to flat the multiple map into single list that contains each calculated
             # percentile using `chain`.
             # e.g. flat the `[<map object at 0x7fc1907dc280>, <map object at 0x7fc1907dcc70>]`
-            # to `[Column<'percentile_approx(A, 0.2, 10000)'>, Column<'percentile_approx(B, 0.2, 10000)'>,
-            # Column<'percentile_approx(A, 0.5, 10000)'>, Column<'percentile_approx(B, 0.5, 10000)'>]`
+            # to `[Column<'percentile_approx(A, 0.2, 10000)'>,
+            # Column<'percentile_approx(B, 0.2, 10000)'>,
+            # Column<'percentile_approx(A, 0.5, 10000)'>,
+            # Column<'percentile_approx(B, 0.5, 10000)'>]`
             perc_exprs = chain(
                 *[
                     map(F.percentile_approx, column_names, [percentile] * column_length)
@@ -8967,8 +8970,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             stat_values = sdf.first()
 
             num_stats = int(len(exprs) / column_length)
-            # `column_name_stats_kv` is key-value store that has column name as key, and the stats as values
-            # e.g. {"A": [{count_value}, {min_value}, ...], "B": [{count_value}, {min_value} ...]}
+            # `column_name_stats_kv` is key-value store that has column name as key, and
+            # the stats as values e.g. {"A": [{count_value}, {min_value}, ...],
+            # "B": [{count_value}, {min_value} ...]}
             column_name_stats_kv: Dict[str, List[str]] = defaultdict(list)
             for i, column_name in enumerate(column_names):
                 for first_stat_idx in range(num_stats):
@@ -12158,7 +12162,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_1   3   2   1   0
         row_2  10  20  30  40
         """
-        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))  # type: ignore[arg-type]
+        return DataFrame(
+            pd.DataFrame.from_dict(
+                data, orient=orient, dtype=dtype, columns=columns  # type: ignore[arg-type]
+            )
+        )
 
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(

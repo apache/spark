@@ -1715,12 +1715,17 @@ def greatest(*cols: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
-def least(*cols: Column) -> Column:
+def least(*cols: "ColumnOrName") -> Column:
     """
     Returns the least value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or columns to be compared
 
     Examples
     --------
@@ -1757,6 +1762,8 @@ def when(condition: Column, value: Any) -> Column:
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
@@ -2200,7 +2207,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     return Column(jc)
 
 
-def date_add(start: "ColumnOrName", days: int) -> Column:
+def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days after `start`
 
@@ -2208,16 +2215,21 @@ def date_add(start: "ColumnOrName", days: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
     >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
+    >>> df.select(date_add(df.dt, df.add.cast('integer')).alias('next_date')).collect()
+    [Row(next_date=datetime.date(2015, 4, 10))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.date_add(_to_java_column(start), days))
+
+    days = lit(days) if isinstance(days, int) else days
+
+    return Column(sc._jvm.functions.date_add(_to_java_column(start), _to_java_column(days)))
 
 
-def date_sub(start: "ColumnOrName", days: int) -> Column:
+def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `days` days before `start`
 
@@ -2225,13 +2237,18 @@ def date_sub(start: "ColumnOrName", days: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'sub'])
     >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
+    >>> df.select(date_sub(df.dt, df.sub.cast('integer')).alias('prev_date')).collect()
+    [Row(prev_date=datetime.date(2015, 4, 6))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.date_sub(_to_java_column(start), days))
+
+    days = lit(days) if isinstance(days, int) else days
+
+    return Column(sc._jvm.functions.date_sub(_to_java_column(start), _to_java_column(days)))
 
 
 def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
@@ -2251,7 +2268,7 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.datediff(_to_java_column(end), _to_java_column(start)))
 
 
-def add_months(start: "ColumnOrName", months: int) -> Column:
+def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
     """
     Returns the date that is `months` months after `start`
 
@@ -2259,13 +2276,18 @@ def add_months(start: "ColumnOrName", months: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df = spark.createDataFrame([('2015-04-08', 2)], ['dt', 'add'])
     >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 5, 8))]
+    >>> df.select(add_months(df.dt, df.add.cast('integer')).alias('next_month')).collect()
+    [Row(next_month=datetime.date(2015, 6, 8))]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(sc._jvm.functions.add_months(_to_java_column(start), months))
+
+    months = lit(months) if isinstance(months, int) else months
+
+    return Column(sc._jvm.functions.add_months(_to_java_column(start), _to_java_column(months)))
 
 
 def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool = True) -> Column:
@@ -2722,12 +2744,12 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     Parameters
     ----------
-    timeColumn : :class:`~pyspark.sql.Column`
-        The column or the expression to use as the timestamp for windowing by time.
+    timeColumn : :class:`~pyspark.sql.Column` or str
+        The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType.
     gapDuration : :class:`~pyspark.sql.Column` or str
-        A column or string specifying the timeout of the session. It could be static value,
-        e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+        A Python string literal or column specifying the timeout of the session. It could be
+        static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
 
     Examples
@@ -2869,6 +2891,13 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
 
     .. versionadded:: 3.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that represents the input column to test
+    errMsg : :class:`~pyspark.sql.Column` or str
+        A Python string literal or column containing the error message
+
     Examples
     --------
     >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
@@ -2898,6 +2927,11 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
 def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     Throws an exception with the provided error message.
+
+    Parameters
+    ----------
+    errMsg : :class:`~pyspark.sql.Column` or str
+        A Python string literal or column containing the error message
     """
     if not isinstance(errMsg, (str, Column)):
         raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
@@ -3087,8 +3121,8 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
 def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
-    pos: Union[Column, int],
-    len: Union[Column, int] = -1,
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int] = -1,
 ) -> Column:
     """
     Overlay the specified portion of `src` with `replace`,
@@ -3096,15 +3130,27 @@ def overlay(
 
     .. versionadded:: 3.0.0
 
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string that will be replaced
+    replace : :class:`~pyspark.sql.Column` or str
+        column name or column containing the substitution string
+    pos : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the starting position in src
+    len : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the number of bytes to replace in src
+        string by 'replace' defaults to -1, which represents the length of the 'replace' string
+
     Examples
     --------
     >>> df = spark.createDataFrame([("SPARK_SQL", "CORE")], ("x", "y"))
-    >>> df.select(overlay("x", "y", 7).alias("overlayed")).show()
-    +----------+
-    | overlayed|
-    +----------+
-    |SPARK_CORE|
-    +----------+
+    >>> df.select(overlay("x", "y", 7).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORE')]
+    >>> df.select(overlay("x", "y", 7, 0).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORESQL')]
+    >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_COREL')]
     """
     if not isinstance(pos, (int, str, Column)):
         raise TypeError(
@@ -3692,7 +3738,9 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]) -> Column:
+def slice(
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
@@ -3702,11 +3750,11 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     Parameters
     ----------
     x : :class:`~pyspark.sql.Column` or str
-        the array to be sliced
-    start : :class:`~pyspark.sql.Column` or int
-        the starting index
-    length : :class:`~pyspark.sql.Column` or int
-        the length of the slice
+        column name or column containing the array to be sliced
+    start : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the starting index
+    length : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the length of the slice
 
     Examples
     --------
@@ -3716,11 +3764,15 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    start = lit(start) if isinstance(start, int) else start
+    length = lit(length) if isinstance(length, int) else length
+
     return Column(
         sc._jvm.functions.slice(
             _to_java_column(x),
-            start._jc if isinstance(start, Column) else start,
-            length._jc if isinstance(length, Column) else length,
+            _to_java_column(start),
+            _to_java_column(length),
         )
     )
 
@@ -4157,12 +4209,10 @@ def from_json(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in json format
+        a column or column name in JSON format
     schema : :class:`DataType` or str
-        a StructType or ArrayType of StructType to use when parsing the json column.
-
-        .. versionchanged:: 2.3
-            the DDL-formatted string is also supported for ``schema``.
+        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+        to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
@@ -4672,11 +4722,18 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
+def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
 
     .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that contains the element to be repeated
+    count : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the number of times to repeat the first argument
 
     Examples
     --------
@@ -4686,11 +4743,10 @@ def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(
-        sc._jvm.functions.array_repeat(
-            _to_java_column(col), _to_java_column(count) if isinstance(count, Column) else count
-        )
-    )
+
+    count = lit(count) if isinstance(count, int) else count
+
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), _to_java_column(count)))
 
 
 def arrays_zip(*cols: "ColumnOrName") -> Column:
@@ -4791,9 +4847,9 @@ def from_csv(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in CSV format
+        a column or column name in CSV format
     schema :class:`~pyspark.sql.Column` or str
-        a string with schema in DDL format to use when parsing the CSV column.
+        a column, or Python string literal with schema in DDL format, to use when parsing the CSV column.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_

@@ -36,6 +36,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
@@ -688,11 +689,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val rootLogger = org.apache.logging.log4j.LogManager.getRootLogger()
     val current = rootLogger.getLevel()
     try {
-      Utils.setLogLevel(org.apache.logging.log4j.Level.ALL)
-      assert(rootLogger.getLevel == org.apache.logging.log4j.Level.ALL)
+      Utils.setLogLevel(Level.ALL)
+      assert(rootLogger.getLevel == Level.ALL)
       assert(log.isInfoEnabled())
-      Utils.setLogLevel(org.apache.logging.log4j.Level.ERROR)
-      assert(rootLogger.getLevel == org.apache.logging.log4j.Level.ERROR)
+      Utils.setLogLevel(Level.ERROR)
+      assert(rootLogger.getLevel == Level.ERROR)
       assert(!log.isInfoEnabled())
       assert(log.isErrorEnabled())
     } finally {

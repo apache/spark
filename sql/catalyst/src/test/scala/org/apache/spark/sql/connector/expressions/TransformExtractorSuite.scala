@@ -28,7 +28,7 @@ class TransformExtractorSuite extends SparkFunSuite {
   private def lit[T](literal: T): Literal[T] = new Literal[T] {
     override def value: T = literal
     override def dataType: DataType = catalyst.expressions.Literal(literal).dataType
-    override def describe: String = literal.toString
+    override def toString: String = literal.toString
   }
 
   /**
@@ -36,7 +36,7 @@ class TransformExtractorSuite extends SparkFunSuite {
    */
   private def ref(names: String*): NamedReference = new NamedReference {
     override def fieldNames: Array[String] = names.toArray
-    override def describe: String = names.mkString(".")
+    override def toString: String = names.mkString(".")
   }
 
   /**
@@ -46,7 +46,7 @@ class TransformExtractorSuite extends SparkFunSuite {
     override def name: String = func
     override def references: Array[NamedReference] = Array(ref)
     override def arguments: Array[Expression] = Array(ref)
-    override def describe: String = ref.describe
+    override def toString: String = ref.describe
   }
 
   test("Identity extractor") {
@@ -135,7 +135,7 @@ class TransformExtractorSuite extends SparkFunSuite {
       override def name: String = "bucket"
       override def references: Array[NamedReference] = Array(col)
       override def arguments: Array[Expression] = Array(lit(16), col)
-      override def describe: String = s"bucket(16, ${col.describe})"
+      override def toString: String = s"bucket(16, ${col.describe})"
     }
 
     bucketTransform match {

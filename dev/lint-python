@@ -210,7 +210,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

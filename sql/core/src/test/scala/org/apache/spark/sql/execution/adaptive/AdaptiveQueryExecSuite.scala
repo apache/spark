@@ -651,23 +651,6 @@ class AdaptiveQueryExecSuite
       }
     }
   }
-  test("SPARK-37193: Allow changing outer join to broadcast join even if too many empty" +
-    " partitions on build plan") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
-      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM (select * from testData where value = '1') td" +
-            " right outer join testData2 ON key = a")
-        val smj = findTopLevelSortMergeJoin(plan)
-        assert(smj.size == 1)
-        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-        assert(bhj.size == 1)
-      }
-    }
-  }
 
   test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
     var numStages = 0

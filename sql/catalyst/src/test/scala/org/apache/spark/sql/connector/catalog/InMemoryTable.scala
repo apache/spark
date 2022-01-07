@@ -102,6 +102,7 @@ class InMemoryTable(
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
   private def getKey(row: InternalRow): Seq[Any] = {
+    @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
         schema: StructType,

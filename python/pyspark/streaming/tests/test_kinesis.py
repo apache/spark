@@ -92,7 +92,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
                     break
                 time.sleep(10)
             self.assertEqual(expectedOutput, set(outputBuffer))
-        except:
+        except BaseException:
             import traceback
 
             traceback.print_exc()

@@ -21,6 +21,7 @@ import org.apache.avro.generic.GenericRecordBuilder
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.NoopFilters
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -209,7 +210,12 @@ object AvroSerdeSuite {
   }
   private object Deserializer extends SerdeFactory[AvroDeserializer] {
     override def create(sql: StructType, avro: Schema, matchType: MatchType): AvroDeserializer =
-      new AvroDeserializer(avro, sql, isPositional(matchType), CORRECTED, new NoopFilters)
+      new AvroDeserializer(
+        avro,
+        sql,
+        isPositional(matchType),
+        RebaseSpec(CORRECTED),
+        new NoopFilters)
   }
 
   /**

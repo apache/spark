@@ -294,6 +294,79 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def structBenchmark(values: Int, width: Int): Unit = {
+    val benchmark = new Benchmark(s"Single Struct Column Scan with $width Fields", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
+        import spark.implicits._
+        val selectExprCore = (1 to width).map(i => s"'f$i', value").mkString(",")
+        val selectExpr = Seq(s"named_struct($selectExprCore) as c1")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
+        benchmark.addCase("Native ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Native ORC Vectorized") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql(s"SELECT * FROM hiveOrcTable").noop()
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
+  def nestedStructBenchmark(values: Int, elementCount: Int, structWidth: Int): Unit = {
+    val benchmark = new Benchmark(s"Nested Struct Scan with $elementCount Elements, " +
+      s"$structWidth Fields", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
+        import spark.implicits._
+        val structExprFields = (1 to structWidth).map(i => s"'f$i', value").mkString(",")
+        val structExpr = s"named_struct($structExprFields)"
+        val arrayExprElements = (1 to elementCount)
+          .map(_ => s"$structExpr").mkString(",")
+        val selectExpr = Seq(s"array($arrayExprElements) as c1")
+        print(s"select expression is $selectExpr\n")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
+        benchmark.addCase("Native ORC MR") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Native ORC Vectorized") { _ =>
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+            spark.sql(s"SELECT * FROM nativeOrcTable").noop()
+          }
+        }
+
+        benchmark.addCase("Hive built-in ORC") { _ =>
+          spark.sql(s"SELECT * FROM hiveOrcTable").noop()
+        }
+
+        benchmark.run()
+      }
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
@@ -318,6 +391,19 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 100)
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
+    }
+
+    runBenchmark("Struct scan") {
+      structBenchmark(1024 * 1024 * 1, 10)
+      structBenchmark(1024 * 1024 * 1, 100)
+      structBenchmark(1024 * 1024 * 1, 300)
+      structBenchmark(1024 * 1024 * 1, 600)
+    }
+
+    runBenchmark("Nested Struct scan") {
+      nestedStructBenchmark(1024 * 1024 * 1, 10, 10)
+      nestedStructBenchmark(1024 * 1024 * 1, 30, 10)
+      nestedStructBenchmark(1024 * 1024 * 1, 10, 30)
     }
   }
 }

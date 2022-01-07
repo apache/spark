@@ -267,7 +267,10 @@ def _check_series_convert_timestamps_internal(
 
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype  # type: ignore[attr-defined]
+    from pandas.api.types import (  # type: ignore[attr-defined]
+        is_datetime64_dtype,
+        is_datetime64tz_dtype,
+    )
 
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
@@ -333,7 +336,10 @@ def _check_series_convert_timestamps_localize(
     require_minimum_pandas_version()
 
     import pandas as pd
-    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype  # type: ignore[attr-defined]
+    from pandas.api.types import (  # type: ignore[attr-defined]
+        is_datetime64tz_dtype,
+        is_datetime64_dtype,
+    )
 
     from_tz = from_timezone or _get_local_timezone()
     to_tz = to_timezone or _get_local_timezone()

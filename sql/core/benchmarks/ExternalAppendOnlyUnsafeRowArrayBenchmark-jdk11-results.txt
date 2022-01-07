@@ -2,44 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Array with 100000 rows:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        5039           5085          65         20.3          49.2       1.0X
-ExternalAppendOnlyUnsafeRowArray                   7524           7584          85         13.6          73.5       0.7X
+ArrayBuffer                                        5461           5937         673         18.8          53.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                   7337           7359          31         14.0          71.6       0.7X
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Array with 1000 rows:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       10509          10609         141         24.9          40.1       1.0X
-ExternalAppendOnlyUnsafeRowArray                  29307          29477         239          8.9         111.8       0.4X
+ArrayBuffer                                        8999           9036          52         29.1          34.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                  34761          34767           7          7.5         132.6       0.3X
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Array with 30000 rows:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       21699          21794         134         22.7          44.1       1.0X
-ExternalAppendOnlyUnsafeRowArray                  38614          38681          94         12.7          78.6       0.6X
+ArrayBuffer                                       17664          17803         196         27.8          35.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  37178          37401         315         13.2          75.6       0.5X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Spilling with 1000 rows:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                              26214          26230          22         10.0         100.0       1.0X
-ExternalAppendOnlyUnsafeRowArray                  12670          12678          12         20.7          48.3       2.1X
+UnsafeExternalSorter                              29337          29521         261          8.9         111.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  15031          15088          80         17.4          57.3       2.0X
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                                 10             11           1         15.9          62.9       1.0X
-ExternalAppendOnlyUnsafeRowArray                      8              8           1         21.3          47.0       1.3X
+UnsafeExternalSorter                                 11             13           2         14.5          69.1       1.0X
+ExternalAppendOnlyUnsafeRowArray                      8             10           2         20.3          49.3       1.4X
 
 

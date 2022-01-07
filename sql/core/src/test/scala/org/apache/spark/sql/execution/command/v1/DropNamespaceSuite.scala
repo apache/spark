@@ -31,12 +31,7 @@ import org.apache.spark.sql.execution.command
 trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
-  override protected def assertDropFails(): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"DROP NAMESPACE $catalog.ns")
-    }
-    assert(e.getMessage.contains("Database ns is not empty. One or more tables exist"))
-  }
+  override protected def namespaceAlias(): String = "database"
 
   test("drop default namespace") {
     val message = intercept[AnalysisException] {

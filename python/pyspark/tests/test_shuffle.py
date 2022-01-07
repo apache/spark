@@ -103,17 +103,17 @@ class MergerTests(unittest.TestCase):
 
         # wrong create combiner
         m = ExternalMerger(Aggregator(stopit, legit_merge_value, legit_merge_combiners), 20)
-        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+        with self.assertRaises((Py4JJavaError, RuntimeError)):
             m.mergeValues(data)
 
         # wrong merge value
         m = ExternalMerger(Aggregator(legit_create_combiner, stopit, legit_merge_combiners), 20)
-        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+        with self.assertRaises((Py4JJavaError, RuntimeError)):
             m.mergeValues(data)
 
         # wrong merge combiners
         m = ExternalMerger(Aggregator(legit_create_combiner, legit_merge_value, stopit), 20)
-        with self.assertRaises((Py4JJavaError, RuntimeError)) as cm:
+        with self.assertRaises((Py4JJavaError, RuntimeError)):
             m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), data))
 
 
