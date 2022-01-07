@@ -80,6 +80,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         .executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200)")
         .executeUpdate()
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (2)").executeUpdate()
+
+      // scalastyle:off
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)").executeUpdate()
+      // scalastyle:on
+      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
     }
   }
 
@@ -305,7 +316,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false)))
+        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false)))
   }
 
   test("SQL API: create table as select") {
@@ -830,5 +841,33 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAggregateRemoved(df, false)
     checkAnswer(df,
       Seq(Row("alex", 1), Row("amy", 1), Row("cathy", 1), Row("david", 1), Row("jen", 1)))
+  }
+
+  test("column name with composite field") {
+    checkAnswer(sql("SELECT `dept id` FROM h2.test.dept"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(`dept id`) FROM h2.test.dept")
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [COUNT(`dept id`)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(2)))
+  }
+
+  test("column name with non-ascii") {
+    // scalastyle:off
+    checkAnswer(sql("SELECT `名` FROM h2.test.person"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(`名`) FROM h2.test.person")
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [COUNT(`名`)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(2)))
+    // scalastyle:on
   }
 }
