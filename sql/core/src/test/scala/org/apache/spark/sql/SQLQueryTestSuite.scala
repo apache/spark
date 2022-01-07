@@ -36,6 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
+// scalastyle:off line.size.limit
 /**
  * End-to-end test cases for SQL queries.
  *
@@ -59,8 +60,7 @@ import org.apache.spark.util.Utils
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt
- *   "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
