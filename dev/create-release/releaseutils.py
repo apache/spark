@@ -147,6 +147,7 @@ def get_commits(tag):
         commits.append(commit)
     return commits
 
+
 # Maintain a mapping for translating issue types to contributions in the release notes
 # This serves an additional function of warning the user against unknown issue types
 # Note: This list is partially derived from this link:

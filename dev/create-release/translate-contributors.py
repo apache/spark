@@ -137,6 +137,7 @@ def generate_candidates(author, issues):
         candidates[i] = (candidate, source)
     return candidates
 
+
 # Translate each invalid author by searching for possible candidates from GitHub and JIRA
 # In interactive mode, this script presents the user with a list of choices and have the user
 # select from this list. Additionally, the user may also choose to enter a custom name.

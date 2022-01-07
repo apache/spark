@@ -94,6 +94,7 @@ class Module(object):
     def __hash__(self):
         return hash(self.name)
 
+
 tags = Module(
     name="tags",
     dependencies=[],

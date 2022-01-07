@@ -116,7 +116,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd1 = self.sc.parallelize([1, 2])
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
-        result = cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
+        cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
 
     def test_transforming_pickle_file(self):
         # Regression test for SPARK-2601

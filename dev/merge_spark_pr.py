@@ -147,9 +147,6 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         distinct_authors = list(filter(lambda x: x != primary_author, distinct_authors))
         distinct_authors.insert(0, primary_author)
 
-    commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
-                      '--pretty=format:%h [%an] %s']).split("\n\n")
-
     merge_message_flags = []
 
     merge_message_flags += ["-m", title]
@@ -304,7 +301,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
                       "again (or leave blank and fix manually)." % (", ".join(fix_versions)))
         except KeyboardInterrupt:
             raise
-        except:
+        except BaseException:
             traceback.print_exc()
             print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
@@ -350,14 +347,14 @@ def choose_jira_assignee(issue, asf_jira):
                 try:
                     id = int(raw_assignee)
                     assignee = candidates[id]
-                except:
+                except BaseException:
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
                 asf_jira.assign_issue(issue.key, assignee.name)
                 return assignee
         except KeyboardInterrupt:
             raise
-        except:
+        except BaseException:
             traceback.print_exc()
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
@@ -562,6 +559,7 @@ def main():
         print("Could not find jira-python library. Run 'sudo pip3 install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
@@ -569,6 +567,6 @@ if __name__ == "__main__":
         sys.exit(-1)
     try:
         main()
-    except:
+    except BaseException:
         clean_up()
         raise

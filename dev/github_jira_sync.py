@@ -161,7 +161,7 @@ for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
     try:
         page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue + "/remotelink"))
         existing_links = map(lambda l: l['object']['url'], page)
-    except:
+    except BaseException:
         print("Failure reading JIRA %s (does it exist?)" % issue)
         print(sys.exc_info()[0])
         continue

@@ -75,6 +75,8 @@ print("")
 def print_indented(_list):
     for x in _list:
         print("  %s" % x)
+
+
 if yesOrNoPrompt("Show all commits?"):
     print_indented(new_commits)
 print("==================================================================================\n")
