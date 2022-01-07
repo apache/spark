@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, SupportsNamespaces}
 import org.apache.spark.sql.internal.SQLConf
@@ -88,9 +89,7 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
 
-      // TODO: HiveExternalCatalog throws DatabaseAlreadyExistsException, and
-      //   non-Hive catalogs throw NamespaceAlreadyExistsException.
-      val e = intercept[AnalysisException] {
+      val e = intercept[NamespaceAlreadyExistsException] {
         sql(s"CREATE NAMESPACE $ns")
       }
       assert(e.getMessage.contains(alreadyExistErrorMessage))

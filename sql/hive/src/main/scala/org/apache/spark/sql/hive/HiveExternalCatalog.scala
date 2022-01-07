@@ -36,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
@@ -189,8 +189,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createDatabase(
       dbDefinition: CatalogDatabase,
-      ignoreIfExists: Boolean): Unit = withClient {
-    client.createDatabase(dbDefinition, ignoreIfExists)
+      ignoreIfExists: Boolean): Unit = {
+    try {
+      withClient {
+        client.createDatabase(dbDefinition, ignoreIfExists)
+      }
+    } catch {
+      case e: AnalysisException if e.message.contains("already exists") =>
+        throw new DatabaseAlreadyExistsException(dbDefinition.name)
+    }
   }
 
   override def dropDatabase(
