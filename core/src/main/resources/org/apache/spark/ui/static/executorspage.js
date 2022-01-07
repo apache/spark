@@ -193,24 +193,6 @@ function getColumnNameForExecutorMetricSummary(columnKey) {
     case "MappedPoolMemory":
       return "Mapped Pool Memory";
 
-    case "ProcessTreeJVMVMemory":
-      return "Process Tree JVM VMemory";
-
-    case "ProcessTreeJVMRSSMemory":
-      return "Process Tree JVM RSS Memory";
-
-    case "ProcessTreePythonVMemory":
-      return "Process Tree Python VMemory";
-
-    case "ProcessTreePythonRSSMemory":
-      return "Process Tree Python RSS Memory";
-
-    case "ProcessTreeOtherVMemory":
-      return "Process Tree Other VMemory";
-
-    case "ProcessTreeOtherRSSMemory":
-      return "Process Tree Other RSS Memory";
-
     case "MinorGCCount":
       return "Minor GC Count";
 
