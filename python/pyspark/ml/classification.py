@@ -3749,11 +3749,11 @@ class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
 
 @inherit_doc
 class OneVsRestModelReader(MLReader):
-    def __init__(self, cls):
+    def __init__(self, cls: "Type[OneVsRestModel]") -> None:
         super(OneVsRestModelReader, self).__init__()
         self.cls = cls
 
-    def load(self, path):
+    def load(self, path: str) -> "OneVsRestModel":
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)
