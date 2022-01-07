@@ -30,7 +30,7 @@ Spark uses pattern letters in the following table for number parsing and formatt
 |**,**|group (thousands) separator|9,999|
 |**G**|group (thousands) separator, same as **,**|9G999|
 |**-**|sign anchored to number (only allowed once)|-9999|
-|**S**|sign anchored to number, same as **.** (only allowed once)|S9999|
+|**S**|sign anchored to number, same as **-** (only allowed once)|S9999|
 |**$**|returns value with a leading dollar sign|$9999|
 
 Usage notes for numeric formatting:
