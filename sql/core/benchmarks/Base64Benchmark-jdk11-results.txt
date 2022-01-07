@@ -1,56 +1,56 @@
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 encode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               2848           2930         132          7.0         142.4       1.0X
-apache                                            12281          14421        1142          1.6         614.1       0.2X
+java                                               4000           4121         204          5.0         200.0       1.0X
+apache                                            34197          34280          71          0.6        1709.9       0.1X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 encode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               3895           4151         236          5.1         194.8       1.0X
-apache                                            13238          14325        1127          1.5         661.9       0.3X
+java                                               4696           4761          62          4.3         234.8       1.0X
+apache                                            35117          35342         262          0.6        1755.9       0.1X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 encode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               4572           4638         113          4.4         228.6       1.0X
-apache                                            15585          15649          59          1.3         779.3       0.3X
+java                                               6059           6192         120          3.3         303.0       1.0X
+apache                                            36995          37108         109          0.5        1849.8       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 encode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               5339           5391          46          3.7         267.0       1.0X
-apache                                            16755          16899         153          1.2         837.8       0.3X
+java                                               6993           7032          52          2.9         349.6       1.0X
+apache                                            37686          37888         198          0.5        1884.3       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 decode for 1:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               3550           3552           3          5.6         177.5       1.0X
-apache                                            13286          13347         103          1.5         664.3       0.3X
+java                                               5322           5503         162          3.8         266.1       1.0X
+apache                                            35180          35391         195          0.6        1759.0       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 decode for 3:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               4575           4623          74          4.4         228.7       1.0X
-apache                                            14173          14283         103          1.4         708.6       0.3X
+java                                               6780           6814          38          2.9         339.0       1.0X
+apache                                            35161          35279         102          0.6        1758.1       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 decode for 5:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               6044           6087          41          3.3         302.2       1.0X
-apache                                            17261          17412         164          1.2         863.0       0.4X
+java                                               8941           9068         130          2.2         447.1       1.0X
+apache                                            41628          41704         122          0.5        2081.4       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.12+0 on Mac OS X 12.0.1
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 decode for 7:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java                                               7952           8190         236          2.5         397.6       1.0X
-apache                                            20086          20416         340          1.0        1004.3       0.4X
+java                                              10248          10336          77          2.0         512.4       1.0X
+apache                                            42702          42732          47          0.5        2135.1       0.2X
 
