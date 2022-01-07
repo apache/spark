@@ -143,6 +143,8 @@ var sumOptionalColumns = [3, 4];
 var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
 var execDataTable;
 var sumDataTable;
+var executorSummaryMetricsTableArray = [];
+var executorSummaryMetricsTableCurrentStateArray = [];
 var executorSummaryMetricsDataTable;
 
 function reselectCheckboxesBasedOnTaskTableState() {
@@ -156,6 +158,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
       }
     }
   }
+
   if (allChecked) {
     $("#select-all-box").prop("checked", true);
   }
@@ -164,56 +167,57 @@ function reselectCheckboxesBasedOnTaskTableState() {
 function getColumnNameForExecutorMetricSummary(columnKey) {
   switch(columnKey) {
     case "JVMHeapMemory":
-      return "JVM Heap Memory";
+      return "Peak JVM Heap Memory";
 
     case "JVMOffHeapMemory":
-      return "JVM Off Heap Memory";
+      return "Peak JVM Off Heap Memory";
 
     case "OnHeapExecutionMemory":
-      return "On Heap Execution Memory";
+      return "Peak On Heap Execution Memory";
 
     case "OffHeapExecutionMemory":
-      return "Off Heap Execution Memory";
+      return "Peak Off Heap Execution Memory";
 
     case "OnHeapStorageMemory":
-      return "On Heap Storage Memory";
+      return "Peak On Heap Storage Memory";
 
     case "OffHeapStorageMemory":
-      return "Off Heap Storage Memory";
+      return "Peak Off Heap Storage Memory";
 
     case "OnHeapUnifiedMemory":
-      return "On Heap Unified Memory";
+      return "Peak On Heap Unified Memory";
 
     case "OffHeapUnifiedMemory":
-      return "Off Heap Unified Memory";
+      return "Peak Off Heap Unified Memory";
 
     case "DirectPoolMemory":
-      return "Direct Pool Memory";
+      return "Peak Direct Pool Memory";
 
     case "MappedPoolMemory":
-      return "Mapped Pool Memory";
+      return "Peak Mapped Pool Memory";
 
     case "MinorGCCount":
-      return "Minor GC Count";
+      return "Peak Minor GC Count";
 
     case "MinorGCTime":
-      return "Minor GC Time";
+      return "Peak Minor GC Time";
 
     case "MajorGCCount":
-      return "Major GC Count";
+      return "Peak Major GC Count";
 
     case "MajorGCTime":
-      return "Major GC Time";
+      return "Peak Major GC Time";
 
     default:
       return "NA";
   }
 }
 
-function createRowMetadataForColumn(colKey, data) {
+function createRowMetadataForColumn(colKey, data, executorSumCheckBoxId) {
   var row = {
     "metric": getColumnNameForExecutorMetricSummary(colKey),
     "data": data,
+    "executorSumCheckBoxId": executorSumCheckBoxId,
     "columnKey": colKey
   };
   return row;
@@ -302,6 +306,7 @@ function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTab
     };
     executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
   }
+  executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
 
 $(document).ready(function () {
@@ -768,20 +773,105 @@ $(document).ready(function () {
         var executorSummariesEndpoint = createRESTEndPointForExecutorsSummaries(appId) + "?activeOnly=true&quantiles=" + quantiles;
         $.getJSON(executorSummariesEndpoint, function(executorMetricsResponse, _ignored_status, _ignored_jqXHR) {
           var taskMetricKeys = Object.keys(executorMetricsResponse);
-          var executorSummaryMetricsTableArray = [];
           taskMetricKeys.forEach(function (columnKey) {
             var row;
             switch(columnKey) {
+
+              case "JVMHeapMemory":
+                 row = createRowMetadataForColumn(
+                   columnKey, executorMetricsResponse[columnKey], 3);
+                 executorSummaryMetricsTableArray.push(row);
+                 break;
+
+              case "JVMOffHeapMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 3);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OnHeapExecutionMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 4);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OffHeapExecutionMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 4);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OnHeapStorageMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 5);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OffHeapStorageMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 5);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OnHeapUnifiedMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 1);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "OffHeapUnifiedMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 2);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "DirectPoolMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 6);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MappedPoolMemory":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 6);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MinorGCCount":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MinorGCTime":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MajorGCCount":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
+              case "MajorGCTime":
+                row = createRowMetadataForColumn(
+                  columnKey, executorMetricsResponse[columnKey], 7);
+                executorSummaryMetricsTableArray.push(row);
+                break;
+
               default:
                 if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
                   row = createRowMetadataForColumn(
-                    columnKey, executorMetricsResponse[columnKey]);
+                    columnKey, executorMetricsResponse[columnKey], 0);
                   executorSummaryMetricsTableArray.push(row);
                 }
                 break;
             }
           });
-          createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableArray);
+          var executorSummaryMetricsTableFilteredArray = []
+          executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTableFilteredArray.slice();
         });
 
         var sumSelector = "#summary-execs-table";
@@ -879,16 +969,17 @@ $(document).ready(function () {
           "Show Additional Metrics" +
           "</a></div>" +
           "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
-          "<div><input type='checkbox' class='toggle-vis' id='select-all-box'> Select All</div>" +
-          "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'> On Heap Memory</div>" +
-          "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'> Off Heap Memory</div>" +
-          "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7'> Peak JVM Memory OnHeap / OffHeap</div>" +
-          "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8'> Peak Execution Memory OnHeap / OffHeap</div>" +
-          "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'> Peak Storage Memory OnHeap / OffHeap</div>" +
-          "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
-          "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
-          "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
-          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
+          "<div><input type='checkbox' class='toggle-vis' id='select-all-box' > Select All</div>" +
+          "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5' exec-sum-idx='1'> On Heap Memory</div>" +
+          "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6' exec-sum-idx='2'> Off Heap Memory</div>" +
+          "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7' exec-sum-idx='3'> Peak JVM Memory OnHeap / OffHeap</div>" +
+          "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8' exec-sum-idx='4'> Peak Execution Memory OnHeap / OffHeap</div>" +
+          "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9' exec-sum-idx='5'> Peak Storage Memory OnHeap / OffHeap</div>" +
+          "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10' exec-sum-idx='6'> Peak Pool Memory Direct / Mapped</div>" +
+          "<div id='gc_count_times' class='gc_count_times_checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' exec-sum-idx='7'> Peak GC Count / Times </div>" +
+          "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13' exec-sum-idx=''> Resources</div>" +
+          "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14' exec-sum-idx=''> Resource Profile Id</div>" +
+          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25' exec-sum-idx=''> Exec Loss Reason</div>" +
           "</div>");
 
         reselectCheckboxesBasedOnTaskTableState();
@@ -910,10 +1001,12 @@ $(document).ready(function () {
               $(".toggle-vis").prop("checked", true);
               sumColumn.visible(true);
               execColumn.visible(true);
+              createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableArray);
             } else {
               $(".toggle-vis").prop("checked", false);
               sumColumn.visible(false);
               execColumn.visible(false);
+              createDataTableForExecutorSummaryMetricsTable([]);
             }
           } else {
             var execColIdx = thisBox.attr("data-exec-col-idx");
@@ -923,6 +1016,20 @@ $(document).ready(function () {
             if (sumColIdx) {
               var sumCol = sumDataTable.column(sumColIdx);
               sumCol.visible(!sumCol.visible());
+            }
+            var para = thisBox.attr('exec-sum-idx');
+            if(para != '') {
+              if (thisBox.is(":checked")) {
+                var selectedExecutorSummaryMetrics = executorSummaryMetricsTableArray.filter(row => (row.executorSumCheckBoxId).toString() == para)
+                for(value in selectedExecutorSummaryMetrics) {
+                  executorSummaryMetricsTableCurrentStateArray.push(selectedExecutorSummaryMetrics[value]);
+                }
+                executorSummaryMetricsTableFilteredArray = executorSummaryMetricsTableCurrentStateArray.slice();
+              } else {
+                executorSummaryMetricsTableFilteredArray =
+                  executorSummaryMetricsTableCurrentStateArray.filter(row => (row.executorSumCheckBoxId).toString() != para);
+              }
+              createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTableFilteredArray);
             }
           }
         });
