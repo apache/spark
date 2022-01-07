@@ -72,4 +72,9 @@ abstract class OutputWriter {
    * The file path to write. Invoked on the executor side.
    */
   def path(): String
+
+  /**
+   * Indicates the file path to write is present. Invoked on the executor side.
+   */
+  def isPathCreated: Boolean = true
 }

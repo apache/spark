@@ -62,7 +62,7 @@ abstract class FileFormatDataWriter(
     if (currentWriter != null) {
       try {
         currentWriter.close()
-        statsTrackers.foreach(_.closeFile(currentWriter.path()))
+        statsTrackers.foreach(_.closeFile(currentWriter.path(), currentWriter.isPathCreated))
       } finally {
         currentWriter = null
       }

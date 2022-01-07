@@ -305,6 +305,12 @@ private[orc] class OrcOutputWriter(
       recordWriter.close(Reporter.NULL)
     }
   }
+
+  /**
+   * If `recordWriterInstantiated` is false, the output file is not pretouched.
+   * We don't need to check on it later.
+   */
+  override def isPathCreated: Boolean = recordWriterInstantiated
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {
