@@ -706,21 +706,45 @@ object DataSourceStrategy
     if (agg.filter.isEmpty) {
       agg.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Min(FieldReference(name)))
+          Some(new Min(FieldReference.column(name)))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Max(FieldReference(name)))
+          Some(new Max(FieldReference.column(name)))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // COUNT(any literal) is the same as COUNT(*)
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference(name), agg.isDistinct))
+              Some(new Count(FieldReference.column(name), agg.isDistinct))
             case _ => None
           }
         case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name), agg.isDistinct))
+          Some(new Sum(FieldReference.column(name), agg.isDistinct))
         case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc("AVG", agg.isDistinct, Array(FieldReference(name))))
+          Some(new GeneralAggregateFunc("AVG", agg.isDistinct, Array(FieldReference.column(name))))
+        case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new GeneralAggregateFunc(
+            "VAR_POP", agg.isDistinct, Array(FieldReference.column(name))))
+        case aggregate.VarianceSamp(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new GeneralAggregateFunc(
+            "VAR_SAMP", agg.isDistinct, Array(FieldReference.column(name))))
+        case aggregate.StddevPop(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new GeneralAggregateFunc(
+            "STDDEV_POP", agg.isDistinct, Array(FieldReference.column(name))))
+        case aggregate.StddevSamp(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new GeneralAggregateFunc(
+            "STDDEV_SAMP", agg.isDistinct, Array(FieldReference.column(name))))
+        case aggregate.CovPopulation(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right), _) =>
+          Some(new GeneralAggregateFunc("COVAR_POP", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.CovSample(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right), _) =>
+          Some(new GeneralAggregateFunc("COVAR_SAMP", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
+        case aggregate.Corr(PushableColumnWithoutNestedColumn(left),
+        PushableColumnWithoutNestedColumn(right), _) =>
+          Some(new GeneralAggregateFunc("CORR", agg.isDistinct,
+            Array(FieldReference.column(left), FieldReference.column(right))))
         case _ => None
       }
     } else {

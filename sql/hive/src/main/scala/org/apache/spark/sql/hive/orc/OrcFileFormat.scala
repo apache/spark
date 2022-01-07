@@ -49,7 +49,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions}
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
@@ -115,7 +115,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       override def getFileExtension(context: TaskAttemptContext): String = {
         val compressionExtension: String = {
           val name = context.getConfiguration.get(COMPRESS.getAttribute)
-          OrcFileFormat.extensionsForCompressionCodecNames.getOrElse(name, "")
+          OrcUtils.extensionsForCompressionCodecNames.getOrElse(name, "")
         }
 
         compressionExtension + ".orc"
@@ -310,14 +310,6 @@ private[orc] class OrcOutputWriter(
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
-
-  // The extensions for ORC compression codecs
-  val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "LZ4" -> ".lz4",
-    "LZO" -> ".lzo")
 
   def unwrapOrcStructs(
       conf: Configuration,

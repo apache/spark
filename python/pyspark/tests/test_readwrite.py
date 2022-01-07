@@ -231,8 +231,9 @@ class OutputFormatTests(ReusedPySparkTestCase):
         )
         self.assertEqual(result, data)
 
+        fmt = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
         conf = {
-            "mapreduce.job.outputformat.class": "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "mapreduce.job.outputformat.class": fmt,
             "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
             "mapreduce.job.output.value.class": "org.apache.hadoop.io.Text",
             "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/",
@@ -332,8 +333,9 @@ class OutputFormatTests(ReusedPySparkTestCase):
         result4 = sorted(self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
         self.assertEqual(result4, data)
 
+        fmt = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
         conf5 = {
-            "mapreduce.job.outputformat.class": "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
+            "mapreduce.job.outputformat.class": fmt,
             "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
             "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
             "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/newdataset",

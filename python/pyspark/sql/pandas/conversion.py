@@ -134,8 +134,9 @@ class PandasConversionMixin:
 
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
+                    c = self.sql_ctx._conf
                     self_destruct = (
-                        self.sql_ctx._conf.arrowPySparkSelfDestructEnabled()  # type: ignore[attr-defined]
+                        c.arrowPySparkSelfDestructEnabled()  # type: ignore[attr-defined]
                     )
                     batches = self.toDF(*tmp_column_names)._collect_as_arrow(
                         split_batches=self_destruct
@@ -561,7 +562,10 @@ class SparkConversionMixin:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype  # type: ignore[attr-defined]
+        from pandas.api.types import (  # type: ignore[attr-defined]
+            is_datetime64_dtype,
+            is_datetime64tz_dtype,
+        )
         import pyarrow as pa
 
         # Create the Spark schema from list of names passed in with Arrow types
