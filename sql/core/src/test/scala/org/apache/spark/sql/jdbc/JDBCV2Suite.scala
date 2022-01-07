@@ -432,7 +432,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             "PushedGroupByColumns: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(2, 1.0)))
+    checkAnswer(df, Seq(Row(2, 1.5)))
   }
 
   test("partitioned scan with aggregate push-down: complete push-down only") {
