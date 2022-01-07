@@ -2748,8 +2748,8 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
         The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType.
     gapDuration : :class:`~pyspark.sql.Column` or str
-        A Python string literal or column specifying the timeout of the session. It could be static value,
-        e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+        A Python string literal or column specifying the timeout of the session. It could be
+        static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
 
     Examples
@@ -3139,8 +3139,8 @@ def overlay(
     pos : :class:`~pyspark.sql.Column` or str or int
         column name, column, or int containing the starting position in src
     len : :class:`~pyspark.sql.Column` or str or int
-        column name, column, or int containing the number of bytes to replace in src string by 'replace'
-        defaults to -1, which represents the length of the 'replace' string
+        column name, column, or int containing the number of bytes to replace in src
+        string by 'replace' defaults to -1, which represents the length of the 'replace' string
 
     Examples
     --------
