@@ -707,7 +707,14 @@ class SparseVector(Vector):
         return np.linalg.norm(self.values, p)
 
     def __reduce__(self) -> Tuple[Type["SparseVector"], Tuple[int, bytes, bytes]]:
-        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))  # type: ignore[attr-defined]
+        return (
+            SparseVector,
+            (
+                self.size,
+                self.indices.tostring(),  # type: ignore[attr-defined]
+                self.values.tostring(),  # type: ignore[attr-defined]
+            ),
+        )
 
     @staticmethod
     def parse(s: str) -> "SparseVector":
