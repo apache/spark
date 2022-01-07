@@ -77,7 +77,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         raise AttributeError("must specify either target_branch or target_ref, not both")
     if target_branch is not None:
         diff_target = target_branch
-        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
+        run_cmd(['git', 'fetch', 'origin', str(target_branch + ':' + target_branch)])
     else:
         diff_target = target_ref
     raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
@@ -154,6 +154,7 @@ def _test():
     failure_count = doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     _test()

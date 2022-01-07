@@ -209,7 +209,7 @@ class SparkContext:
                 profiler_cls,
                 udf_profiler_cls,
             )
-        except:
+        except BaseException:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
