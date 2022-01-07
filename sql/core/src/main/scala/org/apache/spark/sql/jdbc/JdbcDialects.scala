@@ -197,6 +197,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
+   * @param supportCompletePushDown supports complete push-down.
    * @return Converted value.
    */
   @Since("3.3.0")
