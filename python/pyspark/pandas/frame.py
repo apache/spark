@@ -404,10 +404,10 @@ def _resolve_merge_join_condition_from_key_names(
 
 
 class _RightMergeProxy:
-    def __init__(self, right_df):
+    def __init__(self, right_df: SparkDataFrame):
         self._right_df = right_df
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Column:
         return getattr(self._right_df, f"{RIGHT_MERGE_PREFIX}{item}")
 
     __getattr__ = __getitem__
@@ -7871,7 +7871,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return DataFrame(internal)
 
-    def _resolve_merge_key_names(self, right, on, left_on, right_on, left_index, right_index):
+    def _resolve_merge_key_names(
+        self,
+        right: "DataFrame",
+        on: Optional[Union[Name, List[Name]]],
+        left_on: Optional[Union[Name, List[Name]]],
+        right_on: Optional[Union[Name, List[Name]]],
+        left_index: bool,
+        right_index: bool
+    ) -> Tuple[List[str], List[str]]:
         if on:
             if left_on or right_on:
                 raise ValueError(
