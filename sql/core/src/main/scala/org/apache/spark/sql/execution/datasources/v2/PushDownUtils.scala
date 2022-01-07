@@ -22,10 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -118,7 +118,7 @@ object PushDownUtils extends PredicateHelper {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
       case PushableColumnWithoutNestedColumn(name) =>
-        Some(FieldReference(name).asInstanceOf[FieldReference])
+        Some(FieldReference.column(name).asInstanceOf[FieldReference])
       case _ => None
     }
 
@@ -153,6 +153,17 @@ object PushDownUtils extends PredicateHelper {
     scanBuilder match {
       case s: SupportsPushDownLimit =>
         s.pushLimit(limit)
+      case _ => false
+    }
+  }
+
+  /**
+   * Pushes down top N to the data source Scan
+   */
+  def pushTopN(scanBuilder: ScanBuilder, order: Array[SortOrder], limit: Int): Boolean = {
+    scanBuilder match {
+      case s: SupportsPushDownTopN =>
+        s.pushTopN(order, limit)
       case _ => false
     }
   }

@@ -41,13 +41,14 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import copy_func, since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.rdd import (  # type: ignore[attr-defined]
     RDD,
     _load_from_socket,
     _local_iterator_from_socket,
 )
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import BatchedSerializer, CPickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
@@ -121,7 +122,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns the content as an :class:`pyspark.RDD` of :class:`Row`."""
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(CPickleSerializer()))
         return self._lazy_rdd
 
     @property  # type: ignore[misc]
@@ -426,12 +427,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             explain_mode = cast(str, mode)
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
-
-        print(
-            self._sc._jvm.PythonSQLUtils.explainString(  # type: ignore[attr-defined]
-                self._jdf.queryExecution(), explain_mode
-            )
-        )
+        assert self._sc._jvm is not None
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
@@ -592,7 +589,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 max_num_rows,
                 self.sql_ctx._conf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
             head = rows[0]
             row_data = rows[1:]
             has_more_data = len(row_data) > max_num_rows
@@ -769,7 +766,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         """
@@ -792,7 +789,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
-        return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
 
     def limit(self, num: int) -> "DataFrame":
         """Limits the result count to the number specified.
@@ -837,7 +834,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
     def foreach(self, f: Callable[[Row], None]) -> None:
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
@@ -2530,7 +2527,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
         ],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` replacing a value with another value.
@@ -2673,7 +2672,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]
-            rep_dict = dict(zip(to_replace, value))
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
 
         if isinstance(subset, str):
             subset = [subset]
@@ -2986,7 +2985,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(metadata, dict):
             raise TypeError("metadata should be a dict")
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
 
@@ -3058,7 +3058,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
-    def transform(self, func: Callable[["DataFrame"], "DataFrame"]) -> "DataFrame":
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
@@ -3067,6 +3067,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         func : function
             a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+            .. versionadded:: 3.3.0
+        **kwargs
+            Keyword arguments to pass to func.
+
+            .. versionadded:: 3.3.0
 
         Examples
         --------
@@ -3083,8 +3091,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    1|  1|
         |    2|  2|
         +-----+---+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
         """
-        result = func(self)
+        result = func(self, *args, **kwargs)
         assert isinstance(
             result, DataFrame
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
@@ -3198,7 +3216,17 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameWriterV2(self, table)
 
+    # Keep to_pandas_on_spark for backward compatibility for now.
     def to_pandas_on_spark(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        warnings.warn(
+            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
+            FutureWarning,
+        )
+        return self.pandas_api(index_col)
+
+    def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
         """
@@ -3230,7 +3258,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |   c|   3|
         +----+----+
 
-        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+        >>> df.pandas_api()  # doctest: +SKIP
           Col1  Col2
         0    a     1
         1    b     2
@@ -3238,7 +3266,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         We can specify the index columns.
 
-        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+        >>> df.pandas_api(index_col="Col1"): # doctest: +SKIP
               Col2
         Col1
         a        1
@@ -3261,21 +3289,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def to_koalas(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        warnings.warn(
-            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
-            FutureWarning,
-        )
-        return self.to_pandas_on_spark(index_col)
+        return self.pandas_api(index_col)
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     """
     Convert a dict into a JVM Map.
     """
-    return sc._jvm.PythonUtils.toScalaMap(jm)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
-class DataFrameNaFunctions(object):
+class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
 
     .. versionadded:: 1.4
@@ -3337,7 +3362,9 @@ class DataFrameNaFunctions(object):
     def replace(  # type: ignore[misc]
         self,
         to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> DataFrame:
         return self.df.replace(to_replace, value, subset)  # type: ignore[arg-type]
@@ -3345,7 +3372,7 @@ class DataFrameNaFunctions(object):
     replace.__doc__ = DataFrame.replace.__doc__
 
 
-class DataFrameStatFunctions(object):
+class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 
     .. versionadded:: 1.4

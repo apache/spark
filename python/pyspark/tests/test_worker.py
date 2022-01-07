@@ -24,7 +24,7 @@ import unittest
 
 has_resource_module = True
 try:
-    import resource  # noqa: F401
+    import resource
 except ImportError:
     has_resource_module = False
 
@@ -210,8 +210,6 @@ class WorkerMemoryTest(unittest.TestCase):
         rdd = self.sc.parallelize(range(1), 1)
 
         def getrlimit():
-            import resource
-
             return resource.getrlimit(resource.RLIMIT_AS)
 
         actual = rdd.map(lambda _: getrlimit()).collect()

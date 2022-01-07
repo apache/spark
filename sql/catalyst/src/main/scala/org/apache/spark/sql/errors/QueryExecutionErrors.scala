@@ -164,13 +164,36 @@ object QueryExecutionErrors {
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key)
+  }
+
+  def invalidInputIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
+  }
+
+  private def invalidArrayIndexErrorInternal(
+      index: Int,
+      numElements: Int,
+      key: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
+      messageParameters = Array(index.toString, numElements.toString, key))
+  }
+
+  def invalidElementAtIndexError(
+       index: Int,
+       numElements: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
-  def mapKeyNotExistError(key: Any): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+  def mapKeyNotExistError(key: Any, isElementAtFunction: Boolean): NoSuchElementException = {
+    if (isElementAtFunction) {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
+        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+    } else {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
+        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key))
+    }
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {
@@ -605,12 +628,6 @@ object QueryExecutionErrors {
         "Schema of v1 relation: " + v1Schema)
   }
 
-  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
-    new SparkException(
-      s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-        "Use CASCADE option to drop a non-empty namespace.")
-  }
-
   def noRecordsFromEmptyDataReaderError(): Throwable = {
     new IOException("No records should be returned from EmptyDataReader")
   }
@@ -948,7 +965,7 @@ object QueryExecutionErrors {
   def cannotMergeDecimalTypesWithIncompatibleScaleError(
       leftScale: Int, rightScale: Int): Throwable = {
     new SparkException("Failed to merge decimal types with incompatible " +
-      s"scala $leftScale and $rightScale")
+      s"scale $leftScale and $rightScale")
   }
 
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
@@ -1032,6 +1049,13 @@ object QueryExecutionErrors {
       s"Cannot parse field name ${parser.getCurrentName}, " +
         s"field value ${parser.getText}, " +
         s"[$token] as target spark data type [$dataType].")
+  }
+
+  def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
+  : Throwable = {
+    new RuntimeException(
+      s"Cannot parse field value ${value} for pattern ${pattern} " +
+        s"as target spark data type [$dataType].")
   }
 
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
@@ -1388,8 +1412,8 @@ object QueryExecutionErrors {
       s"""
          |Caught Hive MetaException attempting to get partition metadata by filter
          |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
-         |this problem, however this will result in degraded performance. Please
+         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} to true to work
+         |around this problem, however this will result in degraded performance. Please
          |report a bug: https://issues.apache.org/jira/browse/SPARK
        """.stripMargin.replaceAll("\n", " "), e)
   }
@@ -1881,9 +1905,13 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException(
-      s"The key length of aes_encrypt/aes_decrypt should be " +
-        "one of 16, 24 or 32 bytes, but got: $actualLength")
+    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
+      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+  }
+
+  def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
+    new UnsupportedOperationException(
+      s"The AES mode $mode with the padding $padding is not supported")
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
@@ -1893,5 +1921,21 @@ object QueryExecutionErrors {
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
   }
-}
 
+  def writePartitionExceedConfigSizeWhenDynamicPartitionError(
+      numWrittenParts: Int,
+      maxDynamicPartitions: Int,
+      maxDynamicPartitionsKey: String): Throwable = {
+    new SparkException(
+      s"Number of dynamic partitions created is $numWrittenParts" +
+        s", which is more than $maxDynamicPartitions" +
+        s". To solve this try to set $maxDynamicPartitionsKey" +
+        s" to at least $numWrittenParts.")
+  }
+
+  def invalidNumberFormatError(format: String): Throwable = {
+    new IllegalArgumentException(
+      s"Format '$format' used for parsing string to number or " +
+        "formatting number to string is invalid")
+  }
+}

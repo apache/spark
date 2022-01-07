@@ -41,7 +41,7 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class TestCasesUtils(object):
+class TestCasesUtils:
     """A utility holding common test cases for arithmetic operations of different data types."""
 
     @property
@@ -49,14 +49,21 @@ class TestCasesUtils(object):
         dtypes = [np.int32, int, np.float32, float]
         sers = [pd.Series([1, 2, 3], dtype=dtype) for dtype in dtypes]
         sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]))
-        sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)]))
         sers.append(pd.Series([1, 2, np.nan], dtype=float))
+        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+            sers.append(
+                pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)])
+            )
         pdf = pd.concat(sers, axis=1)
-        pdf.columns = [dtype.__name__ for dtype in dtypes] + [
-            "decimal",
-            "decimal_nan",
-            "float_nan",
-        ]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+            pdf.columns = [dtype.__name__ for dtype in dtypes] + [
+                "decimal",
+                "float_nan",
+                "decimal_nan",
+            ]
+        else:
+            pdf.columns = [dtype.__name__ for dtype in dtypes] + ["decimal", "float_nan"]
         return pdf
 
     @property
@@ -84,6 +91,9 @@ class TestCasesUtils(object):
                 [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]
             ),
             "datetime": pd.to_datetime(pd.Series([1, 2, 3])),
+            "timedelta": pd.Series(
+                [datetime.timedelta(1), datetime.timedelta(hours=2), datetime.timedelta(weeks=3)]
+            ),
             "categorical": pd.Series(["a", "b", "a"], dtype="category"),
         }
         return pd.concat(psers, axis=1)

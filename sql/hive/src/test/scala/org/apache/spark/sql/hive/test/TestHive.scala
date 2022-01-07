@@ -535,10 +535,11 @@ private[hive] class TestHiveSparkSession(
   def reset(): Unit = {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
-        val logger = log.asInstanceOf[org.apache.log4j.Logger]
-        if (!logger.getName.contains("org.apache.spark")) {
-          logger.setLevel(org.apache.log4j.Level.WARN)
+      org.apache.logging.log4j.LogManager.getContext(false)
+        .asInstanceOf[org.apache.logging.log4j.core.LoggerContext].getConfiguration.getLoggers()
+        .asScala.foreach { case (_, log) =>
+        if (!log.getName.contains("org.apache.spark")) {
+          log.setLevel(org.apache.logging.log4j.Level.WARN)
         }
       }
 
@@ -599,7 +600,7 @@ private[hive] class TestHiveQueryExecution(
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     // Make sure any test tables referenced are loaded.
     val referencedTables = logical.collect {
-      case UnresolvedRelation(ident, _, _, _) =>
+      case UnresolvedRelation(ident, _, _) =>
         if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
           ident.tail.asTableIdentifier
         } else ident.asTableIdentifier

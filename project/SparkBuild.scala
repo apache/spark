@@ -203,12 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.7 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.6"
+        val silencerVersion = "1.7.7"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -599,8 +599,7 @@ object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
-    libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
+    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/"
   )
 }
 
@@ -639,12 +638,19 @@ object KubernetesIntegrationTests {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
+        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
+        val extraOptions = if (dockerFile.isDefined) {
+          Seq("-f", s"${dockerFile.get}")
+        } else {
+          Seq("-b", s"java_image_tag=$javaImageTag")
+        }
         val cmd = Seq(dockerTool, "-m",
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile") ++
+          extraOptions :+
           "build"
-        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
@@ -705,9 +711,7 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule("io.netty", "netty-handler"),
-      ExclusionRule("io.netty", "netty-transport-native-epoll"))
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -864,7 +868,7 @@ object Assembly {
                                                                => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
                                                                => MergeStrategy.discard
-      case "log4j.properties"                                  => MergeStrategy.discard
+      case "log4j2.properties"                                 => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
@@ -1150,11 +1154,7 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
-        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
-        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
-        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
       s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
         .split(" ").toSeq
     },

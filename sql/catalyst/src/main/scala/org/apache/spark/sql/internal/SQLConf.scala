@@ -198,7 +198,7 @@ object SQLConf {
    * run unit tests (that does not involve SparkSession) in serial order.
    */
   def get: SQLConf = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       val conf = existingConf.get()
       if (conf != null) {
         conf
@@ -661,6 +661,15 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
 
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
@@ -1504,6 +1513,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1762,6 +1778,14 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_SORT_AGGREGATE_CODEGEN =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2639,16 +2663,15 @@ object SQLConf {
       "and/or identifiers for table, view, function, etc.")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
-  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
-    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
-      .doc("When true, the data type conversions between datetime types and numeric types are " +
-        "allowed in ANSI SQL mode. This configuration is only effective when " +
-        s"'${ANSI_ENABLED.key}' is true.")
-      .version("3.3.0")
-      .booleanConf
-      .createWithDefault(false)
+  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
+      "operator will throw an exception if array index is out of bound, or map key does not " +
+      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -4115,8 +4138,7 @@ class SQLConf extends Serializable with Logging {
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
-    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
+  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

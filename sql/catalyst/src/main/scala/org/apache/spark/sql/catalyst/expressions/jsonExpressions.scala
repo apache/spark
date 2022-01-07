@@ -524,6 +524,8 @@ case class JsonTuple(children: Seq[Expression])
        {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
+      > SELECT _FUNC_('{"teacher": "Alice", "student": [{"name": "Bob", "rank": 1}, {"name": "Charlie", "rank": 2}]}', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
+       {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
   """,
   group = "json_funcs",
   since = "2.2.0")
@@ -960,7 +962,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
   }
 
   private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
-    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+    val arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
 
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {

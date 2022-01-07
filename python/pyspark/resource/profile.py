@@ -26,7 +26,7 @@ from pyspark.resource.requests import (
 )
 
 
-class ResourceProfile(object):
+class ResourceProfile:
 
     """
     Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
@@ -102,7 +102,7 @@ class ResourceProfile(object):
             return self._executor_resource_requests
 
 
-class ResourceProfileBuilder(object):
+class ResourceProfileBuilder:
 
     """
     Resource profile Builder to build a resource profile to associate with an RDD.
@@ -155,12 +155,9 @@ class ResourceProfileBuilder(object):
                 )
         else:
             if self._java_resource_profile_builder is not None:
-                if (
-                    resourceRequest._java_executor_resource_requests is not None  # type: ignore[attr-defined]
-                ):
-                    self._java_resource_profile_builder.require(
-                        resourceRequest._java_executor_resource_requests  # type: ignore[attr-defined]
-                    )
+                r = resourceRequest._java_executor_resource_requests  # type: ignore[attr-defined]
+                if r is not None:
+                    self._java_resource_profile_builder.require(r)
                 else:
                     execReqs = ExecutorResourceRequests(
                         self._jvm, resourceRequest.requests  # type: ignore[attr-defined]

@@ -47,7 +47,8 @@ case class SparkListenerSQLExecutionStart(
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
+    time: Long,
+    modifiedConfigs: Map[String, String] = Map.empty)
   extends SparkListenerEvent
 
 @DeveloperApi

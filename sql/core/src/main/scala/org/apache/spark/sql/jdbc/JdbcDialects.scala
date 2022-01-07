@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -191,6 +192,40 @@ abstract class JdbcDialect extends Serializable with Logging{
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
+  }
+
+  /**
+   * Converts aggregate function to String representing a SQL expression.
+   * @param aggFunction The aggregate function to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
+      case min: Min =>
+        if (min.column.fieldNames.length != 1) return None
+        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+      case max: Max =>
+        if (max.column.fieldNames.length != 1) return None
+        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+      case count: Count =>
+        if (count.column.fieldNames.length != 1) return None
+        val distinct = if (count.isDistinct) "DISTINCT " else ""
+        val column = quoteIdentifier(count.column.fieldNames.head)
+        Some(s"COUNT($distinct$column)")
+      case sum: Sum =>
+        if (sum.column.fieldNames.length != 1) return None
+        val distinct = if (sum.isDistinct) "DISTINCT " else ""
+        val column = quoteIdentifier(sum.column.fieldNames.head)
+        Some(s"SUM($distinct$column)")
+      case _: CountStar =>
+        Some("COUNT(*)")
+      case f: GeneralAggregateFunc if f.name() == "AVG" =>
+        assert(f.inputs().length == 1)
+        val distinct = if (f.isDistinct) "DISTINCT " else ""
+        Some(s"AVG($distinct${f.inputs().head})")
+      case _ => None
+    }
   }
 
   /**
@@ -364,11 +399,6 @@ abstract class JdbcDialect extends Serializable with Logging{
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
-
-  /**
-   * returns whether the dialect supports limit or not
-   */
-  def supportsLimit(): Boolean = true
 
   def supportsTableSample: Boolean = false
 

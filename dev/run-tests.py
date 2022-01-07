@@ -26,70 +26,13 @@ import subprocess
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
-from sparktestsupport.toposort import toposort_flatten
+from sparktestsupport.utils import (
+    determine_modules_for_files,
+    determine_modules_to_test,
+    determine_tags_to_exclude,
+    identify_changed_files_from_git_commits
+)
 import sparktestsupport.modules as modules
-
-
-# -------------------------------------------------------------------------------------------------
-# Functions for traversing module dependency graph
-# -------------------------------------------------------------------------------------------------
-
-
-def determine_modules_for_files(filenames):
-    """
-    Given a list of filenames, return the set of modules that contain those files.
-    If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions,
-    and `appveyor.yml` is always ignored because this file is dedicated only to AppVeyor builds.
-
-    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'sql']
-    >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
-    ['root']
-    >>> [x.name for x in determine_modules_for_files(["appveyor.yml"])]
-    []
-    """
-    changed_modules = set()
-    for filename in filenames:
-        if filename in ("appveyor.yml",):
-            continue
-        if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
-            continue
-        matched_at_least_one_module = False
-        for module in modules.all_modules:
-            if module.contains_file(filename):
-                changed_modules.add(module)
-                matched_at_least_one_module = True
-        if not matched_at_least_one_module:
-            changed_modules.add(modules.root)
-    return changed_modules
-
-
-def identify_changed_files_from_git_commits(patch_sha, target_branch=None, target_ref=None):
-    """
-    Given a git commit and target ref, use the set of files changed in the diff in order to
-    determine which modules' tests should be run.
-
-    >>> [x.name for x in determine_modules_for_files( \
-            identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
-    ['graphx']
-    >>> 'root' in [x.name for x in determine_modules_for_files( \
-         identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
-    True
-    """
-    if target_branch is None and target_ref is None:
-        raise AttributeError("must specify either target_branch or target_ref")
-    elif target_branch is not None and target_ref is not None:
-        raise AttributeError("must specify either target_branch or target_ref, not both")
-    if target_branch is not None:
-        diff_target = target_branch
-        run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
-    else:
-        diff_target = target_ref
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
-                                         universal_newlines=True)
-    # Remove any empty strings
-    return [f for f in raw_output.split('\n') if f]
 
 
 def setup_test_environ(environ):
@@ -97,69 +40,6 @@ def setup_test_environ(environ):
     for (k, v) in environ.items():
         print("%s=%s" % (k, v))
         os.environ[k] = v
-
-
-def determine_modules_to_test(changed_modules, deduplicated=True):
-    """
-    Given a set of modules that have changed, compute the transitive closure of those modules'
-    dependent modules in order to determine the set of modules that should be tested.
-
-    Returns a topologically-sorted list of modules (ties are broken by sorting on module names).
-    If ``deduplicated`` is disabled, the modules are returned without tacking the deduplication
-    by dependencies into account.
-
-    >>> [x.name for x in determine_modules_to_test([modules.root])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.build])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.core])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.graphx])]
-    ['graphx', 'examples']
-    >>> [x.name for x in determine_modules_to_test([modules.sql])]
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'avro', 'docker-integration-tests', 'hive', 'mllib', 'sql-kafka-0-10', 'examples',
-     'hive-thriftserver', 'pyspark-sql', 'repl', 'sparkr',
-     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-ml']
-    >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sparkr, modules.sql], deduplicated=False)])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver', 'mllib',
-     'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-sql',
-     'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
-    >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sql, modules.core], deduplicated=False)])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'catalyst', 'core', 'docker-integration-tests', 'examples', 'graphx', 'hive',
-     'hive-thriftserver', 'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
-     'pyspark-pandas', 'pyspark-pandas-slow', 'pyspark-resource', 'pyspark-sql',
-     'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
-     'streaming-kafka-0-10', 'streaming-kinesis-asl']
-    """
-    modules_to_test = set()
-    for module in changed_modules:
-        modules_to_test = modules_to_test.union(
-            determine_modules_to_test(module.dependent_modules, deduplicated))
-    modules_to_test = modules_to_test.union(set(changed_modules))
-
-    if not deduplicated:
-        return modules_to_test
-
-    # If we need to run all of the tests, then we should short-circuit and return 'root'
-    if modules.root in modules_to_test:
-        return [modules.root]
-    return toposort_flatten(
-        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
-
-
-def determine_tags_to_exclude(changed_modules):
-    tags = []
-    for m in modules.all_modules:
-        if m not in changed_modules:
-            tags += m.test_tags
-    return tags
 
 
 # -------------------------------------------------------------------------------------------------
@@ -333,8 +213,8 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.7": ["-Phadoop-2.7"],
-        "hadoop3.2": ["-Phadoop-3.2"],
+        "hadoop2": ["-Phadoop-2"],
+        "hadoop3": ["-Phadoop-3"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -342,24 +222,6 @@ def get_hadoop_profiles(hadoop_version):
     else:
         print("[error] Could not find", hadoop_version, "in the list. Valid options",
               " are", sbt_maven_hadoop_profiles.keys())
-        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
-
-
-def get_hive_profiles(hive_version):
-    """
-    For the given Hive version tag, return a list of Maven/SBT profile flags for
-    building and testing against that Hive version.
-    """
-
-    sbt_maven_hive_profiles = {
-        "hive2.3": ["-Phive-2.3"],
-    }
-
-    if hive_version in sbt_maven_hive_profiles:
-        return sbt_maven_hive_profiles[hive_version]
-    else:
-        print("[error] Could not find", hive_version, "in the list. Valid options",
-              " are", sbt_maven_hive_profiles.keys())
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -508,19 +370,14 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
-    if "GITHUB_ACTIONS" in os.environ:
-        # See SPARK-33565. Python 3.9 was temporarily removed as its default Python executables
-        # to test because of Jenkins environment issue. Once Jenkins has Python 3.9 to test,
-        # we should remove this change back and add python3.9 into python/run-tests.py script.
-        command.append("--python-executable=%s" % ','.join(
-            x for x in ["python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
 
 def run_python_packaging_tests():
-    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
-    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
-    run_cmd(command)
+    if not os.environ.get("AMPLAB_JENKINS"):
+        set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+        command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+        run_cmd(command)
 
 
 def run_build_tests():
@@ -615,8 +472,7 @@ def main():
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
         scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
@@ -626,15 +482,13 @@ def main():
         # else we're running locally or GitHub Actions.
         build_tool = "sbt"
         scala_version = os.environ.get("SCALA_PROFILE")
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
-        hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
         if "GITHUB_ACTIONS" in os.environ:
             test_env = "github_actions"
         else:
             test_env = "local"
 
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version) + \
-        get_scala_profiles(scala_version)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
     print("[info] Using build tool", build_tool, "with profiles",
           *(extra_profiles + ["under environment", test_env]))
@@ -772,7 +626,8 @@ def main():
 
 def _test():
     import doctest
-    failure_count = doctest.testmod()[0]
+    import sparktestsupport.utils
+    failure_count = doctest.testmod(sparktestsupport.utils)[0] + doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
 

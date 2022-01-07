@@ -149,7 +149,7 @@ class HasProbabilityCol(Params):
 
     def __init__(self) -> None:
         super(HasProbabilityCol, self).__init__()
-        self._setDefault(probabilityCol="probability")
+        self._setDefault(probabilityCol='probability')
 
     def getProbabilityCol(self) -> str:
         """

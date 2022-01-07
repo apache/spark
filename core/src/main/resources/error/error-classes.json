@@ -54,6 +54,9 @@
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
   },
+  "ILLEGAL_SUBSTRING" : {
+    "message" : [ "%s cannot contain %s." ]
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
@@ -70,6 +73,9 @@
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
+  },
+  "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
+    "message" : [ "Invalid index: %s, numElements: %s. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
@@ -88,6 +94,9 @@
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
+  },
+  "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT" : {
+    "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '%s' does not exist. Did you mean one of the following? [%s]" ],

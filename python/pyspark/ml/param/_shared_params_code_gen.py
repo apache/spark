@@ -137,9 +137,9 @@ if __name__ == "__main__":
         (
             "probabilityCol",
             "Column name for predicted class conditional probabilities. "
-            + "Note: Not all models output well-calibrated probability estimates! These probabilities "
-            + "should be treated as confidences, not precise probabilities.",
-            '"probability"',
+            + "Note: Not all models output well-calibrated probability estimates! "
+            + "These probabilities should be treated as confidences, not precise probabilities.",
+            "'probability'",
             "TypeConverters.toString",
         ),
         (
@@ -182,7 +182,8 @@ if __name__ == "__main__":
             "checkpointInterval",
             "set checkpoint interval (>= 1) or disable checkpoint (-1). "
             + "E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: "
-            + "this setting will be ignored if the checkpoint directory is not set in the SparkContext.",
+            + "this setting will be ignored if the checkpoint directory is not set in "
+            + "the SparkContext.",
             None,
             "TypeConverters.toInt",
         ),
@@ -214,8 +215,8 @@ if __name__ == "__main__":
         (
             "handleInvalid",
             "how to handle invalid entries. Options are skip (which will filter "
-            + "out rows with bad values), or error (which will throw an error). More options may be "
-            + "added later.",
+            + "out rows with bad values), or error (which will throw an error). "
+            + "More options may be added later.",
             None,
             "TypeConverters.toString",
         ),
@@ -289,9 +290,9 @@ if __name__ == "__main__":
         (
             "collectSubModels",
             "Param for whether to collect a list of sub-models trained during "
-            + "tuning. If set to false, then only the single best sub-model will be available after "
-            + "fitting. If set to true, then all sub-models will be available. Warning: For large "
-            + "models, collecting all sub-models can cause OOMs on the Spark driver.",
+            + "tuning. If set to false, then only the single best sub-model will be available "
+            + "after fitting. If set to true, then all sub-models will be available. Warning: "
+            + "For large models, collecting all sub-models can cause OOMs on the Spark driver.",
             "False",
             "TypeConverters.toBoolean",
         ),
@@ -326,8 +327,8 @@ if __name__ == "__main__":
             "maxBlockSizeInMB",
             "maximum memory in MB for stacking input data into blocks. Data is "
             + "stacked within partitions. If more than remaining data size in a partition then it "
-            + "is adjusted to the data size. Default 0.0 represents choosing optimal value, depends "
-            + "on specific algorithm. Must be >= 0.",
+            + "is adjusted to the data size. Default 0.0 represents choosing optimal value, "
+            + "depends on specific algorithm. Must be >= 0.",
             "0.0",
             "TypeConverters.toFloat",
         ),

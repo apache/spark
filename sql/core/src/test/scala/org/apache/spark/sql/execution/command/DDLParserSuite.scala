@@ -59,12 +59,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       ShowCurrentNamespaceCommand())
   }
 
-  test("alter database - property values must be set") {
-    assertUnsupported(
-      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
   test("insert overwrite directory") {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {
@@ -360,9 +354,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       LocalTempView)
     comparePlans(parsed2, expected2)
 
-    // TODO(SPARK-37367): Reenable exception test in DDLParserSuite.create view -- basic
-    // val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
-    // intercept(v3, "It is not allowed to add database prefix")
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    intercept(v3, "It is not allowed to add database prefix")
   }
 
   test("create temp view - full") {
