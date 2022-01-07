@@ -621,7 +621,8 @@ def main():
 
 def _test():
     import doctest
-    failure_count = doctest.testmod()[0]
+    import sparktestsupport.utils
+    failure_count = doctest.testmod(sparktestsupport.utils)[0] + doctest.testmod()[0]
     if failure_count:
         sys.exit(-1)
 
