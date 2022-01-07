@@ -139,7 +139,7 @@ if __name__ == "__main__":
             "Column name for predicted class conditional probabilities. "
             + "Note: Not all models output well-calibrated probability estimates! "
             + "These probabilities should be treated as confidences, not precise probabilities.",
-            "'probability'",
+            '"probability"',
             "TypeConverters.toString",
         ),
         (
