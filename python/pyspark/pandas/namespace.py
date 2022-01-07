@@ -41,7 +41,11 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_datetime64_dtype,
+    is_datetime64tz_dtype,
+    is_list_like,
+)
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -2027,20 +2031,23 @@ def timedelta_range(
     The closed parameter specifies which endpoint is included.
     The default behavior is to include both endpoints.
 
-    >>> ps.timedelta_range(start='1 day', periods=4, closed='right')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.timedelta_range(start='1 day', periods=4, closed='right')
+    ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
 
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
 
-    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],
                    dtype='timedelta64[ns]', freq=None)
 
     Specify start, end, and periods; the frequency is generated automatically (linearly spaced).
 
-    >>> ps.timedelta_range(start='1 day', end='5 days', periods=4)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.timedelta_range(start='1 day', end='5 days', periods=4)
+    ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '2 days 08:00:00', '3 days 16:00:00',
                     '5 days 00:00:00'],
                    dtype='timedelta64[ns]', freq=None)
@@ -2533,7 +2540,9 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))  # type: ignore[assignment]
+            concat_psdf.columns = list(  # type: ignore[assignment]
+                map(str, _range(len(concat_psdf.columns)))
+            )
 
         if sort:
             concat_psdf = concat_psdf.sort_index()

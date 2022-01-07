@@ -47,7 +47,11 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_list_like,
+    is_hashable,
+    CategoricalDtype,
+)
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -444,7 +448,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)  # type: ignore[assignment]
+    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
+        "spark", SparkSeriesMethods
+    )
 
     @property
     def dtypes(self) -> Dtype:

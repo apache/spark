@@ -20,7 +20,11 @@
 import os
 import sys
 from argparse import ArgumentParser
-from sparktestsupport.utils import determine_modules_for_files, determine_modules_to_test, identify_changed_files_from_git_commits
+from sparktestsupport.utils import (
+    determine_modules_for_files,
+    determine_modules_to_test,
+    identify_changed_files_from_git_commits
+)
 import sparktestsupport.modules as modules
 
 
@@ -52,8 +56,10 @@ def main():
     opts = parse_opts()
 
     test_modules = opts.modules.split(",")
-    changed_files = identify_changed_files_from_git_commits("HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
-    changed_modules = determine_modules_to_test(determine_modules_for_files(changed_files), deduplicated=False)
+    changed_files = identify_changed_files_from_git_commits(
+        "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
+    changed_modules = determine_modules_to_test(
+        determine_modules_for_files(changed_files), deduplicated=False)
     module_names = [m.name for m in changed_modules]
     if len(changed_modules) == 0:
         print("false")
