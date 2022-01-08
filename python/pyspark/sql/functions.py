@@ -52,6 +52,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
+        ColumnOrName_,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
@@ -1670,7 +1671,19 @@ def expr(str: str) -> Column:
     return Column(sc._jvm.functions.expr(str))
 
 
+@overload
 def struct(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def struct(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new struct column.
 
     .. versionadded:: 1.4.0
@@ -1690,8 +1703,8 @@ def struct(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3612,7 +3625,19 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 # ---------------------- Collection functions ------------------------------
 
 
+@overload
 def create_map(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def create_map(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new map column.
 
     .. versionadded:: 2.0.0
@@ -3633,8 +3658,8 @@ def create_map(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3665,7 +3690,19 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
+@overload
 def array(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def array(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new array column.
 
     .. versionadded:: 1.4.0
@@ -3686,8 +3723,8 @@ def array(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -4773,7 +4810,19 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
+@overload
 def map_concat(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def map_concat(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Returns the union of all the given maps.
 
     .. versionadded:: 2.4.0
@@ -4797,8 +4846,8 @@ def map_concat(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
