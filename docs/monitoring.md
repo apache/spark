@@ -1396,19 +1396,19 @@ Note: applies to the shuffle service
 These metrics are exposed by Spark history server.
 
 - namespace = HistoryServer
-  - application - The size of all applications loaded in history server
-  - incompleted - The size of incompleted applications loaded in history server
-  - under.process - The size of under process event log applications loaded in history server
-  - diskManager.free - The size of free app info space about HistoryServerDiskManager
-  - diskManager.committed - The size of committed app info about HistoryServerDiskManager
-  - memoryManager.free - The size of free app info space in HistoryServerMemoryManager
-  - memoryManager.current -The size of current app info in HistoryServerMemoryManager
-  - diskManager.diskAndMemorymanager.total - The total size of app info in HistoryServerDiskManager and HistoryServerMemoryManger
-  - check.logs.timer - The cost time of check event log
-  - clean.logs.timer - The cost time of clean event log
-  - clean.driver.logs.timer - The cost time of clean driver log
-  - compact.timer - The cost time of compact event log
-  - loadStore.timer - The cost time of load store log
+  - applications - The size of all applications
+  - incompleted - The size of incompleted applications
+  - under.process - The size of applications under processing event log
+  - diskManager.free - The size of free app info space about disk manager
+  - diskManager.committed - The size of committed app info about disk manager
+  - memoryManager.free - The size of free app info space in memory manager
+  - memoryManager.current -The size of current app info in memory manager
+  - diskManager.diskAndMemorymanager.total - The total size of app info in disk and memory manager
+  - check.logs.timer - The cost time of check event logs
+  - clean.logs.timer - The cost time of clean event logs
+  - clean.driver.logs.timer - The cost time of clean driver logs
+  - compact.timer - The cost time of compact event logs
+  - loadStore.timer - The cost time of load store logs
 
 - namespace = ApplicationCache
   - history.cache.eviction.count - Application eviction count
