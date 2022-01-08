@@ -1022,6 +1022,7 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `shuffleService`: The Spark shuffle service.
 * `applicationMaster`: The Spark ApplicationMaster when running on YARN.
 * `mesos_cluster`: The Spark cluster scheduler when running on Mesos.
+* `historyServer`: The Spark history server.
 
 Each instance can report to zero or more _sinks_. Sinks are contained in the
 `org.apache.spark.metrics.sink` package:
@@ -1390,6 +1391,31 @@ Note: applies to the shuffle service
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory
+
+### Component instance = historyServer
+These metrics are exposed by Spark history server.
+
+- namespace = HistoryServer
+  - application - The size of all applications loaded in history server
+  - incompleted - The size of incompleted applications loaded in history server
+  - under.process - The size of under process event log applications loaded in history server
+  - diskManager.free - The size of free app info space about HistoryServerDiskManager
+  - diskManager.committed - The size of committed app info about HistoryServerDiskManager
+  - memoryManager.free - The size of free app info space in HistoryServerMemoryManager
+  - memoryManager.current -The size of current app info in HistoryServerMemoryManager
+  - diskManager.diskAndMemorymanager.total - The total size of app info in HistoryServerDiskManager and HistoryServerMemoryManger
+  - check.logs.timer - The cost time of check event log
+  - clean.logs.timer - The cost time of clean event log
+  - clean.driver.logs.timer - The cost time of clean driver log
+  - compact.timer - The cost time of compact event log
+  - loadStore.timer - The cost time of load store log
+
+- namespace = ApplicationCache
+  - history.cache.eviction.count - Application eviction count
+  - history.cache.load.count - Application load cache count
+  - history.cache.lookup.count - Application cache lookup count
+  - history.cache.lookup.failure.count - Application look up failed count
+  - history.cache.load.timer - Application load time
 
 # Advanced Instrumentation
 
