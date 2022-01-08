@@ -359,8 +359,7 @@ RIGHT_MERGE_PREFIX = MERGE_PREFIX_TEMPLATE.format("right")
 
 
 def _resolve_internal_merge_frame(
-    internal: InternalFrame,
-    side: Optional[str] = None,
+    internal: InternalFrame, side: Optional[str] = None,
 ) -> InternalFrame:
     internal = internal.resolved_copy
     if side is None:
@@ -7878,7 +7877,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         left_on: Optional[Union[Name, List[Name]]],
         right_on: Optional[Union[Name, List[Name]]],
         left_index: bool,
-        right_index: bool
+        right_index: bool,
     ) -> Tuple[List[str], List[str]]:
         if on:
             if left_on or right_on:
