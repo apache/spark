@@ -745,11 +745,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("select COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
       " FROM h2.test.employee where dept > 0 group by DePt")
     checkFiltersRemoved(df)
-    checkAggregateRemoved(df, false)
+    checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)]"
+          "PushedAggregates: [COVAR_POP(BONUS, BONUS), COVAR_SAMP(BONUS, BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
@@ -759,11 +761,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("select CORR(bonus, bonus) FROM h2.test.employee where dept > 0" +
       " group by DePt")
     checkFiltersRemoved(df)
-    checkAggregateRemoved(df, false)
+    checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)]"
+          "PushedAggregates: [CORR(BONUS, BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1d), Row(1d), Row(null)))
