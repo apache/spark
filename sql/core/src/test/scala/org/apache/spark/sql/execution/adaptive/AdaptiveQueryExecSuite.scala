@@ -28,6 +28,7 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -123,6 +124,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSort(plan: SparkPlan): Seq[SortExec] = {
     collect(plan) {
       case s: SortExec => s
+    }
+  }
+
+  private def findTopLevelBaeAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
+    collect(plan) {
+      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -1406,6 +1413,56 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-35442: Support propagate empty relation through aggregate") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
+        "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key")
+      assert(findTopLevelBaeAggregate(plan1).size == 2)
+      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+
+      val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
+        "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key limit 1")
+      assert(findTopLevelBaeAggregate(plan1).size == 2)
+      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+
+      val (plan3, adaptivePlan3) = runAdaptiveAndVerifyResult(
+        "SELECT count(*) FROM testData WHERE value = 'no_match'")
+      assert(findTopLevelBaeAggregate(plan3).size == 2)
+      assert(findTopLevelBaeAggregate(adaptivePlan3).size == 2)
+    }
+  }
+
+  test("SPARK-35442: Support propagate empty relation through union") {
+    def checkNumUnion(plan: SparkPlan, numUnion: Int): Unit = {
+      assert(
+        collect(plan) {
+          case u: UnionExec => u
+        }.size == numUnion)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key
+          |UNION ALL
+          |SELECT key, 1 FROM testData
+          |""".stripMargin)
+      checkNumUnion(plan1, 1)
+      checkNumUnion(adaptivePlan1, 0)
+      assert(!stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+
+      val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key
+          |UNION ALL
+          |SELECT /*+ REPARTITION */ key, 1 FROM testData WHERE value = 'no_match'
+          |""".stripMargin)
+      checkNumUnion(plan2, 1)
+      checkNumUnion(adaptivePlan2, 0)
+      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
+    }
+  }
+
   test("SPARK-32753: Only copy tags to node with no tags") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v1") {
@@ -1794,7 +1851,8 @@ class AdaptiveQueryExecSuite
   test("SPARK-35239: Coalesce shuffle partition should handle empty input RDD") {
     withTable("t") {
       withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
         spark.sql("CREATE TABLE t (c1 int) USING PARQUET")
         val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
         assert(
@@ -2261,7 +2319,8 @@ class AdaptiveQueryExecSuite
   test("SPARK-37742: AQE reads invalid InMemoryRelation stats and mistakenly plans BHJ") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048584",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
       // Spark estimates a string column as 20 bytes so with 60k rows, these relations should be
       // estimated at ~120m bytes which is greater than the broadcast join threshold.
       val joinKeyOne = "00112233445566778899"
