@@ -53,6 +53,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
+        ColumnOrName_,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
@@ -1626,7 +1627,19 @@ def expr(str: str) -> Column:
     return _invoke_function("expr", str)
 
 
+@overload
 def struct(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def struct(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new struct column.
 
     .. versionadded:: 1.4.0
@@ -1644,8 +1657,8 @@ def struct(*cols: "ColumnOrName") -> Column:
     [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    return _invoke_function_over_seq_of_columns("struct", cols)
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_seq_of_columns("struct", cols)  # type: ignore[arg-type]
 
 
 def greatest(*cols: "ColumnOrName") -> Column:
@@ -3394,7 +3407,19 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 # ---------------------- Collection functions ------------------------------
 
 
+@overload
 def create_map(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def create_map(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new map column.
 
     .. versionadded:: 2.0.0
@@ -3413,8 +3438,8 @@ def create_map(*cols: "ColumnOrName") -> Column:
     [Row(map={'Alice': 2}), Row(map={'Bob': 5})]
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    return _invoke_function_over_seq_of_columns("map", cols)
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_seq_of_columns("map", cols)  # type: ignore[arg-type]
 
 
 def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -3442,7 +3467,19 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("map_from_arrays", col1, col2)
 
 
+@overload
 def array(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def array(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new array column.
 
     .. versionadded:: 1.4.0
@@ -3461,8 +3498,8 @@ def array(*cols: "ColumnOrName") -> Column:
     [Row(arr=[2, 2]), Row(arr=[5, 5])]
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    return _invoke_function_over_seq_of_columns("array", cols)
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_seq_of_columns("array", cols)  # type: ignore[arg-type]
 
 
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
@@ -4456,7 +4493,19 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     return _invoke_function_over_seq_of_columns("arrays_zip", cols)
 
 
+@overload
 def map_concat(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def map_concat(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Returns the union of all the given maps.
 
     .. versionadded:: 2.4.0
@@ -4478,8 +4527,8 @@ def map_concat(*cols: "ColumnOrName") -> Column:
     +------------------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    return _invoke_function_over_seq_of_columns("map_concat", cols)
+        cols = cols[0]  # type: ignore[assignment]
+    return _invoke_function_over_seq_of_columns("map_concat", cols)  # type: ignore[arg-type]
 
 
 def sequence(
