@@ -318,11 +318,12 @@ private[sql] object V2SessionCatalog {
       case IdentityTransform(FieldReference(Seq(col))) =>
         identityCols += col
 
-      case BucketTransform(numBuckets, FieldReference(Seq(col)), FieldReference(Seq(sortCol))) =>
+      case BucketTransform(numBuckets, col, sortCol) =>
         if (sortCol.isEmpty) {
-          bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
+          bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
         } else {
-          bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, sortCol :: Nil))
+          bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+            sortCol.map(_.fieldNames.mkString("."))))
         }
 
       case transform =>

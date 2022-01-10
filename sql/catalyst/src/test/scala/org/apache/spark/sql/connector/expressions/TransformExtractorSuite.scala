@@ -140,9 +140,9 @@ class TransformExtractorSuite extends SparkFunSuite {
     }
 
     bucketTransform match {
-      case BucketTransform(numBuckets, FieldReference(seq), _) =>
+      case BucketTransform(numBuckets, cols, _) =>
         assert(numBuckets === 16)
-        assert(seq === Seq("a", "b"))
+        assert(cols(0).fieldNames === Seq("a", "b"))
       case _ =>
         fail("Did not match BucketTransform extractor")
     }
@@ -168,10 +168,10 @@ class TransformExtractorSuite extends SparkFunSuite {
     }
 
     sortedBucketTransform match {
-      case BucketTransform(numBuckets, FieldReference(seq), FieldReference(sorted)) =>
+      case BucketTransform(numBuckets, cols, sortCols) =>
         assert(numBuckets === 16)
-        assert(seq === Seq("a", "b"))
-        assert(sorted === Seq("c", "d"))
+        assert(cols.flatMap(c => c.fieldNames()) === Seq("a", "b"))
+        assert(sortCols.flatMap(c => c.fieldNames()) === Seq("c", "d"))
       case _ =>
         fail("Did not match BucketTransform extractor")
     }

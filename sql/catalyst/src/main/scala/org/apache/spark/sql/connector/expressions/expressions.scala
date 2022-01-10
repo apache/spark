@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -121,35 +122,29 @@ private[sql] final case class BucketTransform(
 }
 
 private[sql] object BucketTransform {
-  def unapply(expr: Expression): Option[(Int, FieldReference, FieldReference)] = expr match {
-    case transform: Transform =>
-      transform match {
-        case BucketTransform(n, FieldReference(parts), _) =>
-          Some((n, FieldReference(parts), FieldReference(Seq.empty[String])))
-        case _ =>
-          None
-      }
-    case _ =>
-      None
-  }
-
-  def unapply(transform: Transform): Option[(Int, NamedReference, NamedReference)] =
+  def unapply(transform: Transform): Option[(Int, Seq[NamedReference], Seq[NamedReference])] =
       transform match {
     case NamedTransform("sorted_bucket", arguments) =>
-      var index: Int = -1
       var posOfLit: Int = -1
       var numOfBucket: Int = -1
-      arguments.foreach {
+      arguments.zipWithIndex.foreach {
+        case (Lit(value: Int, IntegerType), i) =>
+          numOfBucket = value
+          posOfLit = i
+        case _ =>
+      }
+      Some(numOfBucket, arguments.take(posOfLit).map(_.asInstanceOf[NamedReference]),
+        arguments.drop(posOfLit + 1).map(_.asInstanceOf[NamedReference]))
+    case NamedTransform("bucket", arguments) =>
+      var numOfBucket: Int = -1
+      arguments(0) match {
         case Lit(value: Int, IntegerType) =>
           numOfBucket = value
-          index = index + 1
-          posOfLit = index
-        case _ => index = index + 1
+        case _ => throw new SparkException("The first element in BucketTransform arguments " +
+          "should be an Integer Literal.")
       }
-      Some(numOfBucket, FieldReference(arguments.take(posOfLit).map(_.describe)),
-        FieldReference(arguments.drop(posOfLit + 1).map(_.describe)))
-    case NamedTransform("bucket", Seq(Lit(value: Int, IntegerType), Ref(seq: Seq[String]))) =>
-      Some(value, FieldReference(seq), FieldReference(Seq.empty[String]))
+      Some(numOfBucket, arguments.drop(1).map(_.asInstanceOf[NamedReference]),
+        Seq.empty[FieldReference])
     case _ =>
       None
   }
