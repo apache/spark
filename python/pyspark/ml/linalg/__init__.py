@@ -125,8 +125,8 @@ def _format_float(f, digits=4):
     return s
 
 
-def _format_float_list(lst):
-    return [_format_float(x) for x in lst]
+def _format_float_list(xs):
+    return [_format_float(x) for x in xs]
 
 
 def _double_to_long_bits(value):
