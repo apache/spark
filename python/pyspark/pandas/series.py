@@ -3210,7 +3210,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = lambda s: s.apply(func, args=args, **kwds)
+        def apply_each(s: Any) -> pd.Series:
+            return s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3611,9 +3612,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
-            asc_func = lambda scol: scol.asc()
+
+            def asc_func(scol: Column) -> Column:
+                return scol.asc()
+
         else:
-            asc_func = lambda scol: scol.desc()
+
+            def asc_func(scol: Column) -> Column:
+                return scol.desc()
 
         if method == "first":
             window = (

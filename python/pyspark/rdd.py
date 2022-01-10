@@ -2362,7 +2362,10 @@ class RDD:
         >>> x.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
-        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
+
+        def flat_map_fn(kv):
+            return ((kv[0], x) for x in f(kv[1]))
+
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def mapValues(self, f):
@@ -2378,7 +2381,10 @@ class RDD:
         >>> x.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
-        map_values_fn = lambda kv: (kv[0], f(kv[1]))
+
+        def map_values_fn(kv):
+            return kv[0], f(kv[1])
+
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def groupWith(self, other, *others):
