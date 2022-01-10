@@ -539,8 +539,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // when users do not specify the schema
     checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
 
+    // same base schema, different metadata
+    val metadata = new MetadataBuilder().putString("foo", "bar").build()
+    var inputSchema = new StructType().add("i", IntegerType, nullable = false, metadata = metadata)
+    checkAnswer(dfReader.schema(inputSchema).load(), spark.range(1, 11).toDF())
+
     // when users specify a wrong schema
-    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    inputSchema = new StructType().add("s", IntegerType, nullable = false)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
