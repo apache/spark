@@ -2899,6 +2899,39 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {
+    val t = "tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint,
+           |  b bigint
+           |)
+           |using parquet
+           |OPTIONS (
+           |  from = 0,
+           |  to = 1)
+           |COMMENT 'This is a comment'
+           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2')
+           |PARTITIONED BY (a)
+           |LOCATION '/tmp'
+        """.stripMargin)
+
+      val table = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+        .loadTable(Identifier.of(Array("default"), t))
+      val properties = table.properties
+      assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
+      assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
+      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
+      assert(properties.containsKey(TableCatalog.PROP_OWNER))
+      assert(properties.get(s"${TableCatalog.OPTION_PREFIX}from") == "0")
+      assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
+      assert(properties.get("prop1") == "1")
+      assert(properties.get("prop2") == "2")
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
