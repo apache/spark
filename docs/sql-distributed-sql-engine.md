@@ -90,12 +90,8 @@ See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-
 
 ## Running the Spark SQL CLI
 
-The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
-queries input from the command line. Note that the Spark SQL CLI cannot talk to the Thrift JDBC server.
-
-To start the Spark SQL CLI, run the following in the Spark directory:
+To use the Spark SQL command line interface (CLI) from the shell:
 
     ./bin/spark-sql
-
-Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
-You may run `./bin/spark-sql --help` for a complete list of all available options.
+    
+For details, please refer to [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html)

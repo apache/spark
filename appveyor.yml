@@ -39,7 +39,7 @@ cache:
   - C:\Users\appveyor\.m2
 
 install:
-  # Install maven and dependencies
+  # Install SBT and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests. xml2 is required to use jUnit reporter in testthat.
   - cmd: Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'xml2'), repos='https://cloud.r-project.org/')"
@@ -49,7 +49,11 @@ build_script:
   # '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
   # See SPARK-28759.
   # Ideally we should check the tests related to Hive in SparkR as well (SPARK-31745).
-  - cmd: mvn -DskipTests -Psparkr -Djna.nosys=true package
+  - cmd: set SBT_MAVEN_PROFILES=-Psparkr
+  - cmd: set SBT_OPTS=-Djna.nosys=true -Dfile.encoding=UTF-8 -Xms4096m -Xms4096m -XX:ReservedCodeCacheSize=128m
+  - cmd: sbt package
+  - cmd: set SBT_MAVEN_PROFILES=
+  - cmd: set SBT_OPTS=
 
 environment:
   NOT_CRAN: true

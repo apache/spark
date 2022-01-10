@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -88,7 +88,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_ARGS,
       None)
     assert(conf.labels === Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(conf.appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
       CUSTOM_LABELS)
     assert(conf.annotations === CUSTOM_ANNOTATIONS)
@@ -153,8 +155,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       KubernetesTestConf.APP_ID,
       Some(DRIVER_POD))
     assert(conf.labels === Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
+      SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(conf.appName),
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> DEFAULT_RESOURCE_PROFILE_ID.toString) ++ CUSTOM_LABELS)
     assert(conf.annotations === CUSTOM_ANNOTATIONS)
@@ -212,5 +216,20 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(execConf.schedulerName === "executorScheduler")
     val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
     assert(driverConf.schedulerName === "driverScheduler")
+  }
+
+  test("SPARK-37735: access appId in KubernetesConf") {
+    val sparkConf = new SparkConf(false)
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(driverConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+    assert(execConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+  }
+
+  test("SPARK-36566: get app name label") {
+    assert(KubernetesConf.getAppNameLabel(" Job+Spark-Pi 2021") === "job-spark-pi-2021")
+    assert(KubernetesConf.getAppNameLabel("a" * 63) === "a" * 63)
+    assert(KubernetesConf.getAppNameLabel("a" * 64) === "a" * 63)
+    assert(KubernetesConf.getAppNameLabel("a" * 253) === "a" * 63)
   }
 }

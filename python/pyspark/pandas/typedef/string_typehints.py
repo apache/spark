@@ -21,13 +21,13 @@ import numpy as np  # noqa: F401
 import pandas  # noqa: F401
 import pandas as pd  # noqa: F401
 from numpy import *  # noqa: F401
-from pandas import *  # noqa: F401
+from pandas import *  # type: ignore[no-redef] # noqa: F401
 from inspect import getfullargspec  # noqa: F401
 
 
 def resolve_string_type_hint(tpe: str) -> Optional[Type]:
     import pyspark.pandas as ps
-    from pyspark.pandas import DataFrame, Series
+    from pyspark.pandas import DataFrame, Series  # type: ignore[misc]
 
     locs = {
         "ps": ps,

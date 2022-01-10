@@ -95,6 +95,7 @@ def createContext(host, port, outputPath):
     wordCounts.foreachRDD(echo)
     return ssc
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 5:
         print("Usage: recoverable_network_wordcount.py <hostname> <port> "

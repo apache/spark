@@ -73,6 +73,11 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
   }
 
+  /** Creates LogicalPlan for a given SQL string of query. */
+  override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+    astBuilder.visitQuery(parser.query())
+  }
+
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
@@ -96,11 +101,12 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
+    parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
-    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
+    parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
 
     try {
       try {
@@ -307,4 +313,63 @@ case object PostProcessor extends SqlBaseBaseListener {
       token.getStopIndex - stripMargins)
     parent.addChild(new TerminalNodeImpl(f(newToken)))
   }
+}
+
+/**
+ * The post-processor checks the unclosed bracketed comment.
+ */
+case class UnclosedCommentProcessor(
+    command: String, tokenStream: CommonTokenStream) extends SqlBaseBaseListener {
+
+  override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleExpression(ctx: SqlBaseParser.SingleExpressionContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleTableIdentifier(ctx: SqlBaseParser.SingleTableIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleFunctionIdentifier(
+      ctx: SqlBaseParser.SingleFunctionIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleMultipartIdentifier(
+      ctx: SqlBaseParser.SingleMultipartIdentifierContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleTableSchema(ctx: SqlBaseParser.SingleTableSchemaContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitQuery(ctx: SqlBaseParser.QueryContext): Unit = {
+    checkUnclosedComment(tokenStream, command)
+  }
+
+  override def exitSingleStatement(ctx: SqlBaseParser.SingleStatementContext): Unit = {
+    // SET command uses a wildcard to match anything, and we shouldn't parse the comments, e.g.
+    // `SET myPath =/a/*`.
+    if (!ctx.statement().isInstanceOf[SqlBaseParser.SetConfigurationContext]) {
+      checkUnclosedComment(tokenStream, command)
+    }
+  }
+
+  /** check `has_unclosed_bracketed_comment` to find out the unclosed bracketed comment. */
+  private def checkUnclosedComment(tokenStream: CommonTokenStream, command: String) = {
+    assert(tokenStream.getTokenSource.isInstanceOf[SqlBaseLexer])
+    val lexer = tokenStream.getTokenSource.asInstanceOf[SqlBaseLexer]
+    if (lexer.has_unclosed_bracketed_comment) {
+      // The last token is 'EOF' and the penultimate is unclosed bracketed comment
+      val failedToken = tokenStream.get(tokenStream.size() - 2)
+      assert(failedToken.getType() == SqlBaseParser.BRACKETED_COMMENT)
+      val position = Origin(Option(failedToken.getLine), Option(failedToken.getCharPositionInLine))
+      throw QueryParsingErrors.unclosedBracketedCommentError(command, position)
+    }
+  }
+
 }

@@ -43,6 +43,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-class PandasOnSparkFrameMethods(object):
+class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
@@ -348,6 +349,10 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = func(pdf)
@@ -584,6 +589,10 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
             transformed = func(pdf)
@@ -635,7 +644,7 @@ class PandasOnSparkFrameMethods(object):
                 self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
+                    self_applied, func, return_schema, retain_index=True  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -700,7 +709,7 @@ class PandasOnSparkFrameMethods(object):
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=should_retain_index
+                    self_applied, func, return_schema, should_retain_index  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -741,7 +750,7 @@ class PandasOnSparkFrameMethods(object):
                 return DataFrame(internal)
 
 
-class PandasOnSparkSeriesMethods(object):
+class PandasOnSparkSeriesMethods:
     """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):

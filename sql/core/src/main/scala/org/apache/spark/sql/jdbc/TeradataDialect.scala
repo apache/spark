@@ -55,4 +55,8 @@ private case object TeradataDialect extends JdbcDialect {
   override def renameTable(oldTable: String, newTable: String): String = {
     s"RENAME TABLE $oldTable TO $newTable"
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    ""
+  }
 }

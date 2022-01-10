@@ -26,6 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{ListenerBus, Utils}
 
@@ -74,7 +75,10 @@ trait QueryExecutionListener {
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
 // user-specified listeners during construction. We should not do it when cloning this listener
 // manager, as we will copy all listeners to the cloned listener manager.
-class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
+class ExecutionListenerManager private[sql](
+    session: SparkSession,
+    sqlConf: SQLConf,
+    loadExtensions: Boolean)
   extends Logging {
 
   private val listenerBus = new ExecutionListenerBus(this, session)
@@ -82,7 +86,9 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   if (loadExtensions) {
     val conf = session.sparkContext.conf
     conf.get(QUERY_EXECUTION_LISTENERS).foreach { classNames =>
-      Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+      SQLConf.withExistingConf(sqlConf) {
+        Utils.loadExtensions(classOf[QueryExecutionListener], classNames, conf).foreach(register)
+      }
     }
   }
 
@@ -118,8 +124,9 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   /**
    * Get an identical copy of this listener manager.
    */
-  private[sql] def clone(session: SparkSession): ExecutionListenerManager = {
-    val newListenerManager = new ExecutionListenerManager(session, loadExtensions = false)
+  private[sql] def clone(session: SparkSession, sqlConf: SQLConf): ExecutionListenerManager = {
+    val newListenerManager =
+      new ExecutionListenerManager(session, sqlConf, loadExtensions = false)
     listenerBus.listeners.asScala.foreach(newListenerManager.register)
     newListenerManager
   }

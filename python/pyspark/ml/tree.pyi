@@ -90,9 +90,7 @@ class _RandomForestParams(_TreeEnsembleParams):
     def getNumTrees(self) -> int: ...
     def getBootstrap(self) -> bool: ...
 
-class _GBTParams(
-    _TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol
-):
+class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
     stepSize: Param[float]
     validationTol: Param[float]
     def getValidationTol(self) -> float: ...

@@ -23,7 +23,7 @@ import numpy as np
 
 from pyspark import SparkContext
 from pyspark.sql import functions as F
-from pyspark.sql.column import (  # type: ignore[attr-defined]
+from pyspark.sql.column import (
     Column,
     _to_java_column,
     _create_column_from_literal,
@@ -43,6 +43,17 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
+
+
+def date_part(field: Union[str, Column], source: Column) -> Column:
+    """
+    Extracts a part of the date/timestamp or interval source.
+    """
+    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    field = (
+        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
+    )
+    return _call_udf(sc, "date_part", field, _to_java_column(source))
 
 
 def lit(literal: Any) -> Column:

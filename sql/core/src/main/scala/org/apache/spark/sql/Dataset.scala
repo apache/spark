@@ -684,12 +684,13 @@ class Dataset[T] private[sql](
       }
 
       if (eager) {
-        internalRdd.count()
+        internalRdd.doCheckpoint()
       }
 
       // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
       // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
       // joins.
+      @scala.annotation.tailrec
       def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
         partitioning match {
           case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
@@ -2958,6 +2959,20 @@ class Dataset[T] private[sql](
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
+        func,
+        func.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
+  }
+
+  /**
+   * Applies a function to each partition in Arrow format. The user-defined function
+   * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
+   * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
+   */
+  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      PythonMapInArrow(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
         logicalPlan))

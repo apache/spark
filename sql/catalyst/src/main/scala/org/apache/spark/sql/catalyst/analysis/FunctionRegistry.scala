@@ -139,7 +139,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params)
+            validParametersCount, name, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -408,8 +408,11 @@ object FunctionRegistry {
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
+
+    // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TryElementAt]("try_element_at"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -433,6 +436,7 @@ object FunctionRegistry {
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
+    expression[HistogramNumeric]("histogram_numeric"),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
@@ -442,6 +446,7 @@ object FunctionRegistry {
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
+    expression[CollectList]("array_agg", true),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[BoolAnd]("every", true),
@@ -449,11 +454,15 @@ object FunctionRegistry {
     expression[BoolOr]("any", true),
     expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
+    expression[RegrCount]("regr_count"),
 
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expression[Contains]("contains"),
+    expression[StartsWith]("startswith"),
+    expression[EndsWith]("endswith"),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true),
@@ -476,7 +485,7 @@ object FunctionRegistry {
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
-    expression[StringLPad]("lpad"),
+    expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
@@ -491,7 +500,7 @@ object FunctionRegistry {
     expression[RLike]("rlike"),
     expression[RLike]("regexp_like", true, Some("3.2.0")),
     expression[RLike]("regexp", true, Some("3.2.0")),
-    expression[StringRPad]("rpad"),
+    expressionBuilder("rpad", RPadExpressionBuilder),
     expression[StringTrimRight]("rtrim"),
     expression[Sentences]("sentences"),
     expression[SoundEx]("soundex"),
@@ -575,6 +584,7 @@ object FunctionRegistry {
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
+    expression[ConvertTimezone]("convert_timezone"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -589,6 +599,7 @@ object FunctionRegistry {
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
+    expression[MapContainsKey]("map_contains_key"),
     expression[MapFromArrays]("map_from_arrays"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
@@ -753,6 +764,16 @@ object FunctionRegistry {
     (name, (expressionInfo, newBuilder))
   }
 
+  private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
+      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      builder.build(expressions)
+    }
+    (name, (info, funcBuilder))
+  }
+
   /**
    * Creates a function registry lookup entry for cast aliases (SPARK-16730).
    * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
@@ -847,4 +868,8 @@ object TableFunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+}
+
+trait ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression
 }

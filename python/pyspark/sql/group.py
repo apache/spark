@@ -21,7 +21,7 @@ from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Unio
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
-from pyspark.sql.column import Column, _to_seq  # type: ignore[attr-defined]
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.context import SQLContext
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
@@ -38,6 +38,7 @@ def dfapi(f: Callable) -> Callable:
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
+
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
     return _api
@@ -46,11 +47,9 @@ def dfapi(f: Callable) -> Callable:
 def df_varargs_api(f: Callable) -> Callable:
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
         name = f.__name__
-        # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-        jdf = getattr(self._jgd, name)(
-            _to_seq(self.sql_ctx._sc, cols)  # type: ignore[attr-defined]
-        )
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
+
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
     return _api
@@ -135,11 +134,7 @@ class GroupedData(PandasGroupedOpsMixin):
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             exprs = cast(Tuple[Column, ...], exprs)
-            # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-            jdf = self._jgd.agg(
-                exprs[0]._jc,
-                _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]])  # type: ignore[attr-defined]
-            )
+            jdf = self._jgd.agg(exprs[0]._jc, _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
@@ -289,34 +284,42 @@ def _test() -> None:
     import doctest
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
+
     globs = pyspark.sql.group.__dict__.copy()
-    spark = SparkSession.builder\
-        .master("local[4]")\
-        .appName("sql.group tests")\
-        .getOrCreate()
+    spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
-    globs['spark'] = spark
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
-    globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
-                                   Row(name='Bob', age=5, height=85)]).toDF()
-    globs['df4'] = sc.parallelize([Row(course="dotNET", year=2012, earnings=10000),
-                                   Row(course="Java",   year=2012, earnings=20000),
-                                   Row(course="dotNET", year=2012, earnings=5000),
-                                   Row(course="dotNET", year=2013, earnings=48000),
-                                   Row(course="Java",   year=2013, earnings=30000)]).toDF()
-    globs['df5'] = sc.parallelize([
-        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
-        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
-        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
-        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
-        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
+    globs["sc"] = sc
+    globs["spark"] = spark
+    globs["df"] = sc.parallelize([(2, "Alice"), (5, "Bob")]).toDF(
+        StructType([StructField("age", IntegerType()), StructField("name", StringType())])
+    )
+    globs["df3"] = sc.parallelize(
+        [Row(name="Alice", age=2, height=80), Row(name="Bob", age=5, height=85)]
+    ).toDF()
+    globs["df4"] = sc.parallelize(
+        [
+            Row(course="dotNET", year=2012, earnings=10000),
+            Row(course="Java", year=2012, earnings=20000),
+            Row(course="dotNET", year=2012, earnings=5000),
+            Row(course="dotNET", year=2013, earnings=48000),
+            Row(course="Java", year=2013, earnings=30000),
+        ]
+    ).toDF()
+    globs["df5"] = sc.parallelize(
+        [
+            Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+            Row(training="junior", sales=Row(course="Java", year=2012, earnings=20000)),
+            Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+            Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+            Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
+        ]
+    ).toDF()
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.group, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+        pyspark.sql.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
     spark.stop()
     if failure_count:
         sys.exit(-1)

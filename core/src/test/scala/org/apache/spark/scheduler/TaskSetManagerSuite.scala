@@ -1560,7 +1560,7 @@ class TaskSetManagerSuite
 
     // Keep track of the index of tasks that are resubmitted,
     // so that the test can check that task is resubmitted correctly
-    var resubmittedTasks = new mutable.HashSet[Int]
+    val resubmittedTasks = new mutable.HashSet[Int]
     val dagScheduler = new FakeDAGScheduler(sc, sched) {
       override def taskEnded(
           task: Task[_],

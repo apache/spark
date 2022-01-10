@@ -434,7 +434,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=
 (69) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
 Right keys [1]: [customer_id#107]
-Join condition: (CASE WHEN (year_total#83 > 0.000000) THEN CheckOverflow((promote_precision(year_total#108) / promote_precision(year_total#83)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#26 > 0.000000) THEN CheckOverflow((promote_precision(year_total#57) / promote_precision(year_total#26)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#83 > 0.000000) THEN CheckOverflow((promote_precision(year_total#108) / promote_precision(year_total#83)), DecimalType(38,14), true) END > CASE WHEN (year_total#26 > 0.000000) THEN CheckOverflow((promote_precision(year_total#57) / promote_precision(year_total#26)), DecimalType(38,14), true) END)
 
 (70) Project [codegen id : 24]
 Output [10]: [customer_id#25, customer_id#50, customer_first_name#51, customer_last_name#52, customer_preferred_cust_flag#53, customer_birth_country#54, customer_login#55, customer_email_address#56, year_total#83, year_total#108]
@@ -608,7 +608,7 @@ Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=
 (106) BroadcastHashJoin [codegen id : 24]
 Left keys [1]: [customer_id#25]
 Right keys [1]: [customer_id#158]
-Join condition: (CASE WHEN (year_total#83 > 0.000000) THEN CheckOverflow((promote_precision(year_total#108) / promote_precision(year_total#83)), DecimalType(38,14), true) ELSE null END > CASE WHEN (year_total#134 > 0.000000) THEN CheckOverflow((promote_precision(year_total#159) / promote_precision(year_total#134)), DecimalType(38,14), true) ELSE null END)
+Join condition: (CASE WHEN (year_total#83 > 0.000000) THEN CheckOverflow((promote_precision(year_total#108) / promote_precision(year_total#83)), DecimalType(38,14), true) END > CASE WHEN (year_total#134 > 0.000000) THEN CheckOverflow((promote_precision(year_total#159) / promote_precision(year_total#134)), DecimalType(38,14), true) END)
 
 (107) Project [codegen id : 24]
 Output [7]: [customer_id#50, customer_first_name#51, customer_last_name#52, customer_preferred_cust_flag#53, customer_birth_country#54, customer_login#55, customer_email_address#56]

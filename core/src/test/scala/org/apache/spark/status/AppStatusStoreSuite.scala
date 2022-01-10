@@ -86,6 +86,10 @@ class AppStatusStoreSuite extends SparkFunSuite {
     if (live) {
       return AppStatusStore.createLiveStore(conf)
     }
+    // LevelDB doesn't support Apple Silicon yet
+    if (Utils.isMacOnAppleSilicon && disk) {
+      return null
+    }
 
     val store: KVStore = if (disk) {
       val testDir = Utils.createTempDir()
@@ -103,6 +107,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     "in memory live" -> createAppStore(disk = false, live = true)
   ).foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
+      assume(appStore != null)
       val store = appStore.store
 
       // Success and failed tasks metrics
@@ -141,21 +146,23 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
   test("SPARK-36038: speculation summary") {
     val store = new InMemoryStore()
-    store.write(newSpeculationSummaryData(stageId, attemptId))
+    val expectedSpeculationSummary = newSpeculationSummaryData(stageId, attemptId)
+    store.write(expectedSpeculationSummary)
 
     val appStore = new AppStatusStore(store)
     val info = appStore.speculationSummary(stageId, attemptId)
     assert(info.isDefined)
+    val expectedSpeculationSummaryInfo = expectedSpeculationSummary.info
     info.foreach { metric =>
-      assert(metric.numTasks == 10)
-      assert(metric.numActiveTasks == 2)
-      assert(metric.numCompletedTasks == 5)
-      assert(metric.numFailedTasks == 1)
-      assert(metric.numKilledTasks == 2)
+      assert(metric.numTasks == expectedSpeculationSummaryInfo.numTasks)
+      assert(metric.numActiveTasks == expectedSpeculationSummaryInfo.numActiveTasks)
+      assert(metric.numCompletedTasks == expectedSpeculationSummaryInfo.numCompletedTasks)
+      assert(metric.numFailedTasks == expectedSpeculationSummaryInfo.numFailedTasks)
+      assert(metric.numKilledTasks == expectedSpeculationSummaryInfo.numKilledTasks)
     }
   }
 
-  test("SPARK-36038: speculation summary without any task completed") {
+  test("SPARK-36038: speculation summary should not be present if there are no speculative tasks") {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
 
@@ -172,14 +179,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
         listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
     }
-
-    assert(statusStore.speculationSummary(0, 0).isDefined)
-  }
-
-  test("SPARK-36038: speculation summary for unknown stages" +
-      " like SKIPPED stages should not fail with NoSuchElementException") {
-    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val statusStore = AppStatusStore.createLiveStore(conf)
 
     assert(statusStore.speculationSummary(0, 0).isEmpty)
   }

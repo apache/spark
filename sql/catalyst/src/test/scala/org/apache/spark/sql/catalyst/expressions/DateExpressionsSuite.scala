@@ -1845,4 +1845,44 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-37552: convert a timestamp_ntz to another time zone") {
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("America/Los_Angeles"),
+        Literal("UTC"),
+        Literal.create(null, TimestampNTZType)),
+      null)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal.create(null, StringType),
+        Literal("UTC"),
+        Literal.create(0L, TimestampNTZType)),
+      null)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("America/Los_Angeles"),
+        Literal.create(null, StringType),
+        Literal.create(-1L, TimestampNTZType)),
+      null)
+
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("Europe/Amsterdam"),
+        Literal("Europe/Moscow"),
+        Literal(LocalDateTime.of(2022, 3, 27, 3, 0, 0))),
+      LocalDateTime.of(2022, 3, 27, 4, 0, 0))
+
+    outstandingTimezonesIds.foreach { sourceTz =>
+      outstandingTimezonesIds.foreach { targetTz =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (_: Expression, _: Expression, sourceTs: Expression) =>
+            ConvertTimezone(
+              Literal(sourceTz),
+              Literal(targetTz),
+              sourceTs),
+          StringType, StringType, TimestampNTZType)
+      }
+    }
+  }
 }
