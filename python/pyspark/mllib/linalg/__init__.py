@@ -68,20 +68,20 @@ except BaseException:
     _have_scipy = False
 
 
-def _convert_to_vector(l):
-    if isinstance(l, Vector):
-        return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, range):
-        return DenseVector(l)
-    elif _have_scipy and scipy.sparse.issparse(l):
-        assert l.shape[1] == 1, "Expected column vector"
+def _convert_to_vector(d):
+    if isinstance(d, Vector):
+        return d
+    elif type(d) in (array.array, np.array, np.ndarray, list, tuple, range):
+        return DenseVector(d)
+    elif _have_scipy and scipy.sparse.issparse(d):
+        assert d.shape[1] == 1, "Expected column vector"
         # Make sure the converted csc_matrix has sorted indices.
-        csc = l.tocsc()
+        csc = d.tocsc()
         if not csc.has_sorted_indices:
             csc.sort_indices()
-        return SparseVector(l.shape[0], csc.indices, csc.data)
+        return SparseVector(d.shape[0], csc.indices, csc.data)
     else:
-        raise TypeError("Cannot convert type %s into Vector" % type(l))
+        raise TypeError("Cannot convert type %s into Vector" % type(d))
 
 
 def _vector_size(v):
@@ -128,8 +128,8 @@ def _format_float(f, digits=4):
     return s
 
 
-def _format_float_list(l):
-    return [_format_float(x) for x in l]
+def _format_float_list(xs):
+    return [_format_float(x) for x in xs]
 
 
 def _double_to_long_bits(value):
