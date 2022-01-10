@@ -229,7 +229,8 @@ abstract class JdbcDialect extends Serializable with Logging{
         if (supportCompletePushDown) {
           Some(s"AVG($distinct$column)")
         } else {
-          Some(s"Sum($distinct$column), Count($distinct$column)")
+          // For simplify code, we not reuse exists `SUM` or `COUNT`.
+          Some(s"SUM($distinct$column), COUNT($distinct$column)")
         }
       case _ => None
     }
