@@ -74,12 +74,16 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         if (outputs.forall { case (newAttr, oldAttr) => newAttr.exprId == oldAttr.exprId }) {
           newPlan
         } else {
-          val outputAliases = outputs.map { case (newAttr, oldAttr) =>
-            val newExplicitMetadata =
-              if (oldAttr.metadata != newAttr.metadata) Some(oldAttr.metadata) else None
-            Alias(newAttr, oldAttr.name)(explicitMetadata = newExplicitMetadata)
+          val newOutput = outputs.map { case (newAttr, oldAttr) =>
+            if (newAttr.exprId == oldAttr.exprId) {
+              newAttr
+            } else {
+              val newExplicitMetadata =
+                if (oldAttr.metadata != newAttr.metadata) Some(oldAttr.metadata) else None
+              Alias(newAttr, oldAttr.name)(oldAttr.exprId, explicitMetadata = newExplicitMetadata)
+            }
           }
-          Project(outputAliases, newPlan)
+          Project(newOutput, newPlan)
         }
       }
 
