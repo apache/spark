@@ -168,20 +168,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // scalastyle:off
                   // Change the optimized logical plan to reflect the pushed down aggregate
                   // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                  // SELECT min(c1), max(c1) FROM t GROUP BY c2;
+                  // SELECT min(c1), max(c1), avg(c1) FROM t GROUP BY c2;
                   // The original logical plan is
-                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, avg(c1#9) AS avg(c1)#19]
                   // +- RelationV2[c1#9, c2#10] ...
                   //
-                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
+                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24]
                   // we have the following
-                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
-                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, avg(c1#9) AS avg(c1)#19]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
                   //
                   // We want to change it to
                   // == Optimized Logical Plan ==
-                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
-                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
+                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18, sum(sum(c1)#23)/sum(count(c1)#24) AS avg(c1)#19]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
                   // scalastyle:on
                   var skip = 0
                   plan.transformExpressionsUp {
