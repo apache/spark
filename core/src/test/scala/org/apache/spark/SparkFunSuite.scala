@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-// scalastyle:off
 import java.io.File
 import java.nio.file.Path
 import java.util.{Locale, TimeZone}
@@ -27,9 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
+import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
-import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
