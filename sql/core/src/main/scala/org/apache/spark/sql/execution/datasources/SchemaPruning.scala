@@ -31,18 +31,22 @@ import org.apache.spark.sql.util.SchemaUtils._
  * By "physical column", we mean a column as defined in the data source format like Parquet format
  * or ORC format. For example, in Spark SQL, a root-level Parquet column corresponds to a SQL
  * column, and a nested Parquet column corresponds to a [[StructField]].
+ *
+ * Also prunes the unnecessary metadata columns if any for all file formats.
  */
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    if (conf.nestedSchemaPruningEnabled) {
-      apply0(plan)
-    } else {
-      plan
-    }
+    applyMetadataSchemaPruning(
+      if (conf.nestedSchemaPruningEnabled) {
+        applyDataSchemaPruning(plan)
+      } else {
+        plan
+      }
+    )
 
-  private def apply0(plan: LogicalPlan): LogicalPlan =
+  private def applyDataSchemaPruning(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
@@ -164,11 +168,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       outputRelation: LogicalRelation,
       prunedBaseRelation: HadoopFsRelation) = {
     val prunedOutput = getPrunedOutput(outputRelation.output, prunedBaseRelation.schema)
-    // also add the metadata output if any
-    // TODO: should be able to prune the metadata schema
-    val metaOutput = outputRelation.output.collect {
-      case MetadataAttribute(attr) => attr
-    }
+    // also add the metadata output if any, perform the metadata schema pruning later on
+    val metaOutput = outputRelation.output.collect { case MetadataAttribute(attr) => attr }
     outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput ++ metaOutput)
   }
 
@@ -204,5 +205,45 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
   }
 
+  private def applyMetadataSchemaPruning(plan: LogicalPlan): LogicalPlan =
+    plan transformDown {
+      case op @ PhysicalOperation(projects, filters, l @ LogicalRelation(_, _, _, _))
+        if containsMetadataAttributes(l) => pruneMetadataSchema(l, projects, filters).getOrElse(op)
+    }
 
+  /**
+   * This method returns optional logical plan with pruned metadata schema.
+   * `None` is returned if no nested field is required or all nested fields are required.
+   */
+  private def pruneMetadataSchema(
+      relation: LogicalRelation,
+      projects: Seq[NamedExpression],
+      filters: Seq[Expression]): Option[LogicalPlan] = {
+    val output = relation.output
+    val (normalizedProjects, normalizedFilters) =
+      normalizeAttributeRefNames(output, projects, filters)
+    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
+
+    val metadataSchema = output.collect { case MetadataAttribute(attr) => attr }.toStructType
+    val prunedMetadataSchema = pruneDataSchema(metadataSchema, requestedRootFields)
+
+    // If the metadata schema is different from the pruned metadata schema, continue.
+    // Otherwise, return None.
+    if (countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
+      val projectionOverSchema = ProjectionOverSchema(prunedMetadataSchema)
+      Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
+        relation, projectionOverSchema))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * If projects or filters contains the metadata attributes
+   */
+  private def containsMetadataAttributes(l: LogicalRelation): Boolean =
+    l.output.exists {
+      case MetadataAttribute(_) => true
+      case _ => false
+    }
 }
