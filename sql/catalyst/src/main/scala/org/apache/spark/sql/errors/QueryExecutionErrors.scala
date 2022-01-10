@@ -1909,8 +1909,7 @@ object QueryExecutionErrors {
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new UnsupportedOperationException(
-      s"The AES mode $mode with the padding $padding is not supported")
+    new SparkUnsupportedOperationException("UNSUPPORTED_AES_MODE", Array(mode, padding))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {

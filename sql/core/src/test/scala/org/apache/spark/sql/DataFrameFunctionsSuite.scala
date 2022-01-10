@@ -261,14 +261,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    def checkUnsupportedMode(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause
-      assert(e.isInstanceOf[UnsupportedOperationException])
-      assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
-    }
-
     val df1 = Seq("Spark", "").toDF
 
     // Successful encryption
@@ -306,10 +298,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
       Seq(Row(null), Row(null)))
-
-    // Unsupported AES mode and padding in encrypt
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"))
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"))
 
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
@@ -359,11 +347,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         }
         assert(e.getMessage.contains("BadPaddingException"))
     }
-
-    // Unsupported AES mode and padding in decrypt
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
   test("string function find_in_set") {

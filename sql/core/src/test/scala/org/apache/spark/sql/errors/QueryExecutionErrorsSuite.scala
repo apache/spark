@@ -17,14 +17,32 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  private def getAesInputs(): (DataFrame, DataFrame) = {
+    val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
+    val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
+    val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
+    val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
+    val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
+    val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
+
+    val df1 = Seq("Spark", "").toDF
+    val df2 = Seq(
+      (encryptedText16, encryptedText24, encryptedText32),
+      (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
+    ).toDF("value16", "value24", "value32")
+
+    (df1, df2)
+  }
+
   test("SPARK-37858: invalid AES key length") {
+    val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
       val e = intercept[SparkException] {
         df.collect
@@ -34,23 +52,10 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
     }
 
-    val df1 = Seq("Spark", "").toDF
-
     // Encryption failure - invalid key length
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
-
-    val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
-    val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
-    val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
-    val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
-    val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
-    val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
-    val df2 = Seq(
-      (encryptedText16, encryptedText24, encryptedText32),
-      (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
-    ).toDF("value16", "value24", "value32")
 
     // Decryption failure - invalid key length
     Seq("value16", "value24", "value32").foreach { colName =>
@@ -63,5 +68,27 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       checkInvalidKeyLength(df2.selectExpr(
         s"aes_decrypt(unbase64($colName), binary(''))"))
     }
+  }
+
+  test("SPARK-37858: unsupported AES modes") {
+    val key16 = "abcdefghijklmnop"
+    val key32 = "abcdefghijklmnop12345678ABCDEFGH"
+    val (df1, df2) = getAesInputs()
+    def checkUnsupportedMode(df: => DataFrame): Unit = {
+      val e = intercept[SparkException] {
+        df.collect
+      }.getCause
+      assert(e.isInstanceOf[SparkUnsupportedOperationException])
+      assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
+    }
+
+    // Unsupported AES mode and padding in encrypt
+    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"))
+    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"))
+
+    // Unsupported AES mode and padding in decrypt
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 }
