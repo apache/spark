@@ -615,11 +615,11 @@ class RDDTests(ReusedPySparkTestCase):
     def test_repartition_no_skewed(self):
         num_partitions = 20
         a = self.sc.parallelize(range(int(1000)), 2)
-        l = a.repartition(num_partitions).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        lst = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in lst if x == 0])
         self.assertTrue(zeros == 0)
-        l = a.coalesce(num_partitions, True).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        lst = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in lst if x == 0])
         self.assertTrue(zeros == 0)
 
     def test_repartition_on_textfile(self):
