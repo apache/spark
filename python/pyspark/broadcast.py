@@ -116,7 +116,8 @@ class Broadcast:
             f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
             self._path = f.name
             self._sc: Optional["SparkContext"] = sc
-            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)  # type: ignore[union-attr]
+            assert sc._jvm is not None
+            self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
             if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
@@ -128,7 +129,7 @@ class Broadcast:
             else:
                 # no encryption, we can just write pickled data directly to the file from python
                 broadcast_out = f
-            self.dump(value, broadcast_out)  # type: ignore[arg-type]
+            self.dump(value, broadcast_out)
             if sc._encryption_enabled:
                 self._python_broadcast.waitTillDataReceived()
             self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)
