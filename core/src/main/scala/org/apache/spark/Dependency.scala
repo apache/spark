@@ -17,7 +17,11 @@
 
 package org.apache.spark
 
+import java.util.concurrent.ScheduledFuture
+
 import scala.reflect.ClassTag
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -131,9 +135,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
-    if (mergerLocs != null) {
-      this.mergerLocs = mergerLocs
-    }
+    this.mergerLocs = mergerLocs
   }
 
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
@@ -160,6 +162,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergedFinalized = false
     mergerLocs = Nil
     _shuffleMergeId += 1
+    finalizeTask = None
+    shufflePushCompleted.clear()
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
@@ -169,9 +173,32 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     if (isPushShuffleEnabled && rdd.isBarrier()) {
       logWarning("Push-based shuffle is currently not supported for barrier stages")
     }
-    isPushShuffleEnabled &&
+    isPushShuffleEnabled && numPartitions > 0 &&
       // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
       !rdd.isBarrier()
+  }
+
+  @transient private[this] val shufflePushCompleted = new RoaringBitmap()
+
+  /**
+   * Mark a given map task as push completed in the tracking bitmap.
+   * Using the bitmap ensures that the same map task launched multiple times due to
+   * either speculation or stage retry is only counted once.
+   * @param mapIndex Map task index
+   * @return number of map tasks with block push completed
+   */
+  def incPushCompleted(mapIndex: Int): Int = {
+    shufflePushCompleted.add(mapIndex)
+    shufflePushCompleted.getCardinality
+  }
+
+  // Only used by DAGScheduler to coordinate shuffle merge finalization
+  @transient private[this] var finalizeTask: Option[ScheduledFuture[_]] = None
+
+  def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
+
+  def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
+    finalizeTask = Option(task)
   }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

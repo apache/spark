@@ -42,7 +42,7 @@ def _from_id(bid):
     return _broadcastRegistry[bid]
 
 
-class Broadcast(object):
+class Broadcast:
 
     """
     A broadcast variable created with :meth:`SparkContext.broadcast`.

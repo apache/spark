@@ -138,7 +138,7 @@ class SparkSession(SparkConversionMixin):
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
     """
 
-    class Builder(object):
+    class Builder:
         """Builder for :class:`SparkSession`."""
 
         _lock = RLock()
@@ -299,8 +299,11 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.context import SQLContext
 
         self._sc = sparkContext
-        self._jsc = self._sc._jsc  # type: ignore[attr-defined]
-        self._jvm = self._sc._jvm  # type: ignore[attr-defined]
+        self._jsc = self._sc._jsc
+        self._jvm = self._sc._jvm
+
+        assert self._jvm is not None
+
         if jsparkSession is None:
             if (
                 self._jvm.SparkSession.getDefaultSession().isDefined()
@@ -330,6 +333,7 @@ class SparkSession(SparkConversionMixin):
         ):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
+            assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
@@ -376,10 +380,11 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark import SparkContext
 
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
         if sc is None:
             return None
         else:
+            assert sc._jvm is not None
             if sc._jvm.SparkSession.getActiveSession().isDefined():
                 SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
                 return SparkSession._activeSession
@@ -663,13 +668,12 @@ class SparkSession(SparkConversionMixin):
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
+            assert SparkContext._jvm is not None
             if cast(str, conf.get("spark.sql.catalogImplementation", "hive")).lower() == "hive":
-                (
-                    SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()  # type: ignore[attr-defined]
-                )
+                SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
                 return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
-                return SparkSession.builder.getOrCreate()
+                return SparkSession._getActiveSessionOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
             if cast(str, conf.get("spark.sql.catalogImplementation", "")).lower() == "hive":
                 warnings.warn(
@@ -677,7 +681,18 @@ class SparkSession(SparkConversionMixin):
                     "please make sure you build spark with hive"
                 )
 
-        return SparkSession.builder.getOrCreate()
+        return SparkSession._getActiveSessionOrCreate()
+
+    @staticmethod
+    def _getActiveSessionOrCreate() -> "SparkSession":
+        """
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder,
+        or if there is no existing one, creates a new one based on the options set in the builder.
+        """
+        spark = SparkSession.getActiveSession()
+        if spark is None:
+            spark = SparkSession.builder.getOrCreate()
+        return spark
 
     @overload
     def createDataFrame(
@@ -855,6 +870,7 @@ class SparkSession(SparkConversionMixin):
         Py4JJavaError: ...
         """
         SparkSession._activeSession = self
+        assert self._jvm is not None
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
@@ -917,6 +933,7 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(map(prepare, data), schema)
+        assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(
             rdd._to_java_object_rdd()  # type: ignore[attr-defined]
         )
@@ -1096,6 +1113,7 @@ class SparkSession(SparkConversionMixin):
 
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
+        assert self._jvm is not None
         self._jvm.SparkSession.clearDefaultSession()
         self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None

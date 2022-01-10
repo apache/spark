@@ -32,6 +32,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
@@ -159,7 +160,7 @@ object ParquetUtils {
       aggregation: Aggregation,
       aggSchema: StructType,
       partitionValues: InternalRow,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value): InternalRow = {
+      datetimeRebaseSpec: RebaseSpec): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
       footer, filePath, dataSchema, partitionSchema, aggregation)
 
@@ -173,8 +174,14 @@ object ParquetUtils {
       AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
 
     val schemaConverter = new ParquetToSparkSchemaConverter
-    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, schemaWithoutGroupBy,
-      None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
+    val converter = new ParquetRowConverter(
+      schemaConverter,
+      parquetSchema,
+      schemaWithoutGroupBy,
+      None,
+      datetimeRebaseSpec,
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      NoopUpdater)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>

@@ -609,7 +609,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          writeOptions = Map.empty,
+          writeOptions = extraOptions.toMap,
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
@@ -631,7 +631,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          Map.empty,
+          writeOptions = extraOptions.toMap,
           other == SaveMode.Ignore)
     }
 

@@ -72,12 +72,6 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     return 8 + ((numFields + 63)/ 64) * 8;
   }
 
-  public static long calculateSizeOfUnderlyingByteArray(long numFields, int elementSize) {
-    long size = UnsafeArrayData.calculateHeaderPortionInBytes(numFields) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(numFields * elementSize);
-    return size;
-  }
-
   private Object baseObject;
   private long baseOffset;
 

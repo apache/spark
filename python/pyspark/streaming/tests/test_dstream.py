@@ -371,7 +371,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.ssc.start()
         try:
             self.ssc.awaitTerminationOrTimeout(10)
-        except:
+        except BaseException:
             import traceback
 
             failure = traceback.format_exc()
@@ -394,7 +394,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.ssc.start()
         try:
             self.ssc.awaitTerminationOrTimeout(10)
-        except:
+        except BaseException:
             import traceback
 
             failure = traceback.format_exc()
@@ -420,7 +420,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.assertEqual(expected, self._collect(input_stream.map(failed_func), 3))
         try:
             self.ssc.awaitTerminationOrTimeout(10)
-        except:
+        except BaseException:
             import traceback
 
             failure = traceback.format_exc()
@@ -573,7 +573,7 @@ class CheckpointTests(unittest.TestCase):
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
         try:
             self.ssc.start()
-        except:
+        except BaseException:
             import traceback
 
             failure = traceback.format_exc()

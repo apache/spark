@@ -368,11 +368,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.sqlOnlySupportedWithV1TablesError("CREATE VIEW")
       }
 
-    case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
-      resolved match {
+    case ShowViews(ns: ResolvedNamespace, pattern, output) =>
+      ns match {
         case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
-          throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
+          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
+            "SHOW VIEWS", ns.catalog.name)
       }
 
     // If target is view, force use v1 command
@@ -386,13 +387,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
 
-    case ShowFunctions(None, userScope, systemScope, pattern, output) =>
-      ShowFunctionsCommand(None, pattern, userScope, systemScope, output)
-
-    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _, output) =>
-      val funcIdentifier = identifier.asFunctionIdentifier
-      ShowFunctionsCommand(
-        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope, output)
+    case ShowFunctions(ns: ResolvedNamespace, userScope, systemScope, pattern, output) =>
+      ns match {
+        case DatabaseInSessionCatalog(db) =>
+          ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
+        case _ =>
+          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
+            "SHOW FUNCTIONS", ns.catalog.name)
+      }
 
     case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
       val funcIdentifier = identifier.asFunctionIdentifier

@@ -16,7 +16,6 @@
 #
 
 - case: varargFunctionsOverloads
-  expect_fail: true  # TODO: Remove once SPARK-37085 is resolved
   main: |
     from pyspark.sql.functions import (
       array,
@@ -55,36 +54,48 @@
     map_concat(["foo"], ["bar"])
     struct(["foo"], ["bar"])
 
+    col_names = ["foo", "bar"]
+    array(col_names)
+    struct(col_names)
+    create_map(col_names)
+    map_concat (col_names)
+
+    col_objs = [col(x) for x in col_names]
+    array(col_objs)
+    struct(col_objs)
+    create_map(col_objs)
+    map_concat(col_objs)
+
   out: |
-    main.py:29: error: No overload variant of "array" matches argument types "List[Column]", "List[Column]"
-    main.py:29: note: Possible overload variant:
-    main.py:29: note:     def array(*cols: Union[Column, str]) -> Column
-    main.py:29: note:     <1 more non-matching overload not shown>
-    main.py:30: error: No overload variant of "create_map" matches argument types "List[Column]", "List[Column]"
-    main.py:30: note: Possible overload variant:
-    main.py:30: note:     def create_map(*cols: Union[Column, str]) -> Column
-    main.py:30: note:     <1 more non-matching overload not shown>
-    main.py:31: error: No overload variant of "map_concat" matches argument types "List[Column]", "List[Column]"
-    main.py:31: note: Possible overload variant:
-    main.py:31: note:     def map_concat(*cols: Union[Column, str]) -> Column
-    main.py:31: note:     <1 more non-matching overload not shown>
-    main.py:32: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"
-    main.py:32: note: Possible overload variant:
-    main.py:32: note:     def struct(*cols: Union[Column, str]) -> Column
-    main.py:32: note:     <1 more non-matching overload not shown>
-    main.py:33: error: No overload variant of "array" matches argument types "List[str]", "List[str]"
-    main.py:33: note: Possible overload variant:
-    main.py:33: note:     def array(*cols: Union[Column, str]) -> Column
-    main.py:33: note:     <1 more non-matching overload not shown>
-    main.py:34: error: No overload variant of "create_map" matches argument types "List[str]", "List[str]"
-    main.py:34: note: Possible overload variant:
-    main.py:34: note:     def create_map(*cols: Union[Column, str]) -> Column
-    main.py:34: note:     <1 more non-matching overload not shown>
-    main.py:35: error: No overload variant of "map_concat" matches argument types "List[str]", "List[str]"
-    main.py:35: note: Possible overload variant:
-    main.py:35: note:     def map_concat(*cols: Union[Column, str]) -> Column
-    main.py:35: note:     <1 more non-matching overload not shown>
-    main.py:36: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"
-    main.py:36: note: Possible overload variant:
-    main.py:36: note:     def struct(*cols: Union[Column, str]) -> Column
-    main.py:36: note:     <1 more non-matching overload not shown>
+    main:29: error: No overload variant of "array" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:29: note: Possible overload variant:
+    main:29: note:     def array(*cols: Union[Column, str]) -> Column
+    main:29: note:     <1 more non-matching overload not shown>
+    main:30: error: No overload variant of "create_map" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:30: note: Possible overload variant:
+    main:30: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main:30: note:     <1 more non-matching overload not shown>
+    main:31: error: No overload variant of "map_concat" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:31: note: Possible overload variant:
+    main:31: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main:31: note:     <1 more non-matching overload not shown>
+    main:32: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:32: note: Possible overload variant:
+    main:32: note:     def struct(*cols: Union[Column, str]) -> Column
+    main:32: note:     <1 more non-matching overload not shown>
+    main:33: error: No overload variant of "array" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:33: note: Possible overload variant:
+    main:33: note:     def array(*cols: Union[Column, str]) -> Column
+    main:33: note:     <1 more non-matching overload not shown>
+    main:34: error: No overload variant of "create_map" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:34: note: Possible overload variant:
+    main:34: note:     def create_map(*cols: Union[Column, str]) -> Column
+    main:34: note:     <1 more non-matching overload not shown>
+    main:35: error: No overload variant of "map_concat" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:35: note: Possible overload variant:
+    main:35: note:     def map_concat(*cols: Union[Column, str]) -> Column
+    main:35: note:     <1 more non-matching overload not shown>
+    main:36: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:36: note: Possible overload variant:
+    main:36: note:     def struct(*cols: Union[Column, str]) -> Column
+    main:36: note:     <1 more non-matching overload not shown>

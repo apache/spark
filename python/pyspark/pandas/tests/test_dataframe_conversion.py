@@ -189,8 +189,7 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
             ]
             assert len(output_paths) > 0
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
-            with open(output_path) as f:
-                self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
+            self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
     @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):

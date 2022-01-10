@@ -68,7 +68,10 @@ def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))  # type: ignore[attr-defined]
-    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)  # type: ignore[attr-defined]
+    assert rdd.ctx._jvm is not None
+    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(
+        rdd._jrdd, True  # type: ignore[attr-defined]
+    )
 
 
 def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
@@ -87,7 +90,8 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
         pass
     else:
         data = bytearray(CPickleSerializer().dumps(obj))
-        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)  # type: ignore[attr-defined]
+        assert sc._jvm is not None
+        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)
     return obj
 
 
@@ -99,18 +103,20 @@ def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "byt
             r = r.toJavaRDD()
             clsName = "JavaRDD"
 
+        assert sc._jvm is not None
+
         if clsName == "JavaRDD":
-            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)  # type: ignore[attr-defined]
+            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
         if clsName == "Dataset":
             return DataFrame(r, SparkSession(sc)._wrapped)
 
         if clsName in _picklable_classes:
-            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
+            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
+                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
             except Py4JJavaError:
                 pass  # not pickable
 
@@ -130,11 +136,12 @@ def callJavaFunc(
 def callMLlibFunc(name: str, *args: Any) -> "JavaObjectOrPickleDump":
     """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
-    api = getattr(sc._jvm.PythonMLLibAPI(), name)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
 
 
-class JavaModelWrapper(object):
+class JavaModelWrapper:
     """
     Wrapper for the model in JVM
     """
@@ -144,7 +151,8 @@ class JavaModelWrapper(object):
         self._java_model = java_model
 
     def __del__(self) -> None:
-        self._sc._gateway.detach(self._java_model)  # type: ignore[attr-defined]
+        assert self._sc._gateway is not None
+        self._sc._gateway.detach(self._java_model)
 
     def call(self, name: str, *a: Any) -> "JavaObjectOrPickleDump":
         """Call method of java_model"""
