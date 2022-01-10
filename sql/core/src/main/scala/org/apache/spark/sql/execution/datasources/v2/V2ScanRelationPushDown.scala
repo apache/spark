@@ -224,10 +224,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
-    agg.aggregateExpressions().forall { aggregateFunc =>
-      !aggregateFunc.isInstanceOf[GeneralAggregateFunc] ||
-        aggregateFunc.asInstanceOf[GeneralAggregateFunc].name() == "AVG"
-    }
+    agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
   }
 
   private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =
