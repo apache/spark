@@ -310,6 +310,8 @@ private[orc] class OrcOutputWriter(
       val options = OrcFile.writerOptions(context.getConfiguration)
       options.inspector(serializer.structOI)
       writer = OrcFile.createWriter(new Path(path), options)
+      // set the writer to make it flush meta on close
+      writerField.set(recordWriter, writer)
     }
     writer
   }

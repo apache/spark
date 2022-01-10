@@ -555,7 +555,7 @@ abstract class OrcSuite
     }
   }
 
-  test("SPARK-37841: Skipping update stats for files not been created") {
+  test("SPARK-37841: Skip updating stats for files not been created") {
     withTempPath { path =>
       val logAppender = new LogAppender()
 
@@ -568,6 +568,16 @@ abstract class OrcSuite
           .contains("This could be due to the output format not writing empty files")
         }
       }
+    }
+  }
+
+  test("SPARK-37841: ORC sources write empty file with schema") {
+    withTempPath { path =>
+      val canonicalPath = path.getCanonicalPath
+      // creates an empty data set
+      spark.range(1, 1, 1, 1).write.orc(canonicalPath)
+      assert(spark.read.orc(canonicalPath).isEmpty,
+        "ORC sources shall write an empty file contains meta if necessary")
     }
   }
 }
