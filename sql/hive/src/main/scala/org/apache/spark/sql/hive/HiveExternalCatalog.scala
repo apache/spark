@@ -94,10 +94,22 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap certain
+   * Run some code involving `client` in a [[synchronized]] block and wrap non-fatal
    * exceptions thrown in the process in [[AnalysisException]].
    */
-  private def withClient[T](body: => T): T = synchronized {
+  private def withClient[T](body: => T): T = withClientWrappingException{
+    body
+  } {
+    _ => None // Will fallback to default wrapping strategy in withClientWrappingException.
+  }
+
+  /**
+   * Run some code involving `client` in a [[synchronized]] block and wrap non-fatal
+   * exceptions thrown in the process in [[AnalysisException]] using the given
+   * `wrapException` function.
+   */
+  private def withClientWrappingException[T](body: => T)
+      (wrapException: Throwable => Option[AnalysisException]): T = synchronized {
     try {
       body
     } catch {
@@ -108,8 +120,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case i: InvocationTargetException => i.getCause
           case o => o
         }
-        throw new AnalysisException(
-          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
+        wrapException(e) match {
+          case Some(wrapped) => throw wrapped
+          case None => throw new AnalysisException(
+            e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
+        }
     }
   }
 
@@ -189,14 +204,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createDatabase(
       dbDefinition: CatalogDatabase,
-      ignoreIfExists: Boolean): Unit = {
-    try {
-      withClient {
-        client.createDatabase(dbDefinition, ignoreIfExists)
-      }
-    } catch {
-      case e: AnalysisException if e.message.contains("already exists") =>
-        throw new DatabaseAlreadyExistsException(dbDefinition.name)
+      ignoreIfExists: Boolean): Unit = withClientWrappingException {
+    client.createDatabase(dbDefinition, ignoreIfExists)
+  } { exception =>
+    if (exception.getClass.getName.equals(
+          "org.apache.hadoop.hive.metastore.api.AlreadyExistsException")
+        && exception.getMessage.contains(
+          s"Database ${dbDefinition.name} already exists")) {
+      Some(new DatabaseAlreadyExistsException(dbDefinition.name))
+    } else {
+      None
     }
   }
 
