@@ -25,6 +25,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, SupportsNamespaces}
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -48,7 +49,8 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def namespaceArray: Array[String] = namespace.split('.')
 
-  protected def notFoundMsgPrefix: String
+  protected def notFoundMsgPrefix: String =
+    if (commandVersion == V1_COMMAND_VERSION) "Database" else "Namespace"
 
   test("basic") {
     val ns = s"$catalog.$namespace"
