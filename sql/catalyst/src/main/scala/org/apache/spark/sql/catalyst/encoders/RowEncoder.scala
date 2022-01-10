@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.annotation.tailrec
 import scala.collection.Map
 import scala.reflect.ClassTag
 
@@ -222,6 +223,7 @@ object RowEncoder {
     case _ => externalDataTypeFor(dt)
   }
 
+  @tailrec
   def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
     case TimestampType =>
@@ -260,6 +262,7 @@ object RowEncoder {
     deserializerFor(input, input.dataType)
   }
 
+  @tailrec
   private def deserializerFor(input: Expression, dataType: DataType): Expression = dataType match {
     case dt if ScalaReflection.isNativeType(dt) => input
 

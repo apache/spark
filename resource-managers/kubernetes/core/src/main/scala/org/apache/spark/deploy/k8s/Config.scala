@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -143,6 +144,38 @@ private[spark] object Config extends Logging {
       .version("3.3.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
+      .createWithDefault(0)
+
+  object ExecutorRollPolicy extends Enumeration {
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS = Value
+  }
+
+  val EXECUTOR_ROLL_POLICY =
+    ConfigBuilder("spark.kubernetes.executor.rollPolicy")
+      .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME (default), " +
+        "TOTAL_DURATION, and FAILED_TASKS. " +
+        "When executor roll happens, Spark uses this policy to choose " +
+        "an executor and decommission it. The built-in policies are based on executor summary." +
+        "ID policy chooses an executor with the smallest executor ID. " +
+        "ADD_TIME policy chooses an executor with the smallest add-time. " +
+        "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
+        "TOTAL_DURATION policy chooses an executor with the biggest total task time. " +
+        "AVERAGE_DURATION policy chooses an executor with the biggest average task time. " +
+        "FAILED_TASKS policy chooses an executor with the most number of failed tasks.")
+      .version("3.3.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(ExecutorRollPolicy.values.map(_.toString))
+      .createWithDefault(ExecutorRollPolicy.TOTAL_GC_TIME.toString)
+
+  val MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING =
+    ConfigBuilder("spark.kubernetes.executor.minTasksPerExecutorBeforeRolling")
+      .doc("The minimum number of tasks per executor before rolling. " +
+        "Spark will not roll executors whose total number of tasks is smaller " +
+        "than this configuration. The default value is zero.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
       .createWithDefault(0)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"

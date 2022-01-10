@@ -22,7 +22,7 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -89,7 +89,57 @@ private[spark] class AppStatusStore(
     } else {
       base
     }
-    filtered.asScala.map(_.info).filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId).toSeq
+    filtered.asScala.map(_.info)
+      .filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId)
+      .map(replaceExec).toSeq
+  }
+
+  private def replaceExec(origin: v1.ExecutorSummary): v1.ExecutorSummary = {
+    if (origin.id == SparkContext.DRIVER_IDENTIFIER) {
+      replaceDriverGcTime(origin, extractGcTime(origin), extractAppTime)
+    } else {
+      origin
+    }
+  }
+
+  private def replaceDriverGcTime(source: v1.ExecutorSummary,
+    totalGcTime: Option[Long], totalAppTime: Option[Long]): v1.ExecutorSummary = {
+    new v1.ExecutorSummary(source.id, source.hostPort, source.isActive, source.rddBlocks,
+      source.memoryUsed, source.diskUsed, source.totalCores, source.maxTasks, source.activeTasks,
+      source.failedTasks, source.completedTasks, source.totalTasks,
+      totalAppTime.getOrElse(source.totalDuration),
+      totalGcTime.getOrElse(source.totalGCTime),
+      source.totalInputBytes, source.totalShuffleRead,
+      source.totalShuffleWrite, source.isBlacklisted, source.maxMemory, source.addTime,
+      source.removeTime, source.removeReason, source.executorLogs, source.memoryMetrics,
+      source.blacklistedInStages, source.peakMemoryMetrics, source.attributes, source.resources,
+      source.resourceProfileId, source.isExcluded, source.excludedInStages)
+  }
+
+  private def extractGcTime(source: v1.ExecutorSummary): Option[Long] = {
+    source.peakMemoryMetrics.map(_.getMetricValue("TotalGCTime"))
+  }
+
+  private def extractAppTime: Option[Long] = {
+    var startTime = 0L
+    // -1 when SparkListenerApplicationStart event written to kvStore
+    // event time when SparkListenerApplicationStart event written to kvStore
+    var endTime = 0L
+    try {
+      val appInfo = applicationInfo()
+      startTime = appInfo.attempts.head.startTime.getTime()
+      endTime = appInfo.attempts.head.endTime.getTime()
+    } catch {
+      //  too early to get appInfo, should wait a while
+      case _: NoSuchElementException =>
+    }
+    if (endTime == 0) {
+      None
+    } else if (endTime < 0) {
+      Option(System.currentTimeMillis() - startTime)
+    } else {
+      Option(endTime - startTime)
+    }
   }
 
   def miscellaneousProcessList(activeOnly: Boolean): Seq[v1.ProcessSummary] = {
@@ -471,6 +521,11 @@ private[spark] class AppStatusStore(
       .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
+  def speculationSummary(stageId: Int, attemptId: Int): Option[v1.SpeculationStageSummary] = {
+    val stageKey = Array(stageId, attemptId)
+    asOption(store.read(classOf[SpeculationStageSummaryWrapper], stageKey).info)
+  }
+
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0
@@ -524,6 +579,11 @@ private[spark] class AppStatusStore(
         } else {
           None
         }
+      val speculationStageSummary: Option[v1.SpeculationStageSummary] = if (withDetail) {
+        speculationSummary(stage.stageId, stage.attemptId)
+      } else {
+        None
+      }
 
       new v1.StageData(
         status = stage.status,
@@ -572,6 +632,7 @@ private[spark] class AppStatusStore(
         accumulatorUpdates = stage.accumulatorUpdates,
         tasks = tasks,
         executorSummary = executorSummaries,
+        speculationSummary = speculationStageSummary,
         killedTasksSummary = stage.killedTasksSummary,
         resourceProfileId = stage.resourceProfileId,
         peakExecutorMetrics = stage.peakExecutorMetrics,

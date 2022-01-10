@@ -102,6 +102,7 @@ class InMemoryTable(
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
   private def getKey(row: InternalRow): Seq[Any] = {
+    @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
         schema: StructType,
@@ -160,7 +161,7 @@ class InMemoryTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
-      case BucketTransform(numBuckets, ref) =>
+      case BucketTransform(numBuckets, ref, _) =>
         val (value, dataType) = extractor(ref.fieldNames, cleanedSchema, row)
         val valueHashCode = if (value == null) 0 else value.hashCode
         ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets

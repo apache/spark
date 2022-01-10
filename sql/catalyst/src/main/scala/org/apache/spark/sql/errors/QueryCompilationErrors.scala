@@ -23,8 +23,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -479,20 +479,12 @@ object QueryCompilationErrors {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def replaceColumnsOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
-  }
-
-  def alterQualifiedColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN with qualified column is only supported with v2 tables.")
+  def operationOnlySupportedWithV2TableError(operation: String): Throwable = {
+    new AnalysisException(s"$operation is only supported with v2 tables.")
   }
 
   def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
-  }
-
-  def alterOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
   }
 
   def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
@@ -501,24 +493,8 @@ object QueryCompilationErrors {
         s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
   }
 
-  def renameColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
-  }
-
-  def dropColumnOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("DROP COLUMN is only supported with v2 tables.")
-  }
-
   def invalidDatabaseNameError(quoted: String): Throwable = {
     new AnalysisException(s"The database name is not valid: $quoted")
-  }
-
-  def replaceTableOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
-  }
-
-  def replaceTableAsSelectOnlySupportedWithV2TableError(): Throwable = {
-    new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
   }
 
   def cannotDropViewWithDropTableError(): Throwable = {
@@ -531,9 +507,8 @@ object QueryCompilationErrors {
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
-  def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
-    new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
-      "SHOW VIEWS, only SessionCatalog supports this command.")
+  def sqlOnlySupportedWithV1CatalogError(sql: String, catalog: String): Throwable = {
+    new AnalysisException(s"Catalog $catalog does not support $sql.")
   }
 
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
@@ -564,8 +539,14 @@ object QueryCompilationErrors {
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
 
-  def databaseNotEmptyError(db: String, details: String): Throwable = {
-    new AnalysisException(s"Database $db is not empty. One or more $details exist.")
+  def cannotDropNonemptyDatabaseError(db: String): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty database: $db. " +
+      "Use CASCADE option to drop a non-empty database.")
+  }
+
+  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+      "Use CASCADE option to drop a non-empty namespace.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -1382,11 +1363,6 @@ object QueryCompilationErrors {
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
-    new AnalysisException(
-      s"Cannot convert bucketing with sort columns to a transform: $spec")
   }
 
   def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
@@ -2393,5 +2369,13 @@ object QueryCompilationErrors {
 
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
+  }
+
+  def multipleSignInNumberFormatError(message: String, numberFormat: String): Throwable = {
+    new AnalysisException(s"Multiple $message in '$numberFormat'")
+  }
+
+  def nonFistOrLastCharInNumberFormatError(message: String, numberFormat: String): Throwable = {
+    new AnalysisException(s"$message must be the first or last char in '$numberFormat'")
   }
 }

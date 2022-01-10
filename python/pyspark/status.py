@@ -47,7 +47,7 @@ class SparkStageInfo(NamedTuple):
     numFailedTasks: int
 
 
-class StatusTracker(object):
+class StatusTracker:
     """
     Low-level status reporting APIs for monitoring job and stage progress.
 

@@ -400,6 +400,18 @@ private[spark] class ExecutorStageSummaryWrapper(
 
 }
 
+private[spark] class SpeculationStageSummaryWrapper(
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val info: SpeculationStageSummary) {
+
+  @JsonIgnore @KVIndex("stage")
+  private def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+  @KVIndex
+  private[this] val id: Array[Int] = Array(stageId, stageAttemptId)
+}
+
 private[spark] class StreamBlockData(
   val name: String,
   val executorId: String,

@@ -11,7 +11,7 @@
   "failedTasks" : 0,
   "completedTasks" : 0,
   "totalTasks" : 0,
-  "totalDuration" : 0,
+  "totalDuration" : 62168,
   "totalGCTime" : 0,
   "totalInputBytes" : 0,
   "totalShuffleRead" : 0,
@@ -47,7 +47,8 @@
     "MinorGCCount" : 7,
     "MinorGCTime" : 55,
     "MajorGCCount" : 3,
-    "MajorGCTime" : 144
+    "MajorGCTime" : 144,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },
@@ -106,7 +107,8 @@
     "MinorGCCount" : 24,
     "MinorGCTime" : 145,
     "MajorGCCount" : 2,
-    "MajorGCTime" : 63
+    "MajorGCTime" : 63,
+    "TotalGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-3.vpc.company.com:8042",
@@ -175,7 +177,8 @@
     "MinorGCCount" : 15,
     "MinorGCTime" : 106,
     "MajorGCCount" : 2,
-    "MajorGCTime" : 75
+    "MajorGCTime" : 75,
+    "TotalGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-4.vpc.company.com:8042",
@@ -244,7 +247,8 @@
     "MinorGCCount" : 27,
     "MinorGCTime" : 140,
     "MajorGCCount" : 2,
-    "MajorGCTime" : 60
+    "MajorGCTime" : 60,
+    "TotalGCTime" : 0
   },
   "attributes" : {
     "NM_HTTP_ADDRESS" : "test-2.vpc.company.com:8042",

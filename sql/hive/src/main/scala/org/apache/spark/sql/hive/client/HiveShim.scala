@@ -832,6 +832,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
   }
 
+  @scala.annotation.tailrec
   private def isCausedBy(e: Throwable, matchMassage: String): Boolean = {
     if (e.getMessage.contains(matchMassage)) {
       true
@@ -1144,7 +1145,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // client-side filtering cannot be used with TimeZoneAwareExpression.
     def hasTimeZoneAwareExpression(e: Expression): Boolean = {
       e.collectFirst {
-        case t: TimeZoneAwareExpression => t
+        case cast: CastBase if cast.needsTimeZone => cast
+        case tz: TimeZoneAwareExpression if !tz.isInstanceOf[CastBase] => tz
       }.isDefined
     }
 

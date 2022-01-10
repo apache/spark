@@ -28,7 +28,7 @@ from pyspark.ml.util import Identifiable
 __all__ = ["Param", "Params", "TypeConverters"]
 
 
-class Param(object):
+class Param:
     """
     A param with self-contained documentation.
 
@@ -68,7 +68,7 @@ class Param(object):
             return False
 
 
-class TypeConverters(object):
+class TypeConverters:
     """
     Factory methods for common type conversion functions for `Param.typeConverter`.
 

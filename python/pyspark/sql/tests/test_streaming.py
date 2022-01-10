@@ -373,7 +373,7 @@ class StreamingTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
-    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # Those foreach tests are failed in macOS High Sierra by defined rules
     # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
     # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):

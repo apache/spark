@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-class PandasOnSparkFrameMethods(object):
+class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
@@ -644,7 +644,7 @@ class PandasOnSparkFrameMethods(object):
                 self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
+                    self_applied, func, return_schema, retain_index=True  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -709,7 +709,7 @@ class PandasOnSparkFrameMethods(object):
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=should_retain_index
+                    self_applied, func, return_schema, retain_index=should_retain_index  # type: ignore[arg-type]
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -750,7 +750,7 @@ class PandasOnSparkFrameMethods(object):
                 return DataFrame(internal)
 
 
-class PandasOnSparkSeriesMethods(object):
+class PandasOnSparkSeriesMethods:
     """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):

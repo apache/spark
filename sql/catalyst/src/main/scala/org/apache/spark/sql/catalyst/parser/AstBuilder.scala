@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, Percentile}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1826,6 +1826,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     val arguments = Seq(Literal(ctx.field.getText), expression(ctx.source))
     UnresolvedFunction("extract", arguments, isDistinct = false)
+  }
+
+  /**
+   * Create a Percentile expression.
+   */
+  override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
+    val percentage = expression(ctx.percentage)
+    val sortOrder = visitSortItem(ctx.sortItem)
+    val percentile = sortOrder.direction match {
+      case Ascending => new Percentile(sortOrder.child, percentage)
+      case Descending => new Percentile(sortOrder.child, Subtract(Literal(1), percentage))
+    }
+    percentile.toAggregateExpression()
   }
 
   /**
@@ -4391,11 +4404,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case Some("user") => (true, false)
         case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
-    val pattern = Option(ctx.pattern).map(string(_))
-    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
-      .map(visitMultipartIdentifier)
-      .map(UnresolvedFunc(_))
-    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
+
+    val ns = Option(ctx.ns).map(visitMultipartIdentifier)
+    val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)
+    val nsPlan = if (ns.isDefined) {
+      if (legacy.isDefined) {
+        throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
+      }
+      UnresolvedNamespace(ns.get)
+    } else if (legacy.isDefined) {
+      UnresolvedNamespace(legacy.get.dropRight(1))
+    } else {
+      UnresolvedNamespace(Nil)
+    }
+    val pattern = Option(ctx.pattern).map(string).orElse(legacy.map(_.last))
+    ShowFunctions(nsPlan, userScope, systemScope, pattern)
   }
 
   /**

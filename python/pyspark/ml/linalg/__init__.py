@@ -250,7 +250,7 @@ class MatrixUDT(UserDefinedType):
         return "matrix"
 
 
-class Vector(object):
+class Vector:
 
     __UDT__ = VectorUDT()
 
@@ -795,7 +795,7 @@ class SparseVector(Vector):
         return result
 
 
-class Vectors(object):
+class Vectors:
 
     """
     Factory methods for working with vectors.
@@ -905,7 +905,7 @@ class Vectors(object):
         return all_equal
 
 
-class Matrix(object):
+class Matrix:
 
     __UDT__ = MatrixUDT()
 
@@ -1211,7 +1211,7 @@ class SparseMatrix(Matrix):
         return np.all(self.toArray() == other.toArray())
 
 
-class Matrices(object):
+class Matrices:
     @staticmethod
     def dense(numRows, numCols, values):
         """

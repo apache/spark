@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Types}
+import java.sql.{Connection, SQLException, Types}
+import java.util
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect {
+private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -163,5 +168,57 @@ private object PostgresDialect extends JdbcDialect {
     // method name
     s"TABLESAMPLE BERNOULLI" +
       s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  // CREATE INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-createindex.html
+  override def createIndex(
+      indexName: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    var indexProperties = ""
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "postgresql")
+
+    if (indexPropertyList.nonEmpty) {
+      indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
+    }
+
+    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)}" +
+      s" $indexType (${columnList.mkString(", ")}) $indexProperties"
+  }
+
+  // SHOW INDEX syntax
+  // https://www.postgresql.org/docs/14/view-pg-indexes.html
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName' AND" +
+      s" indexname = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
+  }
+
+  // DROP INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-dropindex.html
+  override def dropIndex(indexName: String, tableName: String): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)}"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
+    }
   }
 }

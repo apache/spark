@@ -311,6 +311,16 @@ case class Not(child: Expression)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(Seq(child.preCanonicalized)) match {
+      case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+      case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+      case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+      case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+      case other => other
+    }
+  }
+
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
   // +---------+-----------+
@@ -438,6 +448,15 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def foldable: Boolean = children.forall(_.foldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
+
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+    if (list.size > 1) {
+      basic.copy(list = basic.list.sortBy(_.hashCode()))
+    } else {
+      basic
+    }
+  }
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
@@ -870,6 +889,21 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   override def inputType: AbstractDataType = AnyDataType
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
+
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(children.map(_.preCanonicalized)) match {
+      case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
+      case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
+
+      case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
+      case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+
+      case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+      case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+
+      case other => other
+    }
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
