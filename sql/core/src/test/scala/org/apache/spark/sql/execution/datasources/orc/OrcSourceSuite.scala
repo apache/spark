@@ -559,7 +559,7 @@ abstract class OrcSuite
     withTempPath { path =>
       val logAppender = new LogAppender()
 
-      withLogAppender(logAppender, level = Option(Level.DEBUG)) {
+      withLogAppender(logAppender, level = Option(Level.WARN)) {
         spark.range(0, 3, 1, 4).write.orc(path.getCanonicalPath)
       }
       val events = logAppender.loggingEvents
