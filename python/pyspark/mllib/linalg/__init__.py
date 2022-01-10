@@ -63,7 +63,7 @@ try:
     import scipy.sparse
 
     _have_scipy = True
-except:
+except BaseException:
     # No SciPy in environment, but that's okay
     _have_scipy = False
 

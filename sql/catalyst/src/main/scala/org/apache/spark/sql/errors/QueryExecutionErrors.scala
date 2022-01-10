@@ -164,18 +164,36 @@ object QueryExecutionErrors {
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key)
+  }
+
+  def invalidInputIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
+  }
+
+  private def invalidArrayIndexErrorInternal(
+      index: Int,
+      numElements: Int,
+      key: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
+      messageParameters = Array(index.toString, numElements.toString, key))
+  }
+
+  def invalidElementAtIndexError(
+       index: Int,
+       numElements: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
-  def invalidInputIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_INPUT_INDEX",
-      messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
-  }
-
-  def mapKeyNotExistError(key: Any): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+  def mapKeyNotExistError(key: Any, isElementAtFunction: Boolean): NoSuchElementException = {
+    if (isElementAtFunction) {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
+        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+    } else {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
+        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key))
+    }
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {

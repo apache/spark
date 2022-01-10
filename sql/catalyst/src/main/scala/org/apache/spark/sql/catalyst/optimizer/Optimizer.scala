@@ -1615,6 +1615,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Pivot => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
+    case _: RebalancePartitions => true
     case _: ScriptTransformation => true
     case _: Sort => true
     case _: BatchEvalPython => true

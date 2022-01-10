@@ -52,6 +52,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
         ColumnOrName,
+        ColumnOrName_,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
@@ -1670,7 +1671,19 @@ def expr(str: str) -> Column:
     return Column(sc._jvm.functions.expr(str))
 
 
+@overload
 def struct(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def struct(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def struct(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new struct column.
 
     .. versionadded:: 1.4.0
@@ -1690,8 +1703,8 @@ def struct(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.struct(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -1715,12 +1728,17 @@ def greatest(*cols: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.greatest(_to_seq(sc, cols, _to_java_column)))
 
 
-def least(*cols: Column) -> Column:
+def least(*cols: "ColumnOrName") -> Column:
     """
     Returns the least value of the list of column names, skipping null values.
     This function takes at least 2 parameters. It will return null iff all parameters are null.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or columns to be compared
 
     Examples
     --------
@@ -1757,6 +1775,8 @@ def when(condition: Column, value: Any) -> Column:
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise TypeError("condition should be a Column")
     v = value._jc if isinstance(value, Column) else value
@@ -2737,12 +2757,12 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     Parameters
     ----------
-    timeColumn : :class:`~pyspark.sql.Column`
-        The column or the expression to use as the timestamp for windowing by time.
+    timeColumn : :class:`~pyspark.sql.Column` or str
+        The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType.
     gapDuration : :class:`~pyspark.sql.Column` or str
-        A column or string specifying the timeout of the session. It could be static value,
-        e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
+        A Python string literal or column specifying the timeout of the session. It could be
+        static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
 
     Examples
@@ -2884,6 +2904,13 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
 
     .. versionadded:: 3.1.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that represents the input column to test
+    errMsg : :class:`~pyspark.sql.Column` or str
+        A Python string literal or column containing the error message
+
     Examples
     --------
     >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
@@ -2913,6 +2940,11 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
 def raise_error(errMsg: Union[Column, str]) -> Column:
     """
     Throws an exception with the provided error message.
+
+    Parameters
+    ----------
+    errMsg : :class:`~pyspark.sql.Column` or str
+        A Python string literal or column containing the error message
     """
     if not isinstance(errMsg, (str, Column)):
         raise TypeError("errMsg should be a Column or a str, got {}".format(type(errMsg)))
@@ -3102,8 +3134,8 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
 def overlay(
     src: "ColumnOrName",
     replace: "ColumnOrName",
-    pos: Union[Column, int],
-    len: Union[Column, int] = -1,
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int] = -1,
 ) -> Column:
     """
     Overlay the specified portion of `src` with `replace`,
@@ -3111,15 +3143,27 @@ def overlay(
 
     .. versionadded:: 3.0.0
 
+    Parameters
+    ----------
+    src : :class:`~pyspark.sql.Column` or str
+        column name or column containing the string that will be replaced
+    replace : :class:`~pyspark.sql.Column` or str
+        column name or column containing the substitution string
+    pos : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the starting position in src
+    len : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the number of bytes to replace in src
+        string by 'replace' defaults to -1, which represents the length of the 'replace' string
+
     Examples
     --------
     >>> df = spark.createDataFrame([("SPARK_SQL", "CORE")], ("x", "y"))
-    >>> df.select(overlay("x", "y", 7).alias("overlayed")).show()
-    +----------+
-    | overlayed|
-    +----------+
-    |SPARK_CORE|
-    +----------+
+    >>> df.select(overlay("x", "y", 7).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORE')]
+    >>> df.select(overlay("x", "y", 7, 0).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_CORESQL')]
+    >>> df.select(overlay("x", "y", 7, 2).alias("overlayed")).collect()
+    [Row(overlayed='SPARK_COREL')]
     """
     if not isinstance(pos, (int, str, Column)):
         raise TypeError(
@@ -3581,7 +3625,19 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
 # ---------------------- Collection functions ------------------------------
 
 
+@overload
 def create_map(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def create_map(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def create_map(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new map column.
 
     .. versionadded:: 2.0.0
@@ -3602,8 +3658,8 @@ def create_map(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3634,7 +3690,19 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.map_from_arrays(_to_java_column(col1), _to_java_column(col2)))
 
 
+@overload
 def array(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def array(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def array(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Creates a new array column.
 
     .. versionadded:: 1.4.0
@@ -3655,8 +3723,8 @@ def array(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.array(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -3707,7 +3775,9 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
 
 
-def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, int]) -> Column:
+def slice(
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+) -> Column:
     """
     Collection function: returns an array containing  all the elements in `x` from index `start`
     (array indices start at 1, or from the end if `start` is negative) with the specified `length`.
@@ -3717,11 +3787,11 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     Parameters
     ----------
     x : :class:`~pyspark.sql.Column` or str
-        the array to be sliced
-    start : :class:`~pyspark.sql.Column` or int
-        the starting index
-    length : :class:`~pyspark.sql.Column` or int
-        the length of the slice
+        column name or column containing the array to be sliced
+    start : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the starting index
+    length : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the length of the slice
 
     Examples
     --------
@@ -3731,11 +3801,15 @@ def slice(x: "ColumnOrName", start: Union[Column, int], length: Union[Column, in
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
+
+    start = lit(start) if isinstance(start, int) else start
+    length = lit(length) if isinstance(length, int) else length
+
     return Column(
         sc._jvm.functions.slice(
             _to_java_column(x),
-            start._jc if isinstance(start, Column) else start,
-            length._jc if isinstance(length, Column) else length,
+            _to_java_column(start),
+            _to_java_column(length),
         )
     )
 
@@ -4172,12 +4246,10 @@ def from_json(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in json format
+        a column or column name in JSON format
     schema : :class:`DataType` or str
-        a StructType or ArrayType of StructType to use when parsing the json column.
-
-        .. versionchanged:: 2.3
-            the DDL-formatted string is also supported for ``schema``.
+        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+        to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
@@ -4687,11 +4759,18 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.map_from_entries(_to_java_column(col)))
 
 
-def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
+def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
     """
     Collection function: creates an array containing a column repeated count times.
 
     .. versionadded:: 2.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        column name or column that contains the element to be repeated
+    count : :class:`~pyspark.sql.Column` or str or int
+        column name, column, or int containing the number of times to repeat the first argument
 
     Examples
     --------
@@ -4701,11 +4780,10 @@ def array_repeat(col: "ColumnOrName", count: Union[Column, int]) -> Column:
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return Column(
-        sc._jvm.functions.array_repeat(
-            _to_java_column(col), _to_java_column(count) if isinstance(count, Column) else count
-        )
-    )
+
+    count = lit(count) if isinstance(count, int) else count
+
+    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), _to_java_column(count)))
 
 
 def arrays_zip(*cols: "ColumnOrName") -> Column:
@@ -4732,7 +4810,19 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     return Column(sc._jvm.functions.arrays_zip(_to_seq(sc, cols, _to_java_column)))
 
 
+@overload
 def map_concat(*cols: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def map_concat(__cols: Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]) -> Column:
+    ...
+
+
+def map_concat(
+    *cols: Union["ColumnOrName", Union[List["ColumnOrName_"], Tuple["ColumnOrName_", ...]]]
+) -> Column:
     """Returns the union of all the given maps.
 
     .. versionadded:: 2.4.0
@@ -4756,8 +4846,8 @@ def map_concat(*cols: "ColumnOrName") -> Column:
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
-        cols = cols[0]
-    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))
+        cols = cols[0]  # type: ignore[assignment]
+    jc = sc._jvm.functions.map_concat(_to_seq(sc, cols, _to_java_column))  # type: ignore[arg-type]
     return Column(jc)
 
 
@@ -4806,9 +4896,9 @@ def from_csv(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        string column in CSV format
+        a column or column name in CSV format
     schema :class:`~pyspark.sql.Column` or str
-        a string with schema in DDL format to use when parsing the CSV column.
+        a column, or Python string literal with schema in DDL format, to use when parsing the CSV column.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_

@@ -996,7 +996,7 @@ class RDD:
         This method should only be used if the resulting array is expected
         to be small, as all the data is loaded into the driver's memory.
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
@@ -1014,7 +1014,7 @@ class RDD:
             FutureWarning,
         )
 
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
@@ -2171,7 +2171,7 @@ class RDD:
 
         keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
             jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions, id(partitionFunc))
         jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
@@ -2826,7 +2826,7 @@ class RDD:
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
                 self._jrdd.rdd(), prefetchPartitions
             )
