@@ -1905,8 +1905,7 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
-      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+    new SparkIllegalArgumentException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {

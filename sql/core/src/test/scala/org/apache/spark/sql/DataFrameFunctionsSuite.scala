@@ -261,14 +261,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
 
-    def checkInvalidKeyLength(df: => DataFrame): Unit = {
-      val e = intercept[Exception] {
-        df.collect
-      }
-      assert(e.getMessage.contains(
-        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
-    }
-
     def checkUnsupportedMode(df: => DataFrame): Unit = {
       val e = intercept[SparkException] {
         df.collect
@@ -315,11 +307,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
       Seq(Row(null), Row(null)))
 
-    // Encryption failure - invalid key length
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
-
     // Unsupported AES mode and padding in encrypt
     checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"))
     checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"))
@@ -359,18 +346,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
         Seq(Row(null), Row(null)))
-    }
-
-    // Decryption failure - invalid key length
-    Seq("value16", "value24", "value32").foreach { colName =>
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary(''))"))
     }
 
     // Decryption failure - key mismatch

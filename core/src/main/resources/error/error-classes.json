@@ -159,5 +159,9 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "INVALID_AES_KEY_LENGTH" : {
+    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s"],
+    "sqlState" : "42000"
   }
 }
