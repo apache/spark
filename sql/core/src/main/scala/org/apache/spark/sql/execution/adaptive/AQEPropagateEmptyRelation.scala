@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
@@ -40,6 +41,16 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   private def getRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
+
+    case LogicalQueryStage(_, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
+      agg.child.isInstanceOf[QueryStageExec] =>
+      val stage = agg.child.asInstanceOf[QueryStageExec]
+      if (stage.isMaterialized) {
+        stage.getRuntimeStatistics.rowCount
+      } else {
+        None
+      }
+
     case _ => None
   }
 
