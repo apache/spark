@@ -52,9 +52,8 @@ trait WriteTaskStatsTracker {
   /**
    * Process the fact that a file is finished to be written and closed.
    * @param filePath Path of the file.
-   * @param isPathCreated whether path created or not
    */
-  def closeFile(filePath: String, isPathCreated: Boolean): Unit
+  def closeFile(filePath: String): Unit
 
   /**
    * Process the fact that a new row to update the tracked statistics accordingly.

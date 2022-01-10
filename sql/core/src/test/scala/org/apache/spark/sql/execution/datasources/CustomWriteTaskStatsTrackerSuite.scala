@@ -58,7 +58,7 @@ class CustomWriteTaskStatsTracker extends WriteTaskStatsTracker {
     numRowsPerFile.put(filePath, 0)
   }
 
-  override def closeFile(filePath: String, isPathCreated: Boolean): Unit = {}
+  override def closeFile(filePath: String): Unit = {}
 
   override def newRow(filePath: String, row: InternalRow): Unit = {
     numRowsPerFile(filePath) += 1

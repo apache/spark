@@ -142,13 +142,8 @@ class BasicWriteTaskStatsTracker(
     numSubmittedFiles += 1
   }
 
-  override def closeFile(filePath: String, isPathCreated: Boolean): Unit = {
-    if (isPathCreated) {
-      updateFileStats(filePath)
-    } else {
-      logDebug(s"$filePath is not pre-touched by writer, skipping update file stats")
-      numSubmittedFiles -= 1
-    }
+  override def closeFile(filePath: String): Unit = {
+    updateFileStats(filePath)
     submittedFiles.remove(filePath)
   }
 
