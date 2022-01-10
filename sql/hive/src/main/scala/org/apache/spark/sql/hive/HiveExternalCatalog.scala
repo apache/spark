@@ -97,7 +97,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Run some code involving `client` in a [[synchronized]] block and wrap non-fatal
    * exceptions thrown in the process in [[AnalysisException]].
    */
-  private def withClient[T](body: => T): T = withClientWrappingException{
+  private def withClient[T](body: => T): T = withClientWrappingException {
     body
   } {
     _ => None // Will fallback to default wrapping strategy in withClientWrappingException.
