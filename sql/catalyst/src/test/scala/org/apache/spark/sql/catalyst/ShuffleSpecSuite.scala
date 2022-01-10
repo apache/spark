@@ -350,10 +350,10 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   test("canCreatePartitioning") {
     val distribution = ClusteredDistribution(Seq($"a", $"b"))
-    withSQLConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS.key -> "false") {
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
       assert(HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution).canCreatePartitioning)
     }
-    withSQLConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS.key -> "true") {
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
       assert(!HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution)
         .canCreatePartitioning)
       assert(HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10), distribution)

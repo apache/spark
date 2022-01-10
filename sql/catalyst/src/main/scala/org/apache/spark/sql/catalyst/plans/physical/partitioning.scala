@@ -473,8 +473,11 @@ case class HashShuffleSpec(
     // the hash partition keys are not the full join keys (the cluster keys). Then the planner
     // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
     // the join keys.
-    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS)) {
-      distribution.clustering.forall(x => partitioning.expressions.exists(_.semanticEquals(x)))
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      partitioning.expressions.length == distribution.clustering.length &&
+        partitioning.expressions.zip(distribution.clustering).forall {
+          case (l, r) => l.semanticEquals(r)
+        }
     } else {
       true
     }

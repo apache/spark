@@ -140,7 +140,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   private def applyEnsureRequirementsWithSubsetKeys(plan: SparkPlan): SparkPlan = {
     var res: SparkPlan = null
-    withSQLConf(SQLConf.REQUIRE_ALL_JOIN_KEYS_AS_PARTITION_KEYS.key -> "false") {
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
       res = EnsureRequirements.apply(plan)
     }
     res
