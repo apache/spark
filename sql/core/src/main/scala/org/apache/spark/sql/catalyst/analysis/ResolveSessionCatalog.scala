@@ -366,15 +366,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           replace = replace,
           viewType = PersistedView)
       } else {
-        throw QueryCompilationErrors.sqlOnlySupportedWithV1TablesError("CREATE VIEW")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
       }
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
         case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
-          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
-            "SHOW VIEWS", ns.catalog.name)
+          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "views")
       }
 
     // If target is view, force use v1 command
@@ -392,7 +391,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       if (isSessionCatalog(catalog)) {
         DescribeFunctionCommand(func.asInstanceOf[V1Function].info, extended)
       } else {
-        throw QueryCompilationErrors.unsupportedOperationInV2CatalogError("DESCRIBE FUNCTION")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "functions")
       }
 
     case ShowFunctions(ns: ResolvedNamespace, userScope, systemScope, pattern, output) =>
@@ -400,8 +399,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         case DatabaseInSessionCatalog(db) =>
           ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
         case _ =>
-          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
-            "SHOW FUNCTIONS", ns.catalog.name)
+          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "functions")
       }
 
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
@@ -409,7 +407,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         val funcIdentifier = identifier.asFunctionIdentifier
         DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, false)
       } else {
-        throw QueryCompilationErrors.unsupportedOperationInV2CatalogError("DROP FUNCTION")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "DROP FUNCTION")
       }
 
     case RefreshFunction(ResolvedPersistentFunc(catalog, identifier, _)) =>
@@ -417,7 +415,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         val funcIdentifier = identifier.asFunctionIdentifier
         RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
       } else {
-        throw QueryCompilationErrors.unsupportedOperationInV2CatalogError("REFRESH FUNCTION")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "REFRESH FUNCTION")
       }
 
     case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
@@ -439,7 +437,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           ignoreIfExists,
           replace)
       } else {
-        throw QueryCompilationErrors.unsupportedOperationInV2CatalogError("CREATE FUNCTION")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
       }
   }
 

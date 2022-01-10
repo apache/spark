@@ -515,10 +515,6 @@ object QueryCompilationErrors {
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
-  def sqlOnlySupportedWithV1CatalogError(sql: String, catalog: String): Throwable = {
-    new AnalysisException(s"Catalog $catalog does not support $sql.")
-  }
-
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
@@ -1393,10 +1389,6 @@ object QueryCompilationErrors {
 
   def emptyMultipartIdentifierError(): Throwable = {
     new AnalysisException("multi-part identifier cannot be empty.")
-  }
-
-  def unsupportedOperationInV2CatalogError(operation: String): Throwable = {
-    new AnalysisException(s"$operation is only supported in v1 catalog.")
   }
 
   def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {

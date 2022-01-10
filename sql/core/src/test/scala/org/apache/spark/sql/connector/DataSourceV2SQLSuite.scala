@@ -1089,7 +1089,7 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM testcat")
     }
 
-    assert(exception.getMessage.contains("Catalog testcat does not support SHOW VIEWS"))
+    assert(exception.getMessage.contains("Catalog testcat does not support views"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2010,7 +2010,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"CREATE VIEW $v AS SELECT 1")
     }
-    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
+    assert(e.message.contains("Catalog testcat does not support views"))
   }
 
   test("global temp view should not be masked by v2 catalog") {

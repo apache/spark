@@ -224,8 +224,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("invalidateTable") {
@@ -740,8 +739,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("renameTable: fail if new table name already exists") {

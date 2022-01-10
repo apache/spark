@@ -125,7 +125,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
+    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
+    assert(e.message.contains("Undefined function: abcadf. This function is neither a " +
+      "built-in/temporary function, nor a persistent function"))
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {

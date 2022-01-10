@@ -61,7 +61,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val e = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION testcat.abc")
     }
-    assert(e.message.contains("DESCRIBE FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("Catalog testcat does not support functions"))
 
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
@@ -75,7 +75,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val e = intercept[AnalysisException] {
       sql(s"SHOW FUNCTIONS LIKE testcat.abc")
     }
-    assert(e.message.contains("SHOW FUNCTIONS is only supported in v1 catalog"))
+    assert(e.message.contains("Catalog testcat does not support functions"))
   }
 
   test("DROP FUNCTION: only support session catalog") {
@@ -84,7 +84,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val e = intercept[AnalysisException] {
       sql("DROP FUNCTION testcat.abc")
     }
-    assert(e.message.contains("DROP FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("Catalog testcat does not support DROP FUNCTION"))
 
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
@@ -96,7 +96,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val e = intercept[AnalysisException] {
       sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
     }
-    assert(e.message.contains("CREATE FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("Catalog testcat does not support CREATE FUNCTION"))
 
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
@@ -110,7 +110,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val e = intercept[AnalysisException] {
       sql("REFRESH FUNCTION testcat.abc")
     }
-    assert(e.message.contains("REFRESH FUNCTION is only supported in v1 catalog"))
+    assert(e.message.contains("Catalog testcat does not support REFRESH FUNCTION"))
 
     val e1 = intercept[AnalysisException] {
       sql("REFRESH FUNCTION default.ns1.ns2.fun")
