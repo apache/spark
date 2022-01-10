@@ -28,7 +28,6 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
-import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -118,12 +117,6 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
-    }
-  }
-
-  private def findTopLevelBaeAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
-    collect(plan) {
-      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -1417,21 +1410,17 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key")
-      assert(findTopLevelBaeAggregate(plan1).size == 2)
       assert(!plan1.isInstanceOf[LocalTableScanExec])
       assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key limit 1")
-      assert(findTopLevelBaeAggregate(plan2).size == 2)
       assert(!plan2.isInstanceOf[LocalTableScanExec])
       assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
 
       val (plan3, adaptivePlan3) = runAdaptiveAndVerifyResult(
         "SELECT count(*) FROM testData WHERE value = 'no_match'")
-      assert(findTopLevelBaeAggregate(plan3).size == 2)
       assert(!plan3.isInstanceOf[LocalTableScanExec])
-      assert(findTopLevelBaeAggregate(adaptivePlan3).size == 2)
       assert(!stripAQEPlan(adaptivePlan3).isInstanceOf[LocalTableScanExec])
     }
   }

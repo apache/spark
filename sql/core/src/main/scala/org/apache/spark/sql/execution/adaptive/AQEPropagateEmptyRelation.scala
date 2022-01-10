@@ -38,6 +38,10 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
 
+  // The returned value follows:
+  //   - 0 means the plan must produce 0 row
+  //   - positive value means an estimated row count which can be over-estimated
+  //   - none means the plan has not materialized or the plan can not be estimated
   private def getEstimatedRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
