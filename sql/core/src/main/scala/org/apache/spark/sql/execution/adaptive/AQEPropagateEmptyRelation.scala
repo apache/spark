@@ -33,12 +33,12 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
-    super.isEmpty(plan) || getRowCount(plan).contains(0)
+    super.isEmpty(plan) || getEstimatedRowCount(plan).contains(0)
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
-    super.nonEmpty(plan) || getRowCount(plan).exists(_ > 0)
+    super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
 
-  private def getRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
+  private def getEstimatedRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
 

@@ -1418,17 +1418,21 @@ class AdaptiveQueryExecSuite
       val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key")
       assert(findTopLevelBaeAggregate(plan1).size == 2)
+      assert(!plan1.isInstanceOf[LocalTableScanExec])
       assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key limit 1")
       assert(findTopLevelBaeAggregate(plan2).size == 2)
+      assert(!plan2.isInstanceOf[LocalTableScanExec])
       assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
 
       val (plan3, adaptivePlan3) = runAdaptiveAndVerifyResult(
         "SELECT count(*) FROM testData WHERE value = 'no_match'")
       assert(findTopLevelBaeAggregate(plan3).size == 2)
+      assert(!plan3.isInstanceOf[LocalTableScanExec])
       assert(findTopLevelBaeAggregate(adaptivePlan3).size == 2)
+      assert(!stripAQEPlan(adaptivePlan3).isInstanceOf[LocalTableScanExec])
     }
   }
 
