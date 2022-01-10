@@ -305,7 +305,8 @@ private[orc] class OrcOutputWriter(
     writerField.setAccessible(true)
     var writer = writerField.get(recordWriter).asInstanceOf[Writer]
     if (writer == null) {
-      // For empty record, the inter writer will not be initialized
+      // Hive ORC initializes its private `writer` field at the first write.
+      // For empty write task, we need to create it manually to record our meta.
       val options = OrcFile.writerOptions(context.getConfiguration)
       options.inspector(serializer.structOI)
       writer = OrcFile.createWriter(new Path(path), options)
