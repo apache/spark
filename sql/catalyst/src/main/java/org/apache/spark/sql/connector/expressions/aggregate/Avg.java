@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 /**
  * An aggregate function that returns the mean of all the values in a group.
  *
- * @since 3.2.0
+ * @since 3.3.0
  */
 @Evolving
 public final class Avg implements AggregateFunc {
