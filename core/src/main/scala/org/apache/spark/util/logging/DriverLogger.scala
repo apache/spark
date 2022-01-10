@@ -62,6 +62,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     }
     val config = logger.getContext.getConfiguration()
     def log4jFileAppender() = {
+      // SPARK-37853: We can't use the chained API invocation mode because
+      // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
       val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
       builder.withAppend(false)
       builder.withBufferedIo(false)
