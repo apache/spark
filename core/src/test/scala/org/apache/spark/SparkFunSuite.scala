@@ -21,17 +21,15 @@ package org.apache.spark
 import java.io.File
 import java.nio.file.Path
 import java.util.{Locale, TimeZone}
-
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.config.Property
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
-
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -265,7 +263,7 @@ abstract class SparkFunSuite
   }
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
-      extends AbstractAppender("logAppender", null, null) {
+      extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
     private val _loggingEvents = new ArrayBuffer[LogEvent]()
     private var _threshold: Level = Level.INFO
 
