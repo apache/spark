@@ -50,6 +50,7 @@ class NumberUtilsSuite extends SparkFunSuite {
     Seq(
       ("454", "999") -> Decimal(454),
       ("054", "999") -> Decimal(54),
+      ("54", "999") -> Decimal(54),
       ("404", "999") -> Decimal(404),
       ("450", "999") -> Decimal(450),
       ("454", "9999") -> Decimal(454),
@@ -70,6 +71,7 @@ class NumberUtilsSuite extends SparkFunSuite {
     Seq(
       ("454", "000") -> Decimal(454),
       ("054", "000") -> Decimal(54),
+      ("54", "000") -> Decimal(54),
       ("404", "000") -> Decimal(404),
       ("450", "000") -> Decimal(450),
       ("454", "0000") -> Decimal(454),

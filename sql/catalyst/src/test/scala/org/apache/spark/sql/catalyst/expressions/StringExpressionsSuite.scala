@@ -932,6 +932,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       ("454", "000") -> Decimal(454),
       ("054", "000") -> Decimal(54),
+      ("54", "000") -> Decimal(54),
       ("404", "000") -> Decimal(404),
       ("450", "000") -> Decimal(450),
       ("454", "0000") -> Decimal(454),

@@ -190,8 +190,8 @@ object NumberUtils {
    * '0': digit position (will not be dropped, even if insignificant)
    * '.' or 'D': decimal point (only allowed once)
    * ',' or 'G': group (thousands) separator
-   * '-' or 'S': sign anchored to number
-   * '$': returns value with a leading dollar sign
+   * '-' or 'S': sign anchored to number (only allowed once)
+   * '$': value with a leading dollar sign (only allowed once)
    *
    * @param input the decimal to format
    * @param numberFormat the format string
@@ -207,8 +207,8 @@ object NumberUtils {
     if (decimalPlainStr.length > transformedFormat.length) {
       transformedFormat.replaceAll("0", POUND_SIGN_STRING)
     } else {
-      val decimalFormat = new DecimalFormat(transformedFormat)
-      var resultStr = decimalFormat.format(bigDecimal)
+      numberDecimalFormat.applyLocalizedPattern(transformedFormat)
+      var resultStr = numberDecimalFormat.format(bigDecimal)
       // Since we trimmed the comma at the beginning or end of number format in function
       // `normalize`, we restore the comma to the result here.
       // For example, if the specified number format is "99,999," or ",999,999", function
