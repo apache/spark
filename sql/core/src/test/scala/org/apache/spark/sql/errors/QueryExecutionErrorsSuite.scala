@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkCryptoException, SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -90,5 +90,19 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
+  }
+
+  test("SPARK-37858: AES crypto failure - key mismatch") {
+    val (_, df2) = getAesInputs()
+    Seq(
+      ("value16", "1234567812345678"),
+      ("value24", "123456781234567812345678"),
+      ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
+      val e = intercept[SparkException] {
+        df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+      }.getCause
+      assert(e.isInstanceOf[SparkCryptoException])
+      assert(e.getMessage.contains("AES crypto operation failed"))
+    }
   }
 }

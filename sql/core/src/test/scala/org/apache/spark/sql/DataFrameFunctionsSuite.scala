@@ -251,9 +251,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
-    val dummyKey16 = "1234567812345678"
-    val dummyKey24 = "123456781234567812345678"
-    val dummyKey32 = "12345678123456781234567812345678"
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
     val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
     val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
@@ -334,18 +331,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
         Seq(Row(null), Row(null)))
-    }
-
-    // Decryption failure - key mismatch
-    Seq(
-      ("value16", dummyKey16),
-      ("value24", dummyKey24),
-      ("value32", dummyKey32)).foreach {
-      case (colName, key) =>
-        val e = intercept[Exception] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
-        }
-        assert(e.getMessage.contains("BadPaddingException"))
     }
   }
 
