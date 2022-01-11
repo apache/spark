@@ -72,4 +72,52 @@ class ResolveUnionSuite extends AnalysisTest {
     val expected3 = Union(table1 :: projected2 :: projected3 :: Nil)
     comparePlans(analyzed3, expected3)
   }
+
+  test("SPARK-37865: add alias when the first child of union has duplicate columns") {
+    val table1 = LocalRelation(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("b", IntegerType)())
+    val table2 = LocalRelation(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("b", IntegerType)())
+    val rules = Seq(ResolveUnion)
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", Once, rules: _*))
+    }
+    // only the first child of union has duplicate attributes
+    val left1 = Project(Seq(table1.output(0), table1.output(0)), table1)
+    val right1 = Project(Seq(table2.output(0), table2.output(1)), table2)
+    val union1 = Union(left1 :: right1 :: Nil)
+    val analyzed1 = analyzer.execute(union1)
+    val expectedLeft1 = Project(
+      Seq(
+        Alias(table1.output(0), table1.output(0).name)(),
+        Alias(table1.output(0), table1.output(0).name)()),
+      left1)
+    val expected1 = Union(expectedLeft1 :: right1 :: Nil)
+    comparePlans(analyzed1, expected1)
+
+    // only the second child of union has duplicate attributes
+    val left2 = Project(Seq(table1.output(0), table1.output(1)), table1)
+    val right2 = Project(Seq(table2.output(0), table2.output(0)), table2)
+
+    val union2 = Union(left2 :: right2 :: Nil)
+    val analyzed2 = analyzer.execute(union2)
+    val expected2 = Union(left2 :: right2 :: Nil)
+    comparePlans(analyzed2, expected2)
+
+    // both sides of union has duplicate attributes
+    val left3 = Project(Seq(table1.output(0), table1.output(0)), table1)
+    val right3 = Project(Seq(table2.output(1), table2.output(1)), table2)
+
+    val union3 = Union(left3 :: right3 :: Nil)
+    val analyzed3 = analyzer.execute(union3)
+    val expectedLeft3 = Project(
+      Seq(
+        Alias(table1.output(0), table1.output(0).name)(),
+        Alias(table1.output(0), table1.output(0).name)()),
+      left3)
+    val expected3 = Union(expectedLeft3 :: right3 :: Nil)
+    comparePlans(analyzed3, expected3)
+  }
 }

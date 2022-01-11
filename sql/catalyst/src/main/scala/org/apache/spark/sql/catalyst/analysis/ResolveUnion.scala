@@ -208,6 +208,17 @@ object ResolveUnion extends Rule[LogicalPlan] {
     _.containsPattern(UNION), ruleId) {
     case e if !e.childrenResolved => e
 
+    case Union(children, false, false)
+        // the first child of Union has duplicate columns
+        if children.head.output.distinct.length < children.head.output.length =>
+      val union = children.reduceLeft { (left, right) =>
+        val projectList = left.output.map { attr =>
+          Alias(attr, attr.name)()
+        }
+        Union(Project(projectList, left), right)
+      }
+      CombineUnions(union)
+
     case Union(children, byName, allowMissingCol) if byName =>
       val union = children.reduceLeft { (left, right) =>
         checkColumnNames(left, right)
