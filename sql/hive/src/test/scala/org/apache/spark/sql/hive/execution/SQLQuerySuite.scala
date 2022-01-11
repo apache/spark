@@ -2440,6 +2440,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("test") {
       val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
       try {
