@@ -837,18 +837,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     } else if (delta < 0) {
       // Consume as if |delta| had been allocated
       var c = -delta
-      try {
-        while (c > 0) {
-          val h = times.dequeue
-          if (h._1 > c) {
-            // Prepend updated first req to times, constant time op
-            ((h._1 - c, h._2)) +=: times
-          } else {
-            c = c - h._1
-          }
+      // Note: it's possible that something else allocated an executor and we have
+      // a negative delta, we can just avoid mutating the queue.
+      while (c > 0 && !times.isEmpty) {
+        val h = times.dequeue
+        if (h._1 > c) {
+          // Prepend updated first req to times, constant time op
+          ((h._1 - c, h._2)) +=: times
+        } else {
+          c = c - h._1
         }
-      } catch {
-        case e: Exception => // Ignore
       }
     }
   }
