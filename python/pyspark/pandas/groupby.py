@@ -2359,7 +2359,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             stat_function = F.countDistinct
         else:
 
-            def stat_function(col: Column) -> Column:
+            def stat_function(col: Union[Column, str]) -> Column:
                 return F.countDistinct(col) + F.when(
                     F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
                 ).otherwise(0)
