@@ -290,7 +290,8 @@ compute.eager_check             True                    'compute.eager_check' se
                                                         `Series.asof`, `Series.compare`,
                                                         `FractionalExtensionOps.astype`,
                                                         `IntegralExtensionOps.astype`,
-                                                        `FractionalOps.astype`, `DecimalOps.astype`.
+                                                        `FractionalOps.astype`, `DecimalOps.astype`,
+                                                        `LocIndexer._select_cols_by_iterable`.
 compute.isin_limit              80                      'compute.isin_limit' sets the limit for filtering by
                                                         'Column.isin(list)'. If the length of the ‘list’ is
                                                         above the limit, broadcast join is used instead for

@@ -204,7 +204,7 @@ _options: List[Option] = [
             "pandas-on-Spark skip the validation and will be slightly different from pandas. "
             "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
             "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
-            "`FractionalOps.astype`, `DecimalOps.astype`."
+            "`FractionalOps.astype`, `DecimalOps.astype`, `LocIndexer._select_cols_by_iterable`."
         ),
         default=True,
         types=bool,

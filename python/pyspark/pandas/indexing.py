@@ -32,6 +32,7 @@ import numpy as np
 
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
+from pyspark.pandas.config import get_option
 from pyspark.pandas.internal import (
     DEFAULT_SERIES_NAME,
     InternalField,
@@ -1311,7 +1312,9 @@ class LocIndexer(LocIndexerLike):
                     % (len(cast(Sized, cols_sel)), len(self._internal.column_labels))
                 )
             if isinstance(cols_sel, pd.Series):
-                if not cols_sel.index.sort_values().equals(self._psdf.columns.sort_values()):
+                if get_option("compute.eager_check") and not cols_sel.index.sort_values().equals(
+                    self._psdf.columns.sort_values()
+                ):
                     raise SparkPandasIndexingError(
                         "Unalignable boolean Series provided as indexer "
                         "(index of the boolean Series and of the indexed object do not match)"

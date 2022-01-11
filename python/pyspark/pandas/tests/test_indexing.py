@@ -34,6 +34,24 @@ class BasicIndexingTest(ComparisonTestBase):
             {"month": [1, 4, 7, 10], "year": [2012, 2014, 2013, 2014], "sale": [55, 40, 84, 31]}
         )
 
+    def test_indexing_with_eager_check(self):
+        series = pd.Series(data=[True, True, False], index=["month", "year", "sale"])
+        self.assert_eq(self.pdf.loc[:, ["month", "year"]], self.psdf.loc[:, series])
+
+        series = pd.Series(data=[True, True, False], index=["month", "year", "wrong_key"])
+        with ps.option_context("compute.eager_check", True):
+            self.assertRaisesRegex(
+                SparkPandasIndexingError,
+                "Unalignable boolean Series provided as indexer",
+                lambda: self.psdf.loc[:, series],
+            )
+        with ps.option_context("compute.eager_check", False):
+            self.assertRaisesRegex(
+                KeyError,
+                "sale",
+                lambda: self.psdf.loc[:, series],
+            )
+
     @compare_both(almost=False)
     def test_indexing(self, df):
         df1 = df.set_index("month")
