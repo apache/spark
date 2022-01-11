@@ -71,6 +71,10 @@
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
+  "INVALID_AES_KEY_LENGTH" : {
+    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
@@ -137,6 +141,10 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AES_MODE" : {
+    "message" : [ "The AES mode %s with the padding %s is not supported" ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
@@ -159,13 +167,5 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
-  },
-  "INVALID_AES_KEY_LENGTH" : {
-    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
-    "sqlState" : "42000"
-  },
-  "UNSUPPORTED_AES_MODE" : {
-    "message" : [ "The AES mode %s with the padding %s is not supported" ],
-    "sqlState" : "42000"
   }
 }
