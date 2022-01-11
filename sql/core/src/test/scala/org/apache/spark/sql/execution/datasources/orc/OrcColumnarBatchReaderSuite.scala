@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.TypeDescription
+
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
