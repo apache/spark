@@ -2356,10 +2356,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Name: value1, dtype: int64
         """
         if dropna:
-            stat_function = F.countDistinct
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col)
+
         else:
 
-            def stat_function(col: Union[Column, str]) -> Column:
+            def stat_function(col: Column) -> Column:
                 return F.countDistinct(col) + F.when(
                     F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
                 ).otherwise(0)
