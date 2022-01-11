@@ -95,7 +95,6 @@ jobs:
           echo '::set-output name=envs::{"SKIP_MIMA": "true", "SKIP_UNIDOC": "true"}'
           echo '::set-output name=hadoop::hadoop3'
         else
-          echo ' sup'
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
