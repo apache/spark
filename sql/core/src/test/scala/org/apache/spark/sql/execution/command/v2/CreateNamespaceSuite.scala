@@ -24,5 +24,4 @@ import org.apache.spark.sql.execution.command
  */
 class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
-  override def notFoundMsgPrefix: String = "Namespace"
 }

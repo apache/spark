@@ -21,9 +21,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, SupportsNamespaces}
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -47,9 +49,8 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def namespaceArray: Array[String] = namespace.split('.')
 
-  protected def notFoundMsgPrefix: String
-
-  protected def alreadyExistErrorMessage: String = s"$notFoundMsgPrefix '$namespace' already exists"
+  protected def notFoundMsgPrefix: String =
+    if (commandVersion == V1_COMMAND_VERSION) "Database" else "Namespace"
 
   test("basic") {
     val ns = s"$catalog.$namespace"
@@ -88,12 +89,10 @@ trait CreateNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE $ns")
 
-      // TODO: HiveExternalCatalog throws DatabaseAlreadyExistsException, and
-      //   non-Hive catalogs throw NamespaceAlreadyExistsException.
-      val e = intercept[AnalysisException] {
+      val e = intercept[NamespaceAlreadyExistsException] {
         sql(s"CREATE NAMESPACE $ns")
       }
-      assert(e.getMessage.contains(alreadyExistErrorMessage))
+      assert(e.getMessage.contains(s"$notFoundMsgPrefix '$namespace' already exists"))
 
       // The following will be no-op since the namespace already exists.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")
