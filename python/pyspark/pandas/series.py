@@ -47,7 +47,11 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_list_like,
+    is_hashable,
+    CategoricalDtype,
+)
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -444,7 +448,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkSeriesMethods)  # type: ignore[assignment]
+    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
+        "spark", SparkSeriesMethods
+    )
 
     @property
     def dtypes(self) -> Dtype:
@@ -6423,12 +6429,12 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
     Takes a dataframe that is supposed to contain a single row with a single scalar value,
     and returns this value.
     """
-    l = cast(pd.DataFrame, sdf.limit(2).toPandas())
-    assert len(l) == 1, (sdf, l)
-    row = l.iloc[0]
-    l2 = list(row)
-    assert len(l2) == 1, (row, l2)
-    return l2[0]
+    lst = cast(pd.DataFrame, sdf.limit(2).toPandas())
+    assert len(lst) == 1, (sdf, lst)
+    row = lst.iloc[0]
+    lst2 = list(row)
+    assert len(lst2) == 1, (row, lst2)
+    return lst2[0]
 
 
 @overload

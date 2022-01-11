@@ -19,11 +19,14 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 
+import org.apache.spark.tags.SlowHiveTest
+
 
 /**
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
+@SlowHiveTest
 class BigDataBenchmarkSuite extends HiveComparisonTest {
   import org.apache.spark.sql.hive.test.TestHive.sparkSession._
 

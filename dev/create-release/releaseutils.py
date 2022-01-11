@@ -24,6 +24,7 @@ from subprocess import Popen, PIPE
 
 try:
     from jira.client import JIRA  # noqa: F401
+
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -111,11 +112,16 @@ def get_commits(tag):
     commit_start_marker = "|=== COMMIT START MARKER ===|"
     commit_end_marker = "|=== COMMIT END MARKER ===|"
     field_end_marker = "|=== COMMIT FIELD END MARKER ===|"
-    log_format =\
-        commit_start_marker + "%h" +\
-        field_end_marker + "%an" +\
-        field_end_marker + "%s" +\
-        commit_end_marker + "%b"
+    log_format = (
+        commit_start_marker
+        + "%h"
+        + field_end_marker
+        + "%an"
+        + field_end_marker
+        + "%s"
+        + commit_end_marker
+        + "%b"
+    )
     output = run_cmd(["git", "log", "--quiet", "--pretty=format:" + log_format, tag])
     commits = []
     raw_commits = [c for c in output.split(commit_start_marker) if c]
@@ -147,6 +153,7 @@ def get_commits(tag):
         commits.append(commit)
     return commits
 
+
 # Maintain a mapping for translating issue types to contributions in the release notes
 # This serves an additional function of warning the user against unknown issue types
 # Note: This list is partially derived from this link:
@@ -161,7 +168,7 @@ known_issue_types = {
     "documentation": "documentation",
     "test": "test",
     "task": "improvement",
-    "sub-task": "improvement"
+    "sub-task": "improvement",
 }
 
 # Maintain a mapping for translating component names when creating the release notes
@@ -192,7 +199,7 @@ known_components = {
     "streaming": "Streaming",
     "web ui": "Web UI",
     "windows": "Windows",
-    "yarn": "YARN"
+    "yarn": "YARN",
 }
 
 
@@ -203,7 +210,7 @@ def translate_issue_type(issue_type, issue_id, warnings):
     if issue_type in known_issue_types:
         return known_issue_types[issue_type]
     else:
-        warnings.append("Unknown issue type \"%s\" (see %s)" % (issue_type, issue_id))
+        warnings.append('Unknown issue type "%s" (see %s)' % (issue_type, issue_id))
         return issue_type
 
 
@@ -214,7 +221,7 @@ def translate_component(component, commit_hash, warnings):
     if component in known_components:
         return known_components[component]
     else:
-        warnings.append("Unknown component \"%s\" (see %s)" % (component, commit_hash))
+        warnings.append('Unknown component "%s" (see %s)' % (component, commit_hash))
         return component
 
 
@@ -222,8 +229,9 @@ def translate_component(component, commit_hash, warnings):
 # The returned components are already filtered and translated
 def find_components(commit, commit_hash):
     components = re.findall(r"\[\w*\]", commit.lower())
-    components = [translate_component(c, commit_hash, [])
-                  for c in components if c in known_components]
+    components = [
+        translate_component(c, commit_hash, []) for c in components if c in known_components
+    ]
     return components
 
 

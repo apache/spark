@@ -670,9 +670,7 @@ class SparkSession(SparkConversionMixin):
             conf = SparkConf()
             assert SparkContext._jvm is not None
             if cast(str, conf.get("spark.sql.catalogImplementation", "hive")).lower() == "hive":
-                (
-                    SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()  # type: ignore[attr-defined]
-                )
+                SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
                 return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
                 return SparkSession._getActiveSessionOrCreate()

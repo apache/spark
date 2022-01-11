@@ -5825,8 +5825,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         pdf = psdf.to_pandas()
         # NOTE: Set `datetime_is_numeric=True` for pandas:
-        # FutureWarning: Treating datetime data as categorical rather than numeric in `.describe` is deprecated
-        # and will be removed in a future version of pandas. Specify `datetime_is_numeric=True` to silence this
+        # FutureWarning: Treating datetime data as categorical rather than numeric in
+        # `.describe` is deprecated and will be removed in a future version of pandas.
+        # Specify `datetime_is_numeric=True` to silence this
         # warning and adopt the future behavior now.
         # NOTE: Compare the result except percentiles, since we use approximate percentile
         # so the result is different from pandas.

@@ -209,7 +209,7 @@ class SparkContext:
                 profiler_cls,
                 udf_profiler_cls,
             )
-        except:
+        except BaseException:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
@@ -289,7 +289,8 @@ class SparkContext:
         # they will be passed back to us through a TCP server
         assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
-        self._accumulatorServer = accumulators._start_update_server(auth_token)  # type: ignore[attr-defined]
+        start_update_server = accumulators._start_update_server  # type: ignore[attr-defined]
+        self._accumulatorServer = start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
         assert self._jvm is not None
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
@@ -364,7 +365,9 @@ class SparkContext:
             raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
-        if isinstance(threading.current_thread(), threading._MainThread):  # type: ignore[attr-defined]
+        if isinstance(
+            threading.current_thread(), threading._MainThread  # type: ignore[attr-defined]
+        ):
             signal.signal(signal.SIGINT, signal_handler)
 
     def __repr__(self) -> str:
@@ -657,7 +660,9 @@ class SparkContext:
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)  # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))  # type: ignore[arg-type]
+        batchSize = max(
+            1, min(len(c) // numSlices, self._batchSize or 1024)  # type: ignore[arg-type]
+        )
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 
         def reader_func(temp_filename: str) -> JavaObject:
@@ -1160,7 +1165,10 @@ class SparkContext:
         ['Hello', 'World!']
         """
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
-        if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):  # type: ignore[attr-defined]
+        if any(
+            x._jrdd_deserializer != first_jrdd_deserializer  # type: ignore[attr-defined]
+            for x in rdds
+        ):
             rdds = [x._reserialize() for x in rdds]  # type: ignore[attr-defined]
         gw = SparkContext._gateway
         assert gw is not None
@@ -1181,7 +1189,9 @@ class SparkContext:
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
             jrdds[i] = rdds[i]._jrdd  # type: ignore[attr-defined]
-        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)  # type: ignore[attr-defined]
+        return RDD(
+            self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
+        )
 
     def broadcast(self, value: T) -> "Broadcast[T]":
         """
@@ -1438,8 +1448,12 @@ class SparkContext:
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
         assert self._jvm is not None
-        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)  # type: ignore[attr-defined]
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))  # type: ignore[attr-defined]
+        sock_info = self._jvm.PythonRDD.runJob(
+            self._jsc.sc(), mappedRDD._jrdd, partitions  # type: ignore[attr-defined]
+        )
+        return list(
+            _load_from_socket(sock_info, mappedRDD._jrdd_deserializer)  # type: ignore[attr-defined]
+        )
 
     def show_profiles(self) -> None:
         """Print the profile stats to stdout"""

@@ -351,6 +351,10 @@ private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
     LogicalExpressions.parseReference(column)
   }
+
+  def column(name: String) : NamedReference = {
+    FieldReference(Seq(name))
+  }
 }
 
 private[sql] final case class SortValue(

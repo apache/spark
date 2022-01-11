@@ -379,7 +379,7 @@ class PersistenceTest(SparkSessionTestCase):
         )
 
         lr = LogisticRegressionCls(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        OneVsRest(classifier=lr)
 
         def reload_and_compare(ovr, suffix):
             model = ovr.fit(df)
