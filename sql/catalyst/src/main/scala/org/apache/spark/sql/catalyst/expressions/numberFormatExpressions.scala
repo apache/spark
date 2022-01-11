@@ -33,11 +33,11 @@ import org.apache.spark.unsafe.types.UTF8String
   usage = """
      _FUNC_(strExpr, formatExpr) - Convert `strExpr` to a number based on the `formatExpr`.
        The format can consist of the following characters:
-         '0' or '9': digit position
+         '0' or '9':  digit position
          '.' or 'D':  decimal point (only allowed once)
          ',' or 'G':  group (thousands) separator
-         '-' or 'S':  sign anchored to number
-         '$': returns value with a leading dollar sign
+         '-' or 'S':  sign anchored to number (only allowed once)
+         '$':  value with a leading dollar sign (only allowed once)
   """,
   examples = """
     Examples:
@@ -89,14 +89,15 @@ case class ToNumber(left: Expression, right: Expression)
     val builder =
       ctx.addReferenceObj("builder", numberFormatBuilder, classOf[NumberFormatBuilder].getName)
     val eval = left.genCode(ctx)
-    ev.copy(code = code"""
-      ${eval.code}
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $builder.parse(${eval.value});
-      }
-    """)
+    ev.copy(code =
+      code"""
+        |${eval.code}
+        |boolean ${ev.isNull} = ${eval.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $builder.parse(${eval.value});
+        |}
+      """.stripMargin)
   }
 
   override protected def withNewChildrenInternal(

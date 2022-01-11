@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.math.BigDecimal
-import java.text.{DecimalFormat, NumberFormat, ParsePosition}
+import java.text.{DecimalFormat, ParsePosition}
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
@@ -45,9 +45,15 @@ object NumberUtils {
 
   private final val SIGN_SET = Set(POINT_SIGN, COMMA_SIGN, MINUS_SIGN, DOLLAR_SIGN)
 
+  private lazy val numberDecimalFormat = {
+    val decimalFormat = new DecimalFormat()
+    decimalFormat.setParseBigDecimal(true)
+    decimalFormat
+  }
+
   /**
    * DecimalFormat provides '#' and '0' as placeholder of digit, ',' as grouping separator,
-   * '.' as decimal separator, '-' as minus, '$' as dollar, but '9', 'G', 'D', 'S'. So we need
+   * '.' as decimal separator, '-' as minus, '$' as dollar, but not '9', 'G', 'D', 'S'. So we need
    * replace them show below:
    * 1. '9' -> '#'
    * 2. 'G' -> ','
@@ -56,7 +62,7 @@ object NumberUtils {
    *
    * Note: When calling format, we must preserve the digits after decimal point, so the digits
    * after decimal point should be replaced as '0'. For example: '999.9' will be normalized as
-   * '###.0' and '999.99' will be normalized as '###.00', so if the input is 454, so the format
+   * '###.0' and '999.99' will be normalized as '###.00', so if the input is 454, the format
    * output will be 454.0 and 454.00 respectively.
    *
    * @param format number format string
@@ -138,11 +144,11 @@ object NumberUtils {
    * '0' or '9': digit position
    * '.' or 'D': decimal point (only allowed once)
    * ',' or 'G': group (thousands) separator
-   * '-' or 'S': sign anchored to number
-   * '$': returns value with a leading dollar sign
+   * '-' or 'S': sign anchored to number (only allowed once)
+   * '$': value with a leading dollar sign (only allowed once)
    *
    * @param input the string need to converted
-   * @param numberFormat the given number format
+   * @param originNumberFormat the origin number format
    * @param normalizedNumberFormat normalized number format
    * @param precision decimal precision
    * @param scale decimal scale
@@ -150,7 +156,7 @@ object NumberUtils {
    */
   private def parse(
       input: UTF8String,
-      numberFormat: String,
+      originNumberFormat: String,
       normalizedNumberFormat: String,
       precision: Int,
       scale: Int): Decimal = {
@@ -158,23 +164,19 @@ object NumberUtils {
     val inputSplits = inputStr.split(POINT_SIGN)
     if (inputSplits.length == 1) {
       if (inputStr.filterNot(isSign).length > precision - scale) {
-        throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
       }
     } else if (inputSplits(0).filterNot(isSign).length > precision - scale ||
       inputSplits(1).filterNot(isSign).length > scale) {
-      throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+      throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
     }
 
     val transformedFormat = transform(normalizedNumberFormat)
-    val numberFormatInstance = NumberFormat.getNumberInstance(Locale.ROOT)
-    assert(numberFormatInstance.isInstanceOf[DecimalFormat])
-    val numberDecimalFormat = numberFormatInstance.asInstanceOf[DecimalFormat]
-    numberDecimalFormat.setParseBigDecimal(true)
     try {
       numberDecimalFormat.applyLocalizedPattern(transformedFormat)
     } catch {
       case _: IllegalArgumentException =>
-        throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
     }
     val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
     assert(number.isInstanceOf[BigDecimal])
