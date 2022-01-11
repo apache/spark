@@ -294,12 +294,14 @@ public class VectorizedColumnReader {
       case DELTA_BINARY_PACKED:
         return new VectorizedDeltaBinaryPackedReader();
       case RLE:
-        PrimitiveType.PrimitiveTypeName typeName = this.descriptor.getPrimitiveType().getPrimitiveTypeName();
+        PrimitiveType.PrimitiveTypeName typeName =
+          this.descriptor.getPrimitiveType().getPrimitiveTypeName();
         // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
         if (typeName == BOOLEAN) {
           return new VectorizedRleValuesReader(1);
         } else {
-          throw new UnsupportedOperationException("RLE encoding is not supported for values of type: " + typeName);
+          throw new UnsupportedOperationException(
+            "RLE encoding is not supported for values of type: " + typeName);
         }
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
