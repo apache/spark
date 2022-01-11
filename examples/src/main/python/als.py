@@ -96,7 +96,6 @@ if __name__ == "__main__":
         us_ = sc.parallelize(range(U), partitions) \
             .map(lambda x: update(x, msb.value, Rb.value.T)) \
             .collect()
-
         us = matrix(np.array(us_)[:, :, 0])
         usb = sc.broadcast(us)
 
