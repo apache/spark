@@ -249,6 +249,24 @@ class ResourceProfile(
       rp.executorResources("cores") == executorResources("cores")
   }
 
+  private[spark] def resourcesCompatible(rp: ResourceProfile,
+    isCompatibleFunc: (ResourceProfile, ResourceProfile) => Boolean = isCompatibleExecutorsDefault)
+  : Boolean = {
+    isCompatibleFunc(this, rp)
+  }
+
+  private def isCompatibleExecutorsDefault(prevRP: ResourceProfile,
+                                           curRP: ResourceProfile ): Boolean = {
+    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
+      prevRP.executorResources("cores") == curRP.executorResources("cores")
+  }
+
+  private def isCompatibleExecutorsLarger(prevRP: ResourceProfile,
+                                          curRP: ResourceProfile ): Boolean = {
+    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
+      prevRP.executorResources("cores") == curRP.executorResources("cores")
+  }
+
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
 
   override def toString(): String = {

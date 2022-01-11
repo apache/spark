@@ -39,6 +39,7 @@ import org.apache.spark.util.Utils.isTesting
 private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     listenerBus: LiveListenerBus) extends Logging {
   private val resourceProfileIdToResourceProfile = new HashMap[Int, ResourceProfile]()
+  private val resourceProfileIdToCompatibleResourceProfileIds = new HashMap[Int, Set[Int]]()
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -84,6 +85,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     try {
       if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
         val prev = resourceProfileIdToResourceProfile.put(rp.id, rp)
+        computeCompatibleProfileIds()
         if (prev.isEmpty) putNewProfile = true
       }
     } finally {
@@ -146,13 +148,34 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    * Get all compatible profile IDs excluding itself
    */
   def getOtherCompatibleProfileIds(rpId: Int): Set[Int] = {
-    val resourceProfile = resourceProfileFromId(rpId)
+//    val resourceProfile = resourceProfileFromId(rpId)
+//    readLock.lock()
+//    try {
+//      resourceProfileIdToResourceProfile.filter { case (id: Int, rpEntry: ResourceProfile) =>
+//        id != rpId && rpEntry.resourcesCompatible(resourceProfile)
+//      }.map(_._1).toSet
+//    } finally {
+//      readLock.unlock()
+//    }
+    resourceProfileIdToCompatibleResourceProfileIds.getOrElse(rpId, null)
+  }
+
+  def computeCompatibleProfileIds(): Unit = {
     readLock.lock()
     try {
-      resourceProfileIdToResourceProfile.filter { case (id: Int, rpEntry: ResourceProfile) =>
-        id != rpId && rpEntry.resourcesCompatible(resourceProfile)
-      }.map(_._1).toSet
+      resourceProfileIdToResourceProfile.foreach {
+        case (id: Int, rpEntry: ResourceProfile) =>
+          val resourceProfile = resourceProfileFromId(id)
+          val compatibleIdSet = resourceProfileIdToResourceProfile.filter {
+            case (otherId: Int, _: ResourceProfile) =>
+              id != otherId && rpEntry.resourcesCompatible(resourceProfile)
+          }.map(_._1).toSet
+          writeLock.lock()
+          resourceProfileIdToCompatibleResourceProfileIds.put(id, compatibleIdSet)
+          writeLock.unlock()
+      }
     } finally {
+      writeLock.unlock()
       readLock.unlock()
     }
   }
