@@ -24,10 +24,12 @@ import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A test suite for Hive view related functionality.
  */
+@SlowHiveTest
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   import testImplicits._
 

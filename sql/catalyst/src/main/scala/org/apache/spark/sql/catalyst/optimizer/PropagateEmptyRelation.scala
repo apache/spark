@@ -28,14 +28,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TRUE_OR_
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
  * empty or non-empty relations:
- *  1. Binary-node Logical Plans
+ *  1. Higher-node Logical Plans
+ *     - Union with all empty children.
+ *  2. Binary-node Logical Plans
  *     - Join with one or two empty children (including Intersect/Except).
  *     - Left semi Join
  *       Right side is non-empty and condition is empty. Eliminate join to its left side.
  *     - Left anti join
  *       Right side is non-empty and condition is empty. Eliminate join to an empty
  *       [[LocalRelation]].
- *  2. Unary-node Logical Plans
+ *  3. Unary-node Logical Plans
+ *     - Project/Filter/Sample with all empty children.
  *     - Limit/Repartition with all empty children.
  *     - Aggregate with all empty children and at least one grouping expression.
  *     - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
@@ -59,6 +62,31 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
   protected def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case p: Union if p.children.exists(isEmpty) =>
+      val newChildren = p.children.filterNot(isEmpty)
+      if (newChildren.isEmpty) {
+        empty(p)
+      } else {
+        val newPlan = if (newChildren.size > 1) Union(newChildren) else newChildren.head
+        val outputs = newPlan.output.zip(p.output)
+        // the original Union may produce different output attributes than the new one so we alias
+        // them if needed
+        if (outputs.forall { case (newAttr, oldAttr) => newAttr.exprId == oldAttr.exprId }) {
+          newPlan
+        } else {
+          val newOutput = outputs.map { case (newAttr, oldAttr) =>
+            if (newAttr.exprId == oldAttr.exprId) {
+              newAttr
+            } else {
+              val newExplicitMetadata =
+                if (oldAttr.metadata != newAttr.metadata) Some(oldAttr.metadata) else None
+              Alias(newAttr, oldAttr.name)(oldAttr.exprId, explicitMetadata = newExplicitMetadata)
+            }
+          }
+          Project(newOutput, newPlan)
+        }
+      }
+
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
@@ -98,7 +126,13 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         p
       }
 
+    // the only case can be matched here is that LogicalQueryStage is empty
+    case p: LeafNode if !p.isInstanceOf[LocalRelation] && isEmpty(p) => empty(p)
+
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
+      case _: Project => empty(p)
+      case _: Filter => empty(p)
+      case _: Sample => empty(p)
       case _: Sort => empty(p)
       case _: GlobalLimit if !p.isStreaming => empty(p)
       case _: LocalLimit if !p.isStreaming => empty(p)
@@ -128,53 +162,11 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 }
 
 /**
- * This rule runs in the normal optimizer and optimizes more cases
- * compared to [[PropagateEmptyRelationBase]]:
- * 1. Higher-node Logical Plans
- *    - Union with all empty children.
- * 2. Unary-node Logical Plans
- *    - Project/Filter/Sample with all empty children.
- *
- * The reason why we don't apply this rule at AQE optimizer side is: the benefit is not big enough
- * and it may introduce extra exchanges.
+ * This rule runs in the normal optimizer
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
-  private def applyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case p: Union if p.children.exists(isEmpty) =>
-      val newChildren = p.children.filterNot(isEmpty)
-      if (newChildren.isEmpty) {
-        empty(p)
-      } else {
-        val newPlan = if (newChildren.size > 1) Union(newChildren) else newChildren.head
-        val outputs = newPlan.output.zip(p.output)
-        // the original Union may produce different output attributes than the new one so we alias
-        // them if needed
-        if (outputs.forall { case (newAttr, oldAttr) => newAttr.exprId == oldAttr.exprId }) {
-          newPlan
-        } else {
-          val outputAliases = outputs.map { case (newAttr, oldAttr) =>
-            val newExplicitMetadata =
-              if (oldAttr.metadata != newAttr.metadata) Some(oldAttr.metadata) else None
-            Alias(newAttr, oldAttr.name)(oldAttr.exprId, explicitMetadata = newExplicitMetadata)
-          }
-          Project(outputAliases, newPlan)
-        }
-      }
-
-    case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) && canPropagate(p) =>
-      empty(p)
-  }
-
-  // extract the pattern avoid conflict with commonApplyFunc
-  private def canPropagate(plan: LogicalPlan): Boolean = plan match {
-    case _: Project => true
-    case _: Filter => true
-    case _: Sample => true
-    case _ => false
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
-    applyFunc.orElse(commonApplyFunc)
+    commonApplyFunc
   }
 }
