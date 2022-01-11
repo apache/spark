@@ -275,6 +275,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: dropDatabase") {
       assert(client.databaseExists("temporary"))
+      client.createTable(table("temporary", tableName = "tbl"), ignoreIfExists = false)
+      try {
+        client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = false)
+        assert(false, "dropDatabase should throw HiveException")
+      } catch {
+        case ex: Throwable =>
+          assert(ex.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException"))
+          assert(ex.getMessage.contains("Database temporary is not empty"))
+      }
+
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
       assert(client.databaseExists("temporary") == false)
     }

@@ -220,15 +220,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
-      cascade: Boolean): Unit = withClient {
-    try {
-      client.dropDatabase(db, ignoreIfNotExists, cascade)
-    } catch {
-      case NonFatal(exception) =>
-        if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
-          && exception.getMessage.contains(s"Database $db is not empty.")) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
-        } else throw exception
+      cascade: Boolean): Unit = withClientWrappingException {
+    client.dropDatabase(db, ignoreIfNotExists, cascade)
+  } { exception =>
+    if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
+        && exception.getMessage.contains(s"Database $db is not empty")) {
+      throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
+    } else {
+      None
     }
   }
 
