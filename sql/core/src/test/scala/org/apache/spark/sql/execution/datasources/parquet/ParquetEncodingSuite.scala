@@ -182,4 +182,40 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       }
     }
   }
+
+  test("parquet v2 pages - rle encoding for boolean value columns") {
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/test.parquet"
+        val size = 10000
+        val data = (1 to size).map { i => (true, false, i % 2 == 1) }
+
+        spark.createDataFrame(data)
+          .write.options(extraOptions).mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+        // Verify that indeed rle encoding is used for each column
+        assert(columnChunkMetadataList.length === 3)
+        assert(columnChunkMetadataList.head.getEncodings.contains(Encoding.RLE))
+        assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.RLE))
+        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.RLE))
+
+        val actual = spark.read.parquet(path).collect()
+        assert(actual.length == size)
+        assert(actual.map(_.getBoolean(0)).forall(_ == true))
+        assert(actual.map(_.getBoolean(1)).forall(_ == false))
+        val excepted = (1 to size).map { i => i % 2 == 1 }
+        assert(actual.map(_.getBoolean(2)).sameElements(excepted))
+      }
+    }
+  }
 }
