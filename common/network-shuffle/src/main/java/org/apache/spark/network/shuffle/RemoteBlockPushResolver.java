@@ -796,7 +796,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         AppShuffleMergePartitionsInfo appShuffleMergePartitionsInfo,
         int shuffleMergeId) {
       return null == appShuffleMergePartitionsInfo ||
-             appShuffleMergePartitionsInfo.shuffleMergeId > shuffleMergeId;
+        appShuffleMergePartitionsInfo.shuffleMergeId > shuffleMergeId;
     }
 
     /**
