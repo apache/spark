@@ -3433,10 +3433,10 @@ def merge_asof(
     data_columns = []
     column_labels = []
 
-    def left_scol_for(label: Union[Label, Column]) -> Column:
+    def left_scol_for(label: Label) -> Column:
         return scol_for(as_of_joined_table, left_internal.spark_column_name_for(label))
 
-    def right_scol_for(label: Union[Label, Column]) -> Column:
+    def right_scol_for(label: Label) -> Column:
         return scol_for(as_of_joined_table, right_internal.spark_column_name_for(label))
 
     for label in left_internal.column_labels:

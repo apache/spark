@@ -2438,9 +2438,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-
-            def func(*args: Any, **kwargs: Any) -> Any:
-                return f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         axis = validate_axis(axis)
         should_return_series = False
@@ -2693,9 +2694,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-
-            def func(*args: Any, **kwargs: Any) -> "Series":
-                return f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         axis = validate_axis(axis)
         if axis != 0:
@@ -7766,10 +7768,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_columns = []
         column_labels = []
 
-        def left_scol_for(label: Union[Label, Column]) -> Column:
+        def left_scol_for(label: Label) -> Column:
             return scol_for(left_table, left_internal.spark_column_name_for(label))
 
-        def right_scol_for(label: Union[Label, Column]) -> Column:
+        def right_scol_for(label: Label) -> Column:
             return scol_for(right_table, right_internal.spark_column_name_for(label))
 
         for label in left_internal.column_labels:

@@ -335,6 +335,9 @@ class PandasOnSparkFrameMethods:
         if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
             func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         spec = inspect.getfullargspec(func)
@@ -902,9 +905,10 @@ class PandasOnSparkSeriesMethods:
 
         if not isinstance(func, FunctionType):
             f = func
-
-            def func(*args: Any, **kwargs: Any) -> pd.Series:
-                return f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         if return_type is None:
             # TODO: In this case, it avoids the shortcut for now (but only infers schema)
