@@ -1183,7 +1183,7 @@ class SparkContext:
             jrdds[i] = rdds[i]._jrdd  # type: ignore[attr-defined]
         return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)  # type: ignore[attr-defined]
 
-    def broadcast(self, value: T) -> "Broadcast":
+    def broadcast(self, value: T) -> "Broadcast[T]":
         """
         Broadcast a read-only variable to the cluster, returning a :class:`Broadcast`
         object for reading it in distributed functions. The variable will
