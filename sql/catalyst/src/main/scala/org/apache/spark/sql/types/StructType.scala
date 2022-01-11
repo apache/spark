@@ -508,15 +508,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
 
-  private[sql] def withoutMetadata: StructType = {
-    val newFields = fields.map {
-      case StructField(name, dataType, nullable, metadata) =>
-        StructField(name, dataType, nullable, Metadata.empty)
-    }
-
-    StructType(newFields)
-  }
-
   @transient
   private[sql] lazy val interpretedOrdering =
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
