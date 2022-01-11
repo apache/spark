@@ -3612,14 +3612,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
-
-            def asc_func(scol: Column) -> Column:
-                return scol.asc()
-
+            asc_func = Column.asc
         else:
-
-            def asc_func(scol: Column) -> Column:
-                return scol.desc()
+            asc_func = Column.desc
 
         if method == "first":
             window = (
