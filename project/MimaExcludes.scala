@@ -36,6 +36,19 @@ object MimaExcludes {
 
   // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
+    // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
+    // The followings are necessary for Scala 2.13.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$"),
+
+    // [SPARK-37391][SQL] JdbcConnectionProvider tells if it modifies security context
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
+
+    // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
+    // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this")
   )
 
   // Exclude rules for 3.2.x from 3.1.1

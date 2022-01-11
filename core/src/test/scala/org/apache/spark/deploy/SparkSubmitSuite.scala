@@ -55,7 +55,7 @@ trait TestPrematureExit {
 
   /** Simple PrintStream that reads data into a buffer */
   private class BufferPrintStream extends PrintStream(noOpOutputStream) {
-    var lineBuffer = ArrayBuffer[String]()
+    val lineBuffer = ArrayBuffer[String]()
     // scalastyle:off println
     override def println(line: String): Unit = {
       lineBuffer += line

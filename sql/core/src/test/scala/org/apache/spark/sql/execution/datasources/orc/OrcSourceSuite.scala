@@ -485,12 +485,10 @@ abstract class OrcSuite
   }
 
   test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
-          Row(java.sql.Date.valueOf("1200-01-01")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+        Row(java.sql.Date.valueOf("1200-01-01")))
     }
   }
 
@@ -502,23 +500,19 @@ abstract class OrcSuite
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
-        }
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
       }
     }
   }
 
   test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
-    Seq(false, true).foreach { vectorized =>
-      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        checkAnswer(
-          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
-          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
-      }
+    withAllNativeOrcReaders {
+      checkAnswer(
+        readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+        Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
     }
   }
 
@@ -530,14 +524,12 @@ abstract class OrcSuite
         .write
         .orc(path)
 
-      Seq(false, true).foreach { vectorized =>
-        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          checkAnswer(
-            spark.read.orc(path),
-            Seq(
-              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
-              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
-        }
+      withAllNativeOrcReaders {
+        checkAnswer(
+          spark.read.orc(path),
+          Seq(
+            Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+            Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
       }
     }
   }
@@ -809,11 +801,12 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
-  Seq(true, false).foreach { vecReaderEnabled =>
+  withAllNativeOrcReaders {
     Seq(true, false).foreach { vecReaderNestedColEnabled =>
+      val vecReaderEnabled = SQLConf.get.orcVectorizedReaderEnabled
       test("SPARK-36931: Support reading and writing ANSI intervals (" +
-      s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
-      s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
+        s"${SQLConf.ORC_VECTORIZED_READER_ENABLED.key}=$vecReaderEnabled, " +
+        s"${SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key}=$vecReaderNestedColEnabled)") {
 
         withSQLConf(
           SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
@@ -846,6 +839,154 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
             df.write.orc(file.getCanonicalPath)
             val df2 = spark.read.orc(file.getCanonicalPath)
             checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37812: Reuse result row when deserializing a struct") {
+    val queries = Seq(
+      // struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    'ns2',
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4)
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a1', 1,
+        |      'a2', 2),
+        |    1,
+        |    named_struct(
+        |      'a1', 3,
+        |      'a2', 4),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct in an array
+      """SELECT
+        |  array(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct as values in a map
+      """SELECT
+        |  map(
+        |    'ns1',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    'ns2',
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    )
+        |  ) as col1
+        |""".stripMargin,
+
+      // struct in a struct as keys in a map
+      """SELECT
+        |  map(
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 1,
+        |        'a2', 2),
+        |      'b', named_struct(
+        |        'b1', 3,
+        |        'b2', 4)
+        |    ),
+        |    1,
+        |    named_struct(
+        |      'a', named_struct(
+        |        'a1', 5,
+        |        'a2', 6),
+        |      'b', named_struct(
+        |        'b1', 7,
+        |        'b2', 8)
+        |    ),
+        |    2
+        |  ) as col1
+        |""".stripMargin,
+
+      // multi-row test
+      """SELECT * FROM VALUES
+        |  (named_struct(
+        |    'a', 1,
+        |    'b', 2)),
+        |  (named_struct(
+        |    'a', 3,
+        |    'b', 4)),
+        |  (named_struct(
+        |    'a', 5,
+        |    'b', 6))
+        |tbl(c1)
+        |""".stripMargin
+    )
+
+    queries.foreach { query =>
+      withAllNativeOrcReaders {
+        Seq(true, false).foreach { vecReaderNestedColEnabled =>
+          // SPARK-37812 only applies to the configuration where
+          // ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED is false. However, these
+          // are good general correctness tests for the other configurations as well.
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key ->
+            vecReaderNestedColEnabled.toString) {
+            withTempPath { file =>
+              val df = sql(query)
+              // use coalesce so we write just 1 file for the multi-row case
+              df.coalesce(1).write.orc(file.getCanonicalPath)
+              val df2 = spark.read.orc(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
           }
         }
       }

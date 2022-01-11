@@ -135,7 +135,7 @@ object PartitioningUtils extends SQLConfHelper{
       Map.empty[String, String]
     }
 
-    val dateFormatter = DateFormatter()
+    val dateFormatter = DateFormatter(DateFormatter.defaultPattern)
     val timestampFormatter = TimestampFormatter(
       timestampPartitionPattern,
       zoneId,
@@ -544,6 +544,8 @@ object PartitioningUtils extends SQLConfHelper{
       }.getOrElse {
         Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
       }
+    case it: AnsiIntervalType =>
+      Cast(Literal(unescapePathName(value)), it).eval()
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 

@@ -928,7 +928,8 @@
         "MinorGCCount" : 0,
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
-        "MajorGCTime" : 0
+        "MajorGCTime" : 0,
+        "TotalGCTime" : 0
       },
       "isExcludedForStage" : false
     },
@@ -968,7 +969,8 @@
         "MinorGCCount" : 13,
         "MinorGCTime" : 115,
         "MajorGCCount" : 4,
-        "MajorGCTime" : 339
+        "MajorGCTime" : 339,
+        "TotalGCTime" : 0
       },
       "isExcludedForStage" : false
     }
@@ -995,6 +997,7 @@
     "MinorGCCount" : 13,
     "MinorGCTime" : 115,
     "MajorGCCount" : 4,
-    "MajorGCTime" : 339
+    "MajorGCTime" : 339,
+    "TotalGCTime" : 0
   }
 }

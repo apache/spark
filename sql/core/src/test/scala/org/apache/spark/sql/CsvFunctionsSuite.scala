@@ -368,4 +368,15 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       .selectExpr("value.a")
     checkAnswer(fromCsvDF, Row(localDT))
   }
+
+  test("SPARK-37326: Handle incorrectly formatted timestamp_ntz values in from_csv") {
+    val fromCsvDF = Seq("2021-08-12T15:16:23.000+11:00").toDF("csv")
+      .select(
+        from_csv(
+          $"csv",
+          StructType(StructField("a", TimestampNTZType) :: Nil),
+          Map.empty[String, String]) as "value")
+      .selectExpr("value.a")
+    checkAnswer(fromCsvDF, Row(null))
+  }
 }

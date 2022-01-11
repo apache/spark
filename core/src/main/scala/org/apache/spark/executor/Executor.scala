@@ -886,6 +886,8 @@ private[spark] class Executor(
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }
+    logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
+        urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
       new ChildFirstURLClassLoader(urls, currentLoader)
     } else {
@@ -1041,6 +1043,7 @@ private[spark] object Executor {
    *                     checking only the exception but not the cause, and so on. This is to avoid
    *                     `StackOverflowError` when hitting a cycle in the exception chain.
    */
+  @scala.annotation.tailrec
   def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
     if (depthToCheck <= 0) {
       false

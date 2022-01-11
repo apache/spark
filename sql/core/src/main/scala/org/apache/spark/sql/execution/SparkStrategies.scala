@@ -266,11 +266,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
-          .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
-          .orElse(createShuffleHashJoin(true))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastHashJoin(true)
+            .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
+            .orElse(createShuffleHashJoin(true))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
@@ -339,10 +343,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
-
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
@@ -755,6 +762,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child) =>
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
+      case logical.PythonMapInArrow(func, output, child) =>
+        execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>

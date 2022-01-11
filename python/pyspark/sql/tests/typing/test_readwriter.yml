@@ -1,0 +1,45 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: readWriterOptions
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    spark.read.option("foo", 1)
+    spark.createDataFrame([(1, 2)], ["foo", "bar"]).write.option("bar", True)
+
+    spark.read.load(foo=True)
+
+    spark.read.load(foo=["a"])  # E: Argument "foo" to "load" of "DataFrameReader" has incompatible type "List[str]"; expected "Union[bool, float, int, str, None]"  [arg-type]
+    spark.read.option("foo", (1, ))  # E: Argument 2 to "option" of "DataFrameReader" has incompatible type "Tuple[int]"; expected "Union[bool, float, int, str, None]"  [arg-type]
+
+
+- case: readStreamOptions
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    spark.read.option("foo", True).option("foo", 1).option("foo", 1.0).option("foo", "1").option("foo", None)
+    spark.readStream.option("foo", True).option("foo", 1).option("foo", 1.0).option("foo", "1").option("foo", None)
+
+    spark.read.options(foo=True, bar=1).options(foo=1.0, bar="1", baz=None)
+    spark.readStream.options(foo=True, bar=1).options(foo=1.0, bar="1", baz=None)
+
+    spark.readStream.load(foo=True)

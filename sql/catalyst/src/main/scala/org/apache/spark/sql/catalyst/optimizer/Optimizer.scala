@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{RepartitionOperation, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -87,6 +87,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
+        GenerateOptimization,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -99,6 +100,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
+        NullDownPropagation,
         ConstantPropagation,
         FoldablePropagation,
         OptimizeIn,
@@ -106,6 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
+        NotPropagation,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,
@@ -423,6 +426,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case _: BitAndAgg => true
     case _: BitOrAgg => true
     case _: CollectSet => true
+    case _: First => true
+    case _: Last => true
     case _ => false
   }
 }
@@ -979,6 +984,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       }
   }
 
+  @scala.annotation.tailrec
   private def isExtractOnly(expr: Expression, ref: Attribute): Boolean = expr match {
     case a: Alias => isExtractOnly(a.child, ref)
     case e: ExtractValue => isExtractOnly(e.children.head, ref)
@@ -1057,10 +1063,10 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
       case _ => r.copy(child = child.child)
     }
-    // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
-    // we can remove the child.
-    case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
-      r.copy(child = child.child)
+    // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or
+    // RepartitionByExpression we can remove the child.
+    case r @ RepartitionByExpression(_, child @ (Sort(_, true, _) | _: RepartitionOperation), _) =>
+      r.withNewChildren(child.children)
   }
 }
 
@@ -1165,24 +1171,29 @@ object TransposeWindow extends Rule[LogicalPlan] {
 object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(GENERATE)) {
-    // This rule does not infer filters from foldable expressions to avoid constant filters
-    // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
-    // then the idempotence will break.
-    case generate @ Generate(e, _, _, _, _, _)
-      if !e.deterministic || e.children.forall(_.foldable) ||
-        e.children.exists(_.isInstanceOf[UserDefinedExpression]) => generate
-
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
-      // Exclude child's constraints to guarantee idempotency
-      val inferredFilters = ExpressionSet(
-        Seq(
-          GreaterThan(Size(g.children.head), Literal(0)),
-          IsNotNull(g.children.head)
-        )
-      ) -- generate.child.constraints
+      assert(g.children.length == 1)
+      val input = g.children.head
+      // Generating extra predicates here has overheads/risks:
+      //   - We may evaluate expensive input expressions multiple times.
+      //   - We may infer too many constraints later.
+      //   - The input expression may fail to be evaluated under ANSI mode. If we reorder the
+      //     predicates and evaluate the input expression first, we may fail the query unexpectedly.
+      // To be safe, here we only generate extra predicates if the input is an attribute.
+      // Note that, foldable input is also excluded here, to avoid constant filters like
+      // 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and then the
+      // idempotence will break.
+      if (input.isInstanceOf[Attribute]) {
+        // Exclude child's constraints to guarantee idempotency
+        val inferredFilters = ExpressionSet(
+          Seq(GreaterThan(Size(input), Literal(0)), IsNotNull(input))
+        ) -- generate.child.constraints
 
-      if (inferredFilters.nonEmpty) {
-        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+        if (inferredFilters.nonEmpty) {
+          generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+        } else {
+          generate
+        }
       } else {
         generate
       }
@@ -2156,6 +2167,42 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
         a.copy(groupingExpressions = Seq(Literal(0, IntegerType)))
       }
   }
+}
+
+/**
+ * Prunes unnecessary fields from a [[Generate]] if it is under a project which does not refer
+ * any generated attributes, .e.g., count-like aggregation on an exploded array.
+ */
+object GenerateOptimization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+      _.containsAllPatterns(PROJECT, GENERATE), ruleId) {
+      case p @ Project(_, g: Generate) if p.references.isEmpty
+          && g.generator.isInstanceOf[ExplodeBase] =>
+        g.generator.children.head.dataType match {
+          case ArrayType(StructType(fields), containsNull) if fields.length > 1 =>
+            // Try to pick up smallest field
+            val sortedFields = fields.zipWithIndex.sortBy(f => f._1.dataType.defaultSize)
+            val extractor = GetArrayStructFields(g.generator.children.head, sortedFields(0)._1,
+              sortedFields(0)._2, fields.length, containsNull || sortedFields(0)._1.nullable)
+
+            val rewrittenG = g.transformExpressions {
+              case e: ExplodeBase =>
+                e.withNewChildren(Seq(extractor))
+            }
+            // As we change the child of the generator, its output data type must be updated.
+            val updatedGeneratorOutput = rewrittenG.generatorOutput
+              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .map { case (oldAttr, newAttr) =>
+                newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
+              }
+            assert(updatedGeneratorOutput.length == rewrittenG.generatorOutput.length,
+              "Updated generator output must have the same length " +
+                "with original generator output.")
+            val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
+            p.withNewChildren(Seq(updatedGenerate))
+          case _ => p
+        }
+    }
 }
 
 /**

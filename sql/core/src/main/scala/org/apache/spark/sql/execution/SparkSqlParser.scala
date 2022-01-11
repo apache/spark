@@ -73,32 +73,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.SET.getSymbol).trim match {
-      case configKeyValueDef(key, value) =>
-        SetCommand(Some(key -> Option(value.trim)))
-      case configKeyDef(key) =>
-        SetCommand(Some(key -> None))
-      case s if s == "-v" =>
-        SetCommand(Some("-v" -> None))
-      case s if s.isEmpty =>
-        SetCommand(None)
-      case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
-    }
-  }
-
-  override def visitSetQuotedConfiguration(
-      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configValue() != null && ctx.configKey() != null) {
-      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
-    } else if (ctx.configValue() != null) {
-      val valueStr = ctx.configValue().getText
-      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
-      keyCandidate match {
-        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
-        case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
-          keyCandidate, valueStr, ctx)
-      }
-    } else {
+    if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
       if (ctx.EQ() != null) {
         remainder(ctx.EQ().getSymbol).trim match {
@@ -108,6 +83,34 @@ class SparkSqlAstBuilder extends AstBuilder {
         }
       } else {
         SetCommand(Some(keyStr -> None))
+      }
+    } else {
+      remainder(ctx.SET.getSymbol).trim match {
+        case configKeyValueDef(key, value) =>
+          SetCommand(Some(key -> Option(value.trim)))
+        case configKeyDef(key) =>
+          SetCommand(Some(key -> None))
+        case s if s == "-v" =>
+          SetCommand(Some("-v" -> None))
+        case s if s.isEmpty =>
+          SetCommand(None)
+        case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
+      }
+    }
+  }
+
+  override def visitSetQuotedConfiguration(
+      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    assert(ctx.configValue() != null)
+    if (ctx.configKey() != null) {
+      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+    } else {
+      val valueStr = ctx.configValue().getText
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      keyCandidate match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
+        case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
+          keyCandidate, valueStr, ctx)
       }
     }
   }
@@ -338,7 +341,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
       provider = ctx.tableProvider.multipartIdentifier.getText,
-      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      options = Option(ctx.propertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -464,7 +467,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
     }
 
-    val properties = ctx.tablePropertyList.asScala.headOption.map(visitPropertyKeyValues)
+    val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
       .getOrElse(Map.empty)
     if (ctx.TEMPORARY != null && !properties.isEmpty) {
       operationNotAllowed("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW", ctx)

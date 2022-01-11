@@ -38,7 +38,6 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.20.3</version>
     </dependency>
     <dependency>
       <groupId>com.univocity</groupId>
@@ -271,7 +270,7 @@
   
   <profiles>
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
       <dependencies>
         <dependency>
           <groupId>org.codehaus.jackson</groupId>

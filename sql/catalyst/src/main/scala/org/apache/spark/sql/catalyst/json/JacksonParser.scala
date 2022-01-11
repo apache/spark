@@ -66,7 +66,7 @@ class JacksonParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
   private lazy val timestampNTZFormatter = TimestampFormatter(
-    options.timestampFormatInRead,
+    options.timestampNTZFormatInRead,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
@@ -262,7 +262,7 @@ class JacksonParser(
     case TimestampNTZType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timestampNTZFormatter.parseWithoutTimeZone(parser.getText)
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
       }
 
     case DateType =>
@@ -356,6 +356,7 @@ class JacksonParser(
    * to parse the JSON token using given function `f`. If the `f` failed to parse and convert the
    * token, call `failedConversion` to handle the token.
    */
+  @scala.annotation.tailrec
   private def parseJsonToken[R >: Null](
       parser: JsonParser,
       dataType: DataType)(f: PartialFunction[JsonToken, R]): R = {

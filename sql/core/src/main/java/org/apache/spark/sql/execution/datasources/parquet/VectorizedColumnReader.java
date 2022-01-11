@@ -93,13 +93,20 @@ public class VectorizedColumnReader {
       PrimitiveIterator.OfLong rowIndexes,
       ZoneId convertTz,
       String datetimeRebaseMode,
-      String int96RebaseMode) throws IOException {
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.updaterFactory = new ParquetVectorUpdaterFactory(
-        logicalTypeAnnotation, convertTz, datetimeRebaseMode, int96RebaseMode);
+      logicalTypeAnnotation,
+      convertTz,
+      datetimeRebaseMode,
+      datetimeRebaseTz,
+      int96RebaseMode,
+      int96RebaseTz);
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
@@ -266,10 +273,7 @@ public class VectorizedColumnReader {
       this.dataColumn = new VectorizedRleValuesReader();
       this.isCurrentPageDictionaryEncoded = true;
     } else {
-      if (dataEncoding != Encoding.PLAIN) {
-        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
-      }
-      this.dataColumn = new VectorizedPlainValuesReader();
+      this.dataColumn = getValuesReader(dataEncoding);
       this.isCurrentPageDictionaryEncoded = false;
     }
 
@@ -279,6 +283,20 @@ public class VectorizedColumnReader {
       throw new IOException("could not read page in col " + descriptor, e);
     }
   }
+
+  private ValuesReader getValuesReader(Encoding encoding) {
+    switch (encoding) {
+      case PLAIN:
+        return new VectorizedPlainValuesReader();
+      case DELTA_BYTE_ARRAY:
+        return new VectorizedDeltaByteArrayReader();
+      case DELTA_BINARY_PACKED:
+        return new VectorizedDeltaBinaryPackedReader();
+      default:
+        throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
+    }
+  }
+
 
   private int readPageV1(DataPageV1 page) throws IOException {
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
