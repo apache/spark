@@ -360,10 +360,12 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         .canCreatePartitioning)
     }
     assert(SinglePartitionShuffleSpec.canCreatePartitioning)
-    assert(ShuffleSpecCollection(Seq(
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      assert(ShuffleSpecCollection(Seq(
         HashShuffleSpec(HashPartitioning(Seq($"a"), 10), distribution),
         HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10), distribution)))
-      .canCreatePartitioning)
+        .canCreatePartitioning)
+    }
     assert(!RangeShuffleSpec(10, distribution).canCreatePartitioning)
   }
 
