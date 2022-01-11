@@ -110,7 +110,7 @@ private[spark] class ExecutorAllocationManager(
 
   import ExecutorAllocationManager._
 
-  private val reuseExecutors = conf.get(DYN_ALLOCATION_REUSE_EXECUTORS)
+  private val reuseExecutors = conf.get(SCHEDULER_REUSE_COMPATIBLE_EXECUTORS)
 
   // Lower and upper bounds on the number of executors.
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)

@@ -1813,7 +1813,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       decommissioningEnabled: Boolean = false): SparkConf = {
     val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
-      .set(config.DYN_ALLOCATION_REUSE_EXECUTORS, true)
+      .set(config.SCHEDULER_REUSE_COMPATIBLE_EXECUTORS, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
       .set(config.DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)

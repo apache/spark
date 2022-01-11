@@ -572,12 +572,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DYN_ALLOCATION_REUSE_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.reuseExecutors")
-      .version("1.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.dynamicAllocation.testing")
       .version("1.2.0")
@@ -1963,6 +1957,12 @@ package object config {
       .version("0.8.1")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val SCHEDULER_REUSE_COMPATIBLE_EXECUTORS =
+    ConfigBuilder("spark.scheduler.reuseCompatibleExecutors")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SPECULATION_ENABLED =
     ConfigBuilder("spark.speculation")

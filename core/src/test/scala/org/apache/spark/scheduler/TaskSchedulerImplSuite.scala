@@ -1842,7 +1842,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler(numCores = defaultExecutorCpus,
       config.EXECUTOR_CORES.key -> defaultExecutorCpus.toString,
       config.CPUS_PER_TASK.key -> defaultTaskCpus.toString,
-      config.DYN_ALLOCATION_REUSE_EXECUTORS.key -> true.toString)
+      config.SCHEDULER_REUSE_COMPATIBLE_EXECUTORS.key -> true.toString)
 
     val ereqs1 = new ExecutorResourceRequests().cores(4)
     val treqs1 = new TaskResourceRequests().cpus(2)

@@ -103,7 +103,7 @@ private[spark] class TaskSchedulerImpl(
   // of tasks that are very short.
   val MIN_TIME_TO_SPECULATION = conf.get(SPECULATION_MIN_THRESHOLD)
 
-  private val reuseExecutors = conf.get(DYN_ALLOCATION_REUSE_EXECUTORS)
+  private val reuseExecutors = conf.get(SCHEDULER_REUSE_COMPATIBLE_EXECUTORS)
 
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
