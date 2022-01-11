@@ -59,8 +59,19 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.db2.pushDownAggregate", "true")
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      s"CREATE TABLE employee (dept INTEGER, name CLOB, salary DECIMAL(20, 2)," +
+        " bonus DOUBLE)").executeUpdate()
+    conn.prepareStatement(
+      s"""
+         |INSERT INTO employee VALUES
+         |(1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
+         |(2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
+         |""".stripMargin).executeUpdate()
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
@@ -86,4 +97,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
+
+  testVarPop()
+  testStddevPop()
 }

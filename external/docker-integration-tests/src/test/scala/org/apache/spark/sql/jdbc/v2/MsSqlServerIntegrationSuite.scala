@@ -58,10 +58,21 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary NUMERIC(20, 2), bonus FLOAT)")
+      .executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO employee VALUES
+        |(1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
+        |(2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
+        |""".stripMargin).executeUpdate()
+  }
 
   override def notSupportsTableComment: Boolean = true
 
@@ -91,4 +102,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
   }
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
 }

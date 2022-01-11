@@ -51,8 +51,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
+    .set("spark.sql.catalog.postgresql.pushDownAggregate", "true")
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      "CREATE TABLE employee (dept INTEGER, name VARCHAR(32), salary NUMERIC(20, 2)," +
+        " bonus double precision)").executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO employee VALUES
+        | (1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
+        | (2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
+        |""".stripMargin).executeUpdate()
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
@@ -84,4 +95,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "FILLFACTOR=70"
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
+  testCovarPop()
+  testCovarSamp()
+  testCorr()
 }

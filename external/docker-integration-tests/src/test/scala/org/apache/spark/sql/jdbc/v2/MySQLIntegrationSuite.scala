@@ -57,6 +57,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -64,6 +65,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override def dataPreparation(conn: Connection): Unit = {
     mySQLVersion = conn.getMetaData.getDatabaseMajorVersion
+    conn.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
+        " bonus DOUBLE)").executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO employee VALUES
+        | (1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
+        | (2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
+        |""".stripMargin).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -119,4 +129,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
 }

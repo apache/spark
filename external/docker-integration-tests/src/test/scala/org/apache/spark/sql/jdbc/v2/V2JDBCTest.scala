@@ -19,12 +19,12 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Sample}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
@@ -277,6 +277,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     scan.schema.names.sameElements(Seq(col))
   }
 
+  protected def checkFiltersRemoved(df: DataFrame): Unit = {
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+  }
+
+  protected def checkAggregateRemoved(df: DataFrame): Unit = {
+    val aggregates = df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
+    }
+    assert(aggregates.isEmpty)
+  }
+
   test("SPARK-37038: Test TABLESAMPLE") {
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
@@ -346,6 +360,125 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(filterPushed(df8))
         assert(df8.collect().length < 10)
       }
+    }
+  }
+
+  private def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case DataSourceV2ScanRelation(_, scan, _) =>
+        assert(scan.isInstanceOf[V1ScanWrapper])
+        val wrapper = scan.asInstanceOf[V1ScanWrapper]
+        assert(wrapper.pushedDownOperators.aggregation.isDefined)
+        val aggregationExpressions =
+          wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
+        assert(aggregationExpressions.length == 1)
+        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
+        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
+    }
+  }
+
+  protected def testVarPop(): Unit = {
+    test(s"scan with aggregate push-down: VAR_POP") {
+      val df = sql(s"select VAR_POP(bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "VAR_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 10000d)
+      assert(row(1).getDouble(0) === 2500d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testVarSamp(): Unit = {
+    test(s"scan with aggregate push-down: VAR_SAMP") {
+      val df = sql(s"select VAR_SAMP(bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "VAR_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 20000d)
+      assert(row(1).getDouble(0) === 5000d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testStddevPop(): Unit = {
+    test("scan with aggregate push-down: STDDEV_POP") {
+      val df = sql(s"select STDDEV_POP(bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "STDDEV_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 100d)
+      assert(row(1).getDouble(0) === 50d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testStddevSamp(): Unit = {
+    test("scan with aggregate push-down: STDDEV_SAMP") {
+      val df = sql(s"select STDDEV_SAMP(bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "STDDEV_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 141.4213562373095d)
+      assert(row(1).getDouble(0) === 70.71067811865476d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testCovarPop(): Unit = {
+    test("scan with aggregate push-down: COVAR_POP") {
+      val df = sql(s"select COVAR_POP(bonus, bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "COVAR_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 10000d)
+      assert(row(1).getDouble(0) === 2500d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testCovarSamp(): Unit = {
+    test("scan with aggregate push-down: COVAR_SAMP") {
+      val df = sql(s"select COVAR_SAMP(bonus, bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "COVAR_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 20000d)
+      assert(row(1).getDouble(0) === 5000d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testCorr(): Unit = {
+    test("scan with aggregate push-down: CORR") {
+      val df = sql(s"select CORR(bonus, bonus) FROM $catalogName.employee" +
+        " where dept > 0 group by DePt order by dept")
+      checkFiltersRemoved(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "CORR")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 1d)
+      assert(row(1).getDouble(0) === 1d)
+      assert(row(2).isNullAt(0))
     }
   }
 }

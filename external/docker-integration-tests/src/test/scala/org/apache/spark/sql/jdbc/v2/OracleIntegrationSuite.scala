@@ -73,9 +73,25 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
-  override def dataPreparation(conn: Connection): Unit = {}
+
+  override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
+        " bonus DOUBLE)").executeUpdate()
+    conn.prepareStatement("INSERT INTO employee VALUES (1, 'amy', 10000, 1000)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO employee VALUES (2, 'alex', 12000, 1200)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO employee VALUES (1, 'cathy', 9000, 1200)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO employee VALUES (2, 'david', 10000, 1300)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO employee VALUES (6, 'jen', 12000, 1200)")
+      .executeUpdate()
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
@@ -93,4 +109,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     assert(msg1.contains(
       s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
+  testCovarPop()
+  testCovarSamp()
+  testCorr()
 }
