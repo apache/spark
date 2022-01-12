@@ -482,18 +482,6 @@ trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
-object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryContains(left, right)
-  }
-
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
-    Contains(left, right)
-  }
-}
-
 /**
  * A function that returns true if the string `left` contains the string `right`.
  */
@@ -518,6 +506,18 @@ object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   since = "3.3.0",
   group = "string_funcs"
 )
+object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+  override protected def funcName: String = "contains"
+
+  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
+    BinaryContains(left, right)
+  }
+
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    Contains(left, right)
+  }
+}
+
 case class Contains(left: Expression, right: Expression)
   extends BinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
@@ -536,8 +536,7 @@ case class BinaryContains(left: Expression, right: Expression)
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.contains(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""org.apache.spark.unsafe.array.ByteArrayMethods
-        .contains($c1, $c2)""".stripMargin)
+      s"""org.apache.spark.unsafe.array.ByteArrayMethods.contains($c1, $c2)""".stripMargin)
   }
   override def prettyName: String = "contains"
   override protected def withNewChildrenInternal(
@@ -545,17 +544,6 @@ case class BinaryContains(left: Expression, right: Expression)
       newRight: Expression): BinaryContains = copy(left = newLeft, right = newRight)
 }
 
-object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryStartsWith(left, right)
-  }
-
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
-    StartsWith(left, right)
-  }
-}
 
 @ExpressionDescription(
   usage = """
@@ -578,6 +566,18 @@ object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase 
   since = "3.3.0",
   group = "string_funcs"
 )
+object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+  override protected def funcName: String = "contains"
+
+  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
+    BinaryStartsWith(left, right)
+  }
+
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    StartsWith(left, right)
+  }
+}
+
 case class StartsWith(left: Expression, right: Expression) extends BinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
@@ -595,25 +595,12 @@ case class BinaryStartsWith(left: Expression, right: Expression)
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.startsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""org.apache.spark.unsafe.array.ByteArrayMethods
-        .startsWith($c1, $c2)""".stripMargin)
+      s"""org.apache.spark.unsafe.array.ByteArrayMethods.startsWith($c1, $c2)""".stripMargin)
   }
   override def prettyName: String = "startswith"
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): BinaryStartsWith = copy(left = newLeft, right = newRight)
-}
-
-object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryEndsWith(left, right)
-  }
-
-  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
-    EndsWith(left, right)
-  }
 }
 
 @ExpressionDescription(
@@ -637,6 +624,18 @@ object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   since = "3.3.0",
   group = "string_funcs"
 )
+object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+  override protected def funcName: String = "contains"
+
+  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
+    BinaryEndsWith(left, right)
+  }
+
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    EndsWith(left, right)
+  }
+}
+
 case class EndsWith(left: Expression, right: Expression) extends BinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
