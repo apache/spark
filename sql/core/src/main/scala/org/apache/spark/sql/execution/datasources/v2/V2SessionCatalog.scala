@@ -301,6 +301,21 @@ class V2SessionCatalog(catalog: SessionCatalog)
       throw QueryCompilationErrors.noSuchNamespaceError(namespace)
   }
 
+  def dropNamespaceWithCascadeMode(
+      namespace: Array[String],
+      cascade: Boolean): Boolean = namespace match {
+    case Array(db) if catalog.databaseExists(db) =>
+      catalog.dropDatabase(db, ignoreIfNotExists = false, cascade)
+      true
+
+    case Array(_) =>
+      // exists returned false
+      false
+
+    case _ =>
+      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+  }
+
   def isTempView(ident: Identifier): Boolean = {
     catalog.isTempView(ident.namespace() :+ ident.name())
   }

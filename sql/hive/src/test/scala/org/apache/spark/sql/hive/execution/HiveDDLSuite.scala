@@ -1235,7 +1235,7 @@ class HiveDDLSuite
     if (tableExists && !cascade) {
       assertAnalysisError(
         sqlDropDatabase,
-        s"Cannot drop a non-empty database: $dbName.")
+        s"Cannot drop a non-empty namespace: $dbName.")
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
