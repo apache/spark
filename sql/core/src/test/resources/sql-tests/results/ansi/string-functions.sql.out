@@ -773,7 +773,7 @@ true
 -- !query
 SELECT contains(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'))
 -- !query schema
-struct<contains(encode(Spark SQL, utf-8), encode(Spark, utf-8)):boolean>
+struct<binarycontains(encode(Spark SQL, utf-8), encode(Spark, utf-8)):boolean>
 -- !query output
 true
 
@@ -781,7 +781,7 @@ true
 -- !query
 SELECT startswith(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'))
 -- !query schema
-struct<startswith(encode(Spark SQL, utf-8), encode(Spark, utf-8)):boolean>
+struct<binarystartswith(encode(Spark SQL, utf-8), encode(Spark, utf-8)):boolean>
 -- !query output
 true
 
@@ -789,7 +789,7 @@ true
 -- !query
 SELECT startswith(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'))
 -- !query schema
-struct<startswith(encode(Spark SQL, utf-8), encode(park, utf-8)):boolean>
+struct<binarystartswith(encode(Spark SQL, utf-8), encode(park, utf-8)):boolean>
 -- !query output
 false
 
@@ -797,7 +797,7 @@ false
 -- !query
 SELECT endswith(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'))
 -- !query schema
-struct<endswith(encode(Spark SQL, utf-8), encode(SQL, utf-8)):boolean>
+struct<binaryendswith(encode(Spark SQL, utf-8), encode(SQL, utf-8)):boolean>
 -- !query output
 true
 
