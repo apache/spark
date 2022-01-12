@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -433,5 +434,10 @@ object QueryParsingErrors {
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Invalid time travel spec: $reason.", ctx)
+  }
+
+  def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
   }
 }

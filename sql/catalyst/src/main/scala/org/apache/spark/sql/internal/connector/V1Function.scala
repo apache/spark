@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v2
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
+import org.apache.spark.sql.types.StructType
 
-/**
- * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
- */
-class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
-  override def namespace: String = "ns1.ns2"
+case class V1Function(info: ExpressionInfo) extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = {
+    throw new UnsupportedOperationException("Cannot bind a V1 function.")
+  }
+  override def name(): String = info.getName
+  override def description(): String = info.getUsage
 }

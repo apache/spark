@@ -1155,7 +1155,7 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED").mkString(" ")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {

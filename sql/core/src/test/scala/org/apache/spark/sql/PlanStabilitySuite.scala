@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
+import org.apache.spark.tags.ExtendedSQLTest
 
 // scalastyle:off line.size.limit
 /**
@@ -249,6 +250,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 }
 
+@ExtendedSQLTest
 class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v1_4").getAbsolutePath
@@ -260,6 +262,7 @@ class TPCDSV1_4_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   }
 }
 
+@ExtendedSQLTest
 class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
@@ -273,6 +276,7 @@ class TPCDSV1_4_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCD
   }
 }
 
+@ExtendedSQLTest
 class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-v2_7").getAbsolutePath
@@ -284,6 +288,7 @@ class TPCDSV2_7_PlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   }
 }
 
+@ExtendedSQLTest
 class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
@@ -297,6 +302,7 @@ class TPCDSV2_7_PlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCD
   }
 }
 
+@ExtendedSQLTest
 class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase {
   override val goldenFilePath: String =
     new File(baseResourcePath, s"approved-plans-modified").getAbsolutePath
@@ -308,6 +314,7 @@ class TPCDSModifiedPlanStabilitySuite extends PlanStabilitySuite with TPCDSBase 
   }
 }
 
+@ExtendedSQLTest
 class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with TPCDSBase {
   override def injectStats: Boolean = true
 
@@ -321,6 +328,7 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite with T
   }
 }
 
+@ExtendedSQLTest
 class TPCHPlanStabilitySuite extends PlanStabilitySuite with TPCHBase {
   override def goldenFilePath: String = getWorkspaceFilePath(
     "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath

@@ -1089,7 +1089,7 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM testcat")
     }
 
-    assert(exception.getMessage.contains("Catalog testcat does not support SHOW VIEWS"))
+    assert(exception.getMessage.contains("Catalog testcat does not support views"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2010,64 +2010,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"CREATE VIEW $v AS SELECT 1")
     }
-    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
-  }
-
-  test("DESCRIBE FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("SHOW FUNCTIONS not valid v1 namespace") {
-    val function = "testcat.ns1.ns2.fun"
-
-    val e = intercept[AnalysisException] {
-      sql(s"SHOW FUNCTIONS LIKE $function")
-    }
-    assert(e.getMessage.contains("Catalog testcat does not support SHOW FUNCTIONS"))
-  }
-
-  test("DROP FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("DROP FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("DROP FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("CREATE FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("REFRESH FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    assert(e.message.contains("Catalog testcat does not support views"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2896,6 +2839,39 @@ class DataSourceV2SQLSuite
         sql("WITH x AS (SELECT 1) SELECT * FROM x VERSION AS OF 1")
       )
       assert(e7.message.contains("Cannot time travel subqueries from WITH clause"))
+    }
+  }
+
+  test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {
+    val t = "tbl"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint,
+           |  b bigint
+           |)
+           |using parquet
+           |OPTIONS (
+           |  from = 0,
+           |  to = 1)
+           |COMMENT 'This is a comment'
+           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2')
+           |PARTITIONED BY (a)
+           |LOCATION '/tmp'
+        """.stripMargin)
+
+      val table = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+        .loadTable(Identifier.of(Array("default"), t))
+      val properties = table.properties
+      assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
+      assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
+      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
+      assert(properties.containsKey(TableCatalog.PROP_OWNER))
+      assert(properties.get(s"${TableCatalog.OPTION_PREFIX}from") == "0")
+      assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
+      assert(properties.get("prop1") == "1")
+      assert(properties.get("prop2") == "2")
     }
   }
 
