@@ -79,8 +79,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(
-      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
-        " bonus DOUBLE)").executeUpdate()
+      "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
+        " bonus BINARY_DOUBLE)").executeUpdate()
     conn.prepareStatement("INSERT INTO employee VALUES (1, 'amy', 10000, 1000)")
       .executeUpdate()
     conn.prepareStatement("INSERT INTO employee VALUES (2, 'alex', 12000, 1200)")
