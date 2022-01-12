@@ -341,10 +341,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   // This is a temporary solution, we will change the type of children to IndexedSeq in a
   // followup PR
   private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
-    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
-      seq.asInstanceOf[IndexedSeq[BaseType]]
-    } else {
-      seq.toIndexedSeq
+    seq match {
+      case types: IndexedSeq[BaseType] => types
+      case other => other.toIndexedSeq
     }
   }
 
