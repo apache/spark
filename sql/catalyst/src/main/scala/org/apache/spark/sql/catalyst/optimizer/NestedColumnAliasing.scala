@@ -245,11 +245,13 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
-        case ev: ExtractValue =>
+        // we can not alias the attr from lambda variable whose expr id is not available
+        case ev: ExtractValue if ev.find(_.isInstanceOf[NamedLambdaVariable]).isEmpty =>
           if (ev.references.size == 1) {
             nestedFieldReferences.append(ev)
           }
         case ar: AttributeReference => otherRootReferences.append(ar)
+        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
