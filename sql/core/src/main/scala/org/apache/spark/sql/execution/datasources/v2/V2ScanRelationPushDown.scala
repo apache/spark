@@ -87,43 +87,41 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
-              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
-                groupingExpressions, sHolder.relation.output)
-              val translatedGroupBys =
-                DataSourceStrategy.translateAggregation(Seq.empty, normalizedGroupingExpressions)
-              val finalResultExpressions = if (r.supportCompletePushDown(translatedGroupBys.get)) {
-                resultExpressions
-              } else {
-                resultExpressions.map { expr =>
-                  expr.transform {
-                    case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
-                      Divide(Cast(aggregate.Sum(avg.child).toAggregateExpression(isDistinct),
-                        avg.dataType), Cast(
-                        aggregate.Count(avg.child).toAggregateExpression(isDistinct), avg.dataType))
-                  }
-                }.asInstanceOf[Seq[NamedExpression]]
-              }
-
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
-              var ordinal = 0
-              val aggregates = finalResultExpressions.flatMap { expr =>
-                expr.collect {
-                  // Do not push down duplicated aggregate expressions. For example,
-                  // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
-                  // `max(a)` to the data source.
-                  case agg: AggregateExpression
-                      if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
-                    aggExprToOutputOrdinal(agg.canonicalized) = ordinal
-                    ordinal += 1
-                    agg
-                }
-              }
+              val aggregates = collectAggregates(resultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
               val translatedAggregates = DataSourceStrategy.translateAggregation(
                 normalizedAggregates, normalizedGroupingExpressions)
+              val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
+                if (translatedAggregates.isEmpty ||
+                  r.supportCompletePushDown(translatedAggregates.get)) {
+                  (resultExpressions, aggregates, translatedAggregates)
+                } else {
+                  val newResultExpressions = resultExpressions.map { expr =>
+                    expr.transform {
+                      case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
+                        val left = addCastIfNeeded(aggregate.Sum(avg.child)
+                          .toAggregateExpression(isDistinct), avg.dataType)
+                        val right = addCastIfNeeded(aggregate.Count(avg.child)
+                          .toAggregateExpression(isDistinct), avg.dataType)
+                        Divide(left, right)
+                    }
+                  }.asInstanceOf[Seq[NamedExpression]]
+                  // Because aggregate expressions changed, translate them again.
+                  aggExprToOutputOrdinal.clear()
+                  val newAggregates =
+                    collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
+                  val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
+                    newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+                  (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
+                    newNormalizedAggregates, normalizedGroupingExpressions))
+                }
+              }
 
-              val pushedAggregates = translatedAggregates.filter(r.pushAggregation)
+              val pushedAggregates = finalTranslatedAggregates.filter(r.pushAggregation)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
@@ -146,7 +144,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
-                assert(newOutput.length == groupingExpressions.length + aggregates.length)
+                assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
                 val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
@@ -227,16 +225,33 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  private def collectAggregates(resultExpressions: Seq[NamedExpression],
+      aggExprToOutputOrdinal: mutable.HashMap[Expression, Int]): Seq[AggregateExpression] = {
+    var ordinal = 0
+    resultExpressions.flatMap { expr =>
+      expr.collect {
+        // Do not push down duplicated aggregate expressions. For example,
+        // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
+        // `max(a)` to the data source.
+        case agg: AggregateExpression
+          if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+          aggExprToOutputOrdinal(agg.canonicalized) = ordinal
+          ordinal += 1
+          agg
+      }
+    }
+  }
+
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
     agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
   }
 
-  private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =
-    if (aggAttribute.dataType == aggDataType) {
-      aggAttribute
+  private def addCastIfNeeded(expression: Expression, aggDataType: DataType) =
+    if (expression.dataType == aggDataType) {
+      expression
     } else {
-      Cast(aggAttribute, aggDataType)
+      Cast(expression, aggDataType)
     }
 
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {

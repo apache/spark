@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{avg, count, lit, max, min, sum, udf}
+import org.apache.spark.sql.functions.{avg, count, lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -873,34 +873,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     checkAnswer(df, Seq(Row(2)))
     // scalastyle:on
-  }
-
-  test("scan with aggregate push-down: partial push-down MAX, AVG, MIN") {
-    val df = spark.read
-      .option("partitionColumn", "dept")
-      .option("lowerBound", "0")
-      .option("upperBound", "2")
-      .option("numPartitions", "2")
-      .table("h2.test.employee")
-      .agg(max($"SALARY").as("max"), avg($"SALARY").as("avg"), min($"SALARY").as("min"))
-    checkAggregateRemoved(df, false)
-    checkAnswer(df, Seq(Row(12000.00, 10600.000000, 9000.00)))
-
-    val df2 = spark.read
-      .option("partitionColumn", "dept")
-      .option("lowerBound", "0")
-      .option("upperBound", "2")
-      .option("numPartitions", "2")
-      .table("h2.test.employee")
-      .groupBy($"name")
-      .agg(max($"SALARY").as("max"), avg($"SALARY").as("avg"), min($"SALARY").as("min"))
-    checkAggregateRemoved(df2, false)
-    checkAnswer(df2, Seq(
-      Row("alex", 12000.00, 12000.000000, 12000.00),
-      Row("amy", 10000.00, 10000.000000, 10000.00),
-      Row("cathy", 9000.00, 9000.000000, 9000.00),
-      Row("david", 10000.00, 10000.000000, 10000.00),
-      Row("jen", 12000.00, 12000.000000, 12000.00)))
   }
 
   test("scan with aggregate push-down: partial push-down SUM, AVG, COUNT") {
