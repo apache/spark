@@ -193,7 +193,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         assert(sc.env.blockManager.master.getExecutorEndpointRef("0").isEmpty)
       }
 
-      sc.env.blockManager.master.removeShuffle(0, true)
+      sc.cleaner.foreach(_.doCleanupShuffle(0, true))
 
       filesToCheck.foreach { f => assert(!f.exists()) }
     } finally {
