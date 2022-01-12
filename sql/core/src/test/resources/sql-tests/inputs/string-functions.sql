@@ -128,7 +128,23 @@ SELECT endswith(null, null);
 
 SELECT contains(encode('Spark SQL', 'utf-8'), 'Spark');
 SELECT contains(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+SELECT contains(encode('', 'utf-8'), encode('', 'utf-8'));
+SELECT contains(encode('Spark SQL', 'utf-8'), null);
+SELECT contains(12, '1');
+SELECT contains(true, 'ru');
+SELECT contains(encode('12', 'utf-8'), 12);
+SELECT contains(true, false);
+
 SELECT startswith(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
 SELECT startswith(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'));
+SELECT startswith(encode('Spark SQL', 'utf-8'), encode('', 'utf-8'));
+SELECT startswith(encode('', 'utf-8'), encode('', 'utf-8'));
+SELECT startswith(encode('Spark SQL', 'utf-8'), 'Spark');
+SELECT startswith(encode('Spark SQL', 'utf-8'), null);
+
 SELECT endswith(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
 SELECT endsWith(encode('Spark SQL', 'utf-8'), 'Spark');
+SELECT endsWith(encode('Spark SQL', 'utf-8'), encode('', 'utf-8'));
+SELECT endsWith(encode('', 'utf-8'), encode('', 'utf-8'));
+SELECT endsWith(encode('Spark SQL', 'utf-8'), 'SQL');
+SELECT endsWith(encode('Spark SQL', 'utf-8'), null);
