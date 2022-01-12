@@ -43,7 +43,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 from pyspark.testing.pandasutils import (
     have_tabulate,
-    PandasOnSparkTestCase,
+    ComparisonTestBase,
     SPARK_CONF_ARROW_ENABLED,
     tabulate_requirement_message,
 )
@@ -51,17 +51,13 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
-class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
+class DataFrameTest(ComparisonTestBase, SQLTestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):

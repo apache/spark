@@ -23,10 +23,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 
 
-class CategoricalTest(PandasOnSparkTestCase, TestUtils):
+class CategoricalTest(ComparisonTestBase, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -37,10 +37,6 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
                 ),
             },
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):
