@@ -1,4 +1,7 @@
 {
+  "AES_CRYPTO_ERROR" : {
+    "message" : [ "AES crypto operation failed with: %s" ]
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -71,6 +74,10 @@
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
+  "INVALID_AES_KEY_LENGTH" : {
+    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
@@ -136,6 +143,10 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_AES_MODE" : {
+    "message" : [ "The AES mode %s with the padding %s is not supported" ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
