@@ -1,7 +1,6 @@
 {
   "AES_CRYPTO_ERROR" : {
-    "message" : [ "AES crypto operation failed with: %s" ],
-    "sqlState" : "42000"
+    "message" : [ "AES crypto operation failed with: %s" ]
   },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],

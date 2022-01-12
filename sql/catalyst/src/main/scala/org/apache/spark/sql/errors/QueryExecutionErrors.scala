@@ -34,7 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkCryptoException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkClassNotFoundException, SparkConcurrentModificationException, SparkDateTimeException, SparkException, SparkFileAlreadyExistsException, SparkFileNotFoundException, SparkIllegalArgumentException, SparkIllegalStateException, SparkIndexOutOfBoundsException, SparkNoSuchElementException, SparkNoSuchMethodException, SparkNumberFormatException, SparkRuntimeException, SparkSecurityException, SparkSQLException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -1905,15 +1905,15 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new SparkIllegalArgumentException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
+    new SparkRuntimeException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new SparkUnsupportedOperationException("UNSUPPORTED_AES_MODE", Array(mode, padding))
+    new SparkRuntimeException("UNSUPPORTED_AES_MODE", Array(mode, padding))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
-    new SparkCryptoException("AES_CRYPTO_ERROR", Array(detailMessage))
+    new SparkRuntimeException("AES_CRYPTO_ERROR", Array(detailMessage))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {

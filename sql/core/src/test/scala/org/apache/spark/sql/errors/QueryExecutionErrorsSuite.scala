@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkCryptoException, SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -41,13 +41,14 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     (df1, df2)
   }
 
-  test("SPARK-37858: invalid AES key length") {
+  test("INVALID_AES_KEY_LENGTH: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
       val e = intercept[SparkException] {
         df.collect
-      }.getCause
-      assert(e.isInstanceOf[SparkIllegalArgumentException])
+      }.getCause.asInstanceOf[SparkRuntimeException]
+      assert(e.getErrorClass === "INVALID_AES_KEY_LENGTH")
+      assert(e.getSqlState === "42000")
       assert(e.getMessage.contains(
         "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
     }
@@ -70,15 +71,16 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-37858: unsupported AES modes") {
+  test("UNSUPPORTED_AES_MODE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
     def checkUnsupportedMode(df: => DataFrame): Unit = {
       val e = intercept[SparkException] {
         df.collect
-      }.getCause
-      assert(e.isInstanceOf[SparkUnsupportedOperationException])
+      }.getCause.asInstanceOf[SparkRuntimeException]
+      assert(e.getErrorClass === "UNSUPPORTED_AES_MODE")
+      assert(e.getSqlState === "0A000")
       assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
     }
 
@@ -92,7 +94,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
-  test("SPARK-37858: AES crypto failure - key mismatch") {
+  test("AES_CRYPTO_ERROR: AES decrypt failure - key mismatch") {
     val (_, df2) = getAesInputs()
     Seq(
       ("value16", "1234567812345678"),
@@ -100,8 +102,9 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       val e = intercept[SparkException] {
         df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
-      }.getCause
-      assert(e.isInstanceOf[SparkCryptoException])
+      }.getCause.asInstanceOf[SparkRuntimeException]
+      assert(e.getErrorClass === "AES_CRYPTO_ERROR")
+      assert(e.getSqlState === null)
       assert(e.getMessage.contains("AES crypto operation failed"))
     }
   }

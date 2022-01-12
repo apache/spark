@@ -252,18 +252,6 @@ private[spark] class SparkSecurityException(
 }
 
 /**
- * Crypto exception thrown from Spark while performing a crypto operation.
- */
-private[spark] class SparkCryptoException(
-    errorClass: String,
-    messageParameters: Array[String])
-  extends SecurityException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
-
-  override def getErrorClass: String = errorClass
-}
-
-/**
  * Array index out of bounds exception thrown from Spark with an error class.
  */
 private[spark] class SparkArrayIndexOutOfBoundsException(
