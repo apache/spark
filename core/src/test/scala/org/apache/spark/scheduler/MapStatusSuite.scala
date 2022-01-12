@@ -224,17 +224,21 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-36967: Limit accurated skewed block number if too many blocks are skewed") {
-    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, "5")
+  test("SPARK-36967: Limit accurate skewed block number if too many blocks are skewed") {
+    val skewedBlockNumber = 20
+    val conf =
+      new SparkConf()
+        .set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, "5")
+        .set(config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.key, skewedBlockNumber.toString)
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
     val sizes: Array[Long] = Array.tabulate[Long](2500)(i => i) ++:
       Array.tabulate[Long](500)(i => i + 3500 * 1024)
-    val emptyBlocksSize = sizes.filter(_ == 0).length
-    val smallBlockSizes = sizes.slice(emptyBlocksSize, sizes.size - 100)
-    val skewBlocksSizes = sizes.slice(sizes.size - 100, sizes.size)
+    val emptyBlocksSize = 1
+    val smallBlockSizes = sizes.slice(emptyBlocksSize, sizes.size - skewedBlockNumber)
+    val skewBlocksSizes = sizes.slice(sizes.size - skewedBlockNumber, sizes.size)
     val avg = smallBlockSizes.sum / smallBlockSizes.length
 
     val loc = BlockManagerId("a", "b", 10)
@@ -245,12 +249,12 @@ class MapStatusSuite extends SparkFunSuite {
     assert(status1.location == loc)
     assert(status1.mapId == mapTaskAttemptId)
     assert(status1.getSizeForBlock(0) == 0)
-    for (i <- 1 until sizes.length - 100) {
+    for (i <- 1 until sizes.length - skewedBlockNumber) {
       assert(status1.getSizeForBlock(i) === avg)
     }
-    for (i <- 0 until 100) {
-      assert(status1.getSizeForBlock(sizes.length - 100 + i) ===
-        compressAndDecompressSize(skewBlocksSizes(skewBlocksSizes.length - 100 + i)))
+    for (i <- 0 until skewedBlockNumber) {
+      assert(status1.getSizeForBlock(sizes.length - skewedBlockNumber + i) ===
+        compressAndDecompressSize(skewBlocksSizes(skewBlocksSizes.length - skewedBlockNumber + i)))
     }
   }
 }
