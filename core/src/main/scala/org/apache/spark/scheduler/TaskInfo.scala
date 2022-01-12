@@ -35,11 +35,32 @@ class TaskInfo(
      */
     val index: Int,
     val attemptNumber: Int,
+    /**
+     * The actual RDD partition ID in this task.
+     * The ID of the RDD partition is always same even task retries.
+     */
+    val partitionId: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
     val speculative: Boolean) {
+
+  def this(
+      taskId: Long,
+      /**
+       * The index of this task within its task set. Not necessarily the same as the ID of the RDD
+       * partition that the task is computing.
+       */
+      index: Int,
+      attemptNumber: Int,
+      launchTime: Long,
+      executorId: String,
+      host: String,
+      taskLocality: TaskLocality.TaskLocality,
+      speculative: Boolean) {
+    this(taskId, index, attemptNumber, -1, launchTime, executorId, host, taskLocality, speculative)
+  }
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
