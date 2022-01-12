@@ -544,7 +544,6 @@ case class BinaryContains(left: Expression, right: Expression)
       newRight: Expression): BinaryContains = copy(left = newLeft, right = newRight)
 }
 
-
 @ExpressionDescription(
   usage = """
     _FUNC_(left, right) - Returns true if the string or binary `left` starts with
