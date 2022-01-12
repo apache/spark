@@ -28,6 +28,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.command.{DataWritingCommandExec, FunctionsCommand}
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
@@ -77,7 +78,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
         spark.sessionState.catalog.listFunctions("default").map(_._1.funcName)
-        ++ FunctionsCommand.virtualOperators, pattern)
+        ++ FunctionRegistry.builtinOperators.keys, pattern)
         .map(Row(_))
     }
 
@@ -126,7 +127,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
+    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
+    assert(e.message.contains("Undefined function: abcadf. This function is neither a " +
+      "built-in/temporary function, nor a persistent function"))
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {

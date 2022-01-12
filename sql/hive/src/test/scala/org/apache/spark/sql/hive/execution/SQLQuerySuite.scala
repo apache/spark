@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -202,7 +202,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(allFunctions.contains(f))
     }
 
-    FunctionsCommand.virtualOperators.foreach { f =>
+    FunctionRegistry.builtinOperators.keys.foreach { f =>
       assert(allFunctions.contains(f))
     }
 
@@ -263,8 +263,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
 
-    checkKeywordsExist(sql("describe functioN abcadf"),
-      "Function: abcadf not found.")
+    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
+    assert(e.message.contains("Undefined function: abcadf"))
 
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
