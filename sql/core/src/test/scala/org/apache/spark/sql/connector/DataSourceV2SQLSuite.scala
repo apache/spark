@@ -1089,7 +1089,7 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM testcat")
     }
 
-    assert(exception.getMessage.contains("Catalog testcat does not support SHOW VIEWS"))
+    assert(exception.getMessage.contains("Catalog testcat does not support views"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2010,64 +2010,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"CREATE VIEW $v AS SELECT 1")
     }
-    assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
-  }
-
-  test("DESCRIBE FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("SHOW FUNCTIONS not valid v1 namespace") {
-    val function = "testcat.ns1.ns2.fun"
-
-    val e = intercept[AnalysisException] {
-      sql(s"SHOW FUNCTIONS LIKE $function")
-    }
-    assert(e.getMessage.contains("Catalog testcat does not support SHOW FUNCTIONS"))
-  }
-
-  test("DROP FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("DROP FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("DROP FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("CREATE FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
-  }
-
-  test("REFRESH FUNCTION: only support session catalog") {
-    val e = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION testcat.ns1.ns2.fun")
-    }
-    assert(e.message.contains("function is only supported in v1 catalog"))
-
-    val e1 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    assert(e.message.contains("Catalog testcat does not support views"))
   }
 
   test("global temp view should not be masked by v2 catalog") {

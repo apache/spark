@@ -23,14 +23,16 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -38,7 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
 class V2SessionCatalog(catalog: SessionCatalog)
-  extends TableCatalog with SupportsNamespaces with SQLConfHelper {
+  extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")
@@ -61,14 +63,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    val catalogTable = try {
-      catalog.getTableMetadata(ident.asTableIdentifier)
-    } catch {
-      case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
-    }
-
-    V1Table(catalogTable)
+    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -213,6 +208,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
           throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
+
+    def asFunctionIdentifier: FunctionIdentifier = {
+      ident.namespace match {
+        case Array(db) =>
+          FunctionIdentifier(ident.name, Some(db))
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+      }
+    }
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
@@ -300,6 +304,26 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   def isTempView(ident: Identifier): Boolean = {
     catalog.isTempView(ident.namespace() :+ ident.name())
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    namespace match {
+      case Array(db) =>
+        catalog.listFunctions(db).filter(_._2 == "USER").map { case (funcIdent, _) =>
+          assert(funcIdent.database.isDefined)
+          Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
+        }.toArray
+      case _ =>
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+    }
+  }
+
+  override def functionExists(ident: Identifier): Boolean = {
+    catalog.isPersistentFunction(ident.asFunctionIdentifier)
   }
 
   override def toString: String = s"V2SessionCatalog($name)"

@@ -47,6 +47,18 @@ private object H2Dialect extends JdbcDialect {
           assert(f.inputs().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+          assert(f.inputs().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVAR_POP($distinct${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          assert(f.inputs().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVAR_SAMP($distinct${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" =>
+          assert(f.inputs().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"CORR($distinct${f.inputs().head}, ${f.inputs().last})")
         case _ => None
       }
     )
