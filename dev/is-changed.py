@@ -66,7 +66,6 @@ def main():
     changed_modules = determine_modules_to_test(
         determine_modules_for_files(changed_files), deduplicated=False
     )
-
     module_names = [m.name for m in changed_modules]
     if len(changed_modules) == 0:
         print("false")
