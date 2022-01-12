@@ -57,9 +57,15 @@ def main():
     changed_files = identify_changed_files_from_git_commits(
         "HEAD", target_ref=os.environ["APACHE_SPARK_REF"]
     )
-    changed_modules = determine_modules_to_test(
-        determine_modules_for_files(changed_files), deduplicated=False
-    )
+    if os.environ.get("APACHE_SPARK_REF", "") != "":
+        changed_modules = determine_modules_to_test(
+            determine_modules_for_files(changed_files), deduplicated=False
+        )
+    elif os.environ.get("GITHUB_PREV_SHA", "") != "":
+        changed_files = identify_changed_files_from_git_commits(
+            os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
+        )
+
     module_names = [m.name for m in changed_modules]
     if len(changed_modules) == 0:
         print("false")
