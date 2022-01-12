@@ -294,11 +294,11 @@ private[hive] class SparkExecuteStatementOperation(
 
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
       val df = sqlContext.sql(statement)
+      logDebug(df.queryExecution.toString())
+      HiveThriftServer2.eventManager.onStatementParsed(statementId,
+        df.queryExecution.toString())
       rdd = df.rdd
       result = sqlContext.createDataFrame(df.rdd, df.schema)
-      logDebug(result.queryExecution.toString())
-      HiveThriftServer2.eventManager.onStatementParsed(statementId,
-        result.queryExecution.toString())
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         new IterableFetchIterator[SparkRow](new Iterable[SparkRow] {
           override def iterator: Iterator[SparkRow] = result.toLocalIterator.asScala
