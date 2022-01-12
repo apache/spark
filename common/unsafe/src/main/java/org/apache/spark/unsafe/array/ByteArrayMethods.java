@@ -19,6 +19,8 @@ package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
+
 public class ByteArrayMethods {
 
   private ByteArrayMethods() {
@@ -92,63 +94,38 @@ public class ByteArrayMethods {
     return true;
   }
 
-  public static boolean contains(byte[] array, byte[] target) {
-    if (target.length == 0) {
+  public static boolean contains(byte[] arr, byte[] sub) {
+    if (sub.length == 0) {
       return true;
-    } else if (array.length == 0) {
-      return false;
-    } else if (target.length > array.length) {
-      return false;
-    } else {
-      return indexOf(array, target) >= 0;
     }
+    byte first = sub[0];
+    for (int i = 0; i <= arr.length - sub.length; i++) {
+      if (arr[i] == first && matchAt(arr, sub, i)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public static boolean startsWith(byte[] array, byte[] target) {
-    if (target.length == 0) {
-      return true;
-    } else if (array.length == 0) {
+    if(target.length > array.length) {
       return false;
-    } else if (target.length > array.length) {
-      return false;
-    } else {
-      return indexOf(array, target) == 0;
     }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, target.length);
   }
 
   public static boolean endsWith(byte[] array, byte[] target) {
-    if (target.length == 0) {
-      return true;
-    } else if (array.length == 0) {
+    if (target.length > array.length) {
       return false;
-    } else if (target.length > array.length) {
-      return false;
-    } else {
-      int endPos = array.length - target.length;
-      for (int i = 0; i < target.length; ++i) {
-        if (array[endPos + i] != target[i]) {
-          return false;
-        }
-      }
-      return true;
     }
+    return arrayEquals(array, BYTE_ARRAY_OFFSET + array.length - target.length,
+      target, BYTE_ARRAY_OFFSET, target.length);
   }
 
-  // This code from com.google.common.primitives.Bytes.indexOf
-  public static int indexOf(byte[] array, byte[] target) {
-    if (target.length == 0) {
-      return 0;
-    } else {
-      label28:
-      for (int i = 0; i < array.length - target.length + 1; ++i) {
-        for (int j = 0; j < target.length; ++j) {
-          if (array[i + j] != target[j]) {
-            continue label28;
-          }
-        }
-        return i;
-      }
-      return -1;
+  public static boolean matchAt(byte[] arr, byte[] sub, int pos) {
+    if (sub.length + pos > arr.length || pos < 0) {
+      return false;
     }
+    return arrayEquals(arr, BYTE_ARRAY_OFFSET + pos, sub, BYTE_ARRAY_OFFSET, sub.length);
   }
 }
