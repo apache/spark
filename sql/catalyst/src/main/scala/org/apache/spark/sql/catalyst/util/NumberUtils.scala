@@ -45,12 +45,6 @@ object NumberUtils {
 
   private final val SIGN_SET = Set(POINT_SIGN, COMMA_SIGN, MINUS_SIGN, DOLLAR_SIGN)
 
-  private lazy val numberDecimalFormat = {
-    val decimalFormat = new DecimalFormat()
-    decimalFormat.setParseBigDecimal(true)
-    decimalFormat
-  }
-
   /**
    * DecimalFormat provides '#' and '0' as placeholder of digit, ',' as grouping separator,
    * '.' as decimal separator, '-' as minus, '$' as dollar, but not '9', 'G', 'D', 'S'. So we need
@@ -149,7 +143,7 @@ object NumberUtils {
    *
    * @param input the string need to converted
    * @param originNumberFormat the origin number format
-   * @param normalizedNumberFormat normalized number format
+   * @param numberDecimalFormat decimal format of number format
    * @param precision decimal precision
    * @param scale decimal scale
    * @return decimal obtained from string parsing
@@ -157,7 +151,7 @@ object NumberUtils {
   private def parse(
       input: UTF8String,
       originNumberFormat: String,
-      normalizedNumberFormat: String,
+      numberDecimalFormat: DecimalFormat,
       precision: Int,
       scale: Int): Decimal = {
     val inputStr = input.toString.trim
@@ -171,13 +165,6 @@ object NumberUtils {
       throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
     }
 
-    val transformedFormat = transform(normalizedNumberFormat)
-    try {
-      numberDecimalFormat.applyLocalizedPattern(transformedFormat)
-    } catch {
-      case _: IllegalArgumentException =>
-        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
-    }
     val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
     assert(number.isInstanceOf[BigDecimal])
     Decimal(number.asInstanceOf[BigDecimal])
@@ -207,7 +194,17 @@ object NumberUtils {
     if (decimalPlainStr.length > transformedFormat.length) {
       transformedFormat.replaceAll("0", POUND_SIGN_STRING)
     } else {
-      numberDecimalFormat.applyLocalizedPattern(transformedFormat)
+      val numberDecimalFormat = {
+        val decimalFormat = new DecimalFormat()
+        decimalFormat.setParseBigDecimal(true)
+        try {
+          decimalFormat.applyLocalizedPattern(transformedFormat)
+        } catch {
+          case _: IllegalArgumentException =>
+            throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+        }
+        decimalFormat
+      }
       var resultStr = numberDecimalFormat.format(bigDecimal)
       // Since we trimmed the comma at the beginning or end of number format in function
       // `normalize`, we restore the comma to the result here.
@@ -231,9 +228,25 @@ object NumberUtils {
 
     protected val normalizedNumberFormat = normalize(originNumberFormat)
 
+    private val transformedFormat = transform(normalizedNumberFormat)
+
+    private lazy val numberDecimalFormat = {
+      val decimalFormat = new DecimalFormat()
+      decimalFormat.setParseBigDecimal(true)
+      try {
+        decimalFormat.applyLocalizedPattern(transformedFormat)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
+      }
+      decimalFormat
+    }
+
     private val precision = getPrecision(normalizedNumberFormat)
 
     private val scale = getScale(normalizedNumberFormat)
+
+    private var unChecked = true
 
     def parsePrecisionAndScale(): (Int, Int) = (precision, scale)
 
@@ -243,11 +256,15 @@ object NumberUtils {
       } catch {
         case e: AnalysisException => return TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
+      unChecked = false
       TypeCheckResult.TypeCheckSuccess
     }
 
     def parse(input: UTF8String): Decimal = {
-      NumberUtils.parse(input, originNumberFormat, normalizedNumberFormat, precision, scale)
+      if (unChecked) {
+        check()
+      }
+      NumberUtils.parse(input, originNumberFormat, numberDecimalFormat, precision, scale)
     }
   }
 
