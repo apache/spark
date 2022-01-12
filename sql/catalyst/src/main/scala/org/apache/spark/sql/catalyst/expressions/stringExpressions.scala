@@ -525,6 +525,7 @@ case class Contains(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
+  override def prettyName: String = "contains"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
@@ -538,6 +539,7 @@ case class BinaryContains(left: Expression, right: Expression)
       s"""org.apache.spark.unsafe.array.ByteArrayMethods
         .contains($c1, $c2)""".stripMargin)
   }
+  override def prettyName: String = "contains"
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): BinaryContains = copy(left = newLeft, right = newRight)
@@ -582,6 +584,7 @@ case class StartsWith(left: Expression, right: Expression) extends BinaryPredica
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
+  override def prettyName: String = "startswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
@@ -595,6 +598,7 @@ case class BinaryStartsWith(left: Expression, right: Expression)
       s"""org.apache.spark.unsafe.array.ByteArrayMethods
         .startsWith($c1, $c2)""".stripMargin)
   }
+  override def prettyName: String = "startswith"
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): BinaryStartsWith = copy(left = newLeft, right = newRight)
@@ -639,6 +643,7 @@ case class EndsWith(left: Expression, right: Expression) extends BinaryPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
+  override def prettyName: String = "endswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
@@ -651,6 +656,7 @@ case class BinaryEndsWith(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (c1, c2) =>
       s"""org.apache.spark.unsafe.array.ByteArrayMethods.endsWith($c1, $c2)""".stripMargin)
   }
+  override def prettyName: String = "endswith"
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): BinaryEndsWith = copy(left = newLeft, right = newRight)
