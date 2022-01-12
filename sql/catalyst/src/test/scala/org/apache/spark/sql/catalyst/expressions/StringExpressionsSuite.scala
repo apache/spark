@@ -1034,15 +1034,38 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Contains(Literal("Spark SQL".getBytes), Literal("Spark")), true)
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("Spark".getBytes)), true)
     checkEvaluation(Contains(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
+    checkEvaluation(Contains(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
+    checkEvaluation(Contains(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      Contains(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(Contains(Literal(Array.empty[Byte]), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      Contains(Literal.create(null, StringType), Literal(Array(1, 2).map(_.toByte))), null)
 
     checkEvaluation(StartsWith(Literal("Spark SQL"), Literal("Spark")), true)
     checkEvaluation(StartsWith(Literal("Spark SQL".getBytes), Literal("Spark")), true)
     checkEvaluation(StartsWith(Literal("Spark SQL"), Literal("Spark".getBytes)), true)
     checkEvaluation(StartsWith(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
+    checkEvaluation(StartsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
+    checkEvaluation(StartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(StartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      StartsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(StartsWith(Literal(Array.empty[Byte]), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      StartsWith(Literal.create(null, StringType), Literal(Array(1, 2).map(_.toByte))), null)
 
     checkEvaluation(EndsWith(Literal("Spark SQL"), Literal("SQL")), true)
     checkEvaluation(EndsWith(Literal("Spark SQL".getBytes), Literal("SQL")), true)
     checkEvaluation(EndsWith(Literal("Spark SQL"), Literal("SQL".getBytes)), true)
     checkEvaluation(EndsWith(Literal("Spark SQL".getBytes), Literal("SQL".getBytes)), true)
+    checkEvaluation(EndsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
+    checkEvaluation(EndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(EndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      EndsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(EndsWith(Literal(Array.empty[Byte]), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      EndsWith(Literal.create(null, StringType), Literal(Array(1, 2).map(_.toByte))), null)
   }
 }
