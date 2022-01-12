@@ -38,7 +38,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const endpoint = 'GET /repos/:owner/:repo/actions/workflows/:id/runs?&branch=:branch'
+            const endpoint = 'GET /repos/:owner/:repo/commits/:ref/check-runs'
 
             // TODO: Should use pull_request.user and pull_request.user.repos_url?
             // If a different person creates a commit to another forked repo,
@@ -46,8 +46,7 @@ jobs:
             const params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
-              id: 'build_and_test.yml',
-              branch: context.payload.pull_request.head.ref,
+              ref: context.payload.pull_request.head.ref,
             }
 
             console.log('Ref: ' + context.payload.pull_request.head.ref)
@@ -68,7 +67,7 @@ jobs:
             const head_sha = context.payload.pull_request.head.sha
             let status = 'queued'
 
-            if (!runs || runs.data.workflow_runs.length === 0) {
+            if (!runs || runs.data.check_runs.filter(r => r.name === "Configure jobs").length === 0) {
               status = 'completed'
               const conclusion = 'action_required'
 
@@ -100,15 +99,15 @@ jobs:
                 }
               })
             } else {
-              const runID = runs.data.workflow_runs[0].id
+              const runID = runs.data.check_runs.filter(r => r.name === "Configure jobs")[0].id
 
-              if (runs.data.workflow_runs[0].head_sha != context.payload.pull_request.head.sha) {
+              if (runs.data.check_runs[0].head_sha != context.payload.pull_request.head.sha) {
                 throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
               }
 
               const runUrl = 'https://github.com/'
                 + context.payload.pull_request.head.repo.full_name
-                + '/actions/runs/'
+                + '/runs/'
                 + runID
 
               github.checks.create({
