@@ -555,8 +555,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
 
     // when users specify a wrong schema
-    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
-    val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    var inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    var e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
+
+    inputSchema = new StructType().add("i", StringType, nullable = true)
+    e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
