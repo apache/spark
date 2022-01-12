@@ -201,7 +201,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18, sum(sum(c1)#23)/sum(count(c1)#24) AS avg(c1)#19]
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
                   // scalastyle:on
-                  val a = plan.transformExpressions {
+                  plan.transformExpressions {
                     case agg: AggregateExpression =>
                       val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                       val aggAttribute = aggOutput(ordinal)
@@ -217,10 +217,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                             aggregate.Sum(addCastIfNeeded(aggAttribute, LongType))
                           case other => other
                         }
-
                       agg.copy(aggregateFunction = aggFunction)
                   }
-                  a
                 }
               }
             case _ => aggNode
