@@ -280,9 +280,11 @@ private[spark] class BlockManager(
 
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
-  private[storage] lazy val migratableResolver: MigratableResolver = {
+  private[storage] lazy val migratableResolver: MigratableResolver =
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
-  }
+
+  private lazy val indexShuffleBlockResolver: IndexShuffleBlockResolver =
+    shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
@@ -670,7 +672,7 @@ private[spark] class BlockManager(
   override def getHostLocalShuffleData(
       blockId: BlockId,
       dirs: Array[String]): ManagedBuffer = {
-    shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+    indexShuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
   /**
@@ -681,7 +683,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
       try {
-        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+        indexShuffleBlockResolver.getBlockData(blockId)
       } catch {
         case e: IOException =>
           if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
@@ -781,7 +783,7 @@ private[spark] class BlockManager(
   def getLocalMergedBlockData(
       blockId: ShuffleMergedBlockId,
       dirs: Array[String]): Seq[ManagedBuffer] = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
+    indexShuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
 
   /**
@@ -790,7 +792,7 @@ private[spark] class BlockManager(
   def getLocalMergedBlockMeta(
       blockId: ShuffleMergedBlockId,
       dirs: Array[String]): MergedBlockMeta = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
+    indexShuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
   /**

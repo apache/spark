@@ -465,11 +465,13 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   /**
+   * Retrieve the data for the specified merged shuffle block as multiple chunks.
+   *
    * This is only used for reading local merged block data. In such cases, all chunks in the
    * merged shuffle file need to be identified at once, so the ShuffleBlockFetcherIterator
    * knows how to consume local merged shuffle file as multiple chunks.
    */
-  override def getMergedBlockData(
+  def getMergedBlockData(
       blockId: ShuffleMergedBlockId,
       dirs: Option[Array[String]]): Seq[ManagedBuffer] = {
     val indexFile =
@@ -496,9 +498,10 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   /**
+   * Retrieve the meta data for the specified merged shuffle block.
    * This is only used for reading local merged block meta data.
    */
-  override def getMergedBlockMeta(
+  def getMergedBlockMeta(
       blockId: ShuffleMergedBlockId,
       dirs: Option[Array[String]]): MergedBlockMeta = {
     val indexFile =
@@ -550,9 +553,17 @@ private[spark] class IndexShuffleBlockResolver(
       .getOrElse(blockManager.diskBlockManager.getFile(fileName))
   }
 
-  override def getBlockData(
+   /**
+    * Retrieve the data for the specified block.
+    *
+    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+    * read from the specified directories.
+    *
+    * If the data for that block is not available, throws an unspecified exception.
+    */
+   def getBlockData(
       blockId: BlockId,
-      dirs: Option[Array[String]]): ManagedBuffer = {
+      dirs: Option[Array[String]] = None): ManagedBuffer = {
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
       case id: ShuffleBlockId =>
         (id.shuffleId, id.mapId, id.reduceId, id.reduceId + 1)
