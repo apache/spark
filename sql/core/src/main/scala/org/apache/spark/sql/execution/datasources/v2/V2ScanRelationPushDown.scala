@@ -90,7 +90,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
                 groupingExpressions, sHolder.relation.output)
               val translatedGroupBys =
-                PushDownUtils.translateAggregation(Seq.empty, normalizedGroupingExpressions)
+                DataSourceStrategy.translateAggregation(Seq.empty, normalizedGroupingExpressions)
               val finalResultExpressions = if (r.supportCompletePushDown(translatedGroupBys.get)) {
                 resultExpressions
               } else {
@@ -120,10 +120,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               }
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-              val translatedAggregates = PushDownUtils.translateAggregation(
+              val translatedAggregates = DataSourceStrategy.translateAggregation(
                 normalizedAggregates, normalizedGroupingExpressions)
 
-              val pushedAggregates = PushDownUtils.pushAggregates(r, translatedAggregates)
+              val pushedAggregates = translatedAggregates.filter(r.pushAggregation)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
