@@ -1124,6 +1124,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_CLEAN_SHUFFLE_DEPENDENCIES =
+    buildConf("spark.sql.thriftServer.cleanShuffleDependenciesOnStatementEnd")
+      .doc("When true")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_FORCE_CANCEL =
     buildConf("spark.sql.thriftServer.interruptOnCancel")
       .doc("When true, all running tasks will be interrupted if one cancels a query. " +

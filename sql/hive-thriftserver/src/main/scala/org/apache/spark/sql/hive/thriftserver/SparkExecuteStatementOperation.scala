@@ -32,7 +32,8 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, SQLContext, Row => SparkRow}
 import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.VariableSubstitution
@@ -65,11 +66,15 @@ private[hive] class SparkExecuteStatementOperation(
 
   private val forceCancel = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
+  private val cleanShuffleDeps =
+    sqlContext.conf.getConf(SQLConf.THRIFTSERVER_CLEAN_SHUFFLE_DEPENDENCIES)
+
   private val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
     new VariableSubstitution().substitute(statement)
   }
 
   private var result: DataFrame = _
+  private var rdd: RDD[SparkRow] = _
 
   private var iter: FetchIterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
@@ -288,7 +293,9 @@ private[hive] class SparkExecuteStatementOperation(
       }
 
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
-      result = sqlContext.sql(statement)
+      val df = sqlContext.sql(statement)
+      rdd = df.rdd
+      result = sqlContext.createDataFrame(df.rdd, df.schema)
       logDebug(result.queryExecution.toString())
       HiveThriftServer2.eventManager.onStatementParsed(statementId,
         result.queryExecution.toString())
@@ -331,6 +338,10 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.FINISHED)
           HiveThriftServer2.eventManager.onStatementFinish(statementId)
         }
+      }
+      if (cleanShuffleDeps && rdd != null) {
+        rdd.cleanShuffleDependencies()
+        rdd = null
       }
       sqlContext.sparkContext.clearJobGroup()
     }
