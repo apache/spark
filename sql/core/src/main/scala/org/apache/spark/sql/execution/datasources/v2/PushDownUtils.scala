@@ -107,14 +107,12 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down aggregates to the data source reader
+   * Translate aggregate expressions and group by expressions.
    *
-   * @return pushed aggregation.
+   * @return translated aggregation.
    */
-  def pushAggregates(
-      scanBuilder: SupportsPushDownAggregates,
-      aggregates: Seq[AggregateExpression],
-      groupBy: Seq[Expression]): Option[Aggregation] = {
+  def translateAggregation(
+      aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
       case PushableColumnWithoutNestedColumn(name) =>
@@ -130,8 +128,17 @@ object PushDownUtils extends PredicateHelper {
       return None
     }
 
-    val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
-    Some(agg).filter(scanBuilder.pushAggregation)
+    Some(new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray))
+  }
+
+  /**
+   * Pushes down aggregates to the data source reader
+   *
+   * @return pushed aggregation.
+   */
+  def pushAggregates(
+      scanBuilder: SupportsPushDownAggregates, aggOpt: Option[Aggregation]): Option[Aggregation] = {
+    aggOpt.filter(scanBuilder.pushAggregation)
   }
 
   /**

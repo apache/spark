@@ -197,12 +197,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
-   * @param supportCompletePushDown supports complete push-down.
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileAggregate(
-      aggFunction: AggregateFunc, supportCompletePushDown: Boolean = true): Option[String] = {
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
         if (min.column.fieldNames.length != 1) return None
@@ -226,12 +224,7 @@ abstract class JdbcDialect extends Serializable with Logging{
         if (avg.column.fieldNames.length != 1) return None
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
         val column = quoteIdentifier(avg.column.fieldNames.head)
-        if (supportCompletePushDown) {
-          Some(s"AVG($distinct$column)")
-        } else {
-          // For simplify code, we not reuse exists `SUM` or `COUNT`.
-          Some(s"SUM($distinct$column), COUNT($distinct$column)")
-        }
+        Some(s"AVG($distinct$column)")
       case _ => None
     }
   }

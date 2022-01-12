@@ -87,9 +87,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
+              val translatedGroupBys =
+                PushDownUtils.translateAggregation(Seq.empty, normalizedGroupingExpressions)
+              val finalResultExpressions = if (r.supportCompletePushDown(translatedGroupBys.get)) {
+                resultExpressions
+              } else {
+                resultExpressions.map { expr =>
+                  expr.transform {
+                    case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
+                      Divide(Cast(aggregate.Sum(avg.child).toAggregateExpression(isDistinct),
+                        avg.dataType), Cast(
+                        aggregate.Count(avg.child).toAggregateExpression(isDistinct), avg.dataType))
+                  }
+                }.asInstanceOf[Seq[NamedExpression]]
+              }
+
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               var ordinal = 0
-              val aggregates = resultExpressions.flatMap { expr =>
+              val aggregates = finalResultExpressions.flatMap { expr =>
                 expr.collect {
                   // Do not push down duplicated aggregate expressions. For example,
                   // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
@@ -103,10 +120,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               }
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
-                groupingExpressions, sHolder.relation.output)
-              val pushedAggregates = PushDownUtils.pushAggregates(
-                r, normalizedAggregates, normalizedGroupingExpressions)
+              val translatedAggregates = PushDownUtils.translateAggregation(
+                normalizedAggregates, normalizedGroupingExpressions)
+
+              val pushedAggregates = PushDownUtils.pushAggregates(r, translatedAggregates)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
@@ -129,6 +146,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
+                assert(newOutput.length == groupingExpressions.length + aggregates.length)
                 val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
@@ -163,7 +181,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   Project(projectExpressions, scanRelation)
                 } else {
                   val plan = Aggregate(
-                    output.take(groupingExpressions.length), resultExpressions, scanRelation)
+                    output.take(groupingExpressions.length), finalResultExpressions, scanRelation)
 
                   // scalastyle:off
                   // Change the optimized logical plan to reflect the pushed down aggregate
@@ -175,7 +193,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   //
                   // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24]
                   // we have the following
-                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, avg(c1#9) AS avg(c1)#19]
+                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, sum(c1#9)/count(c1#9) AS avg(c1)#19]
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
                   //
                   // We want to change it to
@@ -183,11 +201,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18, sum(sum(c1)#23)/sum(count(c1)#24) AS avg(c1)#19]
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
                   // scalastyle:on
-                  var skip = 0
-                  plan.transformExpressionsUp {
+                  val a = plan.transformExpressions {
                     case agg: AggregateExpression =>
                       val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
-                      val aggAttribute = aggOutput(ordinal + skip)
+                      val aggAttribute = aggOutput(ordinal)
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
                           case max: aggregate.Max =>
@@ -201,19 +218,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                           case other => other
                         }
 
-                      aggFunction match {
-                        case avg: aggregate.Average =>
-                          skip += 1
-                          val countAttribute = aggOutput(ordinal + skip)
-                          val divide = Divide(
-                            aggregate.Sum(addCastIfNeeded(aggAttribute, avg.dataType))
-                              .toAggregateExpression(),
-                            aggregate.Sum(addCastIfNeeded(countAttribute, avg.dataType))
-                              .toAggregateExpression())
-                          Cast(divide, avg.dataType)
-                        case _ => agg.copy(aggregateFunction = aggFunction)
-                      }
+                      agg.copy(aggregateFunction = aggFunction)
                   }
+                  a
                 }
               }
             case _ => aggNode
