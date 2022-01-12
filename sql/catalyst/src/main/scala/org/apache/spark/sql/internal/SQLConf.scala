@@ -1126,7 +1126,8 @@ object SQLConf {
 
   val THRIFTSERVER_CLEAN_SHUFFLE_DEPENDENCIES =
     buildConf("spark.sql.thriftServer.cleanShuffleDependenciesOnStatementEnd")
-      .doc("When true")
+      .doc("When true, sql statements will clear shuffle dependencies eagerly after being" +
+        " executed in Thrift Server.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
