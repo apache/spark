@@ -22,7 +22,6 @@ from tempfile import NamedTemporaryFile
 import threading
 import pickle
 from typing import (
-    cast,
     overload,
     Any,
     Callable,
@@ -119,12 +118,13 @@ class Broadcast(Generic[T]):
             self._sc: Optional["SparkContext"] = sc
             assert sc._jvm is not None
             self._python_broadcast = sc._jvm.PythonRDD.setupBroadcast(self._path)
+            broadcast_out: Union[ChunkedStream, IO[bytes]]
             if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
                 port, auth_secret = self._python_broadcast.setupEncryptionServer()
                 (encryption_sock_file, _) = local_connect_and_auth(port, auth_secret)
-                broadcast_out: Union[ChunkedStream, IO[bytes]] = ChunkedStream(
+                broadcast_out = ChunkedStream(
                     encryption_sock_file, 8192
                 )
             else:
@@ -226,7 +226,8 @@ class Broadcast(Generic[T]):
     def __reduce__(self) -> Tuple[Callable[[int], "Broadcast[T]"], Tuple[int]]:
         if self._jbroadcast is None:
             raise RuntimeError("Broadcast can only be serialized in driver")
-        cast("BroadcastPickleRegistry", self._pickle_registry).add(self)
+        assert self._pickle_registry is not None
+        self._pickle_registry.add(self)
         return _from_id, (self._jbroadcast.id(),)
 
 
