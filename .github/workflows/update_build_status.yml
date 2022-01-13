@@ -72,6 +72,21 @@ jobs:
                         // disalbes GitHub Actions.
                         continue
                       }
+                      
+                      let check_suite
+                      const check_suite_params = {
+                        owner: params.owner,
+                        repo: params.repo,
+                        check_suite_id: run.data.check_suite.id
+                      }
+                      try {
+                        run = await github.request('GET /repos/{owner}/{repo}/check-suites/{check_suite_id}', params)
+                      } catch (error) {
+                        console.error(error)
+                        // Run not found. This can happen when the PR author removes GitHub Actions runs or
+                        // disalbes GitHub Actions.
+                        continue
+                      }
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
@@ -81,9 +96,9 @@ jobs:
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
-                          status: run.data.status,
-                          conclusion: run.data.conclusion,
-                          details_url: run.data.details_url
+                          status: check_suite.data.status,
+                          conclusion: check_suite.data.conclusion,
+                          details_url: run.data.url
                         })
                       } else {
                         console.log('    Run ' + cr.id + ': set status (' + run.data.status + ')')
@@ -92,8 +107,8 @@ jobs:
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
-                          status: run.data.status,
-                          details_url: run.data.details_url
+                          status: check_suite.data.status,
+                          details_url: run.data.url
                         })
                       }
 
