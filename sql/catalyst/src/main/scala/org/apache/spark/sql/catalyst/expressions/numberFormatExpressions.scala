@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.NumberUtils.NumberFormatBuilder
-import org.apache.spark.sql.types.{DataType, DecimalType, StringType}
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -59,9 +59,8 @@ case class ToNumber(left: Expression, right: Expression)
 
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
   private lazy val numberFormatBuilder = new NumberFormatBuilder(numberFormat)
-  private lazy val (precision, scale) = numberFormatBuilder.parsePrecisionAndScale()
 
-  override def dataType: DataType = DecimalType(precision, scale)
+  override def dataType: DataType = numberFormatBuilder.parsedDecimalType
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 

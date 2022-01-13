@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object NumberUtils {
@@ -63,13 +63,13 @@ object NumberUtils {
    * @return normalized number format string
    */
   private def normalize(format: String): String = {
-    var flag = true
+    var notFindDecimalPoint = true
     val normalizedFormat = format.toUpperCase(Locale.ROOT).map {
-      case NINE_DIGIT if flag => POUND_SIGN
-      case NINE_DIGIT if !flag => ZERO_DIGIT
+      case NINE_DIGIT if notFindDecimalPoint => POUND_SIGN
+      case NINE_DIGIT if !notFindDecimalPoint => ZERO_DIGIT
       case COMMA_LETTER => COMMA_SIGN
       case POINT_LETTER | POINT_SIGN =>
-        flag = false
+        notFindDecimalPoint = false
         POINT_SIGN
       case MINUS_LETTER => MINUS_SIGN
       case other => other
@@ -240,7 +240,7 @@ object NumberUtils {
 
     private val scale = getScale(normalizedNumberFormat)
 
-    def parsePrecisionAndScale(): (Int, Int) = (precision, scale)
+    def parsedDecimalType: DecimalType = DecimalType(precision, scale)
 
     def check(): TypeCheckResult = {
       try {

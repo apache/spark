@@ -1004,7 +1004,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (",454,367", ",999,999") -> Decimal(454367),
       (",454,367", ",000,000") -> Decimal(454367),
       (",454,367", "G999G999") -> Decimal(454367),
-      (",454,367", "G000G000") -> Decimal(454367)
+      (",454,367", "G000G000") -> Decimal(454367),
+      (",454,367", "999,999") -> Decimal(454367),
+      (",454,367", "000,000") -> Decimal(454367),
+      (",454,367", "999G999") -> Decimal(454367),
+      (",454,367", "000G000") -> Decimal(454367)
     ).foreach { case ((str, format), expected) =>
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
     }
