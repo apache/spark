@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.NumberUtils.{format, TestBuilder}
+import org.apache.spark.sql.catalyst.util.NumberUtils.TestBuilder
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -216,8 +216,10 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(54), "0000") -> "0054",
       (Decimal(404), "0000") -> "0404",
       (Decimal(450), "0000") -> "0450"
-    ).foreach { case ((decimal, str), expected) =>
-      assert(format(decimal, str) === expected)
+    ).foreach { case ((decimal, format), expected) =>
+      val builder = new TestBuilder(format)
+      builder.check()
+      assert(builder.format(decimal, format) === expected)
     }
 
     // Test '.' and 'D'
@@ -242,8 +244,10 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(4542), "0000.") -> "4542.",
       (Decimal(4542), "9999D") -> "4542.",
       (Decimal(4542), "0000D") -> "4542."
-    ).foreach { case ((decimal, str), expected) =>
-      assert(format(decimal, str) === expected)
+    ).foreach { case ((decimal, format), expected) =>
+      val builder = new TestBuilder(format)
+      builder.check()
+      assert(builder.format(decimal, format) === expected)
     }
 
     // Test ',' and 'G'
@@ -264,8 +268,10 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(454367), ",000,000") -> ",454,367",
       (Decimal(454367), "G999G999") -> ",454,367",
       (Decimal(454367), "G000G000") -> ",454,367"
-    ).foreach { case ((decimal, str), expected) =>
-      assert(format(decimal, str) === expected)
+    ).foreach { case ((decimal, format), expected) =>
+      val builder = new TestBuilder(format)
+      builder.check()
+      assert(builder.format(decimal, format) === expected)
     }
 
     // Test '$'
@@ -274,8 +280,10 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(78.12), "$00.00") -> "$78.12",
       (Decimal(78.12), "99.99$") -> "78.12$",
       (Decimal(78.12), "00.00$") -> "78.12$"
-    ).foreach { case ((decimal, str), expected) =>
-      assert(format(decimal, str) === expected)
+    ).foreach { case ((decimal, format), expected) =>
+      val builder = new TestBuilder(format)
+      builder.check()
+      assert(builder.format(decimal, format) === expected)
     }
 
     // Test '-' and 'S'
@@ -290,8 +298,10 @@ class NumberUtilsSuite extends SparkFunSuite {
       (Decimal(-454), "S000") -> "-454",
       (Decimal(-12454.8), "99G999D9S") -> "12,454.8-",
       (Decimal(-454.8), "99G999.9S") -> "454.8-"
-    ).foreach { case ((decimal, str), expected) =>
-      assert(format(decimal, str) === expected)
+    ).foreach { case ((decimal, format), expected) =>
+      val builder = new TestBuilder(format)
+      builder.check()
+      assert(builder.format(decimal, format) === expected)
     }
   }
 
