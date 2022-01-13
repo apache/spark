@@ -100,8 +100,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   r.supportCompletePushDown(translatedAggregates.get)) {
                   (resultExpressions, aggregates, translatedAggregates)
                 } else {
-                  // Spark can't do complete agg push down to data source and try to do partial agg
-                  // push down by convert `AVG` to: `SUM / COUNT`.
+                  // The data source doesn't support the complete push-down of this aggregation.
+                  // Here we translate `AVG` to `SUM / COUNT`, so that it's more likely to be
+                  // pushed, completely or partially.
                   var findAverage = false
                   val newResultExpressions = resultExpressions.map { expr =>
                     expr.transform {
