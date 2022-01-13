@@ -242,29 +242,11 @@ class ResourceProfile(
     rp.taskResources == taskResources && rp.executorResources == executorResources
   }
 
-  // check that executor cores resources are equal, but the task resources could be different
-  // custom resources are not supported right now
-  private[spark] def resourcesCompatible(rp: ResourceProfile): Boolean = {
-    !hasCustomExecutorResources(this) && !hasCustomExecutorResources(rp) &&
-      rp.executorResources("cores") == executorResources("cores")
-  }
-
   private[spark] def resourcesCompatible(rp: ResourceProfile,
-    isCompatibleFunc: (ResourceProfile, ResourceProfile) => Boolean = isCompatibleExecutorsDefault)
+    resourceProfileCompatibleFunc: (ResourceProfile, ResourceProfile) => Boolean
+    = ResourceProfileCompatiblePolicy.resourceProfileCompatibleWithEqualCores)
   : Boolean = {
-    isCompatibleFunc(this, rp)
-  }
-
-  private def isCompatibleExecutorsDefault(prevRP: ResourceProfile,
-                                           curRP: ResourceProfile ): Boolean = {
-    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
-      prevRP.executorResources("cores") == curRP.executorResources("cores")
-  }
-
-  private def isCompatibleExecutorsLarger(prevRP: ResourceProfile,
-                                          curRP: ResourceProfile ): Boolean = {
-    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
-      prevRP.executorResources("cores") == curRP.executorResources("cores")
+    resourceProfileCompatibleFunc(this, rp)
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
@@ -272,6 +254,34 @@ class ResourceProfile(
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${executorResources.mkString(",")}, " +
       s"task resources: ${taskResources.mkString(",")}"
+  }
+}
+
+/**
+ * Resource profile compatibility based on user policy
+ * strict match:
+ *     only reuse executors with exact same resources (including all 3rd party resources),
+ *     there is no resource waste but less user flexibility
+ * reuse larger executor:
+ *     if there is a larger executor which has resources larger than or equal to current
+ *     requirements, eg. if you define less memory in the new stage then you can reuse previous
+ *     executor with larger memory. or if you define new stage with no GPU, you can reuse
+ *     previous executor with GPU.
+ *     in both cases, new stage has less resource requirements. But in this policy user should know
+ *     there is some resource waste. They need to tradeoff reuse executor or create new ones.
+ */
+object ResourceProfileCompatiblePolicy {
+
+  def resourceProfileCompatibleWithEqualCores(prevRP: ResourceProfile,
+                                              curRP: ResourceProfile): Boolean = {
+    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
+      prevRP.executorResources("cores") == curRP.executorResources("cores")
+  }
+
+  def resourceProfileCompatibleWithMoreCores(prevRP: ResourceProfile,
+                                             curRP: ResourceProfile): Boolean = {
+    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
+      prevRP.executorResources("cores").amount > curRP.executorResources("cores").amount
   }
 }
 
