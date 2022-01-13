@@ -56,10 +56,6 @@ from pyspark import pandas as ps
 
 
 class TypeHintTests(unittest.TestCase):
-    @unittest.skipIf(
-        sys.version_info < (3, 7),
-        "Type inference from pandas instances is supported with Python 3.7+",
-    )
     def test_infer_schema_from_pandas_instances(self):
         def func() -> pd.Series[int]:
             pass
@@ -148,10 +144,6 @@ class TypeHintTests(unittest.TestCase):
         assert not ps._frame_has_class_getitem
         assert not ps._series_has_class_getitem
 
-    @unittest.skipIf(
-        sys.version_info < (3, 7),
-        "Type inference from pandas instances is supported with Python 3.7+",
-    )
     def test_infer_schema_with_names_pandas_instances(self):
         def func() -> 'pd.DataFrame["a" : np.float_, "b":str]':  # noqa: F405
             pass
@@ -201,10 +193,6 @@ class TypeHintTests(unittest.TestCase):
         self.assertEqual(inferred.dtypes, [np.int64, CategoricalDtype(categories=["a", "b", "c"])])
         self.assertEqual(inferred.spark_type, expected)
 
-    @unittest.skipIf(
-        sys.version_info < (3, 7),
-        "Type inference from pandas instances is supported with Python 3.7+",
-    )
     def test_infer_schema_with_names_pandas_instances_negative(self):
         def try_infer_return_type():
             def f() -> 'pd.DataFrame["a" : np.float_ : 1, "b":str:2]':  # noqa: F405

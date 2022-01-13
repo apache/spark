@@ -18,16 +18,15 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
-from typing import Any, Optional, Union, TYPE_CHECKING, no_type_check
+from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.tseries.offsets import DateOffset
+
+import pyspark.pandas as ps
 import pyspark.sql.functions as F
 from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, LongType
-
-if TYPE_CHECKING:
-    import pyspark.pandas as ps
 
 
 class DatetimeMethods:
@@ -107,8 +106,7 @@ class DatetimeMethods:
         The microseconds of the datetime.
         """
 
-        @no_type_check
-        def pandas_microsecond(s) -> "ps.Series[np.int64]":
+        def pandas_microsecond(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
             return s.dt.microsecond
 
         return self._data.pandas_on_spark.transform_batch(pandas_microsecond)
@@ -167,8 +165,7 @@ class DatetimeMethods:
         dtype: int64
         """
 
-        @no_type_check
-        def pandas_dayofweek(s) -> "ps.Series[np.int64]":
+        def pandas_dayofweek(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
             return s.dt.dayofweek
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofweek)
@@ -185,8 +182,7 @@ class DatetimeMethods:
         The ordinal day of the year.
         """
 
-        @no_type_check
-        def pandas_dayofyear(s) -> "ps.Series[np.int64]":
+        def pandas_dayofyear(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
             return s.dt.dayofyear
 
         return self._data.pandas_on_spark.transform_batch(pandas_dayofyear)
@@ -197,8 +193,7 @@ class DatetimeMethods:
         The quarter of the date.
         """
 
-        @no_type_check
-        def pandas_quarter(s) -> "ps.Series[np.int64]":
+        def pandas_quarter(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
             return s.dt.quarter
 
         return self._data.pandas_on_spark.transform_batch(pandas_quarter)
@@ -237,8 +232,7 @@ class DatetimeMethods:
         dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_month_start(s) -> "ps.Series[bool]":
+        def pandas_is_month_start(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_month_start
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_month_start)
@@ -277,8 +271,7 @@ class DatetimeMethods:
         dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_month_end(s) -> "ps.Series[bool]":
+        def pandas_is_month_end(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_month_end
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_month_end)
@@ -328,8 +321,7 @@ class DatetimeMethods:
         Name: dates, dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_quarter_start(s) -> "ps.Series[bool]":
+        def pandas_is_quarter_start(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_quarter_start
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_quarter_start)
@@ -379,8 +371,7 @@ class DatetimeMethods:
         Name: dates, dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_quarter_end(s) -> "ps.Series[bool]":
+        def pandas_is_quarter_end(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_quarter_end
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_quarter_end)
@@ -419,8 +410,7 @@ class DatetimeMethods:
         dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_year_start(s) -> "ps.Series[bool]":
+        def pandas_is_year_start(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_year_start
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_year_start)
@@ -459,8 +449,7 @@ class DatetimeMethods:
         dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_year_end(s) -> "ps.Series[bool]":
+        def pandas_is_year_end(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_year_end
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_year_end)
@@ -499,8 +488,7 @@ class DatetimeMethods:
         dtype: bool
         """
 
-        @no_type_check
-        def pandas_is_leap_year(s) -> "ps.Series[bool]":
+        def pandas_is_leap_year(s) -> ps.Series[bool]:  # type: ignore[no-untyped-def]
             return s.dt.is_leap_year
 
         return self._data.pandas_on_spark.transform_batch(pandas_is_leap_year)
@@ -511,8 +499,7 @@ class DatetimeMethods:
         The number of days in the month.
         """
 
-        @no_type_check
-        def pandas_daysinmonth(s) -> "ps.Series[np.int64]":
+        def pandas_daysinmonth(s) -> ps.Series[np.int64]:  # type: ignore[no-untyped-def]
             return s.dt.daysinmonth
 
         return self._data.pandas_on_spark.transform_batch(pandas_daysinmonth)
@@ -574,8 +561,7 @@ class DatetimeMethods:
         dtype: datetime64[ns]
         """
 
-        @no_type_check
-        def pandas_normalize(s) -> "ps.Series[np.datetime64]":
+        def pandas_normalize(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
             return s.dt.normalize()
 
         return self._data.pandas_on_spark.transform_batch(pandas_normalize)
@@ -623,8 +609,7 @@ class DatetimeMethods:
         dtype: object
         """
 
-        @no_type_check
-        def pandas_strftime(s) -> "ps.Series[str]":
+        def pandas_strftime(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
             return s.dt.strftime(date_format)
 
         return self._data.pandas_on_spark.transform_batch(pandas_strftime)
@@ -679,8 +664,7 @@ class DatetimeMethods:
         dtype: datetime64[ns]
         """
 
-        @no_type_check
-        def pandas_round(s) -> "ps.Series[np.datetime64]":
+        def pandas_round(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
             return s.dt.round(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_round)
@@ -735,8 +719,7 @@ class DatetimeMethods:
         dtype: datetime64[ns]
         """
 
-        @no_type_check
-        def pandas_floor(s) -> "ps.Series[np.datetime64]":
+        def pandas_floor(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
             return s.dt.floor(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_floor)
@@ -791,8 +774,7 @@ class DatetimeMethods:
         dtype: datetime64[ns]
         """
 
-        @no_type_check
-        def pandas_ceil(s) -> "ps.Series[np.datetime64]":
+        def pandas_ceil(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
             return s.dt.ceil(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_ceil)
@@ -828,8 +810,7 @@ class DatetimeMethods:
         dtype: object
         """
 
-        @no_type_check
-        def pandas_month_name(s) -> "ps.Series[str]":
+        def pandas_month_name(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
             return s.dt.month_name(locale=locale)
 
         return self._data.pandas_on_spark.transform_batch(pandas_month_name)
@@ -865,8 +846,7 @@ class DatetimeMethods:
         dtype: object
         """
 
-        @no_type_check
-        def pandas_day_name(s) -> "ps.Series[str]":
+        def pandas_day_name(s) -> ps.Series[str]:  # type: ignore[no-untyped-def]
             return s.dt.day_name(locale=locale)
 
         return self._data.pandas_on_spark.transform_batch(pandas_day_name)

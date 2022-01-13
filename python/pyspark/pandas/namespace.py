@@ -816,8 +816,9 @@ def read_parquet(
     if index_col is None and pandas_metadata:
         # Try to read pandas metadata
 
-        @no_type_check
-        @pandas_udf("index_col array<string>, index_names array<string>")
+        @pandas_udf(  # type: ignore[call-overload]
+            "index_col array<string>, index_names array<string>"
+        )
         def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata

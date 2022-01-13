@@ -137,8 +137,7 @@ class TimedeltaIndex(Index):
         Number of days for each element.
         """
 
-        @no_type_check
-        def pandas_days(x) -> int:
+        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
             return x.days
 
         return Index(self.to_series().transform(pandas_days))
