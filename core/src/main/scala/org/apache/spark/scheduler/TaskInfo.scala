@@ -58,7 +58,7 @@ class TaskInfo(
       executorId: String,
       host: String,
       taskLocality: TaskLocality.TaskLocality,
-      speculative: Boolean) {
+      speculative: Boolean) = {
     this(taskId, index, attemptNumber, -1, launchTime, executorId, host, taskLocality, speculative)
   }
 
