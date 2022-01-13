@@ -1,7 +1,6 @@
 package org.apache.spark.sql.execution.vectorized;
 
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
@@ -28,16 +27,61 @@ public class ConstantColumnVector extends ColumnVector {
   private float floatData;
   private double doubleData;
   private byte[] byteArrayData;
-  private ConstantColumnVector childData;
+  private ConstantColumnVector[] childData;
   private ColumnarArray arrayData;
   private ColumnarMap mapData;
+
+  private int numRows;
 
   /**
    * Sets up the data type of this constant column vector.
    * @param type
    */
-  public ConstantColumnVector(DataType type) {
+  public ConstantColumnVector(int numRows, DataType type) {
     super(type);
+    this.numRows = numRows;
+    if (type instanceof StructType) {
+      StructType st = (StructType) type;
+      this.childData = new ConstantColumnVector[st.fields().length];
+    }
+
+    // copy and modify from WritableColumnVector
+    // could also putChild by users
+    if (isArray()) {
+      DataType childType;
+      if (type instanceof ArrayType) {
+        childType = ((ArrayType) type).elementType();
+      } else {
+        childType = DataTypes.ByteType;
+      }
+      this.childData = new ConstantColumnVector[1];
+      this.childData[0] = new ConstantColumnVector(numRows, childType);
+    } else if (type instanceof StructType) {
+      StructType st = (StructType) type;
+      this.childData = new ConstantColumnVector[st.fields().length];
+      for (int i = 0; i < childData.length; ++i) {
+        this.childData[i] = new ConstantColumnVector(numRows, st.fields()[i].dataType());
+      }
+    } else if (type instanceof MapType) {
+      // 0: key, 1: value
+      MapType mapType = (MapType) type;
+      this.childData = new ConstantColumnVector[2];
+      this.childData[0] = new ConstantColumnVector(numRows, mapType.keyType());
+      this.childData[1] = new ConstantColumnVector(numRows, mapType.valueType());
+    } else if (type instanceof CalendarIntervalType) {
+      // 0: Months as Int, 1: Days as Int, 2: Microseconds as Long.
+      this.childData = new ConstantColumnVector[3];
+      this.childData[0] = new ConstantColumnVector(numRows, DataTypes.IntegerType);
+      this.childData[1] = new ConstantColumnVector(numRows, DataTypes.IntegerType);
+      this.childData[2] = new ConstantColumnVector(numRows, DataTypes.LongType);
+    } else {
+      this.childData = null;
+    }
+  }
+
+  protected boolean isArray() {
+    return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
+        DecimalType.isByteArrayDecimalType(type);
   }
 
   @Override
@@ -55,7 +99,7 @@ public class ConstantColumnVector extends ColumnVector {
 
   @Override
   public int numNulls() {
-    return -1;
+    return numRows;
   }
 
   @Override
@@ -203,10 +247,10 @@ public class ConstantColumnVector extends ColumnVector {
 
   @Override
   public ColumnVector getChild(int ordinal) {
-    return childData;
+    return childData[ordinal];
   }
 
-  public void putChild(ConstantColumnVector value) {
-    childData = value;
+  public void putChild(int ordinal, ConstantColumnVector value) {
+    childData[ordinal] = value;
   }
 }

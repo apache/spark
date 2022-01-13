@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInt
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -130,35 +130,51 @@ class FileScanRDD(
         UnsafeProjection.create(joinedExpressions)
       }
 
-      // metadata constant column vectors, will only be updated when the current file is changed
-      val metadataVectors: Seq[ConstantColumnVector] =
-        metadataColumns.map(m => new ConstantColumnVector(m.dataType))
-
       /**
        * For each partitioned file, metadata columns for each record in the file are exactly same.
-       * Only update metadata row and vectors when `currentFile` is changed.
+       * Only update metadata row when `currentFile` is changed.
        */
-      private def updateMetadataData(): Unit = {
+      private def updateMetadataRow(): Unit = {
         if (metadataColumns.isEmpty || currentFile == null) return
         val path = new Path(currentFile.filePath)
         metadataColumns.zipWithIndex.foreach { case (attr, i) =>
           attr.name match {
-            case FILE_PATH =>
-              metadataRow.update(i, UTF8String.fromString(path.toString))
-              metadataVectors(i).putUtf8String(UTF8String.fromString(path.toString))
-            case FILE_NAME =>
-              metadataRow.update(i, UTF8String.fromString(path.getName))
-              metadataVectors(i).putUtf8String(UTF8String.fromString(path.getName))
-            case FILE_SIZE =>
-              metadataRow.update(i, currentFile.fileSize)
-              metadataVectors(i).putLong(currentFile.fileSize)
+            case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
+            case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
+            case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
             case FILE_MODIFICATION_TIME =>
               // the modificationTime from the file is in millisecond,
               // while internally, the TimestampType is stored in microsecond
               metadataRow.update(i, currentFile.modificationTime * 1000L)
-              metadataVectors(i).putLong(currentFile.modificationTime * 1000L)
           }
         }
+      }
+
+      /**
+       * Create a constant column vector containing all required metadata columns
+       */
+      private def createMetadataColumnVector(c: ColumnarBatch): Array[ConstantColumnVector] = {
+        val path = new Path(currentFile.filePath)
+        metadataColumns.map(_.name).map {
+          case FILE_PATH =>
+            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
+            columnVector.putUtf8String(UTF8String.fromString(path.toString))
+            columnVector
+          case FILE_NAME =>
+            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
+            columnVector.putUtf8String(UTF8String.fromString(path.getName))
+            columnVector
+          case FILE_SIZE =>
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
+            columnVector.putLong(currentFile.fileSize)
+            columnVector
+          case FILE_MODIFICATION_TIME =>
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
+            // the modificationTime from the file is in millisecond,
+            // while internally, the TimestampType is stored in microsecond
+            columnVector.putLong(currentFile.modificationTime * 1000L)
+            columnVector
+        }.toArray
       }
 
       /**
@@ -168,9 +184,9 @@ class FileScanRDD(
       private def addMetadataColumnsIfNeeded(nextElement: Object): Object = {
         if (metadataColumns.nonEmpty) {
           nextElement match {
-            case c: ColumnarBatch =>
-              new ColumnarBatch(Array.tabulate(c.numCols())(c.column) ++ metadataVectors,
-                c.numRows())
+            case c: ColumnarBatch => new ColumnarBatch(
+              Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
+              c.numRows())
             case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataRow))
             case i: InternalRow => new JoinedRow(i, metadataRow)
           }
@@ -210,7 +226,7 @@ class FileScanRDD(
       private def nextIterator(): Boolean = {
         if (files.hasNext) {
           currentFile = files.next()
-          updateMetadataData()
+          updateMetadataRow()
           logInfo(s"Reading File $currentFile")
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
@@ -278,7 +294,7 @@ class FileScanRDD(
           }
         } else {
           currentFile = null
-          updateMetadataData()
+          updateMetadataRow()
           InputFileBlockHolder.unset()
           false
         }
