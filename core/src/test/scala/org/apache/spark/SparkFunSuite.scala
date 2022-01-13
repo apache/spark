@@ -287,7 +287,7 @@ abstract class SparkFunSuite
       _threshold = threshold
     }
 
-    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.synchronized{
+    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.synchronized {
       _loggingEvents.filterNot(_ == null)
     }
   }
