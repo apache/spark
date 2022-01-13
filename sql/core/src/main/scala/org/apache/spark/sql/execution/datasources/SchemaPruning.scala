@@ -37,56 +37,63 @@ import org.apache.spark.sql.util.SchemaUtils._
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
-  override def apply(plan: LogicalPlan): LogicalPlan =
-    applyMetadataSchemaPruning(
-      if (conf.nestedSchemaPruningEnabled) {
-        applyDataSchemaPruning(plan)
-      } else {
-        plan
-      }
-    )
+  override def apply(plan: LogicalPlan): LogicalPlan = apply0(plan)
 
-  private def applyDataSchemaPruning(plan: LogicalPlan): LogicalPlan =
+  private def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
-          l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
-        if canPruneRelation(hadoopFsRelation) =>
-
-        prunePhysicalColumns(l.output, projects, filters, hadoopFsRelation.dataSchema,
-          prunedDataSchema => {
+      l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
+        prunePhysicalColumns(l, projects, filters, hadoopFsRelation,
+          (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
-            buildPrunedRelation(l, prunedHadoopRelation)
+            buildPrunedRelation(l, prunedHadoopRelation, prunedMetadataSchema)
           }).getOrElse(op)
     }
 
   /**
    * This method returns optional logical plan. `None` is returned if no nested field is required or
    * all nested fields are required.
+   *
+   * This method will prune both the data schema and the metadata schema
    */
   private def prunePhysicalColumns(
-      output: Seq[AttributeReference],
+      relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
-      dataSchema: StructType,
-      leafNodeBuilder: StructType => LeafNode): Option[LogicalPlan] = {
+      hadoopFsRelation: HadoopFsRelation,
+      leafNodeBuilder: (StructType, StructType) => LeafNode): Option[LogicalPlan] = {
+
     val (normalizedProjects, normalizedFilters) =
-      normalizeAttributeRefNames(output, projects, filters)
+      normalizeAttributeRefNames(relation.output, projects, filters)
     val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
     if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
-      val prunedDataSchema = pruneDataSchema(dataSchema, requestedRootFields)
 
-      // If the data schema is different from the pruned data schema, continue. Otherwise,
-      // return op. We effect this comparison by counting the number of "leaf" fields in
-      // each schemata, assuming the fields in prunedDataSchema are a subset of the fields
-      // in dataSchema.
-      if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
-        val prunedRelation = leafNodeBuilder(prunedDataSchema)
-        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
+      val prunedDataSchema = if (canPruneDataSchema(hadoopFsRelation)) {
+        pruneDataSchema(hadoopFsRelation.dataSchema, requestedRootFields)
+      } else {
+        hadoopFsRelation.dataSchema
+      }
 
+      val metadataSchema =
+        relation.output.collect { case MetadataAttribute(attr) => attr }.toStructType
+      val prunedMetadataSchema = if (canPruneMetadataSchema(relation)) {
+        pruneDataSchema(metadataSchema, requestedRootFields)
+      } else {
+        metadataSchema
+      }
+
+      // If the data schema + metadata schema is different from
+      // the pruned data schema + pruned metadata schema, continue.
+      // Otherwise, return None.
+      if (countLeaves(hadoopFsRelation.dataSchema.merge(metadataSchema)) >
+        countLeaves(prunedDataSchema.merge(prunedMetadataSchema))) {
+        val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
+        val projectionOverSchema =
+          ProjectionOverSchema(prunedDataSchema.merge(prunedMetadataSchema))
         Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {
@@ -100,9 +107,20 @@ object SchemaPruning extends Rule[LogicalPlan] {
   /**
    * Checks to see if the given relation can be pruned. Currently we support Parquet and ORC v1.
    */
-  private def canPruneRelation(fsRelation: HadoopFsRelation) =
-    fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
-      fsRelation.fileFormat.isInstanceOf[OrcFileFormat]
+  private def canPruneDataSchema(fsRelation: HadoopFsRelation): Boolean =
+    conf.nestedSchemaPruningEnabled && (
+      fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
+        fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
+
+  /**
+   * Checks to see if the metadata schema pruning can be performed
+   */
+  private def canPruneMetadataSchema(l: LogicalRelation): Boolean =
+    l.output.exists {
+      case MetadataAttribute(_) => true
+      case _ => false
+    }
+
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect
@@ -162,15 +180,28 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   /**
    * Builds a pruned logical relation from the output of the output relation and the schema of the
-   * pruned base relation.
+   * pruned base relation
    */
   private def buildPrunedRelation(
       outputRelation: LogicalRelation,
-      prunedBaseRelation: HadoopFsRelation) = {
+      prunedBaseRelation: HadoopFsRelation,
+      prunedMetadataSchema: StructType) = {
     val prunedOutput = getPrunedOutput(outputRelation.output, prunedBaseRelation.schema)
-    // also add the metadata output if any, perform the metadata schema pruning later on
-    val metaOutput = outputRelation.output.collect { case MetadataAttribute(attr) => attr }
-    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput ++ metaOutput)
+    // make sure metadata is existed in the output
+    val prunedMetadataOutput = if (canPruneMetadataSchema(outputRelation)) {
+      val metadataAttribute = outputRelation.output
+        .collectFirst { case MetadataAttribute(attr) => attr }.get
+      prunedMetadataSchema.map { meta =>
+        // copy a metadata attribute with the pruned dataType
+        metadataAttribute.copy(dataType = meta.dataType)(exprId = metadataAttribute.exprId,
+          qualifier = metadataAttribute.qualifier)
+      }
+    } else {
+      Seq.empty
+    }
+
+    outputRelation.copy(relation = prunedBaseRelation,
+      output = prunedOutput ++ prunedMetadataOutput)
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.
@@ -204,59 +235,4 @@ object SchemaPruning extends Rule[LogicalPlan] {
       case _ => 1
     }
   }
-
-  private def applyMetadataSchemaPruning(plan: LogicalPlan): LogicalPlan =
-    plan transformDown {
-      case op @ PhysicalOperation(projects, filters, l @ LogicalRelation(_, _, _, _))
-        if containsMetadataAttributes(l) => pruneMetadataSchema(l, projects, filters).getOrElse(op)
-    }
-
-  /**
-   * This method returns optional logical plan with pruned metadata schema.
-   * `None` is returned if no nested field is required or all nested fields are required.
-   */
-  private def pruneMetadataSchema(
-      relation: LogicalRelation,
-      projects: Seq[NamedExpression],
-      filters: Seq[Expression]): Option[LogicalPlan] = {
-    val output = relation.output
-    val (normalizedProjects, normalizedFilters) =
-      normalizeAttributeRefNames(output, projects, filters)
-    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
-
-    // We've already check before, the metadata struct is existed, here it's safe to get
-    val metadataAttribute = output.collectFirst { case MetadataAttribute(attr) => attr }.get
-    val metadataSchema = Seq(metadataAttribute).toStructType
-    val prunedMetadataSchema = pruneDataSchema(metadataSchema, requestedRootFields)
-
-    // If the metadata schema is different from the pruned metadata schema, continue.
-    // Otherwise, return None.
-    if (countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
-
-      // Pruned output includes the pruned metadata output + the rest of original output
-      val prunedOutput = relation.output.filter {
-        case MetadataAttribute(_) => false
-        case _ => true
-      } ++ prunedMetadataSchema.map { meta =>
-        // copy a metadata attribute with the pruned dataType
-        metadataAttribute.copy(dataType = meta.dataType)(exprId = metadataAttribute.exprId,
-          qualifier = metadataAttribute.qualifier)
-      }
-
-      val projectionOverSchema = ProjectionOverSchema(prunedMetadataSchema)
-      Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
-        relation.copy(output = prunedOutput), projectionOverSchema))
-    } else {
-      None
-    }
-  }
-
-  /**
-   * If projects or filters contains the metadata attributes
-   */
-  private def containsMetadataAttributes(l: LogicalRelation): Boolean =
-    l.output.exists {
-      case MetadataAttribute(_) => true
-      case _ => false
-    }
 }
