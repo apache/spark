@@ -49,17 +49,9 @@ public class ConstantColumnVector extends ColumnVector {
 
   private int numRows;
 
-  /**
-   * Sets up the data type of this constant column vector.
-   * @param type
-   */
   public ConstantColumnVector(int numRows, DataType type) {
     super(type);
     this.numRows = numRows;
-    if (type instanceof StructType) {
-      StructType st = (StructType) type;
-      this.childData = new ConstantColumnVector[st.fields().length];
-    }
 
     // copy and modify from WritableColumnVector
     // could also putChild by users
@@ -115,7 +107,7 @@ public class ConstantColumnVector extends ColumnVector {
 
   @Override
   public int numNulls() {
-    return numRows;
+    return hasNull() ? numRows : 0;
   }
 
   @Override

@@ -134,24 +134,24 @@ class FileScanRDD(
        * For each partitioned file, metadata columns for each record in the file are exactly same.
        * Only update metadata row when `currentFile` is changed.
        */
-      private def updateMetadataRow(): Unit = {
-        if (metadataColumns.isEmpty || currentFile == null) return
-        val path = new Path(currentFile.filePath)
-        metadataColumns.zipWithIndex.foreach { case (attr, i) =>
-          attr.name match {
-            case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
-            case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
-            case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
-            case FILE_MODIFICATION_TIME =>
-              // the modificationTime from the file is in millisecond,
-              // while internally, the TimestampType is stored in microsecond
-              metadataRow.update(i, currentFile.modificationTime * 1000L)
+      private def updateMetadataRow(): Unit =
+        if (metadataColumns.nonEmpty && currentFile != null) {
+          val path = new Path(currentFile.filePath)
+          metadataColumns.zipWithIndex.foreach { case (attr, i) =>
+            attr.name match {
+              case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
+              case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
+              case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
+              case FILE_MODIFICATION_TIME =>
+                // the modificationTime from the file is in millisecond,
+                // while internally, the TimestampType is stored in microsecond
+                metadataRow.update(i, currentFile.modificationTime * 1000L)
+            }
           }
         }
-      }
 
       /**
-       * Create a constant column vector containing all required metadata columns
+       * Create an array of constant column vectors containing all required metadata columns
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ConstantColumnVector] = {
         val path = new Path(currentFile.filePath)
