@@ -408,25 +408,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipIntegers(int total) {
-    int left = total;
-    while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(left, this.currentCount);
-      switch (mode) {
-        case RLE:
-          break;
-        case PACKED:
-          currentBufferIdx += n;
-          break;
-      }
-      currentCount -= n;
-      left -= n;
-    }
+    skipValues(total);
   }
 
   @Override
   public void skipBooleans(int total) {
-    skipIntegers(total);
+    skipValues(total);
   }
 
   @Override
@@ -550,6 +537,26 @@ public final class VectorizedRleValuesReader extends ValuesReader
       }
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read from input stream", e);
+    }
+  }
+
+  /**
+   * Skip `n` values from the current reader.
+   */
+  private void skipValues(int n) {
+    int left = n;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int num = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          break;
+        case PACKED:
+          currentBufferIdx += num;
+          break;
+      }
+      currentCount -= num;
+      left -= num;
     }
   }
 }
