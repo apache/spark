@@ -31,6 +31,8 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
 )
 
+from pyspark.testing.pandasutils import ComparisonTestBase
+
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
 
@@ -41,7 +43,7 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class TestCasesUtils:
+class OpsTestCase(ComparisonTestBase):
     """A utility holding common test cases for arithmetic operations of different data types."""
 
     @property
@@ -109,10 +111,6 @@ class TestCasesUtils:
     @property
     def pdf(self):
         return pd.concat([self.numeric_pdf, self.non_numeric_pdf], axis=1)
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def df_cols(self):

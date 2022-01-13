@@ -19,11 +19,10 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.ml.linalg import SparseVector
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
 
 
-class UDTOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class UDTOpsTest(OpsTestCase):
     @property
     def pser(self):
         sparse_values = {0: 0.1, 1: 1.1}

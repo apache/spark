@@ -21,11 +21,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
 
 
-class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class DateOpsTest(OpsTestCase):
     @property
     def pser(self):
         return pd.Series(
