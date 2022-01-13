@@ -2099,6 +2099,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(psser.asof(20), 4.0)
 
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 25]), pser.asof([5, 25]))
+
+        pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 100]), pser.asof([5, 100]))
+
+        pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
     def test_squeeze(self):
         # Single value
         pser = pd.Series([90])

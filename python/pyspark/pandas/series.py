@@ -5253,22 +5253,62 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             where = [where]
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
+        from pyspark.sql.functions import struct, lit, explode, col, row_number
+
+        column_prefix_constant = "col_"
         cond = [
-            F.max(F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column))
+            F.when(
+                index_scol <= SF.lit(index).cast(index_type),
+                struct(
+                    lit(column_prefix_constant + str(index)).alias("identifier"),
+                    self.spark.column.alias("Koalas"),
+                ),
+            ).alias(column_prefix_constant + str(index))
             for index in where
         ]
+        cond.append(index_scol)
         sdf = self._internal.spark_frame.select(cond)
+        columns = [cols for cols in sdf.columns if cols.startswith("col")]
+        sdf = sdf.withColumn("combined_cols", F.array(columns)).drop(*columns)
+        sdf = (
+            sdf.select(index_scol, explode("combined_cols").alias("values"))
+            .withColumn("identifier", col("values.identifier"))
+            .withColumn("value", col("values.Koalas"))
+            .drop("values")
+            .na.drop(subset="value")
+        )
+        window_specification = Window.partitionBy("identifier").orderBy(index_scol.desc())
+        sdf = (
+            sdf.withColumn("row_number", row_number().over(window_specification))
+            .filter("row_number == 1")
+            .drop(index_scol)
+            .drop("row_number")
+        )
+
+        # Number of rows would be less, since only one row per index.  so collect can be done
+        calculated_values = sdf.collect()
+
+        if len(calculated_values) == 0:
+            return np.nan
+
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
-                result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
+                result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 1]
             return result if result is not None else np.nan
 
-        # The data is expected to be small so it's fine to transpose/use default index.
-        with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            psdf: DataFrame = DataFrame(sdf)
-            psdf.columns = pd.Index(where)
-            return first_series(psdf.transpose()).rename(self.name)
+        calculated_values_map = {data.identifier: data.value for data in calculated_values}
+
+        complete_values = []
+        for data in where:
+            key = column_prefix_constant + str(data)
+            if key in calculated_values_map:
+                complete_values.append(calculated_values_map[key])
+            else:
+                complete_values.append(None)
+
+        df = pd.DataFrame(data=complete_values, columns=[self.name], index=where)
+        return df[df.columns[0]]
 
     def mad(self) -> float:
         """
