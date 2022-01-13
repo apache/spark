@@ -22,7 +22,7 @@ import datetime
 import decimal
 import sys
 import typing
-from collections import Iterable
+from collections.abc import Iterable
 from distutils.version import LooseVersion
 from inspect import getfullargspec, isclass
 from typing import (
