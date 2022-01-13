@@ -19,11 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.NumberUtils.TestBuilder
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
-class NumberUtilsSuite extends SparkFunSuite {
+class NumberFormatSuite extends SparkFunSuite {
 
   private def failParseWithInvalidInput(
       input: UTF8String, numberFormat: String, errorMsg: String): Unit = {

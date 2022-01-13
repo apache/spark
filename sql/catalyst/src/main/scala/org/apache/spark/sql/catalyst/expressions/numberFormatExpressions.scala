@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.util.NumberUtils.NumberFormatBuilder
+import org.apache.spark.sql.catalyst.util.NumberFormatBuilder
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
