@@ -283,15 +283,16 @@ object OrcUtils extends Logging {
    * schema string when reading `TimestampNTZ` as `TimestampLTZ`.
    */
   def getOrcSchemaString(
-      dt: DataType, orcDt: Option[DataType] = None): String = (dt, orcDt) match {
+      dt: DataType, orcDtOpt: Option[DataType] = None): String = (dt, orcDtOpt) match {
     case (s1: StructType, Some(s2: StructType)) =>
+      val orcDataTypeMap = s2.groupBy(_.name)
       val fieldTypes = s1.fields.map { f =>
-        val idx = s2.fieldNames.indexWhere(caseSensitiveResolution(_, f.name))
-        if (idx == -1) {
-          s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
-        } else {
+        if (orcDataTypeMap.contains(f.name)) {
+          val orcFields = orcDataTypeMap(f.name)
           s"${quoteIdentifier(f.name)}:" +
-            s"${getOrcSchemaString(f.dataType, Some(s2(idx).dataType))}"
+            s"${getOrcSchemaString(f.dataType, Some(orcFields(0).dataType))}"
+        } else {
+          s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
         }
       }
       s"struct<${fieldTypes.mkString(",")}>"
