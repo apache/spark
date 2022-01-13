@@ -450,7 +450,7 @@ private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
-private[spark] case class GetShuffleMergersMessage(shuffleId: Int,
+private[spark] case class GetShufflePushMergersMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class MapSizesByExecutorId(
   iter: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])], enableBatchFetch: Boolean)
@@ -474,10 +474,9 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       tracker.post(GetMapAndMergeOutputMessage(shuffleId, context))
 
     case GetShufflePushMergerLocations(shuffleId: Int) =>
-      val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send shuffle push merger locations for shuffle" +
-        s" $shuffleId to $hostPort")
-      tracker.post(GetShuffleMergersMessage(shuffleId, context))
+        s" $shuffleId to ${context.senderAddress.hostPort}")
+      tracker.post(GetShufflePushMergersMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -743,10 +742,9 @@ private[spark] class MapOutputTrackerMaster(
                 handleStatusMessage(shuffleId, context, false)
               case GetMapAndMergeOutputMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, true)
-              case GetShuffleMergersMessage(shuffleId, context) =>
-                val hostPort = context.senderAddress.hostPort
-                logDebug("Handling request to send shuffle push merger locations for shuffle "
-                  + shuffleId + " to " + hostPort)
+              case GetShufflePushMergersMessage(shuffleId, context) =>
+                logDebug(s"Handling request to send shuffle push merger locations for shuffle" +
+                  s" $shuffleId to ${context.senderAddress.hostPort}")
                 context.reply(shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations)
                   .getOrElse(Seq.empty[BlockManagerId]))
             }
@@ -1334,7 +1332,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   }
 
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    shufflePushMergerLocations.get(shuffleId).getOrElse(getMergerLocations(shuffleId))
+    shufflePushMergerLocations.getOrElse(shuffleId, getMergerLocations(shuffleId))
   }
 
   private def getMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {

@@ -63,7 +63,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         val isPushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(SparkEnv.get.conf,
           isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)
         // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
-        if (isPushBasedShuffleEnabled && dep.getMergerLocs.isEmpty && !dep.shuffleMergeFinalized) {
+        if (isPushBasedShuffleEnabled && dep.getMergerLocs.isEmpty && !dep.isShuffleMergeFinalized) {
           val mapOutputTracker = SparkEnv.get.mapOutputTracker
           val mergerLocs = mapOutputTracker.getShufflePushMergerLocations(dep.shuffleId)
           if (mergerLocs.nonEmpty) {
@@ -74,7 +74,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         // The map task only takes care of converting the shuffle data file into multiple
         // block push requests. It delegates pushing the blocks to a different thread-pool -
         // ShuffleBlockPusher.BLOCK_PUSHER_POOL.
-        if (dep.getMergerLocs.nonEmpty && !dep.shuffleMergeFinalized) {
+        if (dep.getMergerLocs.nonEmpty && !dep.isShuffleMergeFinalized) {
           manager.shuffleBlockResolver match {
             case resolver: IndexShuffleBlockResolver =>
               logInfo(s"Shuffle merge enabled with ${dep.getMergerLocs.size} merger locations " +

@@ -106,7 +106,17 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
   // is enabled
-  private[this] var _shuffleMergeEnabled = canShuffleMergeBeEnabled()
+  private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
+
+  private[spark] def setShuffleMergeAllowed(shuffleMergeAllowed: Boolean): Unit = {
+    _shuffleMergeAllowed = shuffleMergeAllowed
+  }
+
+  def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
+
+  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
+  // is enabled
+  private[this] var _shuffleMergeEnabled = shuffleMergeAllowed
 
   private[spark] def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
     _shuffleMergeEnabled = shuffleMergeEnabled
@@ -144,19 +154,26 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergedFinalized = true
   }
 
-  def shuffleMergeFinalized: Boolean = {
-    _shuffleMergedFinalized
+  /**
+   * Returns true if the RDD is an empty RDD or if the shuffle merge for this shuffle is
+   * finalized.
+   */
+  def isShuffleMergeFinalized: Boolean = {
+    // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
+    if (numPartitions > 0) {
+      _shuffleMergedFinalized
+    } else {
+      true
+    }
   }
 
   /**
-   * Returns true if push-based shuffle is disabled for this stage or empty RDD,
-   * or if the shuffle merge for this stage is finalized, i.e. the shuffle merge
-   * results for all partitions are available.
+   * Returns true if push-based shuffle is disabled or if the RDD is an empty RDD or
+   * if the shuffle merge for this shuffle is finalized.
    */
-  def isShuffleMergeOutputsAvailable: Boolean = {
-    // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
-    if (shuffleMergeEnabled && numPartitions > 0) {
-      _shuffleMergedFinalized
+  def isShuffleMergeFinalizedIfEnabled: Boolean = {
+    if (shuffleMergeEnabled) {
+      isShuffleMergeFinalized
     } else {
       true
     }
