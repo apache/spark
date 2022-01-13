@@ -483,7 +483,7 @@ trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 }
 
 /**
- * A function that returns true if the string `left` contains the string `right`.
+ * Returns true if `left` contains `right`. Both expressions must be of STRING or BINARY type.
  */
 @ExpressionDescription(
   usage = """
