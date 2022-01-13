@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, StringBinaryRuntimeReplaceable, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -716,6 +716,31 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
+
+      case b @ StringBinaryRuntimeReplaceable(i @ If(_, trueValue, falseValue), right)
+        if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.newCopy(trueValue, right),
+          falseValue = b.newCopy(falseValue, right))
+
+      case b @ StringBinaryRuntimeReplaceable(left, i @ If(_, trueValue, falseValue))
+        if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.newCopy(left, trueValue),
+          falseValue = b.newCopy(left, falseValue))
+
+      case b @ StringBinaryRuntimeReplaceable(c @ CaseWhen(branches, elseValue), right)
+        if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.newCopy(e._2, right))),
+          Some(b.newCopy(elseValue.getOrElse(Literal(null, c.dataType)), right)))
+
+      case b @ StringBinaryRuntimeReplaceable(left, c @ CaseWhen(branches, elseValue))
+        if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.newCopy(left, e._2))),
+          Some(b.newCopy(left, elseValue.getOrElse(Literal(null, c.dataType)))))
+
     }
   }
 }
