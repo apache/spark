@@ -45,10 +45,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       viewName: String,
       sqlText: String,
       columnNames: Seq[String] = Seq.empty,
+      others: Seq[String] = Seq.empty,
       replace: Boolean = false): String = {
     val replaceString = if (replace) "OR REPLACE" else ""
     val columnString = if (columnNames.nonEmpty) columnNames.mkString("(", ",", ")") else ""
-    sql(s"CREATE $replaceString $viewTypeString $viewName $columnString AS $sqlText")
+    val othersString = if (others.nonEmpty) others.mkString(" ") else ""
+    sql(s"CREATE $replaceString $viewTypeString $viewName $columnString $othersString AS $sqlText")
     formattedViewName(viewName)
   }
 
@@ -421,6 +423,18 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
       }
     }
   }
+
+  test("show create table does not support temp view") {
+    val viewName = "spark_28383"
+    withView(viewName) {
+      createView(viewName, "SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE ${formattedViewName(viewName)}")
+      }
+      assert(ex.getMessage.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
@@ -590,5 +604,53 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       assert(message.contains(s"Invalid view text: $dropView." +
         s" The view ${table.qualifiedName} may have been tampered with"))
     }
+  }
+
+  test("show create table for persisted simple view") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS a")
+        val expected = "CREATE VIEW `default`.`v1` ( `a`) AS SELECT 1 AS a"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("show create table for persisted view with output columns") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS a, 2 AS b", Seq("a", "b COMMENT 'b column'"))
+        val expected = "CREATE VIEW `default`.`v1` ( `a`, `b` COMMENT 'b column')" +
+          " AS SELECT 1 AS a, 2 AS b"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("show create table for persisted simple view with table comment and properties") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS c1, '2' AS c2", Seq("c1 COMMENT 'bla'", "c2"),
+          Seq("COMMENT 'table comment'", "TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')"))
+
+        val expected = "CREATE VIEW `default`.`v1` ( `c1` COMMENT 'bla', `c2`)" +
+          " COMMENT 'table comment'" +
+          " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
+          " AS SELECT 1 AS c1, '2' AS c2"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  def getShowCreateDDL(view: String, serde: Boolean = false): String = {
+    val result = if (serde) {
+      sql(s"SHOW CREATE TABLE $view AS SERDE")
+    } else {
+      sql(s"SHOW CREATE TABLE $view")
+    }
+    result.head().getString(0).split("\n").map(_.trim).mkString(" ")
   }
 }

@@ -1247,7 +1247,7 @@ case class ShowCreateTableAsSerdeCommand(
           s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
-    builder ++= s"CREATE$tableTypeString ${table.quotedString}"
+    builder ++= s"CREATE$tableTypeString ${table.quotedString} "
 
     if (metadata.tableType == VIEW) {
       showCreateView(metadata, builder)

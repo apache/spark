@@ -706,14 +706,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     outputPlan match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
              SortExec(_, _,
-               DummySparkPlan(_, _, HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
              SortExec(_, _,
                ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _),
                _, _), _), _) =>
         assert(leftKeys === smjExec.leftKeys)
         assert(rightKeys === smjExec.rightKeys)
-        assert(leftPartitioningExpressions == Seq(exprA, exprB, exprA))
-        assert(rightPartitioningExpressions == Seq(exprA, exprC, exprA))
+        assert(leftKeys === leftPartitioningExpressions)
+        assert(rightKeys === rightPartitioningExpressions)
       case _ => fail(outputPlan.toString)
     }
   }

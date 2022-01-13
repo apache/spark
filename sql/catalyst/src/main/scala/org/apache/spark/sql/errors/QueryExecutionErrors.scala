@@ -1905,13 +1905,15 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
-      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+    new SparkRuntimeException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new UnsupportedOperationException(
-      s"The AES mode $mode with the padding $padding is not supported")
+    new SparkRuntimeException("UNSUPPORTED_AES_MODE", Array(mode, padding))
+  }
+
+  def aesCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException("AES_CRYPTO_ERROR", Array(detailMessage))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {

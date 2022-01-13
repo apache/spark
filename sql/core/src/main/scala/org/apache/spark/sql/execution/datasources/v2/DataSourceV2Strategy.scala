@@ -537,6 +537,9 @@ private[sql] object DataSourceV2Strategy {
     case expressions.Literal(false, BooleanType) =>
       Some(new V2AlwaysFalse)
 
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(new V2EqualTo(FieldReference(name), LiteralValue(true, BooleanType)))
+
     case _ => None
   }
 

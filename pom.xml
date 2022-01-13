@@ -204,7 +204,7 @@
     <arrow.version>6.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.10.1</kubernetes-client.version>
+    <kubernetes-client.version>5.10.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1075,13 +1075,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.9</version>
+        <version>3.3.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1093,7 +1093,7 @@
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1364,6 +1364,10 @@
           <exclusion>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

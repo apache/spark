@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -380,7 +381,7 @@ trait ShuffleSpec {
   /**
    * Whether this shuffle spec can be used to create partitionings for the other children.
    */
-  def canCreatePartitioning: Boolean = false
+  def canCreatePartitioning: Boolean
 
   /**
    * Creates a partitioning that can be used to re-partition the other side with the given
@@ -412,6 +413,11 @@ case class RangeShuffleSpec(
     numPartitions: Int,
     distribution: ClusteredDistribution) extends ShuffleSpec {
 
+  // `RangePartitioning` is not compatible with any other partitioning since it can't guarantee
+  // data are co-partitioned for all the children, as range boundaries are randomly sampled. We
+  // can't let `RangeShuffleSpec` to create a partitioning.
+  override def canCreatePartitioning: Boolean = false
+
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec => numPartitions == 1
     case ShuffleSpecCollection(specs) => specs.exists(isCompatibleWith)
@@ -424,8 +430,19 @@ case class RangeShuffleSpec(
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
-  lazy val hashKeyPositions: Seq[mutable.BitSet] =
-    createHashKeyPositions(distribution.clustering, partitioning.expressions)
+
+  /**
+   * A sequence where each element is a set of positions of the hash partition key to the cluster
+   * keys. For instance, if cluster keys are [a, b, b] and hash partition keys are [a, b], the
+   * result will be [(0), (1, 2)].
+   */
+  lazy val hashKeyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map(k => distKeyToPos(k.canonicalized))
+  }
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     case SinglePartitionShuffleSpec =>
@@ -451,7 +468,20 @@ case class HashShuffleSpec(
       false
   }
 
-  override def canCreatePartitioning: Boolean = true
+  override def canCreatePartitioning: Boolean = {
+    // To avoid potential data skew, we don't allow `HashShuffleSpec` to create partitioning if
+    // the hash partition keys are not the full join keys (the cluster keys). Then the planner
+    // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
+    // the join keys.
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      partitioning.expressions.length == distribution.clustering.length &&
+        partitioning.expressions.zip(distribution.clustering).forall {
+          case (l, r) => l.semanticEquals(r)
+        }
+    } else {
+      true
+    }
+  }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val exprs = hashKeyPositions.map(v => clustering(v.head))
@@ -459,22 +489,6 @@ case class HashShuffleSpec(
   }
 
   override def numPartitions: Int = partitioning.numPartitions
-
-  /**
-   * Returns a sequence where each element is a set of positions of the key in `hashKeys` to its
-   * positions in `requiredClusterKeys`. For instance, if `requiredClusterKeys` is [a, b, b] and
-   * `hashKeys` is [a, b], the result will be [(0), (1, 2)].
-   */
-  private def createHashKeyPositions(
-      requiredClusterKeys: Seq[Expression],
-      hashKeys: Seq[Expression]): Seq[mutable.BitSet] = {
-    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
-    requiredClusterKeys.zipWithIndex.foreach { case (distKey, distKeyPos) =>
-      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
-    }
-
-    hashKeys.map(k => distKeyToPos(k.canonicalized))
-  }
 }
 
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {

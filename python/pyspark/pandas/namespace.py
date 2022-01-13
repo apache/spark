@@ -3399,8 +3399,8 @@ def merge_asof(
         left_join_on_columns = [scol_for(left_table, label) for label in left_join_on_names]
         right_join_on_columns = [scol_for(right_table, label) for label in right_join_on_names]
         on = reduce(
-            lambda l, r: l & r,
-            [l == r for l, r in zip(left_join_on_columns, right_join_on_columns)],
+            lambda lft, rgt: lft & rgt,
+            [lft == rgt for lft, rgt in zip(left_join_on_columns, right_join_on_columns)],
         )
     else:
         on = None
