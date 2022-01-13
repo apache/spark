@@ -178,7 +178,12 @@ abstract class FileCommitProtocol extends Logging {
    * implementation deletes the file immediately.
    */
   def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
-    fs.delete(path, recursive)
+    if (fs.getConf.getInt("fs.trash.interval", 0) > 0 &&
+      Trash.moveToAppropriateTrash(fs, path, fs.getConf)) {
+      true
+    } else {
+      fs.delete(path, recursive);
+    }
   }
 
   /**
