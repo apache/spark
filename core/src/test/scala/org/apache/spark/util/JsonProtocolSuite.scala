@@ -1226,7 +1226,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 222,
       |    "Index": 333,
       |    "Attempt": 1,
-			|    "Partition ID": -1,
+      |    "Partition ID": -1,
       |    "Launch Time": 444,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
