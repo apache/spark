@@ -100,9 +100,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   r.supportCompletePushDown(translatedAggregates.get)) {
                   (resultExpressions, aggregates, translatedAggregates)
                 } else {
+                  // Spark can't do complete agg push down to data source and try to do partial agg
+                  // push down by split `AVG` into 2 functions: `SUM` and `COUNT`.
+                  var findAverage = false
                   val newResultExpressions = resultExpressions.map { expr =>
                     expr.transform {
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
+                        findAverage = true
                         val left = addCastIfNeeded(aggregate.Sum(avg.child)
                           .toAggregateExpression(isDistinct), avg.dataType)
                         val right = addCastIfNeeded(aggregate.Count(avg.child)
@@ -110,14 +114,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                         Divide(left, right)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
-                  // Because aggregate expressions changed, translate them again.
-                  aggExprToOutputOrdinal.clear()
-                  val newAggregates =
-                    collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
-                  val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
-                    newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-                  (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
-                    newNormalizedAggregates, normalizedGroupingExpressions))
+                  if (findAverage) {
+                    // Because aggregate expressions changed, translate them again.
+                    aggExprToOutputOrdinal.clear()
+                    val newAggregates =
+                      collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
+                    val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
+                      newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+                    (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
+                      newNormalizedAggregates, normalizedGroupingExpressions))
+                  } else {
+                    (resultExpressions, aggregates, translatedAggregates)
+                  }
                 }
               }
 
