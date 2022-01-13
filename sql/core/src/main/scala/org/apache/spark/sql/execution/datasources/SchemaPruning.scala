@@ -224,15 +224,27 @@ object SchemaPruning extends Rule[LogicalPlan] {
       normalizeAttributeRefNames(output, projects, filters)
     val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
-    val metadataSchema = output.collect { case MetadataAttribute(attr) => attr }.toStructType
+    val metadataAttribute = output.collectFirst { case MetadataAttribute(attr) => attr }.head
+    val metadataSchema = Seq(metadataAttribute).toStructType
     val prunedMetadataSchema = pruneDataSchema(metadataSchema, requestedRootFields)
 
     // If the metadata schema is different from the pruned metadata schema, continue.
     // Otherwise, return None.
     if (countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
+
+      // Pruned output includes the pruned metadata output + the rest of original output
+      val prunedOutput = relation.output.filter {
+        case MetadataAttribute(_) => false
+        case _ => true
+      } ++ prunedMetadataSchema.map { meta =>
+        // copy a metadata attribute with the pruned dataType
+        metadataAttribute.copy(dataType = meta.dataType)(exprId = metadataAttribute.exprId,
+          qualifier = metadataAttribute.qualifier)
+      }
+
       val projectionOverSchema = ProjectionOverSchema(prunedMetadataSchema)
       Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
-        relation, projectionOverSchema))
+        relation.copy(output = prunedOutput), projectionOverSchema))
     } else {
       None
     }
