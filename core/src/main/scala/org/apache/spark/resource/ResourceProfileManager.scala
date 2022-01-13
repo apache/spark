@@ -24,6 +24,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SCHEDULER_REUSE_COMPATIBLE_EXECUTORS
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
@@ -39,6 +40,8 @@ import org.apache.spark.util.Utils.isTesting
 private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     listenerBus: LiveListenerBus) extends Logging {
   private val resourceProfileIdToResourceProfile = new HashMap[Int, ResourceProfile]()
+
+  private val reuseExecutors = sparkConf.get(SCHEDULER_REUSE_COMPATIBLE_EXECUTORS)
   private val resourceProfileIdToCompatibleResourceProfileIds = new HashMap[Int, Set[Int]]()
 
   private val (readLock, writeLock) = {
@@ -85,7 +88,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     try {
       if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
         val prev = resourceProfileIdToResourceProfile.put(rp.id, rp)
-        computeCompatibleProfileIds()
+        if (reuseExecutors) {
+          computeCompatibleProfileIds()
+        }
         if (prev.isEmpty) putNewProfile = true
       }
     } finally {
@@ -130,36 +135,13 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     }
   }
 
-  /*
-   * Get all compatible profiles including itself
-   */
-//  def getCompatibleProfiles(rp: ResourceProfile): Map[Int, ResourceProfile] = {
-//    readLock.lock()
-//    try {
-//      resourceProfileIdToResourceProfile.filter { case (_, rpEntry) =>
-//        rpEntry.resourcesCompatible(rp)
-//      }.toMap
-//    } finally {
-//      readLock.unlock()
-//    }
-//  }
-
-  /*
-   * Get all compatible profile IDs excluding itself
-   */
   def getOtherCompatibleProfileIds(rpId: Int): Set[Int] = {
-//    val resourceProfile = resourceProfileFromId(rpId)
-//    readLock.lock()
-//    try {
-//      resourceProfileIdToResourceProfile.filter { case (id: Int, rpEntry: ResourceProfile) =>
-//        id != rpId && rpEntry.resourcesCompatible(resourceProfile)
-//      }.map(_._1).toSet
-//    } finally {
-//      readLock.unlock()
-//    }
-    resourceProfileIdToCompatibleResourceProfileIds.getOrElse(rpId, null)
+    resourceProfileIdToCompatibleResourceProfileIds.getOrElse(rpId, Set())
   }
 
+  /*
+   * Compute and cache all compatible profile IDs excluding itself
+   */
   def computeCompatibleProfileIds(): Unit = {
     readLock.lock()
     try {
@@ -172,28 +154,12 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
           }.map(_._1).toSet
           writeLock.lock()
           resourceProfileIdToCompatibleResourceProfileIds.put(id, compatibleIdSet)
-          writeLock.unlock()
       }
     } finally {
       writeLock.unlock()
       readLock.unlock()
     }
   }
-
-  /*
-   * Get all compatible profile count including itself
-   */
-//  def getCompatibleProfileCount(rpId: Int): Int = {
-//    val resourceProfile = resourceProfileFromId(rpId)
-//    readLock.lock()
-//    try {
-//      resourceProfileIdToResourceProfile.count { case (_, rpEntry) =>
-//        rpEntry.resourcesCompatible(resourceProfile)
-//      }
-//    } finally {
-//      readLock.unlock()
-//    }
-//  }
 
   def dumpResourceProfile(): Unit = {
     readLock.lock()
