@@ -452,7 +452,7 @@ case class Lower(child: Expression)
 }
 
 /** A base trait for functions that compare two strings or binaries, returning a boolean. */
-abstract class BinaryPredicate[T] extends BinaryExpression
+abstract class StringBinaryPredicate[T] extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: T, r: T): Boolean
@@ -498,9 +498,7 @@ trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 'Spark');
-       true
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
        true
   """,
   since = "3.3.0",
@@ -519,7 +517,7 @@ object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
 }
 
 case class Contains(left: Expression, right: Expression)
-  extends BinaryPredicate[UTF8String] {
+  extends StringBinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -531,7 +529,7 @@ case class Contains(left: Expression, right: Expression)
 }
 
 case class BinaryContains(left: Expression, right: Expression)
-  extends BinaryPredicate[Array[Byte]] {
+  extends StringBinaryPredicate[Array[Byte]] {
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.contains(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -546,8 +544,8 @@ case class BinaryContains(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string or binary `left` starts with
-    the string or binary `right`. Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if left starts with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
     Examples:
@@ -557,9 +555,9 @@ case class BinaryContains(left: Expression, right: Expression)
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
        true
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'));
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
        false
   """,
   since = "3.3.0",
@@ -577,7 +575,8 @@ object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase 
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends BinaryPredicate[UTF8String] {
+case class StartsWith(left: Expression, right: Expression)
+  extends StringBinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -589,7 +588,7 @@ case class StartsWith(left: Expression, right: Expression) extends BinaryPredica
 }
 
 case class BinaryStartsWith(left: Expression, right: Expression)
-  extends BinaryPredicate[Array[Byte]] {
+  extends StringBinaryPredicate[Array[Byte]] {
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.startsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -604,8 +603,8 @@ case class BinaryStartsWith(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string or binary `left` ends with
-    the binary string `right`. Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if left ends with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
     Examples:
@@ -615,10 +614,10 @@ case class BinaryStartsWith(left: Expression, right: Expression)
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
-       true
-      > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 'Spark');
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
        false
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
+       true
   """,
   since = "3.3.0",
   group = "string_funcs"
@@ -635,7 +634,7 @@ object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends BinaryPredicate[UTF8String] {
+case class EndsWith(left: Expression, right: Expression) extends StringBinaryPredicate[UTF8String] {
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -647,7 +646,7 @@ case class EndsWith(left: Expression, right: Expression) extends BinaryPredicate
 }
 
 case class BinaryEndsWith(left: Expression, right: Expression)
-  extends BinaryPredicate[Array[Byte]] {
+  extends StringBinaryPredicate[Array[Byte]] {
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.endsWith(l, r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

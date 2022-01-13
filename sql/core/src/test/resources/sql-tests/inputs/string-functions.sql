@@ -126,25 +126,21 @@ SELECT endswith(null, 'Spark');
 SELECT endswith('Spark', null);
 SELECT endswith(null, null);
 
-SELECT contains(encode('Spark SQL', 'utf-8'), 'Spark');
-SELECT contains(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
-SELECT contains(encode('', 'utf-8'), encode('', 'utf-8'));
-SELECT contains(encode('Spark SQL', 'utf-8'), null);
+SELECT contains(x'537061726b2053514c', x'537061726b');
+SELECT contains(x'', x'');
+SELECT contains(x'537061726b2053514c', null);
 SELECT contains(12, '1');
 SELECT contains(true, 'ru');
-SELECT contains(encode('12', 'utf-8'), 12);
+SELECT contains(x'12', 12);
 SELECT contains(true, false);
 
-SELECT startswith(encode('Spark SQL', 'utf-8'), encode('Spark', 'utf-8'));
-SELECT startswith(encode('Spark SQL', 'utf-8'), encode('park', 'utf-8'));
-SELECT startswith(encode('Spark SQL', 'utf-8'), encode('', 'utf-8'));
-SELECT startswith(encode('', 'utf-8'), encode('', 'utf-8'));
-SELECT startswith(encode('Spark SQL', 'utf-8'), 'Spark');
-SELECT startswith(encode('Spark SQL', 'utf-8'), null);
+SELECT startswith(x'537061726b2053514c', x'537061726b');
+SELECT startswith(x'537061726b2053514c', x'');
+SELECT startswith(x'', x'');
+SELECT startswith(x'537061726b2053514c', null);
 
-SELECT endswith(encode('Spark SQL', 'utf-8'), encode('SQL', 'utf-8'));
-SELECT endsWith(encode('Spark SQL', 'utf-8'), 'Spark');
-SELECT endsWith(encode('Spark SQL', 'utf-8'), encode('', 'utf-8'));
-SELECT endsWith(encode('', 'utf-8'), encode('', 'utf-8'));
-SELECT endsWith(encode('Spark SQL', 'utf-8'), 'SQL');
-SELECT endsWith(encode('Spark SQL', 'utf-8'), null);
+SELECT endswith(x'537061726b2053514c', x'53516c');
+SELECT endsWith(x'537061726b2053514c', x'537061726b');
+SELECT endsWith(x'537061726b2053514c', x'');
+SELECT endsWith(x'', x'');
+SELECT endsWith(x'537061726b2053514c', null);

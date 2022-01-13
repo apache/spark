@@ -108,7 +108,7 @@ public class ByteArrayMethods {
   }
 
   public static boolean startsWith(byte[] array, byte[] target) {
-    if(target.length > array.length) {
+    if (target.length > array.length) {
       return false;
     }
     return arrayEquals(array, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, target.length);
