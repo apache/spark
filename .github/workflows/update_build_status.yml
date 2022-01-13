@@ -65,7 +65,7 @@ jobs:
                       // Get the workflow run in the forked repository
                       let run
                       try {
-                        run = await github.request('GET /repos/{owner}/{repo}/check-runs/{run_id}', params)
+                        run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
                       } catch (error) {
                         console.error(error)
                         // Run not found. This can happen when the PR author removes GitHub Actions runs or
@@ -83,7 +83,7 @@ jobs:
                           output: cr.output,
                           status: run.data.status,
                           conclusion: run.data.conclusion,
-                          details_url: run.data.url
+                          details_url: run.data.details_url
                         })
                       } else {
                         console.log('    Run ' + cr.id + ': set status (' + run.data.status + ')')
@@ -93,7 +93,7 @@ jobs:
                           check_run_id: cr.id,
                           output: cr.output,
                           status: run.data.status,
-                          details_url: run.data.url
+                          details_url: run.data.details_url
                         })
                       }
 
