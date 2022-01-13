@@ -224,7 +224,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       normalizeAttributeRefNames(output, projects, filters)
     val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
-    val metadataAttribute = output.collectFirst { case MetadataAttribute(attr) => attr }.head
+    // We've already check before, the metadata struct is existed, here it's safe to get
+    val metadataAttribute = output.collectFirst { case MetadataAttribute(attr) => attr }.get
     val metadataSchema = Seq(metadataAttribute).toStructType
     val prunedMetadataSchema = pruneDataSchema(metadataSchema, requestedRootFields)
 
