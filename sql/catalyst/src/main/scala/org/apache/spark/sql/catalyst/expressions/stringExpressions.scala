@@ -508,7 +508,7 @@ object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryContains(left, right)
+    new BinaryContains(left, right)
   }
 
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
@@ -528,18 +528,24 @@ case class Contains(left: Expression, right: Expression)
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryContains(left: Expression, right: Expression)
-  extends StringBinaryPredicate[Array[Byte]] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
-  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.contains(l, r)
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""org.apache.spark.unsafe.array.ByteArrayMethods.contains($c1, $c2)""".stripMargin)
+case class BinaryContains(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right,
+      StaticInvoke(
+        classOf[ByteArrayMethods],
+        BooleanType,
+        "contains",
+        Seq(left, right),
+        Seq(BinaryType, BinaryType)))
   }
+
+  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def prettyName: String = "contains"
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): BinaryContains = copy(left = newLeft, right = newRight)
+  override protected def withNewChildInternal(newChild: Expression): BinaryContains =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -567,7 +573,7 @@ object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase 
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryStartsWith(left, right)
+    new BinaryStartsWith(left, right)
   }
 
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
@@ -587,18 +593,24 @@ case class StartsWith(left: Expression, right: Expression)
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryStartsWith(left: Expression, right: Expression)
-  extends StringBinaryPredicate[Array[Byte]] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
-  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.startsWith(l, r)
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""org.apache.spark.unsafe.array.ByteArrayMethods.startsWith($c1, $c2)""".stripMargin)
+case class BinaryStartsWith(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right,
+      StaticInvoke(
+        classOf[ByteArrayMethods],
+        BooleanType,
+        "startsWith",
+        Seq(left, right),
+        Seq(BinaryType, BinaryType)))
   }
+
+  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def prettyName: String = "startswith"
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): BinaryStartsWith = copy(left = newLeft, right = newRight)
+  override protected def withNewChildInternal(newChild: Expression): BinaryStartsWith =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -626,7 +638,7 @@ object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    BinaryEndsWith(left, right)
+    new BinaryEndsWith(left, right)
   }
 
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
@@ -645,18 +657,24 @@ case class EndsWith(left: Expression, right: Expression) extends StringBinaryPre
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryEndsWith(left: Expression, right: Expression)
-  extends StringBinaryPredicate[Array[Byte]] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
-  override def compare(l: Array[Byte], r: Array[Byte]): Boolean = ByteArrayMethods.endsWith(l, r)
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""org.apache.spark.unsafe.array.ByteArrayMethods.endsWith($c1, $c2)""".stripMargin)
+case class BinaryEndsWith(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(left: Expression, right: Expression) = {
+    this(left, right,
+      StaticInvoke(
+        classOf[ByteArrayMethods],
+        BooleanType,
+        "endsWith",
+        Seq(left, right),
+        Seq(BinaryType, BinaryType)))
   }
+
+  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def prettyName: String = "endswith"
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): BinaryEndsWith = copy(left = newLeft, right = newRight)
+  override protected def withNewChildInternal(newChild: Expression): BinaryEndsWith =
+    copy(child = newChild)
 }
 
 /**

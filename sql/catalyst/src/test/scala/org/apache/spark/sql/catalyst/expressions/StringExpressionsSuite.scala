@@ -1030,38 +1030,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-37582, SPARK-37583: CONTAINS, STARTSWITH, ENDSWITH should support binary type") {
-    checkEvaluation(BinaryContains(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
-    checkEvaluation(BinaryContains(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(BinaryContains(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryContains(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+      new BinaryContains(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
     checkEvaluation(
-      BinaryContains(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+      new BinaryContains(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryContains(Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
+      new BinaryContains(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      new BinaryContains(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(
+      new BinaryContains(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+    checkEvaluation(new BinaryContains(
+        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
 
     checkEvaluation(
-      BinaryStartsWith(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
+      new BinaryStartsWith(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
     checkEvaluation(
-      BinaryStartsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+      new BinaryStartsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryStartsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryStartsWith(Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
+      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(
+      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+    checkEvaluation(new BinaryStartsWith(
+        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
 
-    checkEvaluation(BinaryEndsWith(Literal("Spark SQL".getBytes), Literal("SQL".getBytes)), true)
-    checkEvaluation(BinaryEndsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+      new BinaryEndsWith(Literal("Spark SQL".getBytes), Literal("SQL".getBytes)), true)
     checkEvaluation(
-      BinaryEndsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+      new BinaryEndsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
     checkEvaluation(
-      BinaryEndsWith(Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
+      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
+    checkEvaluation(
+      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
+    checkEvaluation(
+      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
+    checkEvaluation(new BinaryEndsWith(
+        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
   }
 }
