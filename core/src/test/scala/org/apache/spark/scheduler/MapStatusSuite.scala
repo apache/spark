@@ -29,6 +29,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 class MapStatusSuite extends SparkFunSuite {
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -261,7 +262,7 @@ class MapStatusSuite extends SparkFunSuite {
       smallBlockSizes ++: untrackedSkewedBlocksSizes ++: trackedSkewedBlocksSizes
     val allBlocks = emptyBlocks ++: nonEmptyBlocks
 
-    val skewThreshold = nonEmptyBlocks.sum / nonEmptyBlocks.size * accurateBlockSkewedFactor
+    val skewThreshold = Utils.median(allBlocks.sorted) * accurateBlockSkewedFactor
     assert(nonEmptyBlocks.filter(_ > skewThreshold).size ==
       untrackedSkewedBlocksLength + trackedSkewedBlocksLength,
       "number of skewed block sizes")
