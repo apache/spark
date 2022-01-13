@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
+import sys
 import unittest
 from inspect import signature
 from typing import Union, Iterator, Tuple, cast, get_type_hints
@@ -40,7 +43,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class PandasUDFTypeHintsTests(ReusedSQLTestCase):
+class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):
         def func(col: pd.Series) -> pd.Series:
             pass
@@ -305,6 +308,10 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         expected = df.selectExpr("id + 1 as id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
+    @unittest.skipIf(
+        sys.version_info < (3, 9),
+        "string annotations with future annotations do not work under Python<3.9",
+    )
     def test_string_type_annotation(self):
         def func(col: "pd.Series") -> "pd.Series":
             pass
@@ -357,7 +364,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_typehints import *  # noqa: #401
+    from pyspark.sql.tests.test_pandas_udf_typehints_with_future_annotations import *  # noqa: #401
 
     try:
         import xmlrunner  # type: ignore[import]

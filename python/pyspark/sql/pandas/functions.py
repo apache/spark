@@ -17,7 +17,8 @@
 
 import functools
 import warnings
-from inspect import getfullargspec
+from inspect import getfullargspec, signature
+from typing import get_type_hints
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
@@ -385,8 +386,6 @@ def _create_pandas_udf(f, returnType, evalType):
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
-    from inspect import signature
-
     if evalType in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -410,7 +409,11 @@ def _create_pandas_udf(f, returnType, evalType):
         # 'SQL_COGROUPED_MAP_PANDAS_UDF', the evaluation type will always be set.
         pass
     elif len(argspec.annotations) > 0:
-        evalType = infer_eval_type(signature(f))
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+        evalType = infer_eval_type(signature(f), type_hints)
         assert evalType is not None
 
     if evalType is None:
