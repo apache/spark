@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -1104,12 +1105,12 @@ case class ShowCreateTableCommand(
       val builder = StringBuilder.newBuilder
 
       val stmt = if (tableMetadata.tableType == VIEW) {
-        builder ++= s"CREATE VIEW ${table.quotedString} "
+        builder ++= s"CREATE VIEW ${table.quoted} "
         showCreateView(metadata, builder)
 
         builder.toString()
       } else {
-        builder ++= s"CREATE TABLE ${table.quotedString} "
+        builder ++= s"CREATE TABLE ${table.quoted} "
 
         showCreateDataSourceTable(metadata, builder)
         builder.toString()
@@ -1247,7 +1248,7 @@ case class ShowCreateTableAsSerdeCommand(
           s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
-    builder ++= s"CREATE$tableTypeString ${table.quotedString} "
+    builder ++= s"CREATE$tableTypeString ${table.quoted} "
 
     if (metadata.tableType == VIEW) {
       showCreateView(metadata, builder)

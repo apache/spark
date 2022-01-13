@@ -21,9 +21,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.escapeSingleQuotedString
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
+import org.apache.spark.sql.connector.expressions.BucketTransform
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -57,7 +59,7 @@ case class ShowCreateTableExec(
   }
 
   private def showTableDataColumns(table: Table, builder: StringBuilder): Unit = {
-    val columns = table.schema().fields.map(_.toDDL)
+    val columns = CharVarcharUtils.getRawSchema(table.schema(), conf).fields.map(_.toDDL)
     builder ++= concatByMultiLines(columns)
   }
 
@@ -71,8 +73,9 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
     if (tableOptions.nonEmpty) {
-      val props = tableOptions.toSeq.sortBy(_._1).map { case (key, value) =>
-        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      val props = conf.redactOptions(tableOptions).toSeq.sortBy(_._1).map {
+        case (key, value) =>
+          s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
       builder ++= "OPTIONS "
       builder ++= concatByMultiLines(props)
@@ -82,8 +85,31 @@ case class ShowCreateTableExec(
   private def showTablePartitioning(table: Table, builder: StringBuilder): Unit = {
     if (!table.partitioning.isEmpty) {
       val transforms = new ArrayBuffer[String]
-      table.partitioning.foreach(t => transforms += t.describe())
-      builder ++= s"PARTITIONED BY ${transforms.mkString("(", ", ", ")")}\n"
+      var bucketSpec = Option.empty[BucketSpec]
+      table.partitioning.map {
+        case BucketTransform(numBuckets, col, sortCol) =>
+          if (sortCol.isEmpty) {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
+          } else {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+              sortCol.map(_.fieldNames.mkString("."))))
+          }
+        case t =>
+          transforms += t.describe()
+      }
+      if (transforms.nonEmpty) {
+        builder ++= s"PARTITIONED BY ${transforms.mkString("(", ", ", ")")}\n"
+      }
+
+      // compatible with v1
+      bucketSpec.map { bucket =>
+        assert(bucket.bucketColumnNames.nonEmpty)
+        builder ++= s"CLUSTERED BY ${bucket.bucketColumnNames.mkString("(", ", ", ")")}\n"
+        if (bucket.sortColumnNames.nonEmpty) {
+          builder ++= s"SORTED BY ${bucket.sortColumnNames.mkString("(", ", ", ")")}\n"
+        }
+        builder ++= s"INTO ${bucket.numBuckets} BUCKETS\n"
+      }
     }
   }
 
@@ -98,11 +124,12 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
 
-
     val showProps = table.properties.asScala
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
-        && !tableOptions.contains(key))
+        && !tableOptions.contains(key)
+        && !key.equals(TableCatalog.PROP_EXTERNAL)
+      )
     if (showProps.nonEmpty) {
       val props = showProps.toSeq.sortBy(_._1).map {
         case (key, value) =>
@@ -123,5 +150,4 @@ case class ShowCreateTableExec(
   private def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
   }
-
 }
