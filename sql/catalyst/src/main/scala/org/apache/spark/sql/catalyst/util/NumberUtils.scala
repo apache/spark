@@ -231,22 +231,14 @@ object NumberUtils {
     private val transformedFormat = transform(normalizedNumberFormat)
 
     private lazy val numberDecimalFormat = {
-      val decimalFormat = new DecimalFormat()
+      val decimalFormat = new DecimalFormat(transformedFormat)
       decimalFormat.setParseBigDecimal(true)
-      try {
-        decimalFormat.applyLocalizedPattern(transformedFormat)
-      } catch {
-        case _: IllegalArgumentException =>
-          throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
-      }
       decimalFormat
     }
 
     private val precision = getPrecision(normalizedNumberFormat)
 
     private val scale = getScale(normalizedNumberFormat)
-
-    private var unChecked = true
 
     def parsePrecisionAndScale(): (Int, Int) = (precision, scale)
 
@@ -256,14 +248,10 @@ object NumberUtils {
       } catch {
         case e: AnalysisException => return TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-      unChecked = false
       TypeCheckResult.TypeCheckSuccess
     }
 
     def parse(input: UTF8String): Decimal = {
-      if (unChecked) {
-        check()
-      }
       NumberUtils.parse(input, originNumberFormat, numberDecimalFormat, precision, scale)
     }
   }
