@@ -296,8 +296,8 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         self.maybe_color_bp(bp)
         self._return_obj = ret
 
-        labels = [l for l, _ in self.data.items()]
-        labels = [pprint_thing(l) for l in labels]
+        labels = [lbl for lbl, _ in self.data.items()]
+        labels = [pprint_thing(lbl) for lbl in labels]
         if not self.use_index:
             labels = [pprint_thing(key) for key in range(len(labels))]
         self._set_ticklabels(ax, labels)

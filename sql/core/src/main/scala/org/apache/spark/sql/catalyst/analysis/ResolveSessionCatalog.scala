@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
@@ -214,16 +215,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(r: ResolvedView, ifExists) =>
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
-    case c @ CreateNamespace(ResolvedDBObjectName(catalog, name), _, _)
-        if isSessionCatalog(catalog) =>
-      if (name.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(name.quoted)
-      }
-
+    case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      CreateDatabaseCommand(name.head, c.ifNotExists, location, comment, newProperties)
+      CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
@@ -365,15 +361,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           replace = replace,
           viewType = PersistedView)
       } else {
-        throw QueryCompilationErrors.sqlOnlySupportedWithV1TablesError("CREATE VIEW")
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
       }
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
         case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
-          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
-            "SHOW VIEWS", ns.catalog.name)
+          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "views")
       }
 
     // If target is view, force use v1 command
@@ -384,21 +379,39 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
 
-    case DescribeFunction(ResolvedFunc(identifier), extended) =>
-      DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
+    case DescribeFunction(ResolvedNonPersistentFunc(_, V1Function(info)), extended) =>
+      DescribeFunctionCommand(info, extended)
+
+    case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
+      if (isSessionCatalog(catalog)) {
+        DescribeFunctionCommand(func.asInstanceOf[V1Function].info, extended)
+      } else {
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "functions")
+      }
 
     case ShowFunctions(ns: ResolvedNamespace, userScope, systemScope, pattern, output) =>
       ns match {
         case DatabaseInSessionCatalog(db) =>
           ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
         case _ =>
-          throw QueryCompilationErrors.sqlOnlySupportedWithV1CatalogError(
-            "SHOW FUNCTIONS", ns.catalog.name)
+          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "functions")
       }
 
-    case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
-      val funcIdentifier = identifier.asFunctionIdentifier
-      DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, isTemp)
+    case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
+      if (isSessionCatalog(catalog)) {
+        val funcIdentifier = identifier.asFunctionIdentifier
+        DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, false)
+      } else {
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "DROP FUNCTION")
+      }
+
+    case RefreshFunction(ResolvedPersistentFunc(catalog, identifier, _)) =>
+      if (isSessionCatalog(catalog)) {
+        val funcIdentifier = identifier.asFunctionIdentifier
+        RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+      } else {
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "REFRESH FUNCTION")
+      }
 
     case CreateFunction(ResolvedDBObjectName(catalog, nameParts),
         className, resources, ignoreIfExists, replace) =>
@@ -419,13 +432,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           ignoreIfExists,
           replace)
       } else {
-        throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
+        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
       }
-
-    case RefreshFunction(ResolvedFunc(identifier)) =>
-      // Fallback to v1 command
-      val funcIdentifier = identifier.asFunctionIdentifier
-      RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
   }
 
   private def constructV1TableCmd(
@@ -607,6 +615,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
           resolved.namespace.map(quoteIfNeeded).mkString("."))
+    }
+  }
+
+  private object DatabaseNameInSessionCatalog {
+    def unapply(resolved: ResolvedDBObjectName): Option[String] = resolved match {
+      case ResolvedDBObjectName(catalog, _) if !isSessionCatalog(catalog) => None
+      case ResolvedDBObjectName(_, Seq(dbName)) => Some(dbName)
+      case _ =>
+        assert(resolved.nameParts.length > 1)
+        throw QueryCompilationErrors.invalidDatabaseNameError(resolved.nameParts.quoted)
     }
   }
 }

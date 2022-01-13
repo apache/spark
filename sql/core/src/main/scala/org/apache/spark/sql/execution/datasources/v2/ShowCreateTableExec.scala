@@ -74,7 +74,7 @@ case class ShowCreateTableExec(
       val props = tableOptions.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
-      builder ++= "OPTIONS"
+      builder ++= "OPTIONS "
       builder ++= concatByMultiLines(props)
     }
   }

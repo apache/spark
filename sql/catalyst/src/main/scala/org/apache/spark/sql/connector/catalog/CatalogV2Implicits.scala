@@ -72,14 +72,14 @@ private[sql] object CatalogV2Implicits {
       case tableCatalog: TableCatalog =>
         tableCatalog
       case _ =>
-        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "not a TableCatalog")
+        throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "tables")
     }
 
     def asNamespaceCatalog: SupportsNamespaces = plugin match {
       case namespaceCatalog: SupportsNamespaces =>
         namespaceCatalog
       case _ =>
-        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "does not support namespaces")
+        throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "namespaces")
     }
 
     def isFunctionCatalog: Boolean = plugin match {
@@ -91,7 +91,7 @@ private[sql] object CatalogV2Implicits {
       case functionCatalog: FunctionCatalog =>
         functionCatalog
       case _ =>
-        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "not a FunctionCatalog")
+        throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "functions")
     }
   }
 
