@@ -19,7 +19,7 @@ import os
 import warnings
 from collections import defaultdict
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Collection, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 from sqlalchemy import (
     Boolean,
@@ -303,9 +303,9 @@ class DagRun(Base, LoggingMixin):
     def find(
         cls,
         dag_id: Optional[Union[str, List[str]]] = None,
-        run_id: Optional[str] = None,
-        execution_date: Optional[Union[datetime, Collection[datetime]]] = None,
-        state: Optional[Union[str, DagRunState]] = None,
+        run_id: Optional[Iterable[str]] = None,
+        execution_date: Optional[Union[datetime, Iterable[datetime]]] = None,
+        state: Optional[DagRunState] = None,
         external_trigger: Optional[bool] = None,
         no_backfills: bool = False,
         run_type: Optional[DagRunType] = None,
@@ -342,11 +342,14 @@ class DagRun(Base, LoggingMixin):
         dag_ids = [dag_id] if isinstance(dag_id, str) else dag_id
         if dag_ids:
             qry = qry.filter(cls.dag_id.in_(dag_ids))
-        if run_id:
+
+        if is_container(run_id):
+            qry = qry.filter(cls.run_id.in_(run_id))
+        elif run_id is not None:
             qry = qry.filter(cls.run_id == run_id)
         if is_container(execution_date):
             qry = qry.filter(cls.execution_date.in_(execution_date))
-        elif execution_date:
+        elif execution_date is not None:
             qry = qry.filter(cls.execution_date == execution_date)
         if execution_start_date and execution_end_date:
             qry = qry.filter(cls.execution_date.between(execution_start_date, execution_end_date))
