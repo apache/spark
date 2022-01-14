@@ -410,9 +410,12 @@ class DataSourceV2SQLSuite
   test("SPARK-36850: CreateTableAsSelect partitions can be specified using " +
     "PARTITIONED BY and/or CLUSTERED BY") {
     val identifier = "testcat.table_name"
+    val df = spark.createDataFrame(Seq((1L, "a", "a1", "a2", "a3"), (2L, "b", "b1", "b2", "b3"),
+      (3L, "c", "c1", "c2", "c3"))).toDF("id", "data1", "data2", "data3", "data4")
+    df.createOrReplaceTempView("source_table")
     withTable(identifier) {
       spark.sql(s"CREATE TABLE $identifier USING foo PARTITIONED BY (id) " +
-        s"CLUSTERED BY (data) INTO 4 BUCKETS AS SELECT * FROM source")
+        s"CLUSTERED BY (data1, data2, data3, data4) INTO 4 BUCKETS AS SELECT * FROM source_table")
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
@@ -421,18 +424,22 @@ class DataSourceV2SQLSuite
       val part2 = describe
         .filter("col_name = 'Part 1'")
         .select("data_type").head.getString(0)
-      assert(part2 === "bucket(4, data)")
+      assert(part2 === "bucket(4, data1, data2, data3, data4)")
     }
   }
 
   test("SPARK-36850: ReplaceTableAsSelect partitions can be specified using " +
     "PARTITIONED BY and/or CLUSTERED BY") {
     val identifier = "testcat.table_name"
+    val df = spark.createDataFrame(Seq((1L, "a", "a1", "a2", "a3"), (2L, "b", "b1", "b2", "b3"),
+      (3L, "c", "c1", "c2", "c3"))).toDF("id", "data1", "data2", "data3", "data4")
+    df.createOrReplaceTempView("source_table")
     withTable(identifier) {
       spark.sql(s"CREATE TABLE $identifier USING foo " +
         "AS SELECT id FROM source")
       spark.sql(s"REPLACE TABLE $identifier USING foo PARTITIONED BY (id) " +
-        s"CLUSTERED BY (data) INTO 4 BUCKETS AS SELECT * FROM source")
+        s"CLUSTERED BY (data1, data2) SORTED by (data3, data4) INTO 4 BUCKETS " +
+        s"AS SELECT * FROM source_table")
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
@@ -441,7 +448,7 @@ class DataSourceV2SQLSuite
       val part2 = describe
         .filter("col_name = 'Part 1'")
         .select("data_type").head.getString(0)
-      assert(part2 === "bucket(4, data)")
+      assert(part2 === "sorted_bucket(data1, data2, 4, data3, data4)")
     }
   }
 
@@ -1479,18 +1486,21 @@ class DataSourceV2SQLSuite
   test("create table using - with sorted bucket") {
     val identifier = "testcat.table_name"
     withTable(identifier) {
-      sql(s"CREATE TABLE $identifier (a int, b string, c int) USING $v2Source PARTITIONED BY (c)" +
-        s" CLUSTERED BY (b) SORTED by (a) INTO 4 BUCKETS")
-      val table = getTableMetadata(identifier)
+      sql(s"CREATE TABLE $identifier (a int, b string, c int, d int, e int, f int) USING" +
+        s" $v2Source PARTITIONED BY (a, b) CLUSTERED BY (c, d) SORTED by (e, f) INTO 4 BUCKETS")
       val describe = spark.sql(s"DESCRIBE $identifier")
       val part1 = describe
         .filter("col_name = 'Part 0'")
         .select("data_type").head.getString(0)
-      assert(part1 === "c")
+      assert(part1 === "a")
       val part2 = describe
         .filter("col_name = 'Part 1'")
         .select("data_type").head.getString(0)
-      assert(part2 === "bucket(4, b, a)")
+      assert(part2 === "b")
+      val part3 = describe
+        .filter("col_name = 'Part 2'")
+        .select("data_type").head.getString(0)
+      assert(part3 === "sorted_bucket(c, d, 4, e, f)")
     }
   }
 

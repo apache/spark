@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -48,8 +49,8 @@ private[sql] object LogicalExpressions {
   def bucket(
       numBuckets: Int,
       references: Array[NamedReference],
-      sortedCols: Array[NamedReference]): BucketTransform =
-    BucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
+      sortedCols: Array[NamedReference]): SortedBucketTransform =
+    SortedBucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
@@ -101,8 +102,7 @@ private[sql] abstract class SingleColumnTransform(ref: NamedReference) extends R
 
 private[sql] final case class BucketTransform(
     numBuckets: Literal[Int],
-    columns: Seq[NamedReference],
-    sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference]) extends RewritableTransform {
+    columns: Seq[NamedReference]) extends RewritableTransform {
 
   override val name: String = "bucket"
 
@@ -112,13 +112,9 @@ private[sql] final case class BucketTransform(
 
   override def arguments: Array[Expression] = numBuckets +: columns.toArray
 
-  override def toString: String =
-    if (sortedColumns.nonEmpty) {
-      s"bucket(${arguments.map(_.describe).mkString(", ")}," +
-        s" ${sortedColumns.map(_.describe).mkString(", ")})"
-    } else {
-      s"bucket(${arguments.map(_.describe).mkString(", ")})"
-    }
+  override def describe: String = s"bucket(${arguments.map(_.describe).mkString(", ")})"
+
+  override def toString: String = describe
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
     this.copy(columns = newReferences)
@@ -126,32 +122,52 @@ private[sql] final case class BucketTransform(
 }
 
 private[sql] object BucketTransform {
-  def unapply(expr: Expression): Option[(Int, FieldReference, FieldReference)] =
-      expr match {
-    case transform: Transform =>
+  def unapply(transform: Transform): Option[(Int, Seq[NamedReference], Seq[NamedReference])] =
       transform match {
-        case BucketTransform(n, FieldReference(parts), FieldReference(sortCols)) =>
-          Some((n, FieldReference(parts), FieldReference(sortCols)))
+    case NamedTransform("sorted_bucket", arguments) =>
+      var posOfLit: Int = -1
+      var numOfBucket: Int = -1
+      arguments.zipWithIndex.foreach {
+        case (Lit(value: Int, IntegerType), i) =>
+          numOfBucket = value
+          posOfLit = i
         case _ =>
-          None
       }
+      Some(numOfBucket, arguments.take(posOfLit).map(_.asInstanceOf[NamedReference]),
+        arguments.drop(posOfLit + 1).map(_.asInstanceOf[NamedReference]))
+    case NamedTransform("bucket", arguments) =>
+      var numOfBucket: Int = -1
+      arguments(0) match {
+        case Lit(value: Int, IntegerType) =>
+          numOfBucket = value
+        case _ => throw new SparkException("The first element in BucketTransform arguments " +
+          "should be an Integer Literal.")
+      }
+      Some(numOfBucket, arguments.drop(1).map(_.asInstanceOf[NamedReference]),
+        Seq.empty[FieldReference])
     case _ =>
       None
   }
+}
 
-  def unapply(transform: Transform): Option[(Int, NamedReference, NamedReference)] =
-      transform match {
-    case NamedTransform("bucket", Seq(
-        Lit(value: Int, IntegerType),
-        Ref(partCols: Seq[String]),
-        Ref(sortCols: Seq[String]))) =>
-      Some((value, FieldReference(partCols), FieldReference(sortCols)))
-    case NamedTransform("bucket", Seq(
-        Lit(value: Int, IntegerType),
-        Ref(partCols: Seq[String]))) =>
-      Some((value, FieldReference(partCols), FieldReference(Seq.empty[String])))
-    case _ =>
-      None
+private[sql] final case class SortedBucketTransform(
+    numBuckets: Literal[Int],
+    columns: Seq[NamedReference],
+    sortedColumns: Seq[NamedReference] = Seq.empty[NamedReference]) extends RewritableTransform {
+
+  override val name: String = "sorted_bucket"
+
+  override def references: Array[NamedReference] = {
+    arguments.collect { case named: NamedReference => named }
+  }
+
+  override def arguments: Array[Expression] = (columns.toArray :+ numBuckets) ++ sortedColumns
+
+  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
+
+  override def withReferences(newReferences: Seq[NamedReference]): Transform = {
+    this.copy(columns = newReferences.take(columns.length),
+      sortedColumns = newReferences.drop(columns.length))
   }
 }
 

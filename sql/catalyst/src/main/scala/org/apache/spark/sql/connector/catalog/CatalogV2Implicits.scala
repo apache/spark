@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -37,7 +37,7 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class BucketSpecHelper(spec: BucketSpec) {
-    def asTransform: BucketTransform = {
+    def asTransform: Transform = {
       val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
       if (spec.sortColumnNames.nonEmpty) {
         val sortedCol = spec.sortColumnNames.map(col => reference(Seq(col)))
