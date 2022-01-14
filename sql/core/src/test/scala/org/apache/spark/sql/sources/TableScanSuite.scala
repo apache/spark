@@ -359,7 +359,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       val schemaNotMatch = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType relationProviderWithSchema (i int)
+             |CREATE $tableType relationProviderWithSchema (i string)
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
              |  From '1',
