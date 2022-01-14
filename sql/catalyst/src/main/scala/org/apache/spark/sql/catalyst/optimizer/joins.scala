@@ -188,22 +188,19 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Convert inner join to left semi join
+ * Convert inner join to left semi join.
  */
 object EliminateInnerJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
-      plan.transformWithPruning(
-        _.containsPattern(INNER_LIKE_JOIN), ruleId) {
-        case p @ Project(_,
-            j @ ExtractEquiJoinKeys(
-              Inner, _, rightKeys: Seq[Expression], None, _, left, right: Aggregate, _))
-          if right.groupOnly && p.references.subsetOf(left.outputSet) &&
-            getBroadcastBuildSide(j, conf).contains(BuildRight) &&
-            rightKeys.distinct.size == right.output.distinct.size &&
-            rightKeys.distinct.zip(right.output.distinct)
-              .forall { case (a, b) => a.semanticEquals(b) } =>
-          p.copy(child = j.copy(joinType = LeftSemi))
-      }
+    plan.transformWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
+      case p @ Project(_,
+          j @ ExtractEquiJoinKeys(Inner, _, rightKeys, None, _, left, right: Aggregate, _))
+        if right.groupOnly && p.references.subsetOf(left.outputSet) &&
+          getBroadcastBuildSide(j, conf).contains(BuildRight) &&
+          rightKeys.distinct.size == right.output.distinct.size &&
+          rightKeys.forall(key => right.output.exists(_.semanticEquals(key))) =>
+        p.copy(child = j.copy(joinType = LeftSemi))
+    }
   }
 }
 
