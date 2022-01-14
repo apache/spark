@@ -120,10 +120,14 @@ class NumberFormatterSuite extends SparkFunSuite {
       assert(builder.parse(UTF8String.fromString(str)) === expected)
     }
 
-    invalidNumberFormat("999.9.9", "Multiple 'D' or '.' in '999.9.9'")
-    invalidNumberFormat("999D9D9", "Multiple 'D' or '.' in '999D9D9'")
-    invalidNumberFormat("999.9D9", "Multiple 'D' or '.' in '999.9D9'")
-    invalidNumberFormat("999D9.9", "Multiple 'D' or '.' in '999D9.9'")
+    invalidNumberFormat(
+      "999.9.9", "At most one 'D' or '.' is allowed in the number format: '999.9.9'")
+    invalidNumberFormat(
+      "999D9D9", "At most one 'D' or '.' is allowed in the number format: '999D9D9'")
+    invalidNumberFormat(
+      "999.9D9", "At most one 'D' or '.' is allowed in the number format: '999.9D9'")
+    invalidNumberFormat(
+      "999D9.9", "At most one 'D' or '.' is allowed in the number format: '999D9.9'")
 
     // Test ',' and 'G'
     Seq(
@@ -165,8 +169,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       assert(builder.parse(UTF8String.fromString(str)) === expected)
     }
 
-    invalidNumberFormat("99$.99", "'$' must be the first or last char in '99$.99'")
-    invalidNumberFormat("$99.99$", "Multiple '$' in '$99.99$'")
+    invalidNumberFormat(
+      "99$.99", "'$' must be the first or last char in the number format: '99$.99'")
+    invalidNumberFormat("$99.99$", "At most one '$' is allowed in the number format: '$99.99$'")
 
     // Test '-' and 'S'
     Seq(
@@ -186,9 +191,12 @@ class NumberFormatterSuite extends SparkFunSuite {
       assert(builder.parse(UTF8String.fromString(str)) === expected)
     }
 
-    invalidNumberFormat("9S99", "'S' or '-' must be the first or last char in '9S99'")
-    invalidNumberFormat("9-99", "'S' or '-' must be the first or last char in '9-99'")
-    invalidNumberFormat("999D9SS", "Multiple 'S' or '-' in '999D9SS'")
+    invalidNumberFormat(
+      "9S99", "'S' or '-' must be the first or last char in the number format: '9S99'")
+    invalidNumberFormat(
+      "9-99", "'S' or '-' must be the first or last char in the number format: '9-99'")
+    invalidNumberFormat(
+      "999D9SS", "At most one 'S' or '-' is allowed in the number format: '999D9SS'")
   }
 
   test("format") {

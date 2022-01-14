@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import com.google.common.annotations.VisibleForTesting
-import org.apache.spark.sql.AnalysisException
-
 import java.math.BigDecimal
 import java.text.{DecimalFormat, ParsePosition}
 import java.util.Locale
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DecimalType}
@@ -51,7 +50,7 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
 
   protected val normalizedNumberFormat = normalize(originNumberFormat)
 
-  private lazy val transformedFormat = transform(normalizedNumberFormat)
+  private val transformedFormat = transform(normalizedNumberFormat)
 
   private lazy val numberDecimalFormat = {
     val decimalFormat = new DecimalFormat(transformedFormat)
@@ -59,9 +58,9 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     decimalFormat
   }
 
-  private lazy val precision = normalizedNumberFormat.filterNot(isSign).length
+  private val precision = normalizedNumberFormat.filterNot(isSign).length
 
-  private lazy val scale = {
+  private val scale = {
     val formatSplits = normalizedNumberFormat.split(POINT_SIGN)
     if (formatSplits.length == 1) {
       0
@@ -129,11 +128,11 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     }
 
     def multipleSignInNumberFormatError(message: String): String = {
-      s"Multiple $message in '$originNumberFormat'"
+      s"At most one $message is allowed in the number format: '$originNumberFormat'"
     }
 
     def nonFistOrLastCharInNumberFormatError(message: String): String = {
-      s"$message must be the first or last char in '$originNumberFormat'"
+      s"$message must be the first or last char in the number format: '$originNumberFormat'"
     }
 
     if (normalizedNumberFormat.length == 0) {
@@ -172,6 +171,7 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
   def parse(input: UTF8String): Decimal = {
     val inputStr = input.toString.trim
     val inputSplits = inputStr.split(POINT_SIGN)
+    assert(inputSplits.length <= 2)
     if (inputSplits.length == 1) {
       if (inputStr.filterNot(isSign).length > precision - scale) {
         throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
@@ -206,17 +206,6 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     if (decimalPlainStr.length > transformedFormat.length) {
       transformedFormat.replaceAll("0", POUND_SIGN_STRING)
     } else {
-      val numberDecimalFormat = {
-        val decimalFormat = new DecimalFormat()
-        decimalFormat.setParseBigDecimal(true)
-        try {
-          decimalFormat.applyLocalizedPattern(transformedFormat)
-        } catch {
-          case _: IllegalArgumentException =>
-            throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
-        }
-        decimalFormat
-      }
       var resultStr = numberDecimalFormat.format(bigDecimal)
       // Since we trimmed the comma at the beginning or end of number format in function
       // `normalize`, we restore the comma to the result here.
