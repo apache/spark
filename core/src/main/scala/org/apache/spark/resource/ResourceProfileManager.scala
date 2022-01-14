@@ -89,7 +89,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       if (!resourceProfileIdToResourceProfile.contains(rp.id)) {
         val prev = resourceProfileIdToResourceProfile.put(rp.id, rp)
         if (reuseExecutors) {
-          computeCompatibleProfileIds()
+          calculateCompatibleProfileIds()
         }
         if (prev.isEmpty) putNewProfile = true
       }
@@ -135,37 +135,44 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     }
   }
 
-  def getOtherCompatibleProfileIds(rpId: Int): Set[Int] = {
-    resourceProfileIdToCompatibleResourceProfileIds.getOrElse(rpId, Set())
-  }
-
-  /*
-   * Compute and cache all compatible profile IDs excluding itself
-   */
-  def computeCompatibleProfileIds(): Unit = {
+  private [spark] def getCompatibleProfileIds(rpId: Int): Set[Int] = {
     readLock.lock()
     try {
-      resourceProfileIdToResourceProfile.foreach {
-        case (id: Int, rpEntry: ResourceProfile) =>
-          val resourceProfile = resourceProfileFromId(id)
-          val compatibleIdSet = resourceProfileIdToResourceProfile.filter {
-            case (otherId: Int, _: ResourceProfile) =>
-              id != otherId && rpEntry.resourcesCompatible(resourceProfile)
-          }.map(_._1).toSet
-          writeLock.lock()
-          resourceProfileIdToCompatibleResourceProfileIds.put(id, compatibleIdSet)
-      }
+      resourceProfileIdToCompatibleResourceProfileIds.getOrElse(rpId, Set())
     } finally {
-      writeLock.unlock()
       readLock.unlock()
     }
   }
 
-  def dumpResourceProfile(): Unit = {
+  /*
+   * Calculate and cache all compatible profile IDs excluding itself
+   * This operation is done when new ResourceProfile added
+   */
+  private def calculateCompatibleProfileIds(): Unit = {
+    resourceProfileIdToResourceProfile.foreach {
+      case (id: Int, rpEntry: ResourceProfile) =>
+        val resourceProfile = resourceProfileFromId(id)
+        val compatibleIdSet = resourceProfileIdToResourceProfile.filter {
+          case (otherId: Int, _: ResourceProfile) =>
+            id != otherId && rpEntry.resourcesCompatible(resourceProfile)
+        }.map(_._1).toSet
+        resourceProfileIdToCompatibleResourceProfileIds.put(id, compatibleIdSet)
+    }
+  }
+
+  private [spark] def dumpResourceProfiles(): Unit = {
     readLock.lock()
     try {
+      logDebug("dump resource profiles:")
       resourceProfileIdToResourceProfile.foreach { case (id: Int, rpEntry: ResourceProfile) =>
-        logDebug("rpId " + id + ": " + rpEntry)
+        logDebug("-- rpId " + id + ": " + rpEntry)
+      }
+      if (reuseExecutors) {
+        logDebug("dump compatible resource profile ids:")
+        resourceProfileIdToCompatibleResourceProfileIds.foreach {
+          case (id: Int, compatibleIds: Set[Int]) =>
+            logDebug("-- rpId " + id + ": " + compatibleIds)
+        }
       }
     } finally {
       readLock.unlock()

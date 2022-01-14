@@ -296,7 +296,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     rp1.require(execReqs).require(taskReqs)
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
-    rpManager.dumpResourceProfile()
+    rpManager.dumpResourceProfiles()
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
     val updatesNeeded =
       new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]

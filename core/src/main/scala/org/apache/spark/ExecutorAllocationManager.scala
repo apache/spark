@@ -494,19 +494,8 @@ private[spark] class ExecutorAllocationManager(
     numExecutorsTargetPerResourceProfileId(rpId) - oldNumExecutorsTarget
   }
 
-//  private def executorCountWithCompatibleResourceProfile(rpId: Int): Int = {
-//    val compatibleProfileIds = resourceProfileManager.getOtherCompatibleProfileIds(rpId)
-//
-//    logDebug("compatibleProfileIds for rpId " + rpId + ": " + compatibleProfileIds.mkString(" "))
-//
-//    compatibleProfileIds.map { executorMonitor.executorCountWithResourceProfile(_) }.sum
-//  }
-
   private def numExecutorsTargetsCompatibleProfiles(rpId: Int): Int = {
-    val compatibleProfileIds = resourceProfileManager.getOtherCompatibleProfileIds(rpId)
-
-//    logDebug("compatibleProfileIds for rpId " + rpId + ": " + compatibleProfileIds.mkString(" "))
-
+    val compatibleProfileIds = resourceProfileManager.getCompatibleProfileIds(rpId)
     compatibleProfileIds.map { numExecutorsTargetPerResourceProfileId(_) }.sum
   }
 
@@ -559,13 +548,6 @@ private[spark] class ExecutorAllocationManager(
       val numCompatibleExecutors = numExecutorsTargetsCompatibleProfiles(rpId)
       val adjustedMinNumExecutors = math.max(0, minNumExecutors - numCompatibleExecutors)
       val adjustedMaxNumExecutors = math.max(1, maxNumExecutors - numCompatibleExecutors)
-
-      // scalastyle:off println
-      println(rpId, minNumExecutors, maxNumExecutors, numCompatibleExecutors)
-      // scalastyle:on println
-
-      // assert(adjustedMinNumExecutors >= 0, s"$adjustedMinNumExecutors")
-      // assert(adjustedMaxNumExecutors > 0, s"$adjustedMaxNumExecutors")
 
       math.max(math.min(numExecutorsTarget, adjustedMaxNumExecutors),
         adjustedMinNumExecutors)

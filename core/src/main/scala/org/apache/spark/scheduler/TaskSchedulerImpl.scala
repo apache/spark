@@ -388,7 +388,7 @@ private[spark] class TaskSchedulerImpl(
       val taskSetRpID = taskSet.taskSet.resourceProfileId
 
       val assignTasks = if (reuseExecutors) {
-        val compatibleProfiles = sc.resourceProfileManager.getOtherCompatibleProfileIds(taskSetRpID)
+        val compatibleProfiles = sc.resourceProfileManager.getCompatibleProfileIds(taskSetRpID)
         taskSetRpID == shuffledOffers(i).resourceProfileId ||
           compatibleProfiles.contains(shuffledOffers(i).resourceProfileId)
         } else {
