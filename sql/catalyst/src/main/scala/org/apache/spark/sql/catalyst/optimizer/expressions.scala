@@ -720,26 +720,26 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
       case b @ StringBinaryRuntimeReplaceable(i @ If(_, trueValue, falseValue), right)
         if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.copyChildren(trueValue, right),
-          falseValue = b.copyChildren(falseValue, right))
+          trueValue = b.newCopy(trueValue, right),
+          falseValue = b.newCopy(falseValue, right))
 
       case b @ StringBinaryRuntimeReplaceable(left, i @ If(_, trueValue, falseValue))
         if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.copyChildren(left, trueValue),
-          falseValue = b.copyChildren(left, falseValue))
+          trueValue = b.newCopy(left, trueValue),
+          falseValue = b.newCopy(left, falseValue))
 
       case b @ StringBinaryRuntimeReplaceable(c @ CaseWhen(branches, elseValue), right)
         if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.copyChildren(e._2, right))),
-          Some(b.copyChildren(elseValue.getOrElse(Literal(null, c.dataType)), right)))
+          branches.map(e => e.copy(_2 = b.newCopy(e._2, right))),
+          Some(b.newCopy(elseValue.getOrElse(Literal(null, c.dataType)), right)))
 
       case b @ StringBinaryRuntimeReplaceable(left, c @ CaseWhen(branches, elseValue))
         if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.copyChildren(left, e._2))),
-          Some(b.copyChildren(left, elseValue.getOrElse(Literal(null, c.dataType)))))
+          branches.map(e => e.copy(_2 = b.newCopy(left, e._2))),
+          Some(b.newCopy(left, elseValue.getOrElse(Literal(null, c.dataType)))))
 
     }
   }

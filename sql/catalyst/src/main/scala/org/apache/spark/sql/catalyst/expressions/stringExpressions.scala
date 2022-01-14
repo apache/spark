@@ -484,7 +484,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 
 abstract class StringBinaryRuntimeReplaceable(left: Expression, right: Expression)
   extends RuntimeReplaceable {
-  def copyChildren(left: Expression, right: Expression): StringBinaryRuntimeReplaceable
+  def newCopy(left: Expression, right: Expression): StringBinaryRuntimeReplaceable
 }
 
 object StringBinaryRuntimeReplaceable {
@@ -557,7 +557,7 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
   override protected def withNewChildInternal(newChild: Expression): BinaryContains =
     copy(child = newChild)
 
-  override def copyChildren(left: Expression, right: Expression): BinaryContains =
+  override def newCopy(left: Expression, right: Expression): BinaryContains =
     new BinaryContains(left, right)
 }
 
@@ -625,7 +625,7 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
   override protected def withNewChildInternal(newChild: Expression): BinaryStartsWith =
     copy(child = newChild)
 
-  override def copyChildren(left: Expression, right: Expression): BinaryStartsWith =
+  override def newCopy(left: Expression, right: Expression): BinaryStartsWith =
     new BinaryStartsWith(left, right)
 }
 
@@ -692,7 +692,7 @@ case class BinaryEndsWith(left: Expression, right: Expression, child: Expression
   override protected def withNewChildInternal(newChild: Expression): BinaryEndsWith =
     copy(child = newChild)
 
-  override def copyChildren(left: Expression, right: Expression): BinaryEndsWith =
+  override def newCopy(left: Expression, right: Expression): BinaryEndsWith =
     new BinaryEndsWith(left, right)
 }
 
