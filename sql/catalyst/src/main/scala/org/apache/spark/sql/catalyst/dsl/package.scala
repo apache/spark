@@ -490,6 +490,9 @@ package object dsl {
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
+      def rebalance(exprs: Expression*): LogicalPlan =
+        RebalancePartitions(exprs, logicalPlan)
+
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
         analysis.SimpleAnalyzer.checkAnalysis(analyzed)
