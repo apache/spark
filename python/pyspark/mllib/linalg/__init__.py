@@ -42,6 +42,32 @@ from pyspark.sql.types import (
     BooleanType,
 )
 
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    overload,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    TYPE_CHECKING,
+    Union,
+)
+
+if TYPE_CHECKING:
+    from pyspark.mllib._typing import VectorLike
+    from scipy.sparse import spmatrix
+
+
+QT = TypeVar("QT")
+RT = TypeVar("RT")
+
 
 __all__ = [
     "Vector",
@@ -68,23 +94,23 @@ except BaseException:
     _have_scipy = False
 
 
-def _convert_to_vector(d):
+def _convert_to_vector(d: Union["VectorLike", "spmatrix", range]) -> "Vector":
     if isinstance(d, Vector):
         return d
     elif type(d) in (array.array, np.array, np.ndarray, list, tuple, range):
         return DenseVector(d)
     elif _have_scipy and scipy.sparse.issparse(d):
-        assert d.shape[1] == 1, "Expected column vector"
+        assert cast("spmatrix", d).shape[1] == 1, "Expected column vector"
         # Make sure the converted csc_matrix has sorted indices.
-        csc = d.tocsc()
+        csc = cast("spmatrix", d).tocsc()
         if not csc.has_sorted_indices:
             csc.sort_indices()
-        return SparseVector(d.shape[0], csc.indices, csc.data)
+        return SparseVector(cast("spmatrix", d).shape[0], csc.indices, csc.data)
     else:
         raise TypeError("Cannot convert type %s into Vector" % type(d))
 
 
-def _vector_size(v):
+def _vector_size(v: Union["VectorLike", "spmatrix", range]) -> int:
     """
     Returns the size of the vector.
 
@@ -115,26 +141,26 @@ def _vector_size(v):
         else:
             raise ValueError("Cannot treat an ndarray of shape %s as a vector" % str(v.shape))
     elif _have_scipy and scipy.sparse.issparse(v):
-        assert v.shape[1] == 1, "Expected column vector"
-        return v.shape[0]
+        assert cast("spmatrix", v).shape[1] == 1, "Expected column vector"
+        return cast("spmatrix", v).shape[0]
     else:
         raise TypeError("Cannot treat type %s as a vector" % type(v))
 
 
-def _format_float(f, digits=4):
+def _format_float(f: float, digits: int = 4) -> str:
     s = str(round(f, digits))
     if "." in s:
         s = s[: s.index(".") + 1 + digits]
     return s
 
 
-def _format_float_list(xs):
+def _format_float_list(xs: Iterable[float]) -> List[str]:
     return [_format_float(x) for x in xs]
 
 
-def _double_to_long_bits(value):
+def _double_to_long_bits(value: float) -> int:
     if np.isnan(value):
-        value = float("nan")
+        value = float("nan")  # type: ignore[assignment]
     # pack double into 64 bits, then unpack as long int
     return struct.unpack("Q", struct.pack("d", value))[0]
 
@@ -145,7 +171,7 @@ class VectorUDT(UserDefinedType):
     """
 
     @classmethod
-    def sqlType(cls):
+    def sqlType(cls) -> StructType:
         return StructType(
             [
                 StructField("type", ByteType(), False),
@@ -156,37 +182,41 @@ class VectorUDT(UserDefinedType):
         )
 
     @classmethod
-    def module(cls):
+    def module(cls) -> str:
         return "pyspark.mllib.linalg"
 
     @classmethod
-    def scalaUDT(cls):
+    def scalaUDT(cls) -> str:
         return "org.apache.spark.mllib.linalg.VectorUDT"
 
-    def serialize(self, obj):
+    def serialize(
+        self, obj: "Vector"
+    ) -> Tuple[int, Optional[int], Optional[List[int]], List[float]]:
         if isinstance(obj, SparseVector):
             indices = [int(i) for i in obj.indices]
             values = [float(v) for v in obj.values]
             return (0, obj.size, indices, values)
         elif isinstance(obj, DenseVector):
-            values = [float(v) for v in obj]
+            values = [float(v) for v in obj]  # type: ignore[attr-defined]
             return (1, None, None, values)
         else:
             raise TypeError("cannot serialize %r of type %r" % (obj, type(obj)))
 
-    def deserialize(self, datum):
+    def deserialize(
+        self, datum: Tuple[int, Optional[int], Optional[List[int]], List[float]]
+    ) -> "Vector":
         assert (
             len(datum) == 4
         ), "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
         tpe = datum[0]
         if tpe == 0:
-            return SparseVector(datum[1], datum[2], datum[3])
+            return SparseVector(cast(int, datum[1]), cast(List[int], datum[2]), datum[3])
         elif tpe == 1:
             return DenseVector(datum[3])
         else:
             raise ValueError("do not recognize type %r" % tpe)
 
-    def simpleString(self):
+    def simpleString(self) -> str:
         return "vector"
 
 
@@ -196,7 +226,7 @@ class MatrixUDT(UserDefinedType):
     """
 
     @classmethod
-    def sqlType(cls):
+    def sqlType(cls) -> StructType:
         return StructType(
             [
                 StructField("type", ByteType(), False),
@@ -210,14 +240,16 @@ class MatrixUDT(UserDefinedType):
         )
 
     @classmethod
-    def module(cls):
+    def module(cls) -> str:
         return "pyspark.mllib.linalg"
 
     @classmethod
-    def scalaUDT(cls):
+    def scalaUDT(cls) -> str:
         return "org.apache.spark.mllib.linalg.MatrixUDT"
 
-    def serialize(self, obj):
+    def serialize(
+        self, obj: "Matrix"
+    ) -> Tuple[int, int, int, Optional[List[int]], Optional[List[int]], List[float], bool]:
         if isinstance(obj, SparseMatrix):
             colPtrs = [int(i) for i in obj.colPtrs]
             rowIndices = [int(i) for i in obj.rowIndices]
@@ -237,19 +269,29 @@ class MatrixUDT(UserDefinedType):
         else:
             raise TypeError("cannot serialize type %r" % (type(obj)))
 
-    def deserialize(self, datum):
+    def deserialize(
+        self,
+        datum: Tuple[int, int, int, Optional[List[int]], Optional[List[int]], List[float], bool],
+    ) -> "Matrix":
         assert (
             len(datum) == 7
         ), "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
         tpe = datum[0]
         if tpe == 0:
-            return SparseMatrix(*datum[1:])
+            return SparseMatrix(
+                datum[1],
+                datum[2],
+                cast(List[int], datum[3]),
+                cast(List[int], datum[4]),
+                datum[5],
+                datum[6],
+            )
         elif tpe == 1:
             return DenseMatrix(datum[1], datum[2], datum[5], datum[6])
         else:
             raise ValueError("do not recognize type %r" % tpe)
 
-    def simpleString(self):
+    def simpleString(self) -> str:
         return "matrix"
 
 
@@ -261,7 +303,7 @@ class Vector:
     Abstract class for DenseVector and SparseVector
     """
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Convert the vector into an numpy.ndarray
 
@@ -271,7 +313,7 @@ class Vector:
         """
         raise NotImplementedError
 
-    def asML(self):
+    def asML(self) -> newlinalg.Vector:
         """
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -280,6 +322,9 @@ class Vector:
         -------
         :py:class:`pyspark.ml.linalg.Vector`
         """
+        raise NotImplementedError
+
+    def __len__(self) -> int:
         raise NotImplementedError
 
 
@@ -309,17 +354,18 @@ class DenseVector(Vector):
     DenseVector([-1.0, -2.0])
     """
 
-    def __init__(self, ar):
+    def __init__(self, ar: Union[bytes, np.ndarray, Iterable[float]]):
+        ar_: np.ndarray
         if isinstance(ar, bytes):
-            ar = np.frombuffer(ar, dtype=np.float64)
+            ar_ = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
-            ar = np.array(ar, dtype=np.float64)
-        if ar.dtype != np.float64:
-            ar = ar.astype(np.float64)
-        self.array = ar
+            ar_ = np.array(ar, dtype=np.float64)
+        else:
+            ar_ = ar.astype(np.float64) if ar.dtype != np.float64 else ar
+        self.array = ar_
 
     @staticmethod
-    def parse(s):
+    def parse(s: str) -> "DenseVector":
         """
         Parse string representation back into the DenseVector.
 
@@ -342,16 +388,16 @@ class DenseVector(Vector):
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
 
-    def __reduce__(self):
-        return DenseVector, (self.array.tostring(),)
+    def __reduce__(self) -> Tuple[Type["DenseVector"], Tuple[bytes]]:
+        return DenseVector, (self.array.tostring(),)  # type: ignore[attr-defined]
 
-    def numNonzeros(self):
+    def numNonzeros(self) -> int:
         """
         Number of nonzero elements. This scans all active values and count non zeros
         """
         return np.count_nonzero(self.array)
 
-    def norm(self, p):
+    def norm(self, p: Union[float, str]) -> np.float64:
         """
         Calculates the norm of a DenseVector.
 
@@ -365,7 +411,7 @@ class DenseVector(Vector):
         """
         return np.linalg.norm(self.array, p)
 
-    def dot(self, other):
+    def dot(self, other: Iterable[float]) -> np.float64:
         """
         Compute the dot product of two Vectors. We support
         (Numpy array, list, SparseVector, or SciPy sparse)
@@ -399,8 +445,8 @@ class DenseVector(Vector):
                 assert len(self) == other.shape[0], "dimension mismatch"
             return np.dot(self.array, other)
         elif _have_scipy and scipy.sparse.issparse(other):
-            assert len(self) == other.shape[0], "dimension mismatch"
-            return other.transpose().dot(self.toArray())
+            assert len(self) == cast("spmatrix", other).shape[0], "dimension mismatch"
+            return cast("spmatrix", other).transpose().dot(self.toArray())
         else:
             assert len(self) == _vector_size(other), "dimension mismatch"
             if isinstance(other, SparseVector):
@@ -410,7 +456,7 @@ class DenseVector(Vector):
             else:
                 return np.dot(self.toArray(), other)
 
-    def squared_distance(self, other):
+    def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
         Squared distance of two Vectors.
 
@@ -441,22 +487,22 @@ class DenseVector(Vector):
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
-            return _convert_to_vector(other).squared_distance(self)
+            return _convert_to_vector(other).squared_distance(self)  # type: ignore[attr-defined]
 
         if isinstance(other, Vector):
             other = other.toArray()
         elif not isinstance(other, np.ndarray):
             other = np.array(other)
-        diff = self.toArray() - other
+        diff: np.ndarray = self.toArray() - other
         return np.dot(diff, diff)
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Returns an numpy.ndarray
         """
         return self.array
 
-    def asML(self):
+    def asML(self) -> newlinalg.DenseVector:
         """
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -470,25 +516,33 @@ class DenseVector(Vector):
         return newlinalg.DenseVector(self.array)
 
     @property
-    def values(self):
+    def values(self) -> np.ndarray:
         """
         Returns a list of values
         """
         return self.array
 
-    def __getitem__(self, item):
+    @overload
+    def __getitem__(self, item: int) -> np.float64:
+        ...
+
+    @overload
+    def __getitem__(self, item: slice) -> np.ndarray:
+        ...
+
+    def __getitem__(self, item: Union[int, slice]) -> Union[np.float64, np.ndarray]:
         return self.array[item]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.array)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "[" + ",".join([str(v) for v in self.array]) + "]"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "DenseVector([%s])" % (", ".join(_format_float(i) for i in self.array))
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if isinstance(other, DenseVector):
             return np.array_equal(self.array, other.array)
         elif isinstance(other, SparseVector):
@@ -497,10 +551,10 @@ class DenseVector(Vector):
             return Vectors._equals(list(range(len(self))), self.array, other.indices, other.values)
         return False
 
-    def __ne__(self, other):
+    def __ne__(self, other: Any) -> bool:
         return not self == other
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         size = len(self)
         result = 31 + size
         nnz = 0
@@ -514,14 +568,14 @@ class DenseVector(Vector):
             i += 1
         return result
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> Any:
         return getattr(self.array, item)
 
-    def __neg__(self):
+    def __neg__(self) -> "DenseVector":
         return DenseVector(-self.array)
 
-    def _delegate(op):
-        def func(self, other):
+    def _delegate(op: str) -> Callable[["DenseVector", Any], Any]:  # type: ignore[misc]
+        def func(self: "DenseVector", other: Any) -> Any:
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
@@ -548,7 +602,33 @@ class SparseVector(Vector):
     alternatively pass SciPy's {scipy.sparse} data types.
     """
 
-    def __init__(self, size, *args):
+    @overload
+    def __init__(self, size: int, __indices: bytes, __values: bytes):
+        ...
+
+    @overload
+    def __init__(self, size: int, *args: Tuple[int, float]):
+        ...
+
+    @overload
+    def __init__(self, size: int, __indices: Iterable[int], __values: Iterable[float]):
+        ...
+
+    @overload
+    def __init__(self, size: int, __pairs: Iterable[Tuple[int, float]]):
+        ...
+
+    @overload
+    def __init__(self, size: int, __map: Dict[int, float]):
+        ...
+
+    def __init__(
+        self,
+        size: int,
+        *args: Union[
+            bytes, Tuple[int, float], Iterable[float], Iterable[Tuple[int, float]], Dict[int, float]
+        ],
+    ):
         """
         Create a sparse vector, using either a dictionary, a list of
         (index, value) pairs, or two separate arrays of indices and
@@ -580,7 +660,7 @@ class SparseVector(Vector):
             pairs = args[0]
             if type(pairs) == dict:
                 pairs = pairs.items()
-            pairs = sorted(pairs)
+            pairs = cast(Iterable[Tuple[int, float]], sorted(pairs))
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
             """ A list of indices corresponding to active entries. """
             self.values = np.array([p[1] for p in pairs], dtype=np.float64)
@@ -606,13 +686,13 @@ class SparseVector(Vector):
                         % (self.indices[i], self.indices[i + 1])
                     )
 
-    def numNonzeros(self):
+    def numNonzeros(self) -> int:
         """
         Number of nonzero elements. This scans all active values and count non zeros.
         """
         return np.count_nonzero(self.values)
 
-    def norm(self, p):
+    def norm(self, p: Union[float, str]) -> np.float64:
         """
         Calculates the norm of a SparseVector.
 
@@ -626,11 +706,18 @@ class SparseVector(Vector):
         """
         return np.linalg.norm(self.values, p)
 
-    def __reduce__(self):
-        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))
+    def __reduce__(self) -> Tuple[Type["SparseVector"], Tuple[int, bytes, bytes]]:
+        return (
+            SparseVector,
+            (
+                self.size,
+                self.indices.tostring(),  # type: ignore[attr-defined]
+                self.values.tostring(),  # type: ignore[attr-defined]
+            ),
+        )
 
     @staticmethod
-    def parse(s):
+    def parse(s: str) -> "SparseVector":
         """
         Parse string representation back into the SparseVector.
 
@@ -649,7 +736,7 @@ class SparseVector(Vector):
 
         size = s[: s.find(",")]
         try:
-            size = int(size)
+            size = int(size)  # type: ignore[assignment]
         except ValueError:
             raise ValueError("Cannot parse size %s." % size)
 
@@ -678,9 +765,9 @@ class SparseVector(Vector):
             values = [float(val) for val in val_list if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s." % s)
-        return SparseVector(size, indices, values)
+        return SparseVector(cast(int, size), indices, values)
 
-    def dot(self, other):
+    def dot(self, other: Any) -> np.float64:
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
@@ -730,7 +817,7 @@ class SparseVector(Vector):
             self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
             self_values = self.values[self_cmind]
             if self_values.size == 0:
-                return 0.0
+                return np.float64(0.0)
             else:
                 other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
                 return np.dot(self_values, other.values[other_cmind])
@@ -738,7 +825,7 @@ class SparseVector(Vector):
         else:
             return self.dot(_convert_to_vector(other))
 
-    def squared_distance(self, other):
+    def squared_distance(self, other: Any) -> np.float64:
         """
         Squared distance from a SparseVector or 1-dimensional NumPy array.
 
@@ -808,7 +895,7 @@ class SparseVector(Vector):
         else:
             return self.squared_distance(_convert_to_vector(other))
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
@@ -816,7 +903,7 @@ class SparseVector(Vector):
         arr[self.indices] = self.values
         return arr
 
-    def asML(self):
+    def asML(self) -> newlinalg.SparseVector:
         """
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -829,15 +916,15 @@ class SparseVector(Vector):
         """
         return newlinalg.SparseVector(self.size, self.indices, self.values)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.size
 
-    def __str__(self):
+    def __str__(self) -> str:
         inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
         vals = "[" + ",".join([str(v) for v in self.values]) + "]"
         return "(" + ",".join((str(self.size), inds, vals)) + ")"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inds = self.indices
         vals = self.values
         entries = ", ".join(
@@ -845,7 +932,7 @@ class SparseVector(Vector):
         )
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if isinstance(other, SparseVector):
             return (
                 other.size == self.size
@@ -858,7 +945,7 @@ class SparseVector(Vector):
             return Vectors._equals(self.indices, self.values, list(range(len(other))), other.array)
         return False
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> np.float64:
         inds = self.indices
         vals = self.values
         if not isinstance(index, int):
@@ -870,18 +957,18 @@ class SparseVector(Vector):
             index += self.size
 
         if (inds.size == 0) or (index > inds.item(-1)):
-            return 0.0
+            return np.float64(0.0)
 
         insert_index = np.searchsorted(inds, index)
         row_ind = inds[insert_index]
         if row_ind == index:
             return vals[insert_index]
-        return 0.0
+        return np.float64(0.0)
 
-    def __ne__(self, other):
+    def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         result = 31 + self.size
         nnz = 0
         i = 0
@@ -909,7 +996,37 @@ class Vectors:
     """
 
     @staticmethod
-    def sparse(size, *args):
+    @overload
+    def sparse(size: int, __indices: bytes, __values: bytes) -> SparseVector:
+        ...
+
+    @staticmethod
+    @overload
+    def sparse(size: int, *args: Tuple[int, float]) -> SparseVector:
+        ...
+
+    @staticmethod
+    @overload
+    def sparse(size: int, __indices: Iterable[int], __values: Iterable[float]) -> SparseVector:
+        ...
+
+    @staticmethod
+    @overload
+    def sparse(size: int, __pairs: Iterable[Tuple[int, float]]) -> SparseVector:
+        ...
+
+    @staticmethod
+    @overload
+    def sparse(size: int, __map: Dict[int, float]) -> SparseVector:
+        ...
+
+    @staticmethod
+    def sparse(
+        size: int,
+        *args: Union[
+            bytes, Tuple[int, float], Iterable[float], Iterable[Tuple[int, float]], Dict[int, float]
+        ],
+    ) -> SparseVector:
         """
         Create a sparse vector, using either a dictionary, a list of
         (index, value) pairs, or two separate arrays of indices and
@@ -932,10 +1049,25 @@ class Vectors:
         >>> Vectors.sparse(4, [1, 3], [1.0, 5.5])
         SparseVector(4, {1: 1.0, 3: 5.5})
         """
-        return SparseVector(size, *args)
+        return SparseVector(size, *args)  # type: ignore[arg-type]
+
+    @overload
+    @staticmethod
+    def dense(*elements: float) -> DenseVector:
+        ...
+
+    @overload
+    @staticmethod
+    def dense(__arr: bytes) -> DenseVector:
+        ...
+
+    @overload
+    @staticmethod
+    def dense(__arr: Iterable[float]) -> DenseVector:
+        ...
 
     @staticmethod
-    def dense(*elements):
+    def dense(*elements: Union[float, bytes, np.ndarray, Iterable[float]]) -> DenseVector:
         """
         Create a dense vector of 64-bit floats from a Python list or numbers.
 
@@ -948,11 +1080,11 @@ class Vectors:
         """
         if len(elements) == 1 and not isinstance(elements[0], (float, int)):
             # it's list, numpy.array or other iterable object.
-            elements = elements[0]
-        return DenseVector(elements)
+            elements = elements[0]  # type: ignore[assignment]
+        return DenseVector(cast(Iterable[float], elements))
 
     @staticmethod
-    def fromML(vec):
+    def fromML(vec: newlinalg.DenseVector) -> DenseVector:
         """
         Convert a vector from the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -975,7 +1107,7 @@ class Vectors:
             raise TypeError("Unsupported vector type %s" % type(vec))
 
     @staticmethod
-    def stringify(vector):
+    def stringify(vector: Vector) -> str:
         """
         Converts a vector into a string, which can be recognized by
         Vectors.parse().
@@ -990,7 +1122,7 @@ class Vectors:
         return str(vector)
 
     @staticmethod
-    def squared_distance(v1, v2):
+    def squared_distance(v1: Vector, v2: Vector) -> np.float64:
         """
         Squared distance between two vectors.
         a and b can be of type SparseVector, DenseVector, np.ndarray
@@ -1004,17 +1136,17 @@ class Vectors:
         51.0
         """
         v1, v2 = _convert_to_vector(v1), _convert_to_vector(v2)
-        return v1.squared_distance(v2)
+        return v1.squared_distance(v2)  # type: ignore[attr-defined]
 
     @staticmethod
-    def norm(vector, p):
+    def norm(vector: Vector, p: Union[float, str]) -> np.float64:
         """
         Find norm of the given vector.
         """
-        return _convert_to_vector(vector).norm(p)
+        return _convert_to_vector(vector).norm(p)  # type: ignore[attr-defined]
 
     @staticmethod
-    def parse(s):
+    def parse(s: str) -> Vector:
         """Parse a string representation back into the Vector.
 
         Examples
@@ -1032,11 +1164,16 @@ class Vectors:
             raise ValueError("Cannot find tokens '[' or '(' from the input string.")
 
     @staticmethod
-    def zeros(size):
+    def zeros(size: int) -> DenseVector:
         return DenseVector(np.zeros(size))
 
     @staticmethod
-    def _equals(v1_indices, v1_values, v2_indices, v2_values):
+    def _equals(
+        v1_indices: Union[Sequence[int], np.ndarray],
+        v1_values: Union[Sequence[float], np.ndarray],
+        v2_indices: Union[Sequence[int], np.ndarray],
+        v2_values: Union[Sequence[float], np.ndarray],
+    ) -> bool:
         """
         Check equality between sparse/dense vectors,
         v1_indices and v2_indices assume to be strictly increasing.
@@ -1069,18 +1206,18 @@ class Matrix:
     Represents a local matrix.
     """
 
-    def __init__(self, numRows, numCols, isTransposed=False):
+    def __init__(self, numRows: int, numCols: int, isTransposed: bool = False) -> None:
         self.numRows = numRows
         self.numCols = numCols
         self.isTransposed = isTransposed
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Returns its elements in a NumPy ndarray.
         """
         raise NotImplementedError
 
-    def asML(self):
+    def asML(self) -> newlinalg.Matrix:
         """
         Convert this matrix to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -1088,7 +1225,7 @@ class Matrix:
         raise NotImplementedError
 
     @staticmethod
-    def _convert_to_array(array_like, dtype):
+    def _convert_to_array(array_like: Union[bytes, Iterable[float]], dtype: Any) -> np.ndarray:
         """
         Convert Matrix attributes which are array-like or buffer to array.
         """
@@ -1102,21 +1239,27 @@ class DenseMatrix(Matrix):
     Column-major dense matrix.
     """
 
-    def __init__(self, numRows, numCols, values, isTransposed=False):
+    def __init__(
+        self,
+        numRows: int,
+        numCols: int,
+        values: Union[bytes, Iterable[float]],
+        isTransposed: bool = False,
+    ):
         Matrix.__init__(self, numRows, numCols, isTransposed)
         values = self._convert_to_array(values, np.float64)
         assert len(values) == numRows * numCols
         self.values = values
 
-    def __reduce__(self):
+    def __reduce__(self) -> Tuple[Type["DenseMatrix"], Tuple[int, int, bytes, int]]:
         return DenseMatrix, (
             self.numRows,
             self.numCols,
-            self.values.tostring(),
+            self.values.tostring(),  # type: ignore[attr-defined]
             int(self.isTransposed),
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Pretty printing of a DenseMatrix
 
@@ -1139,7 +1282,7 @@ class DenseMatrix(Matrix):
         x = "\n".join([(" " * 6 + line) for line in array_lines[1:]])
         return array_lines[0].replace("array", "DenseMatrix") + "\n" + x
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Representation of a DenseMatrix
 
@@ -1158,12 +1301,11 @@ class DenseMatrix(Matrix):
                 _format_float_list(self.values[:8]) + ["..."] + _format_float_list(self.values[-8:])
             )
 
-        entries = ", ".join(entries)
         return "DenseMatrix({0}, {1}, [{2}], {3})".format(
-            self.numRows, self.numCols, entries, self.isTransposed
+            self.numRows, self.numCols, ", ".join(entries), self.isTransposed
         )
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Return an numpy.ndarray
 
@@ -1179,7 +1321,7 @@ class DenseMatrix(Matrix):
         else:
             return self.values.reshape((self.numRows, self.numCols), order="F")
 
-    def toSparse(self):
+    def toSparse(self) -> "SparseMatrix":
         """Convert to SparseMatrix"""
         if self.isTransposed:
             values = np.ravel(self.toArray(), order="F")
@@ -1193,7 +1335,7 @@ class DenseMatrix(Matrix):
 
         return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
 
-    def asML(self):
+    def asML(self) -> newlinalg.DenseMatrix:
         """
         Convert this matrix to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -1206,7 +1348,7 @@ class DenseMatrix(Matrix):
         """
         return newlinalg.DenseMatrix(self.numRows, self.numCols, self.values, self.isTransposed)
 
-    def __getitem__(self, indices):
+    def __getitem__(self, indices: Tuple[int, int]) -> np.float64:
         i, j = indices
         if i < 0 or i >= self.numRows:
             raise IndexError("Row index %d is out of range [0, %d)" % (i, self.numRows))
@@ -1218,21 +1360,29 @@ class DenseMatrix(Matrix):
         else:
             return self.values[i + j * self.numRows]
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if self.numRows != other.numRows or self.numCols != other.numCols:
             return False
         if isinstance(other, SparseMatrix):
-            return np.all(self.toArray() == other.toArray())
+            return np.all(self.toArray() == other.toArray()).tolist()
 
         self_values = np.ravel(self.toArray(), order="F")
         other_values = np.ravel(other.toArray(), order="F")
-        return np.all(self_values == other_values)
+        return np.all(self_values == other_values).tolist()
 
 
 class SparseMatrix(Matrix):
     """Sparse Matrix stored in CSC format."""
 
-    def __init__(self, numRows, numCols, colPtrs, rowIndices, values, isTransposed=False):
+    def __init__(
+        self,
+        numRows: int,
+        numCols: int,
+        colPtrs: Union[bytes, Iterable[int]],
+        rowIndices: Union[bytes, Iterable[int]],
+        values: Union[bytes, Iterable[float]],
+        isTransposed: bool = False,
+    ) -> None:
         Matrix.__init__(self, numRows, numCols, isTransposed)
         self.colPtrs = self._convert_to_array(colPtrs, np.int32)
         self.rowIndices = self._convert_to_array(rowIndices, np.int32)
@@ -1254,7 +1404,7 @@ class SparseMatrix(Matrix):
                 % (self.rowIndices.size, self.values.size)
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Pretty printing of a SparseMatrix
 
@@ -1300,7 +1450,7 @@ class SparseMatrix(Matrix):
             spstr += "\n.." * 2
         return spstr
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Representation of a SparseMatrix
 
@@ -1325,24 +1475,26 @@ class SparseMatrix(Matrix):
         if len(self.colPtrs) > 16:
             colPtrs = colPtrs[:8] + ["..."] + colPtrs[-8:]
 
-        values = ", ".join(values)
-        rowIndices = ", ".join([str(ind) for ind in rowIndices])
-        colPtrs = ", ".join([str(ptr) for ptr in colPtrs])
         return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
-            self.numRows, self.numCols, colPtrs, rowIndices, values, self.isTransposed
+            self.numRows,
+            self.numCols,
+            ", ".join([str(ptr) for ptr in colPtrs]),
+            ", ".join([str(ind) for ind in rowIndices]),
+            ", ".join(values),
+            self.isTransposed,
         )
 
-    def __reduce__(self):
+    def __reduce__(self) -> Tuple[Type["SparseMatrix"], Tuple[int, int, bytes, bytes, bytes, int]]:
         return SparseMatrix, (
             self.numRows,
             self.numCols,
-            self.colPtrs.tostring(),
-            self.rowIndices.tostring(),
-            self.values.tostring(),
+            self.colPtrs.tostring(),  # type: ignore[attr-defined]
+            self.rowIndices.tostring(),  # type: ignore[attr-defined]
+            self.values.tostring(),  # type: ignore[attr-defined]
             int(self.isTransposed),
         )
 
-    def __getitem__(self, indices):
+    def __getitem__(self, indices: Tuple[int, int]) -> np.float64:
         i, j = indices
         if i < 0 or i >= self.numRows:
             raise IndexError("Row index %d is out of range [0, %d)" % (i, self.numRows))
@@ -1362,9 +1514,9 @@ class SparseMatrix(Matrix):
         if ind < colEnd and self.rowIndices[ind] == i:
             return self.values[ind]
         else:
-            return 0.0
+            return np.float64(0.0)
 
-    def toArray(self):
+    def toArray(self) -> np.ndarray:
         """
         Return an numpy.ndarray
         """
@@ -1378,11 +1530,11 @@ class SparseMatrix(Matrix):
                 A[self.rowIndices[startptr:endptr], k] = self.values[startptr:endptr]
         return A
 
-    def toDense(self):
+    def toDense(self) -> "DenseMatrix":
         densevals = np.ravel(self.toArray(), order="F")
         return DenseMatrix(self.numRows, self.numCols, densevals)
 
-    def asML(self):
+    def asML(self) -> newlinalg.SparseMatrix:
         """
         Convert this matrix to the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -1403,27 +1555,34 @@ class SparseMatrix(Matrix):
         )
 
     # TODO: More efficient implementation:
-    def __eq__(self, other):
-        return np.all(self.toArray() == other.toArray())
+    def __eq__(self, other: Any) -> bool:
+        assert isinstance(other, Matrix)
+        return np.all(self.toArray() == other.toArray()).tolist()
 
 
 class Matrices:
     @staticmethod
-    def dense(numRows, numCols, values):
+    def dense(numRows: int, numCols: int, values: Union[bytes, Iterable[float]]) -> DenseMatrix:
         """
         Create a DenseMatrix
         """
         return DenseMatrix(numRows, numCols, values)
 
     @staticmethod
-    def sparse(numRows, numCols, colPtrs, rowIndices, values):
+    def sparse(
+        numRows: int,
+        numCols: int,
+        colPtrs: Union[bytes, Iterable[int]],
+        rowIndices: Union[bytes, Iterable[int]],
+        values: Union[bytes, Iterable[float]],
+    ) -> SparseMatrix:
         """
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
 
     @staticmethod
-    def fromML(mat):
+    def fromML(mat: newlinalg.Matrix) -> Matrix:
         """
         Convert a matrix from the new mllib-local representation.
         This does NOT copy the data; it copies references.
@@ -1448,34 +1607,34 @@ class Matrices:
             raise TypeError("Unsupported matrix type %s" % type(mat))
 
 
-class QRDecomposition:
+class QRDecomposition(Generic[QT, RT]):
     """
     Represents QR factors.
     """
 
-    def __init__(self, Q, R):
+    def __init__(self, Q: QT, R: RT) -> None:
         self._Q = Q
         self._R = R
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def Q(self):
+    def Q(self) -> QT:
         """
         An orthogonal matrix Q in a QR decomposition.
         May be null if not computed.
         """
         return self._Q
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def R(self):
+    def R(self) -> RT:
         """
         An upper triangular matrix R in a QR decomposition.
         """
         return self._R
 
 
-def _test():
+def _test() -> None:
     import doctest
     import numpy
 
