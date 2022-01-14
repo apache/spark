@@ -18,19 +18,17 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
-
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression, aggregate}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, GeneralAggregateFunc}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
@@ -97,36 +95,52 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 normalizedAggregates, normalizedGroupingExpressions)
               val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
                 if (translatedAggregates.isEmpty ||
-                  r.supportCompletePushDown(translatedAggregates.get)) {
+                  r.supportCompletePushDown(translatedAggregates.get) ||
+                  translatedAggregates.get.aggregateExpressions().forall(!_.isInstanceOf[Avg])) {
                   (resultExpressions, aggregates, translatedAggregates)
                 } else {
+                  // scalastyle:off
                   // The data source doesn't support the complete push-down of this aggregation.
                   // Here we translate `AVG` to `SUM / COUNT`, so that it's more likely to be
                   // pushed, completely or partially.
-                  var findAverage = false
+                  // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                  // SELECT avg(c1) FROM t GROUP BY c2;
+                  // The original logical plan is
+                  // Aggregate [c2#10],[avg(c1#9) AS avg(c1)#19]
+                  // +- ScanOperation[...]
+                  //
+                  // After convert avg(c1#9) to sum(c1#9)/count(c1#9)
+                  // we have the following
+                  // Aggregate [c2#10],[sum(c1#9)/count(c1#9) AS avg(c1)#19]
+                  // +- ScanOperation[...]
                   val newResultExpressions = resultExpressions.map { expr =>
                     expr.transform {
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
-                        findAverage = true
-                        val left = addCastIfNeeded(aggregate.Sum(avg.child)
-                          .toAggregateExpression(isDistinct), avg.dataType)
-                        val right = addCastIfNeeded(aggregate.Count(avg.child)
-                          .toAggregateExpression(isDistinct), avg.dataType)
-                        Divide(left, right)
+                        val sum = addCastIfNeeded(aggregate.Sum(avg.child)
+                          .toAggregateExpression(isDistinct), avg.sumDataType)
+                        val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
+                        val aggExpr = avg.sumDataType match {
+                          case _: YearMonthIntervalType =>
+                            If(EqualTo(count, Literal(0L)),
+                              Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
+                          case _: DayTimeIntervalType =>
+                            If(EqualTo(count, Literal(0L)),
+                              Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
+                          case _ =>
+                            Divide(sum, addCastIfNeeded(count, avg.sumDataType), false)
+                        }
+
+                        Cast(aggExpr, avg.dataType)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
-                  if (findAverage) {
-                    // Because aggregate expressions changed, translate them again.
-                    aggExprToOutputOrdinal.clear()
-                    val newAggregates =
-                      collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
-                    val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
-                      newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
-                    (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
-                      newNormalizedAggregates, normalizedGroupingExpressions))
-                  } else {
-                    (resultExpressions, aggregates, translatedAggregates)
-                  }
+                  // Because aggregate expressions changed, translate them again.
+                  aggExprToOutputOrdinal.clear()
+                  val newAggregates =
+                    collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
+                  val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
+                    newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+                  (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
+                    newNormalizedAggregates, normalizedGroupingExpressions))
                 }
               }
 
@@ -193,20 +207,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // scalastyle:off
                   // Change the optimized logical plan to reflect the pushed down aggregate
                   // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
-                  // SELECT min(c1), max(c1), avg(c1) FROM t GROUP BY c2;
+                  // SELECT min(c1), max(c1) FROM t GROUP BY c2;
                   // The original logical plan is
-                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, avg(c1#9) AS avg(c1)#19]
+                  // Aggregate [c2#10],[min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
                   // +- RelationV2[c1#9, c2#10] ...
                   //
-                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24]
+                  // After change the V2ScanRelation output to [c2#10, min(c1)#21, max(c1)#22]
                   // we have the following
-                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18, sum(c1#9)/count(c1#9) AS avg(c1)#19]
-                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
+                  // !Aggregate [c2#10], [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
                   //
                   // We want to change it to
                   // == Optimized Logical Plan ==
-                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18, sum(sum(c1)#23)/sum(count(c1)#24) AS avg(c1)#19]
-                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22, sum(c1)#23, count(c1)#24] ...
+                  // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
+                  // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
                   // scalastyle:on
                   plan.transformExpressions {
                     case agg: AggregateExpression =>

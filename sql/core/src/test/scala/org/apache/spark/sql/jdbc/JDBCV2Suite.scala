@@ -23,6 +23,8 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Divide}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Average}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
@@ -875,6 +877,21 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // scalastyle:on
   }
 
+  private def checkAverageConversion(df: DataFrame): Unit = {
+    val aggregates = df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
+    }
+    assert(aggregates.length == 1)
+    val avgs = aggregates(0).aggregateExpressions.collect {
+      case Alias(AggregateExpression(avg: Average, _, _, _, _), _) => avg
+    }
+    assert(avgs.isEmpty)
+    val divs = aggregates(0).aggregateExpressions.collect {
+      case Alias(Cast(div: Divide, _, _, _), _) => div
+    }
+    assert(divs.nonEmpty)
+  }
+
   test("scan with aggregate push-down: partial push-down SUM, AVG, COUNT") {
     val df = spark.read
       .option("partitionColumn", "dept")
@@ -883,7 +900,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("numPartitions", "2")
       .table("h2.test.employee")
       .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
-    checkAggregateRemoved(df, false)
+    checkAverageConversion(df)
     checkAnswer(df, Seq(Row(53000.00, 10600.000000, 5)))
 
     val df2 = spark.read
@@ -894,7 +911,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy($"name")
       .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
-    checkAggregateRemoved(df2, false)
+    checkAverageConversion(df)
     checkAnswer(df2, Seq(
       Row("alex", 12000.00, 12000.000000, 1),
       Row("amy", 10000.00, 10000.000000, 1),
