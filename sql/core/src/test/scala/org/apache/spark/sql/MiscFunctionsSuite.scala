@@ -40,7 +40,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = sql("SELECT version()")
     checkAnswer(
       df,
-      Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
+      Row(SPARK_VERSION_SHORT))
     assert(df.schema.fieldNames === Seq("version()"))
   }
 
