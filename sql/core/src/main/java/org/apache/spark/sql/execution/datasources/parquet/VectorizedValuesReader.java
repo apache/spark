@@ -105,6 +105,8 @@ public interface VectorizedValuesReader {
       c.putByteArray(rowId, bytes);
     }
 
+    static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) { }
+
   }
 
 }

@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.util.PrimitiveIterator;
 
+import org.apache.parquet.CorruptDeltaByteArrays;
+import org.apache.parquet.VersionParser.ParsedVersion;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.bytes.BytesUtils;
@@ -28,6 +30,7 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
@@ -35,6 +38,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotat
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.Decimal;
 
@@ -86,6 +90,8 @@ public class VectorizedColumnReader {
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
   private final String datetimeRebaseMode;
+  private final ParsedVersion writerVersion;
+  private final MemoryMode memoryMode;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -96,7 +102,9 @@ public class VectorizedColumnReader {
       String datetimeRebaseMode,
       String datetimeRebaseTz,
       String int96RebaseMode,
-      String int96RebaseTz) throws IOException {
+      String int96RebaseTz,
+      ParsedVersion writerVersion,
+      MemoryMode memoryMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
@@ -129,6 +137,8 @@ public class VectorizedColumnReader {
     this.datetimeRebaseMode = datetimeRebaseMode;
     assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
       "CORRECTED".equals(int96RebaseMode);
+    this.writerVersion = writerVersion;
+    this.memoryMode = memoryMode;
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
@@ -174,7 +184,7 @@ public class VectorizedColumnReader {
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
-          descriptor.getPrimitiveType().getPrimitiveTypeName();
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
         int startOffset = readState.offset;
@@ -259,6 +269,7 @@ public class VectorizedColumnReader {
       int pageValueCount,
       Encoding dataEncoding,
       ByteBufferInputStream in) throws IOException {
+    ValuesReader previousReader = this.dataColumn;
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
@@ -283,6 +294,11 @@ public class VectorizedColumnReader {
     } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
     }
+    if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
+        previousReader != null && previousReader instanceof RequiresPreviousReader) {
+      // previous reader can only be set if reading sequentially
+      ((RequiresPreviousReader) dataColumn).setPreviousReader(previousReader);
+    }
   }
 
   private ValuesReader getValuesReader(Encoding encoding) {
@@ -290,18 +306,18 @@ public class VectorizedColumnReader {
       case PLAIN:
         return new VectorizedPlainValuesReader();
       case DELTA_BYTE_ARRAY:
-        return new VectorizedDeltaByteArrayReader();
+        return new VectorizedDeltaByteArrayReader(memoryMode);
       case DELTA_BINARY_PACKED:
         return new VectorizedDeltaBinaryPackedReader();
       case RLE:
         PrimitiveType.PrimitiveTypeName typeName =
-          this.descriptor.getPrimitiveType().getPrimitiveTypeName();
+            this.descriptor.getPrimitiveType().getPrimitiveTypeName();
         // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
         if (typeName == BOOLEAN) {
           return new VectorizedRleValuesReader(1);
         } else {
           throw new UnsupportedOperationException(
-            "RLE encoding is not supported for values of type: " + typeName);
+              "RLE encoding is not supported for values of type: " + typeName);
         }
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + encoding);

@@ -147,12 +147,19 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/test.parquet"
 
-        val data = (1 to 3).map { i =>
-          ( i, i.toLong, i.toShort, Array[Byte](i.toByte), s"test_${i}",
-            DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + i)),
-            DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + i)),
-            Period.of(1, i, 0), Duration.ofMillis(i * 100),
-            new BigDecimal(java.lang.Long.toUnsignedString(i*100000))
+        // Have more than 2 * 4096 records (so we have multiple tasks and each task
+        // reads at least twice from the reader). This will catch any issues with state
+        // maintained by the reader(s)
+        // Add at least one string with a null
+        val data = (1 to 8197).map { i =>
+          ( i,
+            i.toLong, i.toShort, Array[Byte](i.toByte),
+            if (i % 2 == 1) s"test_${i}" else null,
+            DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + ((i % 9) + 1))),
+            DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + (i % 10))),
+            Period.of(1, (i % 11 ) + 1, 0),
+            Duration.ofMillis( ((i % 9) + 1) * 100),
+            new BigDecimal(java.lang.Long.toUnsignedString(i * 100000))
           )
         }
 

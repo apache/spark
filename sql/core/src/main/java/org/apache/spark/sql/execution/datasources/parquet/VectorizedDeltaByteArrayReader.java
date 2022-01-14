@@ -16,51 +16,133 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.spark.sql.types.DataTypes.BinaryType;
+import static org.apache.spark.sql.types.DataTypes.IntegerType;
+
 import org.apache.parquet.bytes.ByteBufferInputStream;
-import org.apache.parquet.column.values.deltastrings.DeltaByteArrayReader;
+import org.apache.parquet.column.values.RequiresPreviousReader;
+import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * An implementation of the Parquet DELTA_BYTE_ARRAY decoder that supports the vectorized interface.
+ * An implementation of the Parquet DELTA_BYTE_ARRAY decoder that supports the vectorized
+ * interface.
  */
-public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase {
-  private final DeltaByteArrayReader deltaByteArrayReader = new DeltaByteArrayReader();
+public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
+    implements VectorizedValuesReader, RequiresPreviousReader {
+
+  private final MemoryMode memoryMode;
+  private int valueCount;
+  private final VectorizedDeltaBinaryPackedReader prefixLengthReader =
+      new VectorizedDeltaBinaryPackedReader();
+  private final VectorizedDeltaLengthByteArrayReader suffixReader;
+  private WritableColumnVector prefixLengthVector;
+  private WritableColumnVector suffixVector;
+  private byte[] previous = new byte[0];
+  private int currentRow = 0;
+
+  //temporary variable used by getBinary
+  Binary binaryVal;
+
+  VectorizedDeltaByteArrayReader(MemoryMode memoryMode){
+    this.memoryMode = memoryMode;
+    this.suffixReader = new VectorizedDeltaLengthByteArrayReader(memoryMode);
+  }
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    deltaByteArrayReader.initFromPage(valueCount, in);
+    this.valueCount = valueCount;
+    if (memoryMode == MemoryMode.OFF_HEAP) {
+      prefixLengthVector = new OffHeapColumnVector(valueCount, IntegerType);
+      suffixVector = new OffHeapColumnVector(valueCount, BinaryType);
+    } else {
+      prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
+      suffixVector = new OnHeapColumnVector(valueCount, BinaryType);
+    }
+    prefixLengthReader.initFromPage(valueCount, in);
+    prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
+        prefixLengthVector, 0);
+    suffixReader.initFromPage(valueCount, in);
+    suffixReader.readBinary(valueCount, suffixVector, 0);
   }
 
   @Override
   public Binary readBinary(int len) {
-    return deltaByteArrayReader.readBytes();
+    readValues(1, null, 0,
+        (w, r, v, l) ->
+            binaryVal = Binary.fromConstantByteArray(v.array(), v.arrayOffset() + v.position(), l));
+    return binaryVal;
+  }
+
+  public void readValues(int total, WritableColumnVector c, int rowId,
+      ByteBufferOutputWriter outputWriter) {
+    if (total == 0) {
+      return;
+    }
+
+    for (int i = 0; i < total; i++) {
+      int prefixLength = prefixLengthVector.getInt(currentRow);
+      byte[] suffix = suffixVector.getBinary(currentRow);
+      // This does not copy bytes
+      int length = prefixLength + suffix.length;
+
+      // NOTE: due to PARQUET-246, it is important that we
+      // respect prefixLength which was read from prefixLengthReader,
+      // even for the *first* value of a page. Even though the first
+      // value of the page should have an empty prefix, it may not
+      // because of PARQUET-246.
+
+      // We have to do this to materialize the output
+      if (prefixLength != 0) {
+        // We could do
+        //  c.putByteArray(rowId + i, previous, 0, prefixLength);
+        //  c.putByteArray(rowId+i, suffix, prefixLength, suffix.length);
+        //  previous =  c.getBinary(rowId+1);
+        // but it incurs the same cost of copying the values twice _and_ c.getBinary
+        // is a _slow_ byte by byte copy
+        // The following always uses the faster system arraycopy method
+        byte[] out = new byte[length];
+        System.arraycopy(previous, 0, out, 0, prefixLength);
+        System.arraycopy(suffix, 0, out, prefixLength, suffix.length);
+        previous = out;
+      } else {
+        previous = suffix;
+      }
+      outputWriter.write(c, rowId + i, ByteBuffer.wrap(previous), previous.length);
+      currentRow++;
+    }
   }
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    for (int i = 0; i < total; i++) {
-      Binary binary = deltaByteArrayReader.readBytes();
-      ByteBuffer buffer = binary.toByteBuffer();
-      if (buffer.hasArray()) {
-        c.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(),
-          binary.length());
-      } else {
-        byte[] bytes = new byte[binary.length()];
-        buffer.get(bytes);
-        c.putByteArray(rowId + i, bytes);
-      }
+    readValues(total, c, rowId, ByteBufferOutputWriter::writeArrayByteBuffer);
+  }
+
+  /**
+   * There was a bug (PARQUET-246) in which DeltaByteArrayWriter's reset() method did not clear the
+   * previous value state that it tracks internally. This resulted in the first value of all pages
+   * (except for the first page) to be a delta from the last value of the previous page. In order to
+   * read corrupted files written with this bug, when reading a new page we need to recover the
+   * previous page's last value to use it (if needed) to read the first value.
+   */
+  public void setPreviousReader(ValuesReader reader) {
+    if (reader != null) {
+      this.previous = ((VectorizedDeltaByteArrayReader) reader).previous;
     }
   }
 
   @Override
   public void skipBinary(int total) {
-    for (int i = 0; i < total; i++) {
-      deltaByteArrayReader.skip();
-    }
+    // we have to read all the values so that we always have the correct 'previous'
+    // we just don't write it to the output vector
+    readValues(total, null, currentRow, ByteBufferOutputWriter::skipWrite);
   }
 
 }

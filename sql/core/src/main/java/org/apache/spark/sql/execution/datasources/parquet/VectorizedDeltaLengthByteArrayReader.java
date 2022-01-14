@@ -56,7 +56,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
     }
     lengthReader.initFromPage(valueCount, in);
-    lengthReader.readIntegers(valueCount, lengthsVector, 0);
+    lengthReader.readIntegers(lengthReader.getTotalValueCount(), lengthsVector, 0);
     this.in = in.remainingStream();
   }
 
