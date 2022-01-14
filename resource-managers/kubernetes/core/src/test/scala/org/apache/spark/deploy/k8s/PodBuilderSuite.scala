@@ -66,7 +66,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
   }
 
-  test("configure a custom test step with base config") {
+  test("SPARK-37145: configure a custom test step with base config") {
     val client = mockKubernetesClient()
     val sparkConf = baseConf.clone()
       .set(userFeatureStepsConf.key,
@@ -79,7 +79,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     assert(metadata.getAnnotations.containsKey("test-user-feature-annotation"))
   }
 
-  test("configure a custom test step with driver or executor config") {
+  test("SPARK-37145: configure a custom test step with driver or executor config") {
     val client = mockKubernetesClient()
     val (featureSteps, annotationKey) = this.getClass.getSimpleName match {
       case "KubernetesDriverBuilderSuite" =>
