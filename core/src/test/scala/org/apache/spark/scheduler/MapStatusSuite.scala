@@ -29,6 +29,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 class MapStatusSuite extends SparkFunSuite {
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -189,6 +190,102 @@ class MapStatusSuite extends SparkFunSuite {
     withSpark(new SparkContext(conf)) { sc =>
       val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
       assert(count === 3000)
+    }
+  }
+
+  def compressAndDecompressSize(size: Long): Long = {
+    MapStatus.decompressSize(MapStatus.compressSize(size))
+  }
+
+  test("SPARK-36967: HighlyCompressedMapStatus should record accurately the size " +
+    "of skewed shuffle blocks") {
+    val emptyBlocksLength = 3
+    val smallAndUntrackedBlocksLength = 2889
+    val trackedSkewedBlocksLength = 20
+
+    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, "5")
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val emptyBlocks = Array.fill[Long](emptyBlocksLength)(0L)
+    val smallAndUntrackedBlocks = Array.tabulate[Long](smallAndUntrackedBlocksLength)(i => i)
+    val trackedSkewedBlocks =
+      Array.tabulate[Long](trackedSkewedBlocksLength)(i => i + 350 * 1024)
+    val allBlocks = emptyBlocks ++: smallAndUntrackedBlocks ++: trackedSkewedBlocks
+    val avg = smallAndUntrackedBlocks.sum / smallAndUntrackedBlocks.length
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val status = MapStatus(loc, allBlocks, mapTaskAttemptId)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    assert(status1.mapId == mapTaskAttemptId)
+    assert(status1.getSizeForBlock(0) == 0)
+    for (i <- 1 until emptyBlocksLength) {
+      assert(status1.getSizeForBlock(i) === 0L)
+    }
+    for (i <- 1 until smallAndUntrackedBlocksLength) {
+      assert(status1.getSizeForBlock(emptyBlocksLength + i) === avg)
+    }
+    for (i <- 0 until trackedSkewedBlocksLength) {
+      assert(status1.getSizeForBlock(emptyBlocksLength + smallAndUntrackedBlocksLength + i) ===
+        compressAndDecompressSize(trackedSkewedBlocks(i)),
+        "Only tracked skewed block size is accurate")
+    }
+  }
+
+  test("SPARK-36967: Limit accurate skewed block number if too many blocks are skewed") {
+    val accurateBlockSkewedFactor = 5
+    val emptyBlocksLength = 3
+    val smallBlocksLength = 2500
+    val untrackedSkewedBlocksLength = 500
+    val trackedSkewedBlocksLength = 20
+
+    val conf =
+      new SparkConf()
+        .set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, accurateBlockSkewedFactor.toString)
+        .set(
+          config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.key,
+          trackedSkewedBlocksLength.toString)
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val emptyBlocks = Array.fill[Long](emptyBlocksLength)(0L)
+    val smallBlockSizes = Array.tabulate[Long](smallBlocksLength)(i => i + 1)
+    val untrackedSkewedBlocksSizes =
+      Array.tabulate[Long](untrackedSkewedBlocksLength)(i => i + 3500 * 1024)
+    val trackedSkewedBlocksSizes =
+      Array.tabulate[Long](trackedSkewedBlocksLength)(i => i + 4500 * 1024)
+    val nonEmptyBlocks =
+      smallBlockSizes ++: untrackedSkewedBlocksSizes ++: trackedSkewedBlocksSizes
+    val allBlocks = emptyBlocks ++: nonEmptyBlocks
+
+    val skewThreshold = Utils.median(allBlocks.sorted) * accurateBlockSkewedFactor
+    assert(nonEmptyBlocks.filter(_ > skewThreshold).size ==
+      untrackedSkewedBlocksLength + trackedSkewedBlocksLength,
+      "number of skewed block sizes")
+
+    val smallAndUntrackedBlocks =
+      nonEmptyBlocks.slice(0, nonEmptyBlocks.size - trackedSkewedBlocksLength)
+    val avg = smallAndUntrackedBlocks.sum / smallAndUntrackedBlocks.length
+
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val status = MapStatus(loc, allBlocks, mapTaskAttemptId)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.location == loc)
+    assert(status1.mapId == mapTaskAttemptId)
+    assert(status1.getSizeForBlock(0) == 0)
+    for (i <- emptyBlocksLength until allBlocks.length - trackedSkewedBlocksLength) {
+      assert(status1.getSizeForBlock(i) === avg)
+    }
+    for (i <- 0 until trackedSkewedBlocksLength) {
+      assert(status1.getSizeForBlock(allBlocks.length - trackedSkewedBlocksLength + i) ===
+        compressAndDecompressSize(trackedSkewedBlocksSizes(i)),
+        "Only tracked skewed block size is accurate")
     }
   }
 }
