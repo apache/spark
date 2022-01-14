@@ -816,8 +816,9 @@ def read_parquet(
     if index_col is None and pandas_metadata:
         # Try to read pandas metadata
 
-        @no_type_check
-        @pandas_udf("index_col array<string>, index_names array<string>")
+        @pandas_udf(  # type: ignore[call-overload]
+            "index_col array<string>, index_names array<string>"
+        )
         def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
@@ -3399,8 +3400,8 @@ def merge_asof(
         left_join_on_columns = [scol_for(left_table, label) for label in left_join_on_names]
         right_join_on_columns = [scol_for(right_table, label) for label in right_join_on_names]
         on = reduce(
-            lambda l, r: l & r,
-            [l == r for l, r in zip(left_join_on_columns, right_join_on_columns)],
+            lambda lft, rgt: lft & rgt,
+            [lft == rgt for lft, rgt in zip(left_join_on_columns, right_join_on_columns)],
         )
     else:
         on = None

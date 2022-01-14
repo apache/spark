@@ -23,8 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
 
@@ -55,7 +56,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     }
   }
 
-  override lazy val properties: util.Map[String, String] = v1Table.properties.asJava
+  override lazy val properties: util.Map[String, String] = addV2TableProperties(v1Table).asJava
 
   override lazy val schema: StructType = v1Table.schema
 
@@ -80,6 +81,21 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     util.EnumSet.noneOf(classOf[TableCapability])
 
   override def toString: String = s"V1Table($name)"
+}
+
+private[sql] object V1Table {
+  def addV2TableProperties(v1Table: CatalogTable): Map[String, String] = {
+    val external = v1Table.tableType == CatalogTableType.EXTERNAL
+
+    v1Table.properties ++
+      v1Table.storage.properties.map { case (key, value) =>
+        TableCatalog.OPTION_PREFIX + key -> value } ++
+      v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
+      v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
+      v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString) ++
+      (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
+      Some(TableCatalog.PROP_OWNER -> v1Table.owner)
+  }
 }
 
 /**

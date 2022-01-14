@@ -25,6 +25,7 @@ import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.logging.log4j.Level
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
@@ -551,6 +552,32 @@ abstract class OrcSuite
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
       val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
       assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
+    }
+  }
+
+  test("SPARK-37841: Skip updating stats for files not been created") {
+    withTempPath { path =>
+      val logAppender = new LogAppender()
+
+      withLogAppender(logAppender, level = Option(Level.WARN)) {
+        spark.range(0, 3, 1, 4).write.orc(path.getCanonicalPath)
+      }
+      val events = logAppender.loggingEvents
+      assert {
+        !events.exists { _.getMessage.getFormattedMessage
+          .contains("This could be due to the output format not writing empty files")
+        }
+      }
+    }
+  }
+
+  test("SPARK-37841: ORC sources write empty file with schema") {
+    withTempPath { path =>
+      val canonicalPath = path.getCanonicalPath
+      // creates an empty data set
+      spark.range(1, 1, 1, 1).write.orc(canonicalPath)
+      assert(spark.read.orc(canonicalPath).isEmpty,
+        "ORC sources shall write an empty file contains meta if necessary")
     }
   }
 }

@@ -789,13 +789,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
-     * If appShuffleMergePartitionsInfo's shuffleMergeId is
+     * If appShuffleMergePartitionsInfo is null or shuffleMergeId is
      * greater than the request shuffleMergeId then it is a stale block push.
      */
     private boolean isStale(
         AppShuffleMergePartitionsInfo appShuffleMergePartitionsInfo,
         int shuffleMergeId) {
-      return appShuffleMergePartitionsInfo.shuffleMergeId > shuffleMergeId;
+      return null == appShuffleMergePartitionsInfo ||
+        appShuffleMergePartitionsInfo.shuffleMergeId > shuffleMergeId;
     }
 
     /**

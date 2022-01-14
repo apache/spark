@@ -353,7 +353,7 @@ case class DataSource(
       case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        if (baseRelation.schema != schema) {
+        if (!DataType.equalsIgnoreCompatibleNullability(baseRelation.schema, schema)) {
           throw QueryCompilationErrors.userSpecifiedSchemaMismatchActualSchemaError(
             schema, baseRelation.schema)
         }

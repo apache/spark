@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  * This encoding is used in multiple places:
  *  - Definition/Repetition levels
  *  - Dictionary ids.
+ *  - Boolean type values of Parquet DataPageV2
  */
 public final class VectorizedRleValuesReader extends ValuesReader
     implements VectorizedValuesReader {
@@ -369,7 +370,25 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readBooleans(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          c.putBooleans(rowId, n, currentValue != 0);
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            // For Boolean types, `currentBuffer[currentBufferIdx++]` can only be 0 or 1
+            c.putByte(rowId + i, (byte) currentBuffer[currentBufferIdx++]);
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
   }
 
   @Override
@@ -389,25 +408,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipIntegers(int total) {
-    int left = total;
-    while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(left, this.currentCount);
-      switch (mode) {
-        case RLE:
-          break;
-        case PACKED:
-          currentBufferIdx += n;
-          break;
-      }
-      currentCount -= n;
-      left -= n;
-    }
+    skipValues(total);
   }
 
   @Override
   public void skipBooleans(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    skipValues(total);
   }
 
   @Override
@@ -531,6 +537,26 @@ public final class VectorizedRleValuesReader extends ValuesReader
       }
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read from input stream", e);
+    }
+  }
+
+  /**
+   * Skip `n` values from the current reader.
+   */
+  private void skipValues(int n) {
+    int left = n;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int num = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          break;
+        case PACKED:
+          currentBufferIdx += num;
+          break;
+      }
+      currentCount -= num;
+      left -= num;
     }
   }
 }

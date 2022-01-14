@@ -3216,6 +3216,22 @@ private[spark] object Utils extends Logging {
     }
     files.toSeq
   }
+
+  /**
+   * Return the median number of a long array
+   *
+   * @param sizes
+   * @return
+   */
+  def median(sizes: Array[Long]): Long = {
+    val len = sizes.length
+    val sortedSize = sizes.sorted
+    len match {
+      case _ if (len % 2 == 0) =>
+        math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
+      case _ => math.max(sortedSize(len / 2), 1)
+    }
+  }
 }
 
 private[util] object CallerContext extends Logging {

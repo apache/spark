@@ -204,7 +204,7 @@
     <arrow.version>6.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.10.1</kubernetes-client.version>
+    <kubernetes-client.version>5.10.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -3581,7 +3581,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.7</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
