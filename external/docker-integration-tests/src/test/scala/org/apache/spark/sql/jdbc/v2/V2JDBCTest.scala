@@ -283,20 +283,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     scan.schema.names.sameElements(Seq(col))
   }
 
-  protected def checkFiltersRemoved(df: DataFrame): Unit = {
-    val filters = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.isEmpty)
-  }
-
-  protected def checkAggregateRemoved(df: DataFrame): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
-      case agg: Aggregate => agg
-    }
-    assert(aggregates.isEmpty)
-  }
-
   test("SPARK-37038: Test TABLESAMPLE") {
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
@@ -367,6 +353,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(df8.collect().length < 10)
       }
     }
+  }
+
+  protected def checkFiltersRemoved(df: DataFrame): Unit = {
+    val filters = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    assert(filters.isEmpty)
+  }
+
+  protected def checkAggregateRemoved(df: DataFrame): Unit = {
+    val aggregates = df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
+    }
+    assert(aggregates.isEmpty)
   }
 
   private def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {

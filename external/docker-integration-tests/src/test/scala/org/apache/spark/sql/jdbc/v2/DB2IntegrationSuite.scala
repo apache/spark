@@ -65,11 +65,11 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(
-      "CREATE TABLE EMPLOYEE (dept INTEGER, name CLOB, salary DECIMAL(20, 2), bonus DOUBLE)")
+      "CREATE TABLE employee (dept INTEGER, name CLOB, salary DECIMAL(20, 2), bonus DOUBLE)")
       .executeUpdate()
     conn.prepareStatement(
       """
-        |INSERT INTO EMPLOYEE VALUES
+        |INSERT INTO employee VALUES
         |(1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
         |(2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
         |""".stripMargin).executeUpdate()
