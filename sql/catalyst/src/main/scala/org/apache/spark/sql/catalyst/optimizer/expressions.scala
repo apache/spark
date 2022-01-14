@@ -664,7 +664,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
   // Not all BinaryExpression can be pushed into (if / case) branches.
   private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
-    case _: BinaryComparison | _: StringBinaryPredicate[_] | _: StringRegexExpression => true
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
     case _: BinaryArithmetic => true
     case _: BinaryMathExpression => true
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |

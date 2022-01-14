@@ -452,18 +452,20 @@ case class Lower(child: Expression)
 }
 
 /** A base trait for functions that compare two strings or binaries, returning a boolean. */
-abstract class StringBinaryPredicate[T] extends BinaryExpression
+abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
-  def compare(l: T, r: T): Boolean
+  def compare(l: UTF8String, r: UTF8String): Boolean
+
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
-    compare(input1.asInstanceOf[T], input2.asInstanceOf[T])
+    compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
 
   override def toString: String = s"$nodeName($left, $right)"
 }
 
-trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
+trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   override def build(expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
@@ -504,7 +506,7 @@ trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   since = "3.3.0",
   group = "string_funcs"
 )
-object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -516,9 +518,7 @@ object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   }
 }
 
-case class Contains(left: Expression, right: Expression)
-  extends StringBinaryPredicate[UTF8String] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
@@ -569,7 +569,7 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
   since = "3.3.0",
   group = "string_funcs"
 )
-object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -581,9 +581,7 @@ object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase 
   }
 }
 
-case class StartsWith(left: Expression, right: Expression)
-  extends StringBinaryPredicate[UTF8String] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
@@ -634,7 +632,7 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
   since = "3.3.0",
   group = "string_funcs"
 )
-object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
+object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -646,8 +644,7 @@ object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringBinaryPredicate[UTF8String] {
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
