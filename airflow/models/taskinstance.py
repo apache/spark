@@ -15,6 +15,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import collections.abc
 import contextlib
 import hashlib
 import logging
@@ -82,11 +83,13 @@ from airflow.exceptions import (
     DagRunNotFound,
     TaskDeferralError,
     TaskDeferred,
+    UnmappableXComPushed,
 )
 from airflow.models.base import COLLATION_ARGS, ID_LEN, Base
 from airflow.models.log import Log
 from airflow.models.param import ParamsDict
 from airflow.models.taskfail import TaskFail
+from airflow.models.taskmap import TaskMap
 from airflow.models.taskreschedule import TaskReschedule
 from airflow.models.xcom import XCOM_RETURN_KEY, XCom
 from airflow.plugins_manager import integrate_macros_plugins
@@ -340,6 +343,8 @@ class TaskInstance(Base, LoggingMixin):
     task_id = Column(String(ID_LEN, **COLLATION_ARGS), primary_key=True, nullable=False)
     dag_id = Column(String(ID_LEN, **COLLATION_ARGS), primary_key=True, nullable=False)
     run_id = Column(String(ID_LEN, **COLLATION_ARGS), primary_key=True, nullable=False)
+    map_index = Column(Integer, primary_key=True, nullable=False, default=-1)
+
     start_date = Column(UtcDateTime)
     end_date = Column(UtcDateTime)
     duration = Column(Float)
@@ -424,10 +429,12 @@ class TaskInstance(Base, LoggingMixin):
         execution_date: Optional[datetime] = None,
         run_id: Optional[str] = None,
         state: Optional[str] = None,
+        map_index: int = -1,
     ):
         super().__init__()
         self.dag_id = task.dag_id
         self.task_id = task.task_id
+        self.map_index = map_index
         self.refresh_from_task(task)
         self._log = logging.getLogger("airflow.task")
 
@@ -760,6 +767,7 @@ class TaskInstance(Base, LoggingMixin):
             TaskInstance.dag_id == self.dag_id,
             TaskInstance.task_id == self.task_id,
             TaskInstance.run_id == self.run_id,
+            TaskInstance.map_index == self.map_index,
         )
 
         if lock_for_update:
@@ -1537,7 +1545,9 @@ class TaskInstance(Base, LoggingMixin):
             result = execute_callable(context=context)
         # If the task returns a result, push an XCom containing it
         if task_copy.do_xcom_push and result is not None:
-            self.xcom_push(key=XCOM_RETURN_KEY, value=result)
+            with create_session() as session:
+                self.xcom_push(key=XCOM_RETURN_KEY, value=result, session=session)
+                self._record_task_map_for_downstreams(result, session=session)
         return result
 
     @provide_session
@@ -2127,6 +2137,14 @@ class TaskInstance(Base, LoggingMixin):
         else:
             self.duration = None
         self.log.debug("Task Duration set to %s", self.duration)
+
+    def _record_task_map_for_downstreams(self, value: Any, *, session: Session) -> None:
+        if not self.task.has_mapped_dependants():
+            return
+        if not isinstance(value, collections.abc.Collection) or isinstance(value, (bytes, str)):
+            self.log.info("Failing %s for unmappable XCom push %r", self.key, type(value).__qualname__)
+            raise UnmappableXComPushed(value)
+        session.merge(TaskMap.from_task_instance_xcom(self, value))
 
     @provide_session
     def xcom_push(
