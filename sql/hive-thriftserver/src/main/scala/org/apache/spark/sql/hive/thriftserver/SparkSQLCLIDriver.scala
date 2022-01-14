@@ -613,7 +613,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       isStatement = statementInProgress(index)
     }
-    if (beginIndex < line.length()) {
+    // Check the last char is end of nested bracketed comment.
+    val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
+    if (!insideSimpleComment && !endOfBracketedComment && beginIndex < line.length()) {
       ret.add(line.substring(beginIndex))
     }
     ret
