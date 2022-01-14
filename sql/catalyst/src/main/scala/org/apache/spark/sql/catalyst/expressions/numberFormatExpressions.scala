@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.util.NumberFormatBuilder
+import org.apache.spark.sql.catalyst.util.NumberFormatter
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -58,9 +58,9 @@ case class ToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatBuilder = new NumberFormatBuilder(numberFormat)
+  private lazy val numberFormatter = new NumberFormatter(numberFormat)
 
-  override def dataType: DataType = numberFormatBuilder.parsedDecimalType
+  override def dataType: DataType = numberFormatter.parsedDecimalType
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
@@ -68,7 +68,7 @@ case class ToNumber(left: Expression, right: Expression)
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
       if (right.foldable) {
-        numberFormatBuilder.check()
+        numberFormatter.check()
       } else {
         TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
       }
@@ -81,12 +81,12 @@ case class ToNumber(left: Expression, right: Expression)
 
   override def nullSafeEval(string: Any, format: Any): Any = {
     val input = string.asInstanceOf[UTF8String]
-    numberFormatBuilder.parse(input)
+    numberFormatter.parse(input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builder =
-      ctx.addReferenceObj("builder", numberFormatBuilder, classOf[NumberFormatBuilder].getName)
+      ctx.addReferenceObj("builder", numberFormatter, classOf[NumberFormatter].getName)
     val eval = left.genCode(ctx)
     ev.copy(code =
       code"""

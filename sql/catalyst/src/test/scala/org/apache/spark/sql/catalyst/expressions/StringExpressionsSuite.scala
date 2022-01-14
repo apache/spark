@@ -988,6 +988,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // Test ',' and 'G'
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("123,456"), Literal("9G9")))
+    }
+
     Seq(
       ("12,454", "99,999") -> Decimal(12454),
       ("12,454", "00,000") -> Decimal(12454),

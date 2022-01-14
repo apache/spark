@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
+
 import java.math.BigDecimal
 import java.text.{DecimalFormat, ParsePosition}
 import java.util.Locale
-
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -45,12 +45,12 @@ object NumberConstants {
   final val SIGN_SET = Set(POINT_SIGN, COMMA_SIGN, MINUS_SIGN, DOLLAR_SIGN)
 }
 
-class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
+class NumberFormatter(originNumberFormat: String) extends Serializable {
   import NumberConstants._
 
   protected val normalizedNumberFormat = normalize(originNumberFormat)
 
-  private val transformedFormat = transform(normalizedNumberFormat)
+  private lazy val transformedFormat = transform(normalizedNumberFormat)
 
   private lazy val numberDecimalFormat = {
     val decimalFormat = new DecimalFormat(transformedFormat)
@@ -58,24 +58,18 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
     decimalFormat
   }
 
-  private val precision = getPrecision(normalizedNumberFormat)
+  private lazy val precision = normalizedNumberFormat.filterNot(isSign).length
 
-  private val scale = getScale(normalizedNumberFormat)
+  private lazy val scale = {
+    val formatSplits = normalizedNumberFormat.split(POINT_SIGN)
+    if (formatSplits.length == 1) {
+      0
+    } else {
+      formatSplits(1).filterNot(isSign).length
+    }
+  }
 
   def parsedDecimalType: DecimalType = DecimalType(precision, scale)
-
-  def check(): TypeCheckResult = {
-    try {
-      check(normalizedNumberFormat, originNumberFormat)
-    } catch {
-      case e: AnalysisException => return TypeCheckResult.TypeCheckFailure(e.getMessage)
-    }
-    TypeCheckResult.TypeCheckSuccess
-  }
-
-  def parse(input: UTF8String): Decimal = {
-    parse(input, originNumberFormat, numberDecimalFormat, precision, scale)
-  }
 
   /**
    * DecimalFormat provides '#' and '0' as placeholder of digit, ',' as grouping separator,
@@ -127,41 +121,38 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
     }
   }
 
-  protected def check(normalizedFormat: String, numberFormat: String) = {
-    def invalidSignPosition(format: String, c: Char): Boolean = {
-      val signIndex = format.indexOf(c)
-      signIndex > 0 && signIndex < format.length - 1
+  def check(): TypeCheckResult = {
+    def invalidSignPosition(c: Char): Boolean = {
+      val signIndex = normalizedNumberFormat.indexOf(c)
+      signIndex > 0 && signIndex < normalizedNumberFormat.length - 1
     }
 
-    if (normalizedFormat.length == 0) {
-      throw QueryCompilationErrors.emptyNumberFormatError()
-    } else if (normalizedFormat.count(_ == POINT_SIGN) > 1) {
-      throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$POINT_LETTER' or '$POINT_SIGN'", numberFormat)
-    } else if (normalizedFormat.count(_ == MINUS_SIGN) > 1) {
-      throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$MINUS_LETTER' or '$MINUS_SIGN'", numberFormat)
-    } else if (normalizedFormat.count(_ == DOLLAR_SIGN) > 1) {
-      throw QueryCompilationErrors.multipleSignInNumberFormatError(
-        s"'$DOLLAR_SIGN'", numberFormat)
-    } else if (invalidSignPosition(normalizedFormat, MINUS_SIGN)) {
-      throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
-        s"'$MINUS_LETTER' or '$MINUS_SIGN'", numberFormat)
-    } else if (invalidSignPosition(normalizedFormat, DOLLAR_SIGN)) {
-      throw QueryCompilationErrors.nonFistOrLastCharInNumberFormatError(
-        s"'$DOLLAR_SIGN'", numberFormat)
+    def multipleSignInNumberFormatError(message: String): String = {
+      s"Multiple $message in '$originNumberFormat'"
     }
-  }
 
-  private def getPrecision(numberFormat: String): Int =
-    numberFormat.filterNot(isSign).length
+    def nonFistOrLastCharInNumberFormatError(message: String): String = {
+      s"$message must be the first or last char in '$originNumberFormat'"
+    }
 
-  private def getScale(numberFormat: String): Int = {
-    val formatSplits = numberFormat.split(POINT_SIGN)
-    if (formatSplits.length == 1) {
-      0
+    if (normalizedNumberFormat.length == 0) {
+      TypeCheckResult.TypeCheckFailure("Number format cannot be empty")
+    } else if (normalizedNumberFormat.count(_ == POINT_SIGN) > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        multipleSignInNumberFormatError(s"'$POINT_LETTER' or '$POINT_SIGN'"))
+    } else if (normalizedNumberFormat.count(_ == MINUS_SIGN) > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        multipleSignInNumberFormatError(s"'$MINUS_LETTER' or '$MINUS_SIGN'"))
+    } else if (normalizedNumberFormat.count(_ == DOLLAR_SIGN) > 1) {
+      TypeCheckResult.TypeCheckFailure(multipleSignInNumberFormatError(s"'$DOLLAR_SIGN'"))
+    } else if (invalidSignPosition(MINUS_SIGN)) {
+      TypeCheckResult.TypeCheckFailure(
+        nonFistOrLastCharInNumberFormatError(s"'$MINUS_LETTER' or '$MINUS_SIGN'"))
+    } else if (invalidSignPosition(DOLLAR_SIGN)) {
+      TypeCheckResult.TypeCheckFailure(
+        nonFistOrLastCharInNumberFormatError(s"'$DOLLAR_SIGN'"))
     } else {
-      formatSplits(1).filterNot(isSign).length
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 
@@ -175,18 +166,9 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
    * '$': value with a leading dollar sign (only allowed once)
    *
    * @param input the string need to converted
-   * @param originNumberFormat the origin number format
-   * @param numberDecimalFormat decimal format of number format
-   * @param precision decimal precision
-   * @param scale decimal scale
    * @return decimal obtained from string parsing
    */
-  private def parse(
-      input: UTF8String,
-      originNumberFormat: String,
-      numberDecimalFormat: DecimalFormat,
-      precision: Int,
-      scale: Int): Decimal = {
+  def parse(input: UTF8String): Decimal = {
     val inputStr = input.toString.trim
     val inputSplits = inputStr.split(POINT_SIGN)
     if (inputSplits.length == 1) {
@@ -217,11 +199,7 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
    * @param numberFormat the format string
    * @return The string after formatting input decimal
    */
-  def format(input: Decimal, numberFormat: String): String = {
-    val normalizedFormat = normalize(numberFormat)
-    check(normalizedFormat, numberFormat)
-
-    val transformedFormat = transform(normalizedFormat)
+  def format(input: Decimal): String = {
     val bigDecimal = input.toJavaBigDecimal
     val decimalPlainStr = bigDecimal.toPlainString
     if (decimalPlainStr.length > transformedFormat.length) {
@@ -234,7 +212,7 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
           decimalFormat.applyLocalizedPattern(transformedFormat)
         } catch {
           case _: IllegalArgumentException =>
-            throw QueryExecutionErrors.invalidNumberFormatError(numberFormat)
+            throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
         }
         decimalFormat
       }
@@ -246,10 +224,11 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
       // new DecimalFormat("##,###").parse(12454) and new DecimalFormat("###,###").parse(124546)
       // will return "12,454" and "124,546" respectively. So we add ',' at the end and head of
       // the result, then the final output are "12,454," or ",124,546".
-      if (numberFormat.last == COMMA_SIGN || numberFormat.last == COMMA_LETTER) {
+      if (originNumberFormat.last == COMMA_SIGN || originNumberFormat.last == COMMA_LETTER) {
         resultStr = resultStr + COMMA_SIGN
       }
-      if (numberFormat.charAt(0) == COMMA_SIGN || numberFormat.charAt(0) == COMMA_LETTER) {
+      if (originNumberFormat.charAt(0) == COMMA_SIGN ||
+        originNumberFormat.charAt(0) == COMMA_LETTER) {
         resultStr = COMMA_SIGN + resultStr
       }
 
@@ -259,8 +238,12 @@ class NumberFormatBuilder(originNumberFormat: String) extends Serializable {
 }
 
 // Used for test
-class TestBuilder(originNumberFormat: String) extends NumberFormatBuilder(originNumberFormat) {
+class TestNumberFormatter(originNumberFormat: String) extends NumberFormatter(originNumberFormat) {
   def checkWithException(): Unit = {
-    check(normalizedNumberFormat, originNumberFormat)
+    check() match {
+      case TypeCheckResult.TypeCheckFailure(message) =>
+        throw new AnalysisException(message)
+      case _ =>
+    }
   }
 }

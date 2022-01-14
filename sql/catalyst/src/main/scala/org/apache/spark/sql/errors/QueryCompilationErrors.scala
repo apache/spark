@@ -2380,16 +2380,4 @@ object QueryCompilationErrors {
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
   }
-
-  def multipleSignInNumberFormatError(message: String, numberFormat: String): Throwable = {
-    new AnalysisException(s"Multiple $message in '$numberFormat'")
-  }
-
-  def nonFistOrLastCharInNumberFormatError(message: String, numberFormat: String): Throwable = {
-    new AnalysisException(s"$message must be the first or last char in '$numberFormat'")
-  }
-
-  def emptyNumberFormatError(): Throwable = {
-    new AnalysisException("Number format cannot be empty")
-  }
 }
