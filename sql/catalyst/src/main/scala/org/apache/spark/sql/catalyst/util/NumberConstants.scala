@@ -181,9 +181,14 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
       throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
     }
 
-    val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
-    assert(number.isInstanceOf[BigDecimal])
-    Decimal(number.asInstanceOf[BigDecimal])
+    try {
+      val number = numberDecimalFormat.parse(inputStr, new ParsePosition(0))
+      assert(number.isInstanceOf[BigDecimal])
+      Decimal(number.asInstanceOf[BigDecimal])
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
+    }
   }
 
   /**

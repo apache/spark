@@ -909,7 +909,7 @@ SELECT '' AS to_number_10, to_number('0', '99.99');
 SELECT '' AS to_number_12, to_number('.01-', '99.99S');
 -- SELECT '' AS to_number_13, to_number(' . 0 1-', ' 9 9 . 9 9 S');
 SELECT '' AS to_number_14, to_number('34,50','999,99');
--- SELECT '' AS to_number_15, to_number('123,000','999G');
+SELECT '' AS to_number_15, to_number('123,000','999G');
 SELECT '' AS to_number_16, to_number('123456','999G999');
 -- SELECT '' AS to_number_17, to_number('$1234.56','L9,999.99');
 -- SELECT '' AS to_number_18, to_number('$1234.56','L99,999.99');
