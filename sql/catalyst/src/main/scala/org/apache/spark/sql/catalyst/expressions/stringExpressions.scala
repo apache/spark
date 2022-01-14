@@ -463,7 +463,7 @@ abstract class StringBinaryPredicate[T] extends BinaryExpression
   override def toString: String = s"$nodeName($left, $right)"
 }
 
-trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
+trait BinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   override def build(expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
@@ -480,16 +480,6 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def funcName: String
   protected def createBinaryPredicate(left: Expression, right: Expression): Expression
   protected def createStringPredicate(left: Expression, right: Expression): Expression
-}
-
-abstract class StringBinaryRuntimeReplaceable(left: Expression, right: Expression)
-  extends RuntimeReplaceable {
-  def newCopy(left: Expression, right: Expression): StringBinaryRuntimeReplaceable
-}
-
-object StringBinaryRuntimeReplaceable {
-  def unapply(e: StringBinaryRuntimeReplaceable): Option[(Expression, Expression)] =
-    Some((e.children.head, e.children.last))
 }
 
 /**
@@ -514,7 +504,7 @@ object StringBinaryRuntimeReplaceable {
   since = "3.3.0",
   group = "string_funcs"
 )
-object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+object ContainsExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -539,7 +529,7 @@ case class Contains(left: Expression, right: Expression)
 }
 
 case class BinaryContains(left: Expression, right: Expression, child: Expression)
-  extends StringBinaryRuntimeReplaceable(left, right) {
+  extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -556,9 +546,6 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
   override def prettyName: String = "contains"
   override protected def withNewChildInternal(newChild: Expression): BinaryContains =
     copy(child = newChild)
-
-  override def newCopy(left: Expression, right: Expression): BinaryContains =
-    new BinaryContains(left, right)
 }
 
 @ExpressionDescription(
@@ -582,7 +569,7 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
   since = "3.3.0",
   group = "string_funcs"
 )
-object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+object StartsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -607,7 +594,7 @@ case class StartsWith(left: Expression, right: Expression)
 }
 
 case class BinaryStartsWith(left: Expression, right: Expression, child: Expression)
-  extends StringBinaryRuntimeReplaceable(left, right) {
+  extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -624,9 +611,6 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
   override def prettyName: String = "startswith"
   override protected def withNewChildInternal(newChild: Expression): BinaryStartsWith =
     copy(child = newChild)
-
-  override def newCopy(left: Expression, right: Expression): BinaryStartsWith =
-    new BinaryStartsWith(left, right)
 }
 
 @ExpressionDescription(
@@ -650,7 +634,7 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
   since = "3.3.0",
   group = "string_funcs"
 )
-object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+object EndsWithExpressionBuilder extends BinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
   override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
@@ -674,7 +658,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringBinaryPre
 }
 
 case class BinaryEndsWith(left: Expression, right: Expression, child: Expression)
-  extends StringBinaryRuntimeReplaceable(left, right) {
+  extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -691,9 +675,6 @@ case class BinaryEndsWith(left: Expression, right: Expression, child: Expression
   override def prettyName: String = "endswith"
   override protected def withNewChildInternal(newChild: Expression): BinaryEndsWith =
     copy(child = newChild)
-
-  override def newCopy(left: Expression, right: Expression): BinaryEndsWith =
-    new BinaryEndsWith(left, right)
 }
 
 /**
