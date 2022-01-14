@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
 class KubernetesUtilsSuite extends SparkFunSuite {
   private val HOST = "test-host"
@@ -64,5 +65,43 @@ class KubernetesUtilsSuite extends SparkFunSuite {
       KubernetesUtils.selectSparkContainer(noContainersPod, Option.empty)
     assert(sparkPodWithNoContainerName.pod.getSpec.getHostname == HOST)
     assert(sparkPodWithNoContainerName.container.getName == null)
+  }
+
+  test("SPARK-37145: feature step load test") {
+    val execConf: KubernetesExecutorConf = KubernetesTestConf.createExecutorConf()
+    val driverConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf()
+    val basicFeatureNames = Seq(
+      "org.apache.spark.deploy.k8s.TestStep",
+      "org.apache.spark.deploy.k8s.TestStepWithConf"
+    )
+    val driverFeatureNames = "org.apache.spark.deploy.k8s.TestStepWithDrvConf"
+    val execFeatureNames = "org.apache.spark.deploy.k8s.TestStepWithExecConf"
+
+    (basicFeatureNames :+ driverFeatureNames).foreach { featureName =>
+      val drvFeatureStep = KubernetesUtils.loadFeatureStep(driverConf, featureName)
+      assert(drvFeatureStep.isInstanceOf[KubernetesFeatureConfigStep])
+    }
+
+    (basicFeatureNames :+ execFeatureNames).foreach { featureName =>
+      val execFeatureStep = KubernetesUtils.loadFeatureStep(execConf, featureName)
+      assert(execFeatureStep.isInstanceOf[KubernetesFeatureConfigStep])
+    }
+
+    val e1 = intercept[SparkException] {
+      KubernetesUtils.loadFeatureStep(execConf, driverFeatureNames)
+    }
+    assert(e1.getMessage.contains(s"Failed to load feature step: $driverFeatureNames"))
+    assert(e1.getMessage.contains("with only KubernetesExecutorConf/KubernetesConf param"))
+
+    val e2 = intercept[SparkException] {
+      KubernetesUtils.loadFeatureStep(driverConf, execFeatureNames)
+    }
+    assert(e2.getMessage.contains(s"Failed to load feature step: $execFeatureNames"))
+    assert(e2.getMessage.contains("with only KubernetesDriverConf/KubernetesConf param"))
+
+    val e3 = intercept[ClassNotFoundException] {
+      KubernetesUtils.loadFeatureStep(execConf, "unknow.class")
+    }
+    assert(e3.getMessage.contains("unknow.class"))
   }
 }
