@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Unresol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.ByteArray
 
 class ConstantFoldingSuite extends PlanTest {
 
@@ -295,6 +297,37 @@ class ConstantFoldingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select('a)
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-37907: StaticInvoke support ConstantFolding") {
+    val originalQuery =
+      testRelation
+        .select(
+          StaticInvoke(
+            classOf[ByteArray],
+            BinaryType,
+            "lpad",
+            Seq(Literal("Spark".getBytes), Literal(7), Literal("W".getBytes)),
+            Seq(BinaryType, IntegerType, BinaryType),
+            returnNullable = false).as("c1"),
+          StaticInvoke(
+            classOf[ByteArray],
+            BinaryType,
+            "rpad",
+            Seq(Literal("Spark".getBytes), Literal(7), Literal("W".getBytes)),
+            Seq(BinaryType, IntegerType, BinaryType),
+            returnNullable = false).as("c2"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal("WWSpark".getBytes()).as("c1"),
+          Literal("SparkWW".getBytes()).as("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

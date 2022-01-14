@@ -257,6 +257,7 @@ case class StaticInvoke(
     Utils.classForName(objectName)
   }
 
+  override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
