@@ -536,12 +536,31 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .option("TO", "10")
       .format("org.apache.spark.sql.sources.SimpleScanSource")
 
+    val answerDf = spark.range(1, 11).toDF()
+
     // when users do not specify the schema
-    checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
+    checkAnswer(dfReader.load(), answerDf)
+
+    // same base schema, differing metadata and nullability
+    val fooBarMetadata = new MetadataBuilder().putString("foo", "bar").build()
+    val nullableAndMetadataCases = Seq(
+      (false, fooBarMetadata),
+      (false, Metadata.empty),
+      (true, fooBarMetadata),
+      (true, Metadata.empty))
+    nullableAndMetadataCases.foreach { case (nullable, metadata) =>
+      val inputSchema = new StructType()
+        .add("i", IntegerType, nullable = nullable, metadata = metadata)
+      checkAnswer(dfReader.schema(inputSchema).load(), answerDf)
+    }
 
     // when users specify a wrong schema
-    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
-    val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    var inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    var e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
+
+    inputSchema = new StructType().add("i", StringType, nullable = true)
+    e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
