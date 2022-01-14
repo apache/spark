@@ -56,7 +56,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file null)
+        reader.initialize(file, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
