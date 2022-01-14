@@ -1028,49 +1028,4 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("SQL")), true)
     checkEvaluation(Contains(Literal("Spark SQL"), Literal("k S")), true)
   }
-
-  test("SPARK-37582, SPARK-37583: CONTAINS, STARTSWITH, ENDSWITH should support binary type") {
-    checkEvaluation(
-      new BinaryContains(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
-    checkEvaluation(
-      new BinaryContains(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryContains(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryContains(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
-    checkEvaluation(
-      new BinaryContains(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
-    checkEvaluation(new BinaryContains(
-        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
-
-    checkEvaluation(
-      new BinaryStartsWith(Literal("Spark SQL".getBytes), Literal("Spark".getBytes)), true)
-    checkEvaluation(
-      new BinaryStartsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
-    checkEvaluation(
-      new BinaryStartsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
-    checkEvaluation(new BinaryStartsWith(
-        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
-
-    checkEvaluation(
-      new BinaryEndsWith(Literal("Spark SQL".getBytes), Literal("SQL".getBytes)), true)
-    checkEvaluation(
-      new BinaryEndsWith(Literal("Spark SQL".getBytes), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array.empty[Byte])), true)
-    checkEvaluation(
-      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal(Array(1, 2).map(_.toByte))), false)
-    checkEvaluation(
-      new BinaryEndsWith(Literal(Array.empty[Byte]), Literal.create(null, BinaryType)), null)
-    checkEvaluation(new BinaryEndsWith(
-        Literal.create(null, BinaryType), Literal(Array(1, 2).map(_.toByte))), null)
-  }
 }
