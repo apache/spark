@@ -37,9 +37,7 @@ import org.apache.spark.sql.util.SchemaUtils._
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
-  override def apply(plan: LogicalPlan): LogicalPlan = apply0(plan)
-
-  private def apply0(plan: LogicalPlan): LogicalPlan =
+  override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
       l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
@@ -197,8 +195,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       .toAttributes
       .map {
         case att if nameAttributeMap.contains(att.name) =>
-          val outputAttribute = nameAttributeMap(att.name)
-          att.withExprId(outputAttribute.exprId).withMetadata(outputAttribute.metadata)
+          nameAttributeMap(att.name).withDataType(att.dataType)
         case att => att
       }
   }
