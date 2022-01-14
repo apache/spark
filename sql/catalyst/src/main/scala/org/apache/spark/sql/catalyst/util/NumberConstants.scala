@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import com.google.common.annotations.VisibleForTesting
 import org.apache.spark.sql.AnalysisException
 
 import java.math.BigDecimal
@@ -237,7 +238,7 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
   }
 }
 
-// Used for test
+// Visible for testing
 class TestNumberFormatter(originNumberFormat: String) extends NumberFormatter(originNumberFormat) {
   def checkWithException(): Unit = {
     check() match {
