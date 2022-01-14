@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -205,6 +206,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison => true
     case _: In | _: InSet => true
     case _: StringPredicate => true
+    case StaticInvoke(_, _, "contains" | "startsWith" | "endsWith", _, _, _, _) => true
     case _: MultiLikeBase => true
     case _ => false
   }

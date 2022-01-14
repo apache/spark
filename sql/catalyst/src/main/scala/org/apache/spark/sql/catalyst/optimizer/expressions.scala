@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -716,6 +716,35 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
+
+      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
+          Seq(i @ If(_, trueValue, falseValue), right), _, _, _)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = s.copy(arguments = Seq(trueValue, right)),
+          falseValue = s.copy(arguments = Seq(falseValue, right)))
+
+      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
+          Seq(left, i @ If(_, trueValue, falseValue)), _, _, _)
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = s.copy(arguments = Seq(left, trueValue)),
+          falseValue = s.copy(arguments = Seq(left, falseValue)))
+
+      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
+          Seq(c @ CaseWhen(branches, elseValue), right), _, _, _)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = s.copy(arguments = Array(e._2, right)))),
+          Some(s.copy(arguments = Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
+
+      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
+          Seq(left, c @ CaseWhen(branches, elseValue)), _, _, _)
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = s.copy(arguments = Array(left, e._2)))),
+          Some(s.copy(arguments = Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
+
     }
   }
 }
