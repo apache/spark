@@ -36,6 +36,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   import testImplicits._
 
   val catalogName: String
+
+  val namespaceOpt: Option[String] = None
+
+  private def catalogAndNamespace =
+    namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
+
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
 
@@ -377,10 +383,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
+  protected def caseConvert(tableName: String): String = tableName
+
   protected def testVarPop(): Unit = {
     test(s"scan with aggregate push-down: VAR_POP") {
-      val df = sql(s"select VAR_POP(bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(s"SELECT VAR_POP(bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "VAR_POP")
@@ -394,8 +402,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testVarSamp(): Unit = {
     test(s"scan with aggregate push-down: VAR_SAMP") {
-      val df = sql(s"select VAR_SAMP(bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT VAR_SAMP(bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "VAR_SAMP")
@@ -409,8 +418,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testStddevPop(): Unit = {
     test("scan with aggregate push-down: STDDEV_POP") {
-      val df = sql(s"select STDDEV_POP(bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT STDDEV_POP(bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "STDDEV_POP")
@@ -424,8 +434,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testStddevSamp(): Unit = {
     test("scan with aggregate push-down: STDDEV_SAMP") {
-      val df = sql(s"select STDDEV_SAMP(bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT STDDEV_SAMP(bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "STDDEV_SAMP")
@@ -439,8 +450,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testCovarPop(): Unit = {
     test("scan with aggregate push-down: COVAR_POP") {
-      val df = sql(s"select COVAR_POP(bonus, bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT COVAR_POP(bonus, bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "COVAR_POP")
@@ -454,8 +466,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testCovarSamp(): Unit = {
     test("scan with aggregate push-down: COVAR_SAMP") {
-      val df = sql(s"select COVAR_SAMP(bonus, bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT COVAR_SAMP(bonus, bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "COVAR_SAMP")
@@ -469,8 +482,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   protected def testCorr(): Unit = {
     test("scan with aggregate push-down: CORR") {
-      val df = sql(s"select CORR(bonus, bonus) FROM $catalogName.employee" +
-        " where dept > 0 group by DePt order by dept")
+      val df = sql(
+        s"SELECT CORR(bonus, bonus) FROM $catalogAndNamespace.${caseConvert("employee")}" +
+        " WHERE dept > 0 GROUP BY dept ORDER BY dept")
       checkFiltersRemoved(df)
       checkAggregateRemoved(df)
       checkAggregatePushed(df, "CORR")

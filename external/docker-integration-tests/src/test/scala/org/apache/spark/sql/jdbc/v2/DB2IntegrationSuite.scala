@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
@@ -38,6 +39,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "db2"
+  override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
     override val env = Map(
@@ -63,14 +65,14 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(
-      s"CREATE TABLE employee (dept INTEGER, name CLOB, salary DECIMAL(20, 2)," +
-        " bonus DOUBLE)").executeUpdate()
+      "CREATE TABLE EMPLOYEE (dept INTEGER, name CLOB, salary DECIMAL(20, 2), bonus DOUBLE)")
+      .executeUpdate()
     conn.prepareStatement(
-      s"""
-         |INSERT INTO employee VALUES
-         |(1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
-         |(2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
-         |""".stripMargin).executeUpdate()
+      """
+        |INSERT INTO EMPLOYEE VALUES
+        |(1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
+        |(2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
+        |""".stripMargin).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -98,6 +100,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     assert(t.schema === expectedSchema)
   }
 
+  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
   testVarPop()
-  testStddevPop()
 }

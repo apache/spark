@@ -35,10 +35,6 @@ private object DB2Dialect extends JdbcDialect {
           assert(f.inputs().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"VARIANCE($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEV($distinct${f.inputs().head})")
         case _ => None
       }
     )
