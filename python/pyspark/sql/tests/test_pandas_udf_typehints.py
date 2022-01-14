@@ -16,7 +16,7 @@
 #
 import unittest
 from inspect import signature
-from typing import Any, Union, Iterator, Tuple, cast, get_type_hints
+from typing import Union, Iterator, Tuple, cast, get_type_hints
 
 from pyspark.sql.functions import mean, lit
 from pyspark.testing.sqlutils import (
