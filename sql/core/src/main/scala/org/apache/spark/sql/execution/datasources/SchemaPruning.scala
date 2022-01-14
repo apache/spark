@@ -73,24 +73,25 @@ object SchemaPruning extends Rule[LogicalPlan] {
     if (requestedRootFields.exists { root: RootField => !root.derivedFromAtt }) {
 
       val prunedDataSchema = if (canPruneDataSchema(hadoopFsRelation)) {
-        pruneDataSchema(hadoopFsRelation.dataSchema, requestedRootFields)
+        pruneSchema(hadoopFsRelation.dataSchema, requestedRootFields)
       } else {
         hadoopFsRelation.dataSchema
       }
 
       val metadataSchema =
         relation.output.collect { case MetadataAttribute(attr) => attr }.toStructType
-      val prunedMetadataSchema = if (canPruneMetadataSchema(relation)) {
-        pruneDataSchema(metadataSchema, requestedRootFields)
+      val prunedMetadataSchema = if (metadataSchema.nonEmpty) {
+        pruneSchema(metadataSchema, requestedRootFields)
       } else {
         metadataSchema
       }
 
-      // If the data schema + metadata schema is different from
-      // the pruned data schema + pruned metadata schema, continue.
+      // If the data schema is different from the pruned data schema
+      // OR
+      // the metadata schema is different from the pruned metadata schema, continue.
       // Otherwise, return None.
-      if (countLeaves(hadoopFsRelation.dataSchema.merge(metadataSchema)) >
-        countLeaves(prunedDataSchema.merge(prunedMetadataSchema))) {
+      if (countLeaves(hadoopFsRelation.dataSchema) > countLeaves(prunedDataSchema) ||
+        countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
         val projectionOverSchema =
           ProjectionOverSchema(prunedDataSchema.merge(prunedMetadataSchema))
@@ -111,16 +112,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
     conf.nestedSchemaPruningEnabled && (
       fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
         fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
-
-  /**
-   * Checks to see if the metadata schema pruning can be performed
-   */
-  private def canPruneMetadataSchema(l: LogicalRelation): Boolean =
-    l.output.exists {
-      case MetadataAttribute(_) => true
-      case _ => false
-    }
-
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect
@@ -186,22 +177,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
       outputRelation: LogicalRelation,
       prunedBaseRelation: HadoopFsRelation,
       prunedMetadataSchema: StructType) = {
-    val prunedOutput = getPrunedOutput(outputRelation.output, prunedBaseRelation.schema)
-    // make sure metadata is existed in the output
-    val prunedMetadataOutput = if (canPruneMetadataSchema(outputRelation)) {
-      val metadataAttribute = outputRelation.output
-        .collectFirst { case MetadataAttribute(attr) => attr }.get
-      prunedMetadataSchema.map { meta =>
-        // copy a metadata attribute with the pruned dataType
-        metadataAttribute.copy(dataType = meta.dataType)(exprId = metadataAttribute.exprId,
-          qualifier = metadataAttribute.qualifier)
-      }
-    } else {
-      Seq.empty
-    }
-
-    outputRelation.copy(relation = prunedBaseRelation,
-      output = prunedOutput ++ prunedMetadataOutput)
+    val finalSchema = prunedBaseRelation.schema.merge(prunedMetadataSchema)
+    val prunedOutput = getPrunedOutput(outputRelation.output, finalSchema)
+    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.
@@ -211,12 +189,16 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // We need to replace the expression ids of the pruned relation output attributes
     // with the expression ids of the original relation output attributes so that
     // references to the original relation's output are not broken
-    val outputIdMap = output.map(att => (att.name, att.exprId)).toMap
+
+    // We also need to keep the metadata of the attribute,
+    // so that references to the metadata struct is not broken
+    val nameAttributeMap = output.map(att => (att.name, att)).toMap
     requiredSchema
       .toAttributes
       .map {
-        case att if outputIdMap.contains(att.name) =>
-          att.withExprId(outputIdMap(att.name))
+        case att if nameAttributeMap.contains(att.name) =>
+          val outputAttribute = nameAttributeMap(att.name)
+          att.withExprId(outputAttribute.exprId).withMetadata(outputAttribute.metadata)
         case att => att
       }
   }
