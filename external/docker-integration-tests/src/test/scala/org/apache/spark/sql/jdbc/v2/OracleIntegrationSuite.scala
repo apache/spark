@@ -111,6 +111,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
       s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
+  test("SHOW NAMESPACES and TABLES") {
+    val df = sql(s"SHOW NAMESPACES IN $catalogName")
+    df.show(20)
+    val df2 = sql(s"SHOW TABLES IN $catalogName.SYSTEM")
+    df2.show(50)
+    val df3 = sql(s"SHOW TABLES IN $catalogName.system")
+    df3.show(50)
+  }
+
   testVarPop()
   testVarSamp()
   testStddevPop()
