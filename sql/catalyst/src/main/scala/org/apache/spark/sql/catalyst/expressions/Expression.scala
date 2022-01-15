@@ -18,10 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
@@ -365,6 +364,8 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
   override lazy val preCanonicalized: Expression = child.preCanonicalized
+
+  def isAggregate: Boolean = child.isInstanceOf[AggregateFunction]
 
   /**
    * Only used to generate SQL representation of this expression.
