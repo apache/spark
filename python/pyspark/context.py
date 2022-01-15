@@ -35,6 +35,7 @@ from typing import (
     List,
     NoReturn,
     Optional,
+    Sequence,
     Tuple,
     Type,
     TYPE_CHECKING,
@@ -1421,7 +1422,7 @@ class SparkContext:
         self,
         rdd: "RDD[T]",
         partitionFunc: Callable[[Iterable[T]], Iterable[U]],
-        partitions: Optional[List[int]] = None,
+        partitions: Optional[Sequence[int]] = None,
         allowLocal: bool = False,
     ) -> List[U]:
         """

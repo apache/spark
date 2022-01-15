@@ -203,6 +203,18 @@ class SparkConf:
             self.set(k, v)
         return self
 
+    @overload
+    def get(self, key: str) -> Optional[str]:
+        ...
+
+    @overload
+    def get(self, key: str, defaultValue: None) -> Optional[str]:
+        ...
+
+    @overload
+    def get(self, key: str, defaultValue: str) -> str:
+        ...
+
     def get(self, key: str, defaultValue: Optional[str] = None) -> Optional[str]:
         """Get the configured value for some key, or return a default otherwise."""
         if defaultValue is None:  # Py4J doesn't call the right get() if we pass None

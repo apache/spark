@@ -42,11 +42,12 @@ DataFrameOrSeriesLike_ = TypeVar("DataFrameOrSeriesLike_", bound=DataFrameOrSeri
 
 # UDF annotations
 PandasScalarUDFType = Literal[200]
-PandasScalarIterUDFType = Literal[204]
 PandasGroupedMapUDFType = Literal[201]
-PandasCogroupedMapUDFType = Literal[206]
 PandasGroupedAggUDFType = Literal[202]
+PandasWindowAggUDFType = Literal[203]
+PandasScalarIterUDFType = Literal[204]
 PandasMapIterUDFType = Literal[205]
+PandasCogroupedMapUDFType = Literal[206]
 ArrowMapIterUDFType = Literal[207]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
