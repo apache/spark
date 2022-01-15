@@ -20,19 +20,26 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Date
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
+import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -637,5 +644,127 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
       "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
+  }
+
+  private def splitSemiColon(line: String): JList[String] = {
+    var insideSingleQuote = false
+    var insideDoubleQuote = false
+    var insideSimpleComment = false
+    var bracketedCommentLevel = 0
+    var escape = false
+    var beginIndex = 0
+    var leavingBracketedComment = false
+    var isStatement = false
+    val ret = new JArrayList[String]
+
+    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
+    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
+    def statementInProgress(index: Int): Boolean = isStatement || (!insideComment &&
+      index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
+
+    for (index <- 0 until line.length) {
+      // Checks if we need to decrement a bracketed comment level; the last character '/' of
+      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
+      // in the previous loop and we decrement the level here if needed.
+      if (leavingBracketedComment) {
+        bracketedCommentLevel -= 1
+        leavingBracketedComment = false
+      }
+
+      if (line.charAt(index) == '\'' && !insideComment) {
+        // take a look to see if it is escaped
+        // See the comment above about SPARK-31595
+        if (!escape && !insideDoubleQuote) {
+          // flip the boolean variable
+          insideSingleQuote = !insideSingleQuote
+        }
+      } else if (line.charAt(index) == '\"' && !insideComment) {
+        // take a look to see if it is escaped
+        // See the comment above about SPARK-31595
+        if (!escape && !insideSingleQuote) {
+          // flip the boolean variable
+          insideDoubleQuote = !insideDoubleQuote
+        }
+      } else if (line.charAt(index) == '-') {
+        val hasNext = index + 1 < line.length
+        if (insideDoubleQuote || insideSingleQuote || insideComment) {
+          // Ignores '-' in any case of quotes or comment.
+          // Avoids to start a comment(--) within a quoted segment or already in a comment.
+          // Sample query: select "quoted value --"
+          //                                    ^^ avoids starting a comment if it's inside quotes.
+        } else if (hasNext && line.charAt(index + 1) == '-') {
+          // ignore quotes and ; in simple comment
+          insideSimpleComment = true
+        }
+      } else if (line.charAt(index) == ';') {
+        if (insideSingleQuote || insideDoubleQuote || insideComment) {
+          // do not split
+        } else {
+          if (isStatement) {
+            // split, do not include ; itself
+            ret.add(line.substring(beginIndex, index))
+          }
+          beginIndex = index + 1
+          isStatement = false
+        }
+      } else if (line.charAt(index) == '\n') {
+        // with a new line the inline simple comment should end.
+        if (!escape) {
+          insideSimpleComment = false
+        }
+      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
+        val hasNext = index + 1 < line.length
+        if (insideSingleQuote || insideDoubleQuote) {
+          // Ignores '/' in any case of quotes
+        } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
+          // Decrements `bracketedCommentLevel` at the beginning of the next loop
+          leavingBracketedComment = true
+        } else if (hasNext && line.charAt(index + 1) == '*') {
+          bracketedCommentLevel += 1
+        }
+      }
+      // set the escape
+      if (escape) {
+        escape = false
+      } else if (line.charAt(index) == '\\') {
+        escape = true
+      }
+
+      isStatement = statementInProgress(index)
+    }
+    // Check the last char is end of nested bracketed comment.
+    val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
+    if (!endOfBracketedComment && (isStatement || insideBracketedComment)) {
+      ret.add(line.substring(beginIndex))
+    }
+    ret
+  }
+
+  test("SPARK-37906: Spark SQL CLI should not pass final comment") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+
+    val sessionState = new CliSessionState(cliConf)
+    SessionState.setCurrentSessionState(sessionState)
+    val cli = new SparkSQLCLIDriver
+    Seq("SELECT 1; --comment" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment" -> Seq("SELECT 1", " /* comment"),
+      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", " /* comment select 1;"),
+      "/* This is a comment without end symbol SELECT 1;" ->
+        Seq("/* This is a comment without end symbol SELECT 1;"),
+      "SELECT 1; --comment\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
+      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
+      "/* This is a comment without end symbol SELECT 1;\n" ->
+        Seq("/* This is a comment without end symbol SELECT 1;\n")
+    ).foreach { case (query, ret) =>
+      assert(cli.splitSemiColon(query).asScala === ret)
+    }
+    sessionState.close()
   }
 }

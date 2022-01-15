@@ -48,7 +48,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.internal.SharedState
-import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -324,9 +324,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
-    SparkSQLEnv.init()
-    if (sessionState.getIsSilent) {
-      SparkSQLEnv.sparkContext.setLogLevel("warn")
+    if (!Utils.isTesting) {
+      SparkSQLEnv.init()
+      if (sessionState.getIsSilent) {
+        SparkSQLEnv.sparkContext.setLogLevel("warn")
+      }
     }
   } else {
     // Hive 1.2 + not supported in CLI
@@ -527,7 +529,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
   // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
-  private def splitSemiColon(line: String): JList[String] = {
+  private[hive] def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideSimpleComment = false
