@@ -56,7 +56,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "oracle"
-  override val namespaceOpt: Option[String] = Some("SYSAUX")
+  override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
@@ -116,9 +116,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     df.show(20)
     val df2 = sql(s"SHOW TABLES IN $catalogName.SYSTEM")
     df2.show(50)
-    val df3 = sql(s"SHOW TABLES IN $catalogName.system")
+    val df3 = sql(s"SHOW COLUMNS IN $catalogName.SYSTEM.employee")
     df3.show(50)
-    val df4 = sql(s"SHOW TABLES IN $catalogName.SYSAUX")
+    val df4 = sql(s"SHOW COLUMNS IN $catalogName.SYSTEM.EMPLOYEE")
     df4.show(50)
   }
 
