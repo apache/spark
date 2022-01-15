@@ -65,20 +65,22 @@ private object H2Dialect extends JdbcDialect {
   }
 
   override def classifyException(message: String, e: Throwable): AnalysisException = {
-    if (e.isInstanceOf[SQLException]) {
-      // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
-      e.asInstanceOf[SQLException].getErrorCode match {
-        // TABLE_OR_VIEW_ALREADY_EXISTS_1
-        case 42101 =>
-          throw new TableAlreadyExistsException(message, cause = Some(e))
-        // TABLE_OR_VIEW_NOT_FOUND_1
-        case 42102 =>
-          throw new NoSuchTableException(message, cause = Some(e))
-        // SCHEMA_NOT_FOUND_1
-        case 90079 =>
-          throw new NoSuchNamespaceException(message, cause = Some(e))
-        case _ =>
-      }
+    e match {
+      case exception: SQLException =>
+        // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
+        exception.getErrorCode match {
+          // TABLE_OR_VIEW_ALREADY_EXISTS_1
+          case 42101 =>
+            throw new TableAlreadyExistsException(message, cause = Some(e))
+          // TABLE_OR_VIEW_NOT_FOUND_1
+          case 42102 =>
+            throw NoSuchTableException(message, cause = Some(e))
+          // SCHEMA_NOT_FOUND_1
+          case 90079 =>
+            throw NoSuchNamespaceException(message, cause = Some(e))
+          case _ => // do nothing
+        }
+      case _ => // do nothing
     }
     super.classifyException(message, e)
   }

@@ -214,16 +214,17 @@ class FileScanRDD(
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
-        if (nextElement.isInstanceOf[ColumnarBatch]) {
-          incTaskInputMetricsBytesRead()
-          inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
-        } else {
-          // too costly to update every record
-          if (inputMetrics.recordsRead %
-              SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+        nextElement match {
+          case batch: ColumnarBatch =>
             incTaskInputMetricsBytesRead()
-          }
-          inputMetrics.incRecordsRead(1)
+            inputMetrics.incRecordsRead(batch.numRows())
+          case _ =>
+            // too costly to update every record
+            if (inputMetrics.recordsRead %
+              SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+              incTaskInputMetricsBytesRead()
+            }
+            inputMetrics.incRecordsRead(1)
         }
         addMetadataColumnsIfNeeded(nextElement)
       }
