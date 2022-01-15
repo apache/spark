@@ -297,17 +297,16 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   test("SPARK-37904: Improve rebalance in PropagateEmptyRelation") {
     val emptyRelation = LocalRelation($"a".int)
+    val expected = emptyRelation.analyze
 
     // test root node
     val plan1 = emptyRelation.rebalance($"a").analyze
     val optimized1 = Optimize.execute(plan1)
-    val expected1 = emptyRelation.analyze
-    comparePlans(optimized1, expected1)
+    comparePlans(optimized1, expected)
 
     // test non-root node
     val plan2 = emptyRelation.rebalance($"a").where($"a" > 0).select($"a").analyze
     val optimized2 = Optimize.execute(plan2)
-    val expected2 = emptyRelation.analyze
-    comparePlans(optimized2, expected2)
+    comparePlans(optimized2, expected)
   }
 }
