@@ -17,11 +17,10 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{Partition, ShuffleDependency, SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.{Partition, ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.util.Utils
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -60,10 +59,8 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       val mapStatus = writer.stop(success = true)
       if (mapStatus.isDefined) {
-        val isPushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(SparkEnv.get.conf,
-          isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)
         // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
-        if (isPushBasedShuffleEnabled && dep.getMergerLocs.isEmpty && !dep.isShuffleMergeFinalized) {
+        if (dep.shuffleMergeAllowed && dep.getMergerLocs.isEmpty && !dep.isShuffleMergeFinalized) {
           val mapOutputTracker = SparkEnv.get.mapOutputTracker
           val mergerLocs = mapOutputTracker.getShufflePushMergerLocations(dep.shuffleId)
           if (mergerLocs.nonEmpty) {
