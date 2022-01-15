@@ -446,6 +446,21 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /**
+   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
+   * by MapReduce.
+   */
+  def listDirectory(path: File): Array[String] = {
+    val result = ArrayBuffer.empty[String]
+    if (path.isDirectory) {
+      path.listFiles.foreach(f => result.appendAll(listDirectory(f)))
+    } else {
+      val c = path.getName.charAt(0)
+      if (c != '.' && c != '_') result.append(path.getAbsolutePath)
+    }
+    result.toArray
+  }
+
   /** Creates a temp JSON file that contains the input JSON record. */
   def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
     val file = File.createTempFile(prefix, ".json", dir)

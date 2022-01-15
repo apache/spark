@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Ove
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
-import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -764,7 +763,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       df.write.mode("overwrite").parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+      val file = TestUtils.listDirectory(dir).head
 
       val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), new Configuration())
       val f = ParquetFileReader.open(hadoopInputFile)
