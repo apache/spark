@@ -1148,6 +1148,7 @@ object SparkSession extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
+      case other => other
     }
   }
 
@@ -1167,11 +1168,10 @@ object SparkSession extends Logging {
       className: String,
       sparkSession: SparkSession): SessionState = {
     try {
-      // invoke new [Hive]SessionStateBuilder(
-      //   SparkSession,
-      //   Option[SessionState])
+      // Instance the sessionStateBuilder with specified
+      // construct, build-in [Hive]SessionStateBuilder or custom SessionStateBuilder
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getConstructors.head
+      val ctor = clazz.getConstructor(classOf[SparkSession], classOf[Option[SessionState]])
       ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>

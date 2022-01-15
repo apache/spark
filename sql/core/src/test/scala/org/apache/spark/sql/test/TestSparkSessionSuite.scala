@@ -17,13 +17,51 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder}
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class TestSparkSessionSuite extends SparkFunSuite {
+
+  def getSparkSessionWithExtraConf(conf: SparkConf): SparkSession = {
+    SparkSession.builder()
+      .master("local[1]")
+      .appName("TestSparkSessionSuite")
+      .config(conf = conf)
+      .getOrCreate()
+  }
+
   test("default session is set in constructor") {
     val session = new TestSparkSession()
     assert(SparkSession.getDefaultSession.contains(session))
     session.stop()
   }
+
+  test("[SPARK-37918] instance sessionBuilder with the specified construct") {
+    val conf = new SparkConf()
+    conf.set(CATALOG_IMPLEMENTATION, "org.apache.spark.sql.test.ExtensionSessionStateBuilder")
+    val session = getSparkSessionWithExtraConf(conf)
+    assert(session != null)
+  }
+}
+
+private[sql] class ExtensionSessionStateBuilder(
+    session: SparkSession,
+    state: Option[SessionState])
+  extends SessionStateBuilder(session, state) {
+
+  def this() {
+    this(null, None)
+  }
+
+  def this(session: SparkSession) {
+    this(session, None)
+  }
+
+  def this(state: Option[SessionState]) {
+    this(null, state)
+  }
+
+  override def newBuilder: NewBuilder = new ExtensionSessionStateBuilder(_, _)
 }
