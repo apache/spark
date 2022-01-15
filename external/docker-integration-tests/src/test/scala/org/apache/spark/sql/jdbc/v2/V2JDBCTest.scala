@@ -267,7 +267,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   private def limitPushed(df: DataFrame, limit: Int): Boolean = {
-    val filter = df.queryExecution.optimizedPlan.collect {
+    df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           return v1.pushedDownOperators.limit == Some(limit)
