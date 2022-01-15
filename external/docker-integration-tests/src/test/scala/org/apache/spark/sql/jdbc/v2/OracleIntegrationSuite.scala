@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
@@ -116,11 +117,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     df.show(20)
     val df2 = sql(s"SHOW TABLES IN $catalogName.SYSTEM")
     df2.show(50)
-    val df3 = sql(s"SHOW COLUMNS IN $catalogName.SYSTEM.employee")
-    df3.show(50)
     val df4 = sql(s"SHOW COLUMNS IN $catalogName.SYSTEM.EMPLOYEE")
     df4.show(50)
   }
+
+  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
   testVarPop()
   testVarSamp()
