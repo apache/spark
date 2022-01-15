@@ -50,12 +50,7 @@ private[sql] object CatalogV2Implicits {
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
     def asPartitionColumns: Seq[String] = {
-      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
-
-      if (nonIdTransforms.nonEmpty) {
-        throw QueryCompilationErrors.cannotConvertTransformsToPartitionColumnsError(nonIdTransforms)
-      }
-
+      val idTransforms = transforms.filter(_.isInstanceOf[IdentityTransform])
       idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
         val parts = ref.fieldNames
         if (parts.size > 1) {
