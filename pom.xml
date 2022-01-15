@@ -2756,39 +2756,39 @@
             </execution>
           </executions>
         </plugin>
-	<plugin>
-	  <groupId>org.codehaus.mojo</groupId>
-	  <artifactId>build-helper-maven-plugin</artifactId>
-	  <version>3.2.0</version>
-	  <executions>
-	    <execution>
-	      <id>module-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>module.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>current</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	    <execution>
-	      <id>local-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>local.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>build</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	  </executions>
-	</plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>3.2.0</version>
+          <executions>
+            <execution>
+              <id>module-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>module.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>current</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+            <execution>
+              <id>local-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>local.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>build</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
@@ -3564,9 +3564,9 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <!-- 
+        <!--
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
-         property correctly. 
+         property correctly.
         -->
         <scala.version>2.12.15</scala.version>
       </properties>
