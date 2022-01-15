@@ -716,7 +716,7 @@ struct<histogram_2:array<struct<x:double,y:double>>,histogram_3:array<struct<x:d
 -- !query
 SELECT regr_count(y, x) FROM testRegression
 -- !query schema
-struct<regr_count(y, x):bigint>
+struct<count(y, x):bigint>
 -- !query output
 3
 
@@ -724,7 +724,7 @@ struct<regr_count(y, x):bigint>
 -- !query
 SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL
 -- !query schema
-struct<regr_count(y, x):bigint>
+struct<count(y, x):bigint>
 -- !query output
 3
 
@@ -732,7 +732,7 @@ struct<regr_count(y, x):bigint>
 -- !query
 SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,count(1):bigint,regr_count(y, x):bigint>
+struct<k:int,count(1):bigint,count(y, x):bigint>
 -- !query output
 1	1	0
 2	4	3
@@ -741,7 +741,7 @@ struct<k:int,count(1):bigint,regr_count(y, x):bigint>
 -- !query
 SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k
 -- !query schema
-struct<k:int,count(1) FILTER (WHERE (x IS NOT NULL)):bigint,regr_count(y, x):bigint>
+struct<k:int,count(1) FILTER (WHERE (x IS NOT NULL)):bigint,count(y, x):bigint>
 -- !query output
 1	0	0
 2	3	3

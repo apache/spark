@@ -291,7 +291,7 @@ struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query
 SELECT regr_count(b, a) FROM aggtest
 -- !query schema
-struct<regr_count(b, a):bigint>
+struct<count(b, a):bigint>
 -- !query output
 4
 
