@@ -56,7 +56,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "oracle"
-  override val namespaceOpt: Option[String] = Some("system")
+  override val namespaceOpt: Option[String] = Some("SYSAUX")
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
@@ -80,17 +80,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(
-      "CREATE TABLE system.employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
+      "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
-    conn.prepareStatement("INSERT INTO system.employee VALUES (1, 'amy', 10000, 1000)")
+    conn.prepareStatement("INSERT INTO employee VALUES (1, 'amy', 10000, 1000)")
       .executeUpdate()
-    conn.prepareStatement("INSERT INTO system.employee VALUES (2, 'alex', 12000, 1200)")
+    conn.prepareStatement("INSERT INTO employee VALUES (2, 'alex', 12000, 1200)")
       .executeUpdate()
-    conn.prepareStatement("INSERT INTO system.employee VALUES (1, 'cathy', 9000, 1200)")
+    conn.prepareStatement("INSERT INTO employee VALUES (1, 'cathy', 9000, 1200)")
       .executeUpdate()
-    conn.prepareStatement("INSERT INTO system.employee VALUES (2, 'david', 10000, 1300)")
+    conn.prepareStatement("INSERT INTO employee VALUES (2, 'david', 10000, 1300)")
       .executeUpdate()
-    conn.prepareStatement("INSERT INTO system.employee VALUES (6, 'jen', 12000, 1200)")
+    conn.prepareStatement("INSERT INTO employee VALUES (6, 'jen', 12000, 1200)")
       .executeUpdate()
   }
 
@@ -118,6 +118,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     df2.show(50)
     val df3 = sql(s"SHOW TABLES IN $catalogName.system")
     df3.show(50)
+    val df4 = sql(s"SHOW TABLES IN $catalogName.SYSAUX")
+    df4.show(50)
   }
 
   testVarPop()
