@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNSNAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNSNAME_MAX_LENGTH
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
 
@@ -88,9 +88,8 @@ private[spark] object KubernetesClientUtils extends Logging {
    * on remote pods.
    */
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
-      withLabels: Map[String, String] = Map()): ConfigMap = {
-    val configMapNameSpace =
-      confFileMap.getOrElse(KUBERNETES_NAMESPACE.key, KUBERNETES_NAMESPACE.defaultValueString)
+                     configMapNameSpace: String,
+                     withLabels: Map[String, String] = Map()): ConfigMap = {
     new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
