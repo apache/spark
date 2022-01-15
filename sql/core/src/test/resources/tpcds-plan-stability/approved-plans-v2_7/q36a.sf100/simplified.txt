@@ -8,15 +8,15 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
               InputAdapter
                 Exchange [lochierarchy,_w0] #1
                   WholeStageCodegen (19)
-                    HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy] [_w0]
+                    HashAggregate [gross_margin,i_category,i_class,lochierarchy,_w0]
                       InputAdapter
-                        Exchange [gross_margin,i_category,i_class,t_category,t_class,lochierarchy] #2
+                        Exchange [gross_margin,i_category,i_class,lochierarchy,_w0] #2
                           WholeStageCodegen (18)
-                            HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
+                            HashAggregate [gross_margin,i_category,i_class,lochierarchy,_w0]
                               InputAdapter
                                 Union
                                   WholeStageCodegen (5)
-                                    HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),gross_margin,t_category,t_class,lochierarchy,sum,sum]
+                                    HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),gross_margin,lochierarchy,_w0,sum,sum]
                                       InputAdapter
                                         Exchange [i_category,i_class] #3
                                           WholeStageCodegen (4)
@@ -57,7 +57,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                                             InputAdapter
                                                               Scan parquet default.item [i_item_sk,i_class,i_category]
                                   WholeStageCodegen (11)
-                                    HashAggregate [i_category,sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
+                                    HashAggregate [i_category,sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_class,lochierarchy,_w0,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
                                         Exchange [i_category] #7
                                           WholeStageCodegen (10)
@@ -66,7 +66,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                                 InputAdapter
                                                   ReusedExchange [i_category,i_class,sum,sum] #3
                                   WholeStageCodegen (17)
-                                    HashAggregate [sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_category,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
+                                    HashAggregate [sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_category,i_class,lochierarchy,_w0,sum,isEmpty,sum,isEmpty]
                                       InputAdapter
                                         Exchange #8
                                           WholeStageCodegen (16)

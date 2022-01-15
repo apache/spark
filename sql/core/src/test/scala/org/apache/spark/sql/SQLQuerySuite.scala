@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort, Union}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4241,6 +4241,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       checkAnswer(df3, df4)
+    }
+  }
+
+  test("SPARK-37915: Push down deterministic projection through SQL UNION and combine them") {
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      spark.range(1).selectExpr("cast(id AS decimal(18, 1)) AS id").write.saveAsTable("t1")
+      spark.range(2).selectExpr("cast(id AS decimal(18, 2)) AS id").write.saveAsTable("t2")
+      spark.range(3).selectExpr("cast(id AS decimal(18, 3)) AS id").write.saveAsTable("t3")
+      spark.range(4).selectExpr("cast(id AS decimal(18, 4)) AS id").write.saveAsTable("t4")
+      spark.range(5).selectExpr("cast(id AS decimal(18, 5)) AS id").write.saveAsTable("t5")
+
+      val df = sql(
+        """
+          |SELECT id
+          |FROM   t1
+          |UNION
+          |SELECT id
+          |FROM   t2
+          |UNION
+          |SELECT id
+          |FROM   t3
+          |UNION
+          |SELECT id
+          |FROM   t4
+          |UNION
+          |SELECT id
+          |FROM   t5
+        """.stripMargin)
+
+      val unions = df.queryExecution.optimizedPlan.collect {
+        case l: Union => l
+      }
+      assert(unions.length === 1, "Four unions should be combined to one union")
+      checkAnswer(df, Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
     }
   }
 }
