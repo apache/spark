@@ -51,8 +51,71 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     withSQLConf("spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
       assert(intercept[AnalysisException](
         sql("SELECT testcat.strlen('abc')").collect()
-      ).getMessage.contains("is not a FunctionCatalog"))
+      ).getMessage.contains("Catalog testcat does not support functions"))
     }
+  }
+
+  test("DESCRIBE FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support functions"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("SHOW FUNCTIONS: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql(s"SHOW FUNCTIONS LIKE testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support functions"))
+  }
+
+  test("DROP FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("DROP FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support DROP FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("DROP FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("CREATE FUNCTION: only support session catalog") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE FUNCTION testcat.ns1.ns2.fun as 'f'")
+    }
+    assert(e.message.contains("Catalog testcat does not support CREATE FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
+  }
+
+  test("REFRESH FUNCTION: only support session catalog") {
+    addFunction(Identifier.of(Array.empty, "abc"), new JavaStrLen(new JavaStrLenNoImpl))
+
+    val e = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION testcat.abc")
+    }
+    assert(e.message.contains("Catalog testcat does not support REFRESH FUNCTION"))
+
+    val e1 = intercept[AnalysisException] {
+      sql("REFRESH FUNCTION default.ns1.ns2.fun")
+    }
+    assert(e1.message.contains("requires a single-part namespace"))
   }
 
   test("built-in with non-function catalog should still work") {

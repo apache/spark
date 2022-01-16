@@ -133,15 +133,41 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    // setup resources before pod creation
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
+    try {
+      kubernetesClient.resourceList(preKubernetesResources: _*).createOrReplace()
+    } catch {
+      case NonFatal(e) =>
+        logError("Please check \"kubectl auth can-i create [resource]\" first." +
+          " It should be yes. And please also check your feature step implementation.")
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        throw e
+    }
+
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
       createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
     } catch {
       case NonFatal(e) =>
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
+
+    // Refresh all pre-resources' owner references
+    try {
+      addOwnerReference(createdDriverPod, preKubernetesResources)
+      kubernetesClient.resourceList(preKubernetesResources: _*).createOrReplace()
+    } catch {
+      case NonFatal(e) =>
+        kubernetesClient.pods().delete(createdDriverPod)
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        throw e
+    }
+
+    // setup resources after pod creation, and refresh all resources' owner references
     try {
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)

@@ -1764,9 +1764,11 @@ abstract class RDD[T: ClassTag](
        * Clean the shuffles & all of its parents.
        */
       def cleanEagerly(dep: Dependency[_]): Unit = {
-        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
-          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-          cleaner.doCleanupShuffle(shuffleId, blocking)
+        dep match {
+          case dependency: ShuffleDependency[_, _, _] =>
+            val shuffleId = dependency.shuffleId
+            cleaner.doCleanupShuffle(shuffleId, blocking)
+          case _ => // do nothing
         }
         val rdd = dep.rdd
         val rddDepsOpt = rdd.internalDependencies

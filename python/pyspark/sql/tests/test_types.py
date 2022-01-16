@@ -134,7 +134,7 @@ class TypesTests(ReusedSQLTestCase):
     def test_infer_schema_specification(self):
         from decimal import Decimal
 
-        class A(object):
+        class A:
             def __init__(self):
                 self.a = 1
 

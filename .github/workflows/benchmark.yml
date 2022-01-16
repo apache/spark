@@ -101,8 +101,8 @@ jobs:
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
         # Make less noisy
-        cp conf/log4j.properties.template conf/log4j.properties
-        sed -i 's/log4j.rootCategory=INFO, console/log4j.rootCategory=WARN, console/g' conf/log4j.properties
+        cp conf/log4j2.properties.template conf/log4j2.properties
+        sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
         bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \

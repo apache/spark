@@ -26,7 +26,8 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net._
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.yarn.util.RackResolver
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.internal.Logging
 
@@ -38,8 +39,9 @@ import org.apache.spark.internal.Logging
 private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
-  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
-    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  val logger = LogManager.getLogger(classOf[RackResolver])
+  if (logger.getLevel != Level.WARN) {
+    logger.asInstanceOf[Logger].setLevel(Level.WARN)
   }
 
   private val dnsToSwitchMapping: DNSToSwitchMapping = {

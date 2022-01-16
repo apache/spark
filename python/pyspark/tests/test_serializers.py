@@ -81,7 +81,7 @@ class SerializationTestCase(unittest.TestCase):
 
         ser = CloudPickleSerializer()
 
-        class C(object):
+        class C:
             def __getattr__(self, item):
                 return item
 
@@ -113,7 +113,7 @@ class SerializationTestCase(unittest.TestCase):
             self.assertEqual(out1, out2)
 
     def test_func_globals(self):
-        class Unpicklable(object):
+        class Unpicklable:
             def __reduce__(self):
                 raise RuntimeError("not picklable")
 

@@ -21,11 +21,15 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.SparkConf
+import org.apache.spark.TestUtils
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
@@ -76,6 +80,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     saveAsCsvTable(testDf, dir.getCanonicalPath + "/csv")
     saveAsJsonTable(testDf, dir.getCanonicalPath + "/json")
     saveAsParquetTable(testDf, dir.getCanonicalPath + "/parquet")
+    saveAsParquetV2Table(testDf, dir.getCanonicalPath + "/parquetV2")
     saveAsOrcTable(testDf, dir.getCanonicalPath + "/orc")
   }
 
@@ -92,6 +97,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   private def saveAsParquetTable(df: DataFrameWriter[Row], dir: String): Unit = {
     df.mode("overwrite").option("compression", "snappy").parquet(dir)
     spark.read.parquet(dir).createOrReplaceTempView("parquetTable")
+  }
+
+  private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
+      df.mode("overwrite").option("compression", "snappy").parquet(dir)
+      spark.read.parquet(dir).createOrReplaceTempView("parquetV2Table")
+    }
   }
 
   private def saveAsOrcTable(df: DataFrameWriter[Row], dir: String): Unit = {
@@ -155,7 +168,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         sqlBenchmark.run()
 
         // Driving the parquet reader in batch mode directly.
-        val files = SpecificParquetRecordReaderBase.listDirectory(new File(dir, "parquet")).toArray
+        val files = TestUtils.listDirectory(new File(dir, "parquet"))
         val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
         parquetReaderBenchmark.addCase("ParquetReader Vectorized") { _ =>
@@ -171,7 +184,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
             case DoubleType => (col: ColumnVector, i: Int) => doubleSum += col.getDouble(i)
           }
 
-          files.map(_.asInstanceOf[String]).foreach { p =>
+          files.foreach { p =>
             val reader = new VectorizedParquetRecordReader(
               enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
@@ -456,12 +469,12 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           }
         }
 
-        val files = SpecificParquetRecordReaderBase.listDirectory(new File(dir, "parquet")).toArray
+        val files = TestUtils.listDirectory(new File(dir, "parquet"))
         val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
         benchmark.addCase("ParquetReader Vectorized") { num =>
           var sum = 0
-          files.map(_.asInstanceOf[String]).foreach { p =>
+          files.foreach { p =>
             val reader = new VectorizedParquetRecordReader(
               enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {

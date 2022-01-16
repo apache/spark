@@ -26,7 +26,7 @@ Window functions operate on a group of rows, referred to as a window, and calcul
 ### Syntax
 
 ```sql
-window_function OVER
+window_function [ nulls_option ] OVER
 ( [  { PARTITION | DISTRIBUTE } BY partition_col_name = partition_col_val ( [ , ... ] ) ]
   { ORDER | SORT } BY expression [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [ , ... ]
   [ window_frame ] )
@@ -42,13 +42,23 @@ window_function OVER
 
     * Analytic Functions
 
-      **Syntax:** `CUME_DIST | LAG | LEAD`
+      **Syntax:** `CUME_DIST | LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE`
 
     * Aggregate Functions
 
       **Syntax:** `MAX | MIN | COUNT | SUM | AVG | ...`
 
       Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) document for a complete list of Spark aggregate functions.
+
+* **nulls_option**
+
+    Specifies whether or not to skip null values when evaluating the window function. `RESECT NULLS` means not skipping null values, while `IGNORE NULLS` means skipping. If not specified, the default is `RESECT NULLS`.
+
+    **Syntax:**
+
+    `{ IGNORE | RESPECT } NULLS`
+
+    **Note:** Only `LAG | LEAD | NTH_VALUE | FIRST_VALUE | LAST_VALUE` can be used with `IGNORE NULLS`.
 
 * **window_frame**
 
@@ -184,6 +194,29 @@ SELECT name, salary,
 | Jane|  Marketing| 29000|29000|35000|
 | Jeff|  Marketing| 35000|29000|    0|
 +-----+-----------+------+-----+-----+
+
+SELECT id, v,
+    LEAD(v, 0) IGNORE NULLS OVER w lead,
+    LAG(v, 0) IGNORE NULLS OVER w lag,
+    NTH_VALUE(v, 2) IGNORE NULLS OVER w nth_value,
+    FIRST_VALUE(v) IGNORE NULLS OVER w first_value,
+    LAST_VALUE(v) IGNORE NULLS OVER w last_value
+    FROM test_ignore_null
+    WINDOW w AS (ORDER BY id)
+    ORDER BY id;
++--+----+----+----+---------+-----------+----------+
+|id|   v|lead| lag|nth_value|first_value|last_value|
++--+----+----+----+---------+-----------+----------+
+| 0|NULL|NULL|NULL|     NULL|       NULL|      NULL|
+| 1|   x|   x|   x|     NULL|          x|         x|
+| 2|NULL|NULL|NULL|     NULL|          x|         x|
+| 3|NULL|NULL|NULL|     NULL|          x|         x|
+| 4|   y|   y|   y|        y|          x|         y|
+| 5|NULL|NULL|NULL|        y|          x|         y|
+| 6|   z|   z|   z|        y|          x|         z|
+| 7|   v|   v|   v|        y|          x|         v|
+| 8|NULL|NULL|NULL|        y|          x|         v|
++--+----+----+----+---------+-----------+----------+
 ```
 
 ### Related Statements

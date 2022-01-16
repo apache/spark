@@ -5,23 +5,9 @@
 -- !query
 select from_csv('1', 'create INT')
 -- !query schema
-struct<>
+struct<from_csv(1):struct<create:int>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Cannot parse the data type: 
-no viable alternative at input 'create'(line 1, pos 0)
-
-== SQL ==
-create INT
-^^^
-
-Failed fallback parsing: 
-no viable alternative at input 'create'(line 1, pos 0)
-
-== SQL ==
-create INT
-^^^
-; line 1 pos 7
+{"create":1}
 
 
 -- !query
@@ -35,23 +21,9 @@ struct<from_csv(1):struct<cube:int>>
 -- !query
 select from_json('{"create":1}', 'create INT')
 -- !query schema
-struct<>
+struct<from_json({"create":1}):struct<create:int>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Cannot parse the data type: 
-no viable alternative at input 'create'(line 1, pos 0)
-
-== SQL ==
-create INT
-^^^
-
-Failed fallback parsing: 
-no viable alternative at input 'create'(line 1, pos 0)
-
-== SQL ==
-create INT
-^^^
-; line 1 pos 7
+{"create":1}
 
 
 -- !query
