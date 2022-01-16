@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -179,9 +182,9 @@ class DDLParserSuite extends AnalysisTest {
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     val expectedTableSpec = TableSpec(
-      Seq("my_tab"),
+      ArrayBuffer("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      Seq.empty[Transform],
+      List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Some(BucketSpec(5, Seq("a"), Seq("b"))),
       Map.empty[String, String],
       Some("parquet"),
@@ -189,6 +192,7 @@ class DDLParserSuite extends AnalysisTest {
       None,
       None,
       None)
+
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
