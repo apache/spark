@@ -68,4 +68,26 @@ class SimplifyCastsSuite extends PlanTest {
     // `SimplifyCasts` rule respect the plan.
     comparePlans(optimized, plan, checkAnalysis = false)
   }
+
+  test("SPARK-37922: Remove useless cast") {
+    val input = LocalRelation('a.int, 'b.decimal(18, 2))
+
+    comparePlans(
+      Optimize.execute(
+        input.select('a.cast(DecimalType(18, 1)).cast(DecimalType(19, 1)).as("casted")).analyze),
+      input.select('a.cast(DecimalType(19, 1)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('b.cast(DecimalType(20, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select('b.cast(DecimalType(24, 2)).as("casted")).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze),
+      input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+  }
 }

@@ -1037,6 +1037,9 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
+    case c1 @ Cast(Cast(e, d2: DecimalType, _, _), d1: DecimalType, _, _)
+        if d1.isWiderThan(d2) && d2.isWiderThan(e.dataType) =>
+      c1.copy(child = e)
     case c @ Cast(e, dataType, _, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
