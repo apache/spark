@@ -316,17 +316,20 @@ class BlockManagerMasterEndpoint(
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
-    mapOutputTracker.shuffleStatuses.get(shuffleId).map { shuffleStatus =>
-      shuffleStatus.mapStatuses.foreach { mapStatus =>
-        // Port should always be external shuffle port if external shuffle is enabled
-        val isShufflePort = mapStatus.location.port == externalShuffleServicePort
-        val executorDeallocated = !blockManagerIdByExecutor.contains(mapStatus.location.executorId)
-        if (isShufflePort && executorDeallocated) {
-          val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
-            new mutable.HashSet[BlockId])
-          val blocksToDel =
-            shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
-          blocksToDel.foreach(blocks.add(_))
+    if (externalBlockStoreClient.isDefined) {
+      mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
+        shuffleStatus.mapStatuses.foreach { mapStatus =>
+          // Port should always be external shuffle port if external shuffle is enabled
+          val isShufflePort = mapStatus.location.port == externalShuffleServicePort
+          val executorDeallocated =
+            !blockManagerIdByExecutor.contains(mapStatus.location.executorId)
+          if (isShufflePort && executorDeallocated) {
+            val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
+              new mutable.HashSet[BlockId])
+            val blocksToDel =
+              shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+            blocks ++= blocksToDel
+          }
         }
       }
     }
@@ -339,7 +342,7 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    val removeShuffleBlockViaExtShuffleServiceFutures =
+    val removeShuffleFromShuffleServicesFutures =
       externalBlockStoreClient.map { shuffleClient =>
         blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
           Future[Boolean] {
@@ -355,7 +358,7 @@ class BlockManagerMasterEndpoint(
       }.getOrElse(Seq.empty)
 
     Future.sequence(removeShuffleFromExecutorsFutures ++
-      removeShuffleBlockViaExtShuffleServiceFutures)
+      removeShuffleFromShuffleServicesFutures)
   }
 
   /**
