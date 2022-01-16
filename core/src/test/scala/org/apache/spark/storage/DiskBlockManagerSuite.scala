@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 import java.nio.file.{Files, Paths}
-import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.HashMap
 
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -139,6 +139,15 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(mergeDir.equals(DiskBlockManager.MERGE_DIRECTORY + "_1"))
     val attemptId = metaMap.get(DiskBlockManager.ATTEMPT_ID_KEY)
     assert(attemptId.equals("1"))
+  }
+
+  test("SPARK-37618: Sub dirs are group writable") {
+    val blockId = new TestBlockId("test")
+    val newFile = diskBlockManager.getFile(blockId)
+    val parentDir = newFile.getParentFile()
+    assert(parentDir.exists && parentDir.isDirectory)
+    val permission = Files.getPosixFilePermissions(parentDir.toPath)
+    assert(permission.contains(PosixFilePermission.GROUP_WRITE))
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {
