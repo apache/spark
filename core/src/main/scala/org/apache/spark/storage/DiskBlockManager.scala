@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.UUID
 
 import scala.collection.mutable.HashMap
@@ -94,7 +95,10 @@ private[spark] class DiskBlockManager(
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
         if (!newDir.exists()) {
-          Files.createDirectory(newDir.toPath)
+          // SPARK-37618: Create dir as group writable so it can be deleted by the shuffle service
+          val path = newDir.toPath
+          Files.createDirectory(path)
+          Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwxrwx---"))
         }
         subDirs(dirId)(subDirId) = newDir
         newDir

@@ -336,8 +336,6 @@ private[spark] class IndexShuffleBlockResolver(
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
-    // SPARK-37618: Create the file as group writable so it can be deleted by the shuffle service
-    Utils.createFileAsGroupWritable(indexTmp)
 
     val checksumEnabled = checksums.nonEmpty
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {

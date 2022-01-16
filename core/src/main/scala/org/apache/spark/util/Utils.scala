@@ -27,7 +27,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
@@ -2744,16 +2743,6 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
-  }
-
-  /**
-   * Creates a file with group write permission.
-   */
-  def createFileAsGroupWritable(file: File): Unit = {
-    val perms = PosixFilePermissions.fromString("rw-rw----")
-    val path = file.toPath
-    Files.createFile(path)
-    Files.setPosixFilePermissions(path, perms)
   }
 
   /**

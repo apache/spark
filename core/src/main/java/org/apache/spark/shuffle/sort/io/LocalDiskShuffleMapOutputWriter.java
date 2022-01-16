@@ -88,8 +88,6 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     lastPartitionId = reducePartitionId;
     if (outputTempFile == null) {
       outputTempFile = Utils.tempFileWith(outputFile);
-      // SPARK-37618: Create the file as group writable so it can be deleted by the shuffle service
-      Utils.createFileAsGroupWritable(outputTempFile);
     }
     if (outputFileChannel != null) {
       currChannelPosition = outputFileChannel.position();
