@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -182,7 +180,7 @@ class DDLParserSuite extends AnalysisTest {
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     val expectedTableSpec = TableSpec(
-      ArrayBuffer("my_tab"),
+      Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
       List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Some(BucketSpec(5, Seq("a"), Seq("b"))),
