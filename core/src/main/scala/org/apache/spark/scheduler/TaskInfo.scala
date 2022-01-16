@@ -37,7 +37,10 @@ class TaskInfo(
     val attemptNumber: Int,
     /**
      * The actual RDD partition ID in this task.
-     * The ID of the RDD partition is always same even task retries.
+     * The ID of the RDD partition is always same across task or stage retries.
+     * This will be -1 for historical data.
+     *
+     * @since 3.3.0
      */
     val partitionId: Int,
     val launchTime: Long,

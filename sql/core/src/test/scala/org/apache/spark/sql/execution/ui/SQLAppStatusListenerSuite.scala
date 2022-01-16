@@ -111,6 +111,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       taskId = taskId,
       attemptNumber = attemptNumber,
       index = taskId.toInt,
+      partitionId = taskId.toInt,
       // The following fields are not used in tests
       launchTime = 0,
       executorId = "",
