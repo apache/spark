@@ -25,10 +25,11 @@ import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.SparkConf
+import org.apache.spark.TestUtils
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
@@ -167,7 +168,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         sqlBenchmark.run()
 
         // Driving the parquet reader in batch mode directly.
-        val files = SpecificParquetRecordReaderBase.listDirectory(new File(dir, "parquet")).toArray
+        val files = TestUtils.listDirectory(new File(dir, "parquet"))
         val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
         parquetReaderBenchmark.addCase("ParquetReader Vectorized") { _ =>
@@ -183,7 +184,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
             case DoubleType => (col: ColumnVector, i: Int) => doubleSum += col.getDouble(i)
           }
 
-          files.map(_.asInstanceOf[String]).foreach { p =>
+          files.foreach { p =>
             val reader = new VectorizedParquetRecordReader(
               enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
@@ -468,12 +469,12 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           }
         }
 
-        val files = SpecificParquetRecordReaderBase.listDirectory(new File(dir, "parquet")).toArray
+        val files = TestUtils.listDirectory(new File(dir, "parquet"))
         val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
         val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
         benchmark.addCase("ParquetReader Vectorized") { num =>
           var sum = 0
-          files.map(_.asInstanceOf[String]).foreach { p =>
+          files.foreach { p =>
             val reader = new VectorizedParquetRecordReader(
               enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {

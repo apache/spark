@@ -33,6 +33,7 @@ import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetM
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
@@ -179,7 +180,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   def getMetaData(dir: java.io.File): Map[String, String] = {
-    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+    val file = TestUtils.listDirectory(dir).head
     val conf = new Configuration()
     val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
     val parquetReadOptions = HadoopReadOptions.builder(conf).build()
