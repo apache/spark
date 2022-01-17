@@ -21,10 +21,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class TimedeltaOpsTest(OpsTestCase):
+class TimedeltaOpsTest(OpsTestBase):
     @property
     def pser(self):
         return pd.Series([timedelta(1), timedelta(microseconds=2), timedelta(weeks=3)])
