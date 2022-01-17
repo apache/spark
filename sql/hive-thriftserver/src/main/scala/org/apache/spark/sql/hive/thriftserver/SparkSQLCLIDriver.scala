@@ -616,7 +616,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     // Check the last char is end of nested bracketed comment.
     val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
     // Spark SQL support simple comment and nested bracketed comment in query body.
-    // But if Spark SQL only received a comment, it will throw parser exception.
+    // But if Spark SQL receives a comment alone, it will throw parser exception.
     // In Spark SQL CLI, if there is a completed comment in the end of whole query,
     // since Spark SQL CLL use `;` to split the query, CLI will pass the comment
     // to the backend engine and throw exception. CLI should ignore this comment,
