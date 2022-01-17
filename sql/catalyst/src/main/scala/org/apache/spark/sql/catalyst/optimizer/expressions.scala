@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /*
@@ -689,66 +690,76 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
-      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
-        i.copy(
-          trueValue = b.withNewChildren(Array(trueValue, right)),
-          falseValue = b.withNewChildren(Array(falseValue, right)))
-
-      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
-        i.copy(
-          trueValue = b.withNewChildren(Array(left, trueValue)),
-          falseValue = b.withNewChildren(Array(left, falseValue)))
-
-      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
-        c.copy(
-          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
-          Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
-
-      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
-        c.copy(
-          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
-          Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
-
-      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
-          Seq(i @ If(_, trueValue, falseValue), right), _, _, _)
-          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(s: StaticInvoke, i @ If(_, trueValue, falseValue), right)
+        if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = s.copy(arguments = Seq(trueValue, right)),
           falseValue = s.copy(arguments = Seq(falseValue, right)))
 
-      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
-          Seq(left, i @ If(_, trueValue, falseValue)), _, _, _)
-          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(s: StaticInvoke, left, i @ If(_, trueValue, falseValue))
+        if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = s.copy(arguments = Seq(left, trueValue)),
           falseValue = s.copy(arguments = Seq(left, falseValue)))
 
-      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
-          Seq(c @ CaseWhen(branches, elseValue), right), _, _, _)
-          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(s: StaticInvoke, c @ CaseWhen(branches, elseValue), right)
+        if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = s.copy(arguments = Array(e._2, right)))),
           Some(s.copy(arguments = Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
-      case s @ StaticInvoke(_, _, "contains" | "startsWith" | "endsWith",
-          Seq(left, c @ CaseWhen(branches, elseValue)), _, _, _)
-          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(s: StaticInvoke, left, c @ CaseWhen(branches, elseValue))
+        if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = s.copy(arguments = Array(left, e._2)))),
           Some(s.copy(arguments = Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
 
+      case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.withNewChildren(Array(trueValue, right)),
+          falseValue = b.withNewChildren(Array(falseValue, right)))
+
+      case SupportedBinaryExpr(b, left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.withNewChildren(Array(left, trueValue)),
+          falseValue = b.withNewChildren(Array(left, falseValue)))
+
+      case SupportedBinaryExpr(b, c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
+          Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
+
+      case SupportedBinaryExpr(b, left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
+          Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
     }
   }
 }
 
+object SupportedBinaryExpr {
+  def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryArithmetic =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryMathExpression =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: FindInSet | _: RoundBase =>
+      Some(expr, expr.children.head, expr.children.last)
+    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(left, right), _, _, _)
+        if clz.isInstanceOf[Class[ByteArrayMethods]] =>
+      Some(s, left, right)
+    case _ => None
+  }
+}
 
 /**
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
