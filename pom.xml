@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.2.0-kylin-4.x-r45</version>
+  <version>3.2.0-kylin-4.x-r46</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -119,7 +119,7 @@
     <hadoop.version>3.3.2</hadoop.version>
     <protobuf.version>3.4.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.6.2</zookeeper.version>
+    <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>2.13.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
@@ -1739,11 +1739,7 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport-native-epoll</artifactId>
+            <artifactId>netty</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.github.spotbugs</groupId>
