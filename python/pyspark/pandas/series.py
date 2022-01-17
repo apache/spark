@@ -5275,7 +5275,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             .withColumn("identifier", col("values.identifier"))
             .withColumn("value", col("values.Koalas"))
             .drop("values")
-            .na.drop(subset="value")
+            .dropna(subset="value")
         )
         window_specification = Window.partitionBy("identifier").orderBy(index_scol.desc())
         sdf = (
