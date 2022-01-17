@@ -4489,7 +4489,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def combine(
         self,
-        other: "Series",
+        other: Union[Scalar, "Series"],
         func: Callable,
         fill_value: Optional[Any] = None,
     ) -> "Series":
@@ -4576,23 +4576,22 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: float64
         >>> reset_option("compute.ops_on_diff_frames")
         """
-        if not isinstance(other, Series) and not pd.api.types.is_scalar(other):
-            raise TypeError("unsupported type: %s" % type(other))
-
         if not callable(func):
-            raise TypeError("%s object is not callable" % type(func).__name__)
+            raise TypeError("'%s' object is not callable" % type(func).__name__)
 
-        if pd.api.types.is_scalar(other):
+        if pd.api.types.is_scalar(other):  # type: ignore[attr-defined]
             tmp_other_col = verify_temp_column_name(self._internal.spark_frame, "__tmp_other_col__")
             combined = self.to_frame()
             combined[tmp_other_col] = other
             combined = DataFrame(combined._internal.resolved_copy)
-        elif same_anchor(self, other):
-            combined = self._psdf[self._column_label, other._column_label]
-        elif fill_value is None:
-            combined = combine_frames(self.to_frame(), other.to_frame())
         else:
-            combined = self._combine_frame_with_fill_value(other, fill_value=fill_value)
+            assert isinstance(other, Series)
+            if same_anchor(self, other):
+                combined = self._psdf[self._column_label, other._column_label]
+            elif fill_value is None:
+                combined = combine_frames(self.to_frame(), other.to_frame())
+            else:
+                combined = self._combine_frame_with_fill_value(other, fill_value=fill_value)
 
         try:
             sig_return = infer_return_type(func)

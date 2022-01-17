@@ -1893,10 +1893,6 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pser2 = pd.Series({"falcon": 345.0, "eagle": 200.0, "duck": 30.0}, name=("y", "s2"))
         run_test_combine(pser1, pser2)
 
-        psser1 = ps.from_pandas(pser1)
-        with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
-            psser1.combine([345.0, 200.0, 30.0], max)
-
         pser1 = pd.Series([330.0, 160.0], index=pd.MultiIndex.from_tuples([(1, 2), (3, 4)]))
         pser2 = pd.Series(
             [345.0, 200.0, np.nan], index=pd.MultiIndex.from_tuples([(1, 2), (1, 1), (3, 4)])
