@@ -4617,7 +4617,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         data_field = self._internal.data_fields[0].copy(
-            dtype=return_dtype, spark_type=return_spark_type
+            dtype=return_dtype, spark_type=return_spark_type, nullable=True
         )
 
         internal = combined._internal.copy(
