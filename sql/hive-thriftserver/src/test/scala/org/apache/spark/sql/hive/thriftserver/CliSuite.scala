@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
-import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Date
 
 import scala.collection.JavaConverters._
