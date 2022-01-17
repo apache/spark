@@ -26,6 +26,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REUSE_COMPATIBLE_EXECUTORS
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.resource.ResourceProfileCompatiblePolicy.{EQUAL_RESOURCES, ResourceProfileCompatiblePolicy}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting
@@ -54,6 +55,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
 
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
+  var reuseResourceNames: Set[String] = Set("cores")
+  var reusePolicy = EQUAL_RESOURCES
+
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
@@ -79,6 +83,17 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
         "with dynamic allocation enabled.")
     }
     true
+  }
+
+  def updateResourceReusePolicy(resourceNames: Set[String],
+    policy: ResourceProfileCompatiblePolicy): Unit = {
+    writeLock.lock()
+    try {
+      reuseResourceNames = resourceNames
+      reusePolicy = policy
+    } finally {
+      writeLock.unlock()
+    }
   }
 
   def addResourceProfile(rp: ResourceProfile): Unit = {
