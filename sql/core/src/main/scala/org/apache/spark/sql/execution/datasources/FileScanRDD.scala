@@ -158,21 +158,21 @@ class FileScanRDD(
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.putUtf8String(UTF8String.fromString(path.toString))
+            columnVector.setUtf8String(UTF8String.fromString(path.toString))
             columnVector
           case FILE_NAME =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.putUtf8String(UTF8String.fromString(path.getName))
+            columnVector.setUtf8String(UTF8String.fromString(path.getName))
             columnVector
           case FILE_SIZE =>
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            columnVector.putLong(currentFile.fileSize)
+            columnVector.setLong(currentFile.fileSize)
             columnVector
           case FILE_MODIFICATION_TIME =>
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             // the modificationTime from the file is in millisecond,
             // while internally, the TimestampType is stored in microsecond
-            columnVector.putLong(currentFile.modificationTime * 1000L)
+            columnVector.setLong(currentFile.modificationTime * 1000L)
             columnVector
         }.toArray
       }

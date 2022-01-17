@@ -16,19 +16,19 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-
 /**
  * This class adds the constant support to ColumnVector.
- * It supports all the types and contains put APIs,
- * which will put the exact same value to all rows.
+ * It supports all the types and contains `set` APIs,
+ * which will set the exact same value to all rows.
  *
  * Capacity: The vector only stores one copy of the data, and acts as an unbounded vector
  * (get from any row will return the same value)
@@ -47,54 +47,29 @@ public class ConstantColumnVector extends ColumnVector {
   private ColumnarArray arrayData;
   private ColumnarMap mapData;
 
-  private int numRows;
+  private final int numRows;
 
   public ConstantColumnVector(int numRows, DataType type) {
     super(type);
     this.numRows = numRows;
 
-    // copy and modify from WritableColumnVector
-    // could also putChild by users
-    if (isArray()) {
-      DataType childType;
-      if (type instanceof ArrayType) {
-        childType = ((ArrayType) type).elementType();
-      } else {
-        childType = DataTypes.ByteType;
-      }
-      this.childData = new ConstantColumnVector[1];
-      this.childData[0] = new ConstantColumnVector(numRows, childType);
-    } else if (type instanceof StructType) {
-      StructType st = (StructType) type;
-      this.childData = new ConstantColumnVector[st.fields().length];
-      for (int i = 0; i < childData.length; ++i) {
-        this.childData[i] = new ConstantColumnVector(numRows, st.fields()[i].dataType());
-      }
-    } else if (type instanceof MapType) {
-      // 0: key, 1: value
-      MapType mapType = (MapType) type;
-      this.childData = new ConstantColumnVector[2];
-      this.childData[0] = new ConstantColumnVector(numRows, mapType.keyType());
-      this.childData[1] = new ConstantColumnVector(numRows, mapType.valueType());
+    if (type instanceof StructType) {
+      this.childData = new ConstantColumnVector[((StructType) type).fields().length];
     } else if (type instanceof CalendarIntervalType) {
-      // 0: Months as Int, 1: Days as Int, 2: Microseconds as Long.
+      // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childData = new ConstantColumnVector[3];
-      this.childData[0] = new ConstantColumnVector(numRows, DataTypes.IntegerType);
-      this.childData[1] = new ConstantColumnVector(numRows, DataTypes.IntegerType);
-      this.childData[2] = new ConstantColumnVector(numRows, DataTypes.LongType);
     } else {
       this.childData = null;
     }
   }
 
-  protected boolean isArray() {
-    return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
-        DecimalType.isByteArrayDecimalType(type);
-  }
-
   @Override
   public void close() {
     byteArrayData = null;
+    for (int i = 0; i < childData.length; i++) {
+      childData[i].close();
+      childData[i] = null;
+    }
     childData = null;
     arrayData = null;
     mapData = null;
@@ -115,11 +90,11 @@ public class ConstantColumnVector extends ColumnVector {
     return nullData == 1;
   }
 
-  public void putNull() {
+  public void setNull() {
     nullData = (byte) 1;
   }
 
-  public void putNotNull() {
+  public void setNotNull() {
     nullData = (byte) 0;
   }
 
@@ -128,7 +103,7 @@ public class ConstantColumnVector extends ColumnVector {
     return byteData == 1;
   }
 
-  public void putBoolean(boolean value) {
+  public void setBoolean(boolean value) {
     byteData = (byte) ((value) ? 1 : 0);
   }
 
@@ -137,7 +112,7 @@ public class ConstantColumnVector extends ColumnVector {
     return byteData;
   }
 
-  public void putByte(byte value) {
+  public void setByte(byte value) {
     byteData = value;
   }
 
@@ -146,7 +121,7 @@ public class ConstantColumnVector extends ColumnVector {
     return shortData;
   }
 
-  public void putShort(short value) {
+  public void setShort(short value) {
     shortData = value;
   }
 
@@ -155,7 +130,7 @@ public class ConstantColumnVector extends ColumnVector {
     return intData;
   }
 
-  public void putInt(int value) {
+  public void setInt(int value) {
     intData = value;
   }
 
@@ -164,7 +139,7 @@ public class ConstantColumnVector extends ColumnVector {
     return longData;
   }
 
-  public void putLong(long value) {
+  public void setLong(long value) {
     longData = value;
   }
 
@@ -173,7 +148,7 @@ public class ConstantColumnVector extends ColumnVector {
     return floatData;
   }
 
-  public void putFloat(float value) {
+  public void setFloat(float value) {
     floatData = value;
   }
 
@@ -182,7 +157,7 @@ public class ConstantColumnVector extends ColumnVector {
     return doubleData;
   }
 
-  public void putDouble(double value) {
+  public void setDouble(double value) {
     doubleData = value;
   }
 
@@ -191,7 +166,7 @@ public class ConstantColumnVector extends ColumnVector {
     return arrayData;
   }
 
-  public void putArray(ColumnarArray value) {
+  public void setArray(ColumnarArray value) {
     arrayData = value;
   }
 
@@ -200,7 +175,7 @@ public class ConstantColumnVector extends ColumnVector {
     return mapData;
   }
 
-  public void putMap(ColumnarMap value) {
+  public void setMap(ColumnarMap value) {
     mapData = value;
   }
 
@@ -219,15 +194,15 @@ public class ConstantColumnVector extends ColumnVector {
     }
   }
 
-  public void putDecimal(Decimal value, int precision) {
+  public void setDecimal(Decimal value, int precision) {
     // copy and modify from WritableColumnVector
     if (precision <= Decimal.MAX_INT_DIGITS()) {
-      putInt((int) value.toUnscaledLong());
+      setInt((int) value.toUnscaledLong());
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      putLong(value.toUnscaledLong());
+      setLong(value.toUnscaledLong());
     } else {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
-      putByteArray(bigInteger.toByteArray());
+      setByteArray(bigInteger.toByteArray());
     }
   }
 
@@ -236,11 +211,11 @@ public class ConstantColumnVector extends ColumnVector {
     return UTF8String.fromBytes(byteArrayData);
   }
 
-  public void putUtf8String(UTF8String value) {
-    putByteArray(value.getBytes());
+  public void setUtf8String(UTF8String value) {
+    setByteArray(value.getBytes());
   }
 
-  private void putByteArray(byte[] value) {
+  private void setByteArray(byte[] value) {
     byteArrayData =  value;
   }
 
@@ -249,8 +224,8 @@ public class ConstantColumnVector extends ColumnVector {
     return byteArrayData;
   }
 
-  public void putBinary(byte[] value) {
-    putByteArray(value);
+  public void setBinary(byte[] value) {
+    setByteArray(value);
   }
 
   @Override
@@ -258,7 +233,7 @@ public class ConstantColumnVector extends ColumnVector {
     return childData[ordinal];
   }
 
-  public void putChild(int ordinal, ConstantColumnVector value) {
+  public void setChild(int ordinal, ConstantColumnVector value) {
     childData[ordinal] = value;
   }
 }
