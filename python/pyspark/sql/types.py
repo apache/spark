@@ -1033,11 +1033,11 @@ def _parse_datatype_string(s: str) -> DataType:
         try:
             # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
             return from_ddl_datatype(s)
-        except:
+        except BaseException:
             try:
                 # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
                 return from_ddl_datatype("struct<%s>" % s.strip())
-            except:
+            except BaseException:
                 raise e
 
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
@@ -485,5 +486,88 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       session.sql("SELECT 1").collect()
     }
     assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
+  }
+
+  test("SPARK-37727: Show ignored configurations in debug level logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      SparkSession.builder()
+        .config("spark.sql.warehouse.dir", "2")
+        .config("spark.abc", "abcb")
+        .config("spark.abcd", "abcb4")
+        .getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+        "Ignored static SQL configurations",
+        "spark.sql.warehouse.dir=2",
+        "Configurations that might not take effect",
+        "spark.abcd=abcb4",
+        "spark.abc=abcb").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+  }
+
+  test("SPARK-37727: Hide the same configuration already explicitly set in logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").config("spark.abc", "abc").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      // Ignore logs because it's already set.
+      SparkSession.builder().config("spark.abc", "abc").getOrCreate()
+      // Show logs for only configuration newly set.
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
+      // Ignore logs because it's set ^.
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+      "Using an existing Spark session; only runtime SQL configurations will take effect",
+      "Configurations that might not take effect",
+      "spark.abc.new=abc").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+
+    assert(
+      !logs.exists(_.contains("spark.abc=abc")),
+      s"'spark.abc=abc' existed in:\n${logs.mkString("\n")}")
+  }
+
+  test("SPARK-37727: Hide runtime SQL configurations in logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      // Ignore logs for runtime SQL configurations
+      SparkSession.builder().config("spark.sql.ansi.enabled", "true").getOrCreate()
+      // Show logs for Spark core configuration
+      SparkSession.builder().config("spark.buffer.size", "1234").getOrCreate()
+      // Show logs for custom runtime options
+      SparkSession.builder().config("spark.sql.source.abc", "abc").getOrCreate()
+      // Show logs for static SQL configurations
+      SparkSession.builder().config("spark.sql.warehouse.dir", "xyz").getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+      "spark.buffer.size=1234",
+      "spark.sql.source.abc=abc",
+      "spark.sql.warehouse.dir=xyz").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+
+    assert(
+      !logs.exists(_.contains("spark.sql.ansi.enabled\"")),
+      s"'spark.sql.ansi.enabled' existed in:\n${logs.mkString("\n")}")
   }
 }

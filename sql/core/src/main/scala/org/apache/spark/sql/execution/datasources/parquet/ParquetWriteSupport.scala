@@ -31,7 +31,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -117,15 +117,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
     ) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        Some(SPARK_LEGACY_DATETIME -> "")
+        Map(
+          SPARK_LEGACY_DATETIME_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
-        None
+        Map.empty
       }
     } ++ {
       if (int96RebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        Some(SPARK_LEGACY_INT96 -> "")
+        Map(
+          SPARK_LEGACY_INT96_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
-        None
+        Map.empty
       }
     }
 

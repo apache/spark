@@ -118,7 +118,7 @@ object PushDownUtils extends PredicateHelper {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
       case PushableColumnWithoutNestedColumn(name) =>
-        Some(FieldReference(name).asInstanceOf[FieldReference])
+        Some(FieldReference.column(name).asInstanceOf[FieldReference])
       case _ => None
     }
 

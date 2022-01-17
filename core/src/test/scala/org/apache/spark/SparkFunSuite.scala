@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-// scalastyle:off
 import java.io.File
 import java.nio.file.Path
 import java.util.{Locale, TimeZone}
@@ -27,8 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
+import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
-import org.apache.logging.log4j.core.{LogEvent, Logger}
+import org.apache.logging.log4j.core.config.Property
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -242,17 +242,14 @@ abstract class SparkFunSuite
       throw new SparkException(s"Cannot get any logger to add the appender")
     }
     val restoreLevels = loggers.map(_.getLevel)
-    loggers.foreach { logger =>
-      logger match {
-        case logger: Logger =>
-          logger.addAppender(appender)
-          appender.start()
-          if (level.isDefined) {
-            logger.setLevel(level.get)
-            logger.get().setLevel(level.get)
-          }
-        case _ =>
-          throw new SparkException(s"Cannot add appender to logger ${logger.getName}")
+    loggers.foreach { l =>
+      val logger = l.asInstanceOf[Logger]
+      logger.addAppender(appender)
+      appender.start()
+      if (level.isDefined) {
+        logger.setLevel(level.get)
+        logger.get().setLevel(level.get)
+        LogManager.getContext(false).asInstanceOf[LoggerContext].updateLoggers()
       }
     }
     try f finally {
@@ -268,23 +265,30 @@ abstract class SparkFunSuite
   }
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
-      extends AbstractAppender("logAppender", null, null) {
-    val loggingEvents = new ArrayBuffer[LogEvent]()
+      extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
+    private val _loggingEvents = new ArrayBuffer[LogEvent]()
     private var _threshold: Level = Level.INFO
 
-    override def append(loggingEvent: LogEvent): Unit = {
-      if (loggingEvent.getLevel.isMoreSpecificThan(_threshold)) {
-        if (loggingEvents.size >= maxEvents) {
-          val loggingInfo = if (msg == "") "." else s" while logging $msg."
-          throw new IllegalStateException(
-            s"Number of events reached the limit of $maxEvents$loggingInfo")
+    override def append(loggingEvent: LogEvent): Unit = loggingEvent.synchronized {
+      val copyEvent = loggingEvent.toImmutable
+      if (copyEvent.getLevel.isMoreSpecificThan(_threshold)) {
+        _loggingEvents.synchronized {
+          if (_loggingEvents.size >= maxEvents) {
+            val loggingInfo = if (msg == "") "." else s" while logging $msg."
+            throw new IllegalStateException(
+              s"Number of events reached the limit of $maxEvents$loggingInfo")
+          }
+          _loggingEvents.append(copyEvent)
         }
-        loggingEvents.append(loggingEvent.toImmutable)
       }
     }
 
     def setThreshold(threshold: Level): Unit = {
       _threshold = threshold
+    }
+
+    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.synchronized {
+      _loggingEvents.filterNot(_ == null)
     }
   }
 }

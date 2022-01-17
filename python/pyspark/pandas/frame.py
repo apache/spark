@@ -27,7 +27,7 @@ import json
 import types
 from functools import partial, reduce
 import sys
-from itertools import zip_longest
+from itertools import zip_longest, chain
 from types import TracebackType
 from typing import (
     Any,
@@ -74,6 +74,8 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     DecimalType,
+    TimestampType,
+    TimestampNTZType,
 )
 from pyspark.sql.window import Window
 
@@ -3026,8 +3028,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        @no_type_check
-        def pandas_between_time(pdf) -> ps.DataFrame[return_types]:
+        def pandas_between_time(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
@@ -3104,8 +3107,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        @no_type_check
-        def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
+        def pandas_at_time(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
             return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
@@ -3768,7 +3772,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     for lvl in level
                 ]
 
-            if all(isinstance(l, int) for l in level_list):
+            if all(isinstance(lvl, int) for lvl in level_list):
                 int_level_list = cast(List[int], level_list)
                 for lev in int_level_list:
                     if lev >= self._internal.index_level:
@@ -3780,9 +3784,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 idx = int_level_list
             elif all(is_name_like_tuple(lev) for lev in level_list):
                 idx = []
-                for l in cast(List[Label], level_list):
+                for label in cast(List[Label], level_list):
                     try:
-                        i = self._internal.index_names.index(l)
+                        i = self._internal.index_names.index(label)
                         idx.append(i)
                     except ValueError:
                         if multi_index:
@@ -3996,7 +4000,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     raise ValueError('"column" must have length equal to number of column levels.')
             else:
                 raise NotImplementedError(
-                    "Assigning column name as tuple is only supported for MultiIndex columns for now."
+                    "Assigning column name as tuple is only supported for MultiIndex columns "
+                    "for now."
                 )
 
         if column in self.columns:
@@ -5302,8 +5307,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         reduce(
                             lambda x, y: x & y,
                             [
-                                scol == SF.lit(l)
-                                for l, scol in zip(lbl, internal.index_spark_columns)
+                                scol == SF.lit(part)
+                                for part, scol in zip(lbl, internal.index_spark_columns)
                             ],
                         )
                         for lbl in labels
@@ -6474,14 +6479,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for inc in include_list:
             try:
                 include_spark_type.append(_parse_datatype_string(inc))
-            except:
+            except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
                 exclude_spark_type.append(_parse_datatype_string(exc))
-            except:
+            except BaseException:
                 pass
 
         # Handle pandas types
@@ -6489,14 +6494,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for inc in include_list:
             try:
                 include_numpy_type.append(infer_dtype_from_object(inc))
-            except:
+            except BaseException:
                 pass
 
         exclude_numpy_type = []
         for exc in exclude_list:
             try:
                 exclude_numpy_type.append(infer_dtype_from_object(exc))
-            except:
+            except BaseException:
                 pass
 
         column_labels = []
@@ -7030,7 +7035,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if level is None or (is_list_like(level) and len(level) == 0):  # type: ignore[arg-type]
             by = self._internal.index_spark_columns
         elif is_list_like(level):
-            by = [self._internal.index_spark_columns[l] for l in level]  # type: ignore[union-attr]
+            by = [
+                self._internal.index_spark_columns[lvl] for lvl in level  # type: ignore[union-attr]
+            ]
         else:
             by = [self._internal.index_spark_columns[level]]  # type: ignore[index]
 
@@ -8712,7 +8719,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         For numeric data, the result's index will include ``count``,
         ``mean``, ``std``, ``min``, ``25%``, ``50%``, ``75%``, ``max``.
 
-        Currently only numeric data is supported.
+        For object data (e.g. strings or timestamps), the result’s index will include
+        ``count``, ``unique``, ``top``, and ``freq``.
+        The ``top`` is the most common value. The ``freq`` is the most common value’s frequency.
+        Timestamps also include the ``first`` and ``last`` items.
 
         Examples
         --------
@@ -8819,16 +8829,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
-        exprs = []
-        column_labels = []
+        psser_numeric: List[Series] = []
+        psser_string: List[Series] = []
+        psser_timestamp: List[Series] = []
+        spark_data_types: List[DataType] = []
+        column_labels: Optional[List[Label]] = []
+        column_names: List[str] = []
         for label in self._internal.column_labels:
             psser = self._psser_for(label)
-            if isinstance(psser.spark.data_type, NumericType):
-                exprs.append(psser._dtype_op.nan_to_null(psser).spark.column)
+            spark_data_type = psser.spark.data_type
+            if isinstance(spark_data_type, NumericType):
+                psser_numeric.append(psser)
                 column_labels.append(label)
-
-        if len(exprs) == 0:
-            raise ValueError("Cannot describe a DataFrame without columns")
+                spark_data_types.append(spark_data_type)
+            elif isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                psser_timestamp.append(psser)
+                column_labels.append(label)
+                spark_data_types.append(spark_data_type)
+            else:
+                psser_string.append(psser)
+                column_names.append(self._internal.spark_column_name_for(label))
 
         if percentiles is not None:
             if any((p < 0.0) or (p > 1.0) for p in percentiles):
@@ -8838,22 +8858,147 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             percentiles = [0.25, 0.5, 0.75]
 
-        formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
-        stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
-
-        sdf = self._internal.spark_frame.select(*exprs).summary(*stats)
-        sdf = sdf.replace("stddev", "std", subset=["summary"])
-
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[scol_for(sdf, "summary")],
-            column_labels=column_labels,
-            data_spark_columns=[
-                scol_for(sdf, self._internal.spark_column_name_for(label))
-                for label in column_labels
-            ],
+        # Identify the cases
+        is_all_string_type = (
+            len(psser_numeric) == 0 and len(psser_timestamp) == 0 and len(psser_string) > 0
         )
-        return DataFrame(internal).astype("float64")
+        is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
+        has_timestamp_type = len(psser_timestamp) > 0
+        has_numeric_type = len(psser_numeric) > 0
+
+        if is_all_string_type:
+            # Handling string type columns
+            # We will retrive the `count`, `unique`, `top` and `freq`.
+            internal = self._internal.resolved_copy
+            exprs_string = [
+                internal.spark_column_for(psser._column_label) for psser in psser_string
+            ]
+            sdf = internal.spark_frame.select(*exprs_string)
+
+            # Get `count` & `unique` for each columns
+            counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
+            # Handling Empty DataFrame
+            if len(counts) == 0 or counts[0] == "0":
+                data = dict()
+                for psser in psser_string:
+                    data[psser.name] = [0, 0, np.nan, np.nan]
+                return DataFrame(data, index=["count", "unique", "top", "freq"])
+
+            # Get `top` & `freq` for each columns
+            tops = []
+            freqs = []
+            # TODO(SPARK-37711): We should do it in single pass since invoking Spark job
+            #   for every columns is too expensive.
+            for column in exprs_string:
+                top, freq = sdf.groupby(column).count().sort("count", ascending=False).first()
+                tops.append(str(top))
+                freqs.append(str(freq))
+
+            stats = [counts, uniques, tops, freqs]
+            stats_names = ["count", "unique", "top", "freq"]
+
+            result: DataFrame = DataFrame(
+                data=stats,
+                index=stats_names,
+                columns=column_names,
+            )
+        elif is_all_numeric_type:
+            # Handling numeric columns
+            exprs_numeric = [
+                psser._dtype_op.nan_to_null(psser).spark.column for psser in psser_numeric
+            ]
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats = ["count", "mean", "stddev", "min", *formatted_perc, "max"]
+
+            # In this case, we can simply use `summary` to calculate the stats.
+            sdf = self._internal.spark_frame.select(*exprs_numeric).summary(*stats)
+            sdf = sdf.replace("stddev", "std", subset=["summary"])
+
+            internal = InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[scol_for(sdf, "summary")],
+                column_labels=column_labels,
+                data_spark_columns=[
+                    scol_for(sdf, self._internal.spark_column_name_for(label))
+                    for label in column_labels
+                ],
+            )
+            result = DataFrame(internal).astype("float64")
+        elif has_timestamp_type:
+            internal = self._internal.resolved_copy
+            column_names = [
+                internal.spark_column_name_for(column_label) for column_label in column_labels
+            ]
+            column_length = len(column_labels)
+
+            # Apply stat functions for each column.
+            count_exprs = map(F.count, column_names)
+            min_exprs = map(F.min, column_names)
+            # Here we try to flat the multiple map into single list that contains each calculated
+            # percentile using `chain`.
+            # e.g. flat the `[<map object at 0x7fc1907dc280>, <map object at 0x7fc1907dcc70>]`
+            # to `[Column<'percentile_approx(A, 0.2, 10000)'>,
+            # Column<'percentile_approx(B, 0.2, 10000)'>,
+            # Column<'percentile_approx(A, 0.5, 10000)'>,
+            # Column<'percentile_approx(B, 0.5, 10000)'>]`
+            perc_exprs = chain(
+                *[
+                    map(F.percentile_approx, column_names, [percentile] * column_length)
+                    for percentile in percentiles
+                ]
+            )
+            max_exprs = map(F.max, column_names)
+            mean_exprs = []
+            for column_name, spark_data_type in zip(column_names, spark_data_types):
+                mean_exprs.append(F.mean(column_name).astype(spark_data_type))
+            exprs = [*count_exprs, *mean_exprs, *min_exprs, *perc_exprs, *max_exprs]
+
+            formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+            stats_names = ["count", "mean", "min", *formatted_perc, "max"]
+
+            # If not all columns are timestamp type,
+            # we also need to calculate the `std` for numeric columns
+            if has_numeric_type:
+                std_exprs = []
+                for label, spark_data_type in zip(column_labels, spark_data_types):
+                    column_name = label[0]
+                    if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                        std_exprs.append(F.lit(None).alias("stddev_samp({})".format(column_name)))
+                    else:
+                        std_exprs.append(F.stddev(column_name))
+                exprs.extend(std_exprs)
+                stats_names.append("std")
+
+            # Select stats for all columns at once.
+            sdf = internal.spark_frame.select(exprs)
+            stat_values = sdf.first()
+
+            num_stats = int(len(exprs) / column_length)
+            # `column_name_stats_kv` is key-value store that has column name as key, and
+            # the stats as values e.g. {"A": [{count_value}, {min_value}, ...],
+            # "B": [{count_value}, {min_value} ...]}
+            column_name_stats_kv: Dict[str, List[str]] = defaultdict(list)
+            for i, column_name in enumerate(column_names):
+                for first_stat_idx in range(num_stats):
+                    column_name_stats_kv[column_name].append(
+                        stat_values[(first_stat_idx * column_length) + i]
+                    )
+
+            # For timestamp type columns, we should cast the column type to string.
+            for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
+                if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
+                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
+
+            result: DataFrame = DataFrame(  # type: ignore[no-redef]
+                data=column_name_stats_kv,
+                index=stats_names,
+                columns=column_names,
+            )
+        else:
+            # Empty DataFrame without column
+            raise ValueError("Cannot describe a DataFrame without columns")
+
+        return result
 
     def drop_duplicates(
         self,
@@ -11502,8 +11647,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Since `eval_func` doesn't have a type hint, inferring the schema is always preformed
         # in the `apply_batch`. Hence, the variables `should_return_series`, `series_name`,
         # and `should_return_scalar` can be updated.
-        @no_type_check
-        def eval_func(pdf):
+        def eval_func(pdf):  # type: ignore[no-untyped-def]
             nonlocal should_return_series
             nonlocal series_name
             nonlocal should_return_scalar
@@ -12021,7 +12165,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         row_1   3   2   1   0
         row_2  10  20  30  40
         """
-        return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))  # type: ignore[arg-type]
+        return DataFrame(
+            pd.DataFrame.from_dict(
+                data, orient=orient, dtype=dtype, columns=columns  # type: ignore[arg-type]
+            )
+        )
 
     # Override the `groupby` to specify the actual return type annotation.
     def groupby(
@@ -12318,12 +12466,12 @@ def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:
     """
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
-    l = cast(pd.DataFrame, sdf0.limit(2).toPandas())
-    assert len(l) == 1, (sdf, l)
-    row = l.iloc[0]
-    l2 = list(row)
-    assert len(l2) == len(aggs), (row, l2)
-    return l2
+    lst = cast(pd.DataFrame, sdf0.limit(2).toPandas())
+    assert len(lst) == 1, (sdf, lst)
+    row = lst.iloc[0]
+    lst2 = list(row)
+    assert len(lst2) == len(aggs), (row, lst2)
+    return lst2
 
 
 class CachedDataFrame(DataFrame):

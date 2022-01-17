@@ -78,7 +78,7 @@ class TransformFunction:
                     return r._jrdd
                 else:
                     return r.map(lambda x: x)._jrdd
-        except:
+        except BaseException:
             self.failure = traceback.format_exc()
 
     def getLastFailure(self):
@@ -118,7 +118,7 @@ class TransformFunctionSerializer:
             return bytearray(
                 self.serializer.dumps((func.func, func.rdd_wrap_func, func.deserializers))
             )
-        except:
+        except BaseException:
             self.failure = traceback.format_exc()
 
     def loads(self, data):
@@ -127,7 +127,7 @@ class TransformFunctionSerializer:
         try:
             f, wrap_func, deserializers = self.serializer.loads(bytes(data))
             return TransformFunction(self.ctx, f, *deserializers).rdd_wrapper(wrap_func)
-        except:
+        except BaseException:
             self.failure = traceback.format_exc()
 
     def getLastFailure(self):

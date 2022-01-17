@@ -1,16 +1,16 @@
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 4.18.0-193.6.3.el8_2.x86_64
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           2767           2813          65          5.7         175.9       1.0X
-Output Single Double Column                        2973           2975           2          5.3         189.0       0.9X
-Output Int and String Column                       6024           6036          16          2.6         383.0       0.5X
-Output Partitions                                  4610           4709         140          3.4         293.1       0.6X
-Output Buckets                                     6177           6209          45          2.5         392.7       0.4X
+Output Single Int Column                           2804           2879         106          5.6         178.3       1.0X
+Output Single Double Column                        3025           3033          11          5.2         192.3       0.9X
+Output Int and String Column                       6099           6101           3          2.6         387.8       0.5X
+Output Partitions                                  4605           4654          69          3.4         292.8       0.6X
+Output Buckets                                     6149           6191          59          2.6         390.9       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_292-b10 on Linux 4.18.0-193.6.3.el8_2.x86_64
-Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Write wide rows into 20 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Write wide rows                                   40838          40936         139          0.0       81675.4       1.0X
+Write wide rows                                   42007          43248        1755          0.0       84014.4       1.0X
 

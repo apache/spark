@@ -267,7 +267,9 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkIndexMethods)  # type: ignore[assignment]
+    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
+        "spark", SparkIndexMethods
+    )
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
@@ -559,7 +561,9 @@ class Index(IndexOpsMixin):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)  # type: ignore[arg-type,attr-defined]
+        result = np.asarray(
+            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[arg-type,attr-defined]
+        )
         if copy:
             result = result.copy()
         return result

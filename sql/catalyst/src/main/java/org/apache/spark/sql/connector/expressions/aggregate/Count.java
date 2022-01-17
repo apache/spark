@@ -46,7 +46,4 @@ public final class Count implements AggregateFunc {
       return "COUNT(" + column.describe() + ")";
     }
   }
-
-  @Override
-  public String describe() { return this.toString(); }
 }

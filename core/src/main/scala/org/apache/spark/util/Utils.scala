@@ -57,6 +57,8 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.core.LoggerContext
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
@@ -353,26 +355,26 @@ private[spark] object Utils extends Logging {
       closeStreams: Boolean = false,
       transferToEnabled: Boolean = false): Long = {
     tryWithSafeFinally {
-      if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
-        && transferToEnabled) {
-        // When both streams are File stream, use transferTo to improve copy performance.
-        val inChannel = in.asInstanceOf[FileInputStream].getChannel()
-        val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
-        val size = inChannel.size()
-        copyFileStreamNIO(inChannel, outChannel, 0, size)
-        size
-      } else {
-        var count = 0L
-        val buf = new Array[Byte](8192)
-        var n = 0
-        while (n != -1) {
-          n = in.read(buf)
-          if (n != -1) {
-            out.write(buf, 0, n)
-            count += n
+      (in, out) match {
+        case (input: FileInputStream, output: FileOutputStream) if transferToEnabled =>
+          // When both streams are File stream, use transferTo to improve copy performance.
+          val inChannel = input.getChannel
+          val outChannel = output.getChannel
+          val size = inChannel.size()
+          copyFileStreamNIO(inChannel, outChannel, 0, size)
+          size
+        case (input, output) =>
+          var count = 0L
+          val buf = new Array[Byte](8192)
+          var n = 0
+          while (n != -1) {
+            n = input.read(buf)
+            if (n != -1) {
+              output.write(buf, 0, n)
+              count += n
+            }
           }
-        }
-        count
+          count
       }
     } {
       if (closeStreams) {
@@ -871,6 +873,11 @@ private[spark] object Utils extends Logging {
     // These environment variables are set by YARN.
     conf.getenv("CONTAINER_ID") != null
   }
+
+  /**
+   * Returns if the current codes are running in a Spark task, e.g., in executors.
+   */
+  def isInRunningSparkTask: Boolean = TaskContext.get() != null
 
   /**
    * Gets or creates the directories listed in spark.local.dir or SPARK_LOCAL_DIRS,
@@ -2423,11 +2430,13 @@ private[spark] object Utils extends Logging {
   /**
    * configure a new log4j level
    */
-  def setLogLevel(l: org.apache.logging.log4j.Level): Unit = {
-    val rootLogger = org.apache.logging.log4j.LogManager.getRootLogger()
-      .asInstanceOf[org.apache.logging.log4j.core.Logger]
-    rootLogger.setLevel(l)
-    rootLogger.get().setLevel(l)
+  def setLogLevel(l: Level): Unit = {
+    val ctx = LogManager.getContext(false).asInstanceOf[LoggerContext]
+    val config = ctx.getConfiguration()
+    val loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME)
+    loggerConfig.setLevel(l)
+    ctx.updateLoggers()
+
     // Setting threshold to null as rootLevel will define log level for spark-shell
     Logging.sparkShellThresholdLevel = null
   }
@@ -3030,6 +3039,7 @@ private[spark] object Utils extends Logging {
    * Remove trailing dollar signs from qualified class name,
    * and return the trailing part after the last dollar sign in the middle
    */
+  @scala.annotation.tailrec
   private def stripDollars(s: String): String = {
     val lastDollarIndex = s.lastIndexOf('$')
     if (lastDollarIndex < s.length - 1) {
@@ -3205,6 +3215,22 @@ private[spark] object Utils extends Logging {
       IOUtils.closeQuietly(out)
     }
     files.toSeq
+  }
+
+  /**
+   * Return the median number of a long array
+   *
+   * @param sizes
+   * @return
+   */
+  def median(sizes: Array[Long]): Long = {
+    val len = sizes.length
+    val sortedSize = sizes.sorted
+    len match {
+      case _ if (len % 2 == 0) =>
+        math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
+      case _ => math.max(sortedSize(len / 2), 1)
+    }
   }
 }
 

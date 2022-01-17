@@ -507,8 +507,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[]
+View Query Output Columns	[a, b, c, d]
 
 
 -- !query
@@ -531,8 +530,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[]
+View Query Output Columns	[a, b, c, d]
 
 
 -- !query

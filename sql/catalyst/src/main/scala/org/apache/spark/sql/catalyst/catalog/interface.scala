@@ -386,7 +386,7 @@ case class CatalogTable(
     val tableProperties = properties
       .filterKeys(!_.startsWith(VIEW_PREFIX))
       .toSeq.sortBy(_._1)
-      .map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      .map(p => p._1 + "=" + p._2)
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val lastAccess = {
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
@@ -414,7 +414,9 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
+    if (tableProperties.nonEmpty) {
+      map.put("Table Properties", tableProperties.mkString("[", ", ", "]"))
+    }
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")

@@ -22,18 +22,10 @@ import datetime
 import decimal
 import sys
 import typing
-from collections import Iterable
+from collections.abc import Iterable
 from distutils.version import LooseVersion
-from inspect import getfullargspec, isclass
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    List,
-    Tuple,
-    Union,
-    Type,
-)
+from inspect import isclass
+from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hints
 
 import numpy as np
 import pandas as pd
@@ -76,7 +68,6 @@ from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Dtype, T
-from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
 
 if typing.TYPE_CHECKING:
     from pyspark.pandas.internal import InternalField
@@ -566,11 +557,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     from pyspark.pandas.typedef import SeriesType, NameTypeHolder, IndexNameTypeHolder
     from pyspark.pandas.utils import name_like_string
 
-    spec = getfullargspec(f)
-    tpe = spec.annotations.get("return", None)
-    if isinstance(tpe, str):
-        # This type hint can happen when given hints are string to avoid forward reference.
-        tpe = resolve_string_type_hint(tpe)
+    tpe = get_type_hints(f).get("return", None)
 
     if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
         tpe = tpe.__args__[0]

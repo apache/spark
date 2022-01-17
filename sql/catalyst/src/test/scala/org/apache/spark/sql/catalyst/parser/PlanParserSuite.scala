@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -1298,5 +1299,26 @@ class PlanParserSuite extends AnalysisTest {
       "timestamp expression cannot refer to any columns")
     intercept("SELECT * FROM a.b.c TIMESTAMP AS OF (select 1)",
       "timestamp expression cannot contain subqueries")
+  }
+
+  test("PERCENTILE_CONT function") {
+    def assertPercentileContPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertPercentileContPlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
+      new Percentile(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression()
+    )
+
+    assertPercentileContPlans(
+      "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
+      new Percentile(UnresolvedAttribute("col"),
+        Subtract(Literal(1), Literal(Decimal(0.1), DecimalType(1, 1)))).toAggregateExpression()
+    )
   }
 }

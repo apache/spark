@@ -69,18 +69,20 @@ class UISeleniumSuite
     }
 
     val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """rootLogger.level = info
+          |rootLogger.appenderRef.file.ref = console
+          |appender.console.type = Console
+          |appender.console.name = console
+          |appender.console.target = SYSTEM_ERR
+          |appender.console.layout.type = PatternLayout
+          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
         """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
+        new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
 
       tempLog4jConf
