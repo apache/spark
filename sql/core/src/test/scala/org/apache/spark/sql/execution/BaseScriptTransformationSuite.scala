@@ -109,7 +109,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
@@ -126,7 +126,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
            |TRANSFORM(a, b, c, d, e)
            |  ROW FORMAT DELIMITED
            |  FIELDS TERMINATED BY '\t'
-           |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  USING 'python3 $scriptFilePath' AS (a, b, c, d, e)
            |  ROW FORMAT DELIMITED
            |  FIELDS TERMINATED BY '\t'
            |FROM v
@@ -212,7 +212,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
     test(s"SPARK-32400: TRANSFORM should support basic data types as input ($testName)") {
-      assume(TestUtils.testCommandAvailable("python"))
+      assume(TestUtils.testCommandAvailable("python3"))
       withTempView("v") {
         val df = Seq(
           (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
@@ -251,7 +251,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-32400: TRANSFORM should support more data types (interval, array, map, struct " +
     "and udt) as input (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (new CalendarInterval(7, 1, 1000), Array(0, 1, 2), Map("a" -> 1), (1, 2),
@@ -287,7 +287,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-32400: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     Array(false, true).foreach { java8AapiEnable =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8AapiEnable.toString) {
         withTempView("v") {
@@ -405,7 +405,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
        """.stripMargin,
       s"""
          |SELECT TRANSFORM(a)
-         |USING 'python some_non_existent_file' AS (a)
+         |USING 'python3 some_non_existent_file' AS (a)
          |FROM VALUES (1) t(a)
        """.stripMargin).foreach { query =>
       intercept[SparkException] {
@@ -442,7 +442,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-31936: Script transform support ArrayType/MapType/StructType (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
@@ -488,7 +488,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
     withTempView("v") {
       val df = Seq(
@@ -498,7 +498,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      // test 'python /path/to/script.py' with local file
+      // test 'python3 /path/to/script.py' with local file
       checkAnswer(
         sql(
           s"""
@@ -506,7 +506,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+             |  USING 'python3 $scriptFilePath' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
@@ -583,14 +583,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'd.cast("string"),
           'e.cast("string")).collect())
 
-      // test `python script.py` when file added
+      // test `python3 script.py` when file added
       checkAnswer(
         sql(
           s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  USING 'python3 ${scriptFilePath.getName}' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
@@ -635,7 +635,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-36208: TRANSFORM should support ANSI interval (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (Period.of(1, 2, 0), Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4))

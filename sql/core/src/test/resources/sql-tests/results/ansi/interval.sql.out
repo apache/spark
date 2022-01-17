@@ -1324,7 +1324,7 @@ select interval (-30) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1333,7 +1333,7 @@ select interval (a + 1) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1356,7 +1356,7 @@ select interval (-30) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1365,7 +1365,7 @@ select interval (a + 1) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query

@@ -5,60 +5,57 @@ WholeStageCodegen (12)
         WholeStageCodegen (11)
           Filter [paid]
             Subquery #1
-              WholeStageCodegen (13)
+              WholeStageCodegen (14)
                 HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
                   InputAdapter
                     Exchange #10
-                      WholeStageCodegen (12)
+                      WholeStageCodegen (13)
                         HashAggregate [netpaid] [sum,count,sum,count]
                           HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,sum] [sum(UnscaledValue(ss_net_paid)),netpaid,sum]
                             InputAdapter
                               Exchange [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size] #11
-                                WholeStageCodegen (11)
+                                WholeStageCodegen (12)
                                   HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,ss_net_paid] [sum,sum]
                                     Project [ss_net_paid,s_store_name,s_state,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,ca_state]
                                       SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
                                         InputAdapter
-                                          WholeStageCodegen (8)
+                                          WholeStageCodegen (9)
                                             Sort [ss_ticket_number,ss_item_sk]
-                                              Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id]
-                                                SortMergeJoin [ss_item_sk,i_item_sk]
-                                                  InputAdapter
-                                                    WholeStageCodegen (5)
-                                                      Sort [ss_item_sk]
+                                              InputAdapter
+                                                Exchange [ss_ticket_number,ss_item_sk] #12
+                                                  WholeStageCodegen (8)
+                                                    Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                      SortMergeJoin [ss_item_sk,i_item_sk]
                                                         InputAdapter
-                                                          Exchange [ss_item_sk] #12
-                                                            WholeStageCodegen (4)
-                                                              Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid]
-                                                                BroadcastHashJoin [s_store_sk,c_customer_sk,ss_store_sk,ss_customer_sk]
-                                                                  InputAdapter
-                                                                    ReusedExchange [s_store_sk,s_store_name,s_state,ca_state,c_customer_sk,c_first_name,c_last_name] #5
-                                                                  Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
-                                                                    Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                          WholeStageCodegen (5)
+                                                            Sort [ss_item_sk]
+                                                              InputAdapter
+                                                                Exchange [ss_item_sk] #13
+                                                                  WholeStageCodegen (4)
+                                                                    Project [s_store_name,s_state,ca_state,c_first_name,c_last_name,ss_item_sk,ss_ticket_number,ss_net_paid]
+                                                                      BroadcastHashJoin [s_store_sk,c_customer_sk,ss_store_sk,ss_customer_sk]
+                                                                        InputAdapter
+                                                                          ReusedExchange [s_store_sk,s_store_name,s_state,ca_state,c_customer_sk,c_first_name,c_last_name] #5
+                                                                        Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                          Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                                            ColumnarToRow
+                                                                              InputAdapter
+                                                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
+                                                        InputAdapter
+                                                          WholeStageCodegen (7)
+                                                            Sort [i_item_sk]
+                                                              InputAdapter
+                                                                Exchange [i_item_sk] #14
+                                                                  WholeStageCodegen (6)
+                                                                    Filter [i_item_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
-                                                                          Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
-                                                  InputAdapter
-                                                    WholeStageCodegen (7)
-                                                      Sort [i_item_sk]
-                                                        InputAdapter
-                                                          Exchange [i_item_sk] #13
-                                                            WholeStageCodegen (6)
-                                                              Filter [i_item_sk]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                                          Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
                                         InputAdapter
-                                          WholeStageCodegen (10)
+                                          WholeStageCodegen (11)
                                             Sort [sr_ticket_number,sr_item_sk]
                                               InputAdapter
-                                                Exchange [sr_item_sk] #14
-                                                  WholeStageCodegen (9)
-                                                    Project [sr_item_sk,sr_ticket_number]
-                                                      Filter [sr_ticket_number,sr_item_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
+                                                ReusedExchange [sr_item_sk,sr_ticket_number] #9
             HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum,isEmpty]
               InputAdapter
                 Exchange [c_last_name,c_first_name,s_store_name] #2

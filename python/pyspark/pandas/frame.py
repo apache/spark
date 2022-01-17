@@ -3028,8 +3028,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        @no_type_check
-        def pandas_between_time(pdf) -> ps.DataFrame[return_types]:
+        def pandas_between_time(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
@@ -3106,8 +3107,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
         return_types = [psdf.index.dtype] + list(psdf.dtypes)
 
-        @no_type_check
-        def pandas_at_time(pdf) -> ps.DataFrame[return_types]:
+        def pandas_at_time(  # type: ignore[no-untyped-def]
+            pdf,
+        ) -> ps.DataFrame[return_types]:  # type: ignore[valid-type]
             return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
@@ -11645,8 +11647,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Since `eval_func` doesn't have a type hint, inferring the schema is always preformed
         # in the `apply_batch`. Hence, the variables `should_return_series`, `series_name`,
         # and `should_return_scalar` can be updated.
-        @no_type_check
-        def eval_func(pdf):
+        def eval_func(pdf):  # type: ignore[no-untyped-def]
             nonlocal should_return_series
             nonlocal series_name
             nonlocal should_return_scalar

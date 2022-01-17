@@ -371,7 +371,7 @@ class HiveSparkSubmitSuite
 
 object SetMetastoreURLTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true)
     val builder = SparkSession.builder()
@@ -409,7 +409,7 @@ object SetMetastoreURLTest extends Logging {
 
 object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true).set(UI_ENABLED, false)
     val providedExpectedWarehouseLocation =
@@ -489,7 +489,7 @@ object SetWarehouseLocationTest extends Logging {
 // can load the jar defined with the function.
 object TemporaryHiveUDFTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -527,7 +527,7 @@ object TemporaryHiveUDFTest extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest1 extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -565,7 +565,7 @@ object PermanentHiveUDFTest1 extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest2 extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     conf.set(UI_ENABLED, false)
     val sc = new SparkContext(conf)
@@ -600,7 +600,7 @@ object PermanentHiveUDFTest2 extends Logging {
 // We test if we can load user jars in both driver and executors when HiveContext is used.
 object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
     conf.set(UI_ENABLED, false)
@@ -670,7 +670,7 @@ object SparkSubmitClassLoaderTest extends Logging {
 // We test if we can correctly set spark sql configurations when HiveContext is used.
 object SparkSQLConfTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     // We override the SparkConf to add spark.sql.hive.metastore.version and
     // spark.sql.hive.metastore.jars to the beginning of the conf entry array.
     // So, if metadataHive get initialized after we set spark.sql.hive.metastore.version but
@@ -711,7 +711,7 @@ object SPARK_9757 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
@@ -760,7 +760,7 @@ object SPARK_11009 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
@@ -791,7 +791,7 @@ object SPARK_14244 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()

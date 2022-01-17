@@ -125,6 +125,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedFunc =>
+        throw QueryCompilationErrors.noSuchFunctionError(
+          u.multipartIdentifier, u, u.possibleQualifiedName)
+
       case u: UnresolvedHint =>
         u.failAnalysis(s"Hint not found: ${u.name}")
 
