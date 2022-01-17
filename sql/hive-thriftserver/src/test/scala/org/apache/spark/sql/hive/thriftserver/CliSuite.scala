@@ -668,7 +668,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
       "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
       "/* This is a comment without end symbol SELECT 1;\n" ->
-        Seq("/* This is a comment without end symbol SELECT 1;\n")
+        Seq("/* This is a comment without end symbol SELECT 1;\n"),
+      "/* comment */ SELECT 1;" -> Seq("/* comment */ SELECT 1"),
+      "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
+      "-- comment " -> Seq(),
+      "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
+      "/*  comment */  " -> Seq()
     ).foreach { case (query, ret) =>
       assert(cli.splitSemiColon(query).asScala === ret)
     }
