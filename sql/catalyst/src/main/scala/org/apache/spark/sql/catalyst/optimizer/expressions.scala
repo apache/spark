@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
+import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, StaticInvoke}
@@ -663,17 +663,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  // Not all BinaryExpression can be pushed into (if / case) branches.
-  private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
-    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
-    case _: BinaryArithmetic => true
-    case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
-    case _: FindInSet | _: RoundBase => true
-    case _ => false
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
@@ -745,18 +734,14 @@ object SupportedBinaryExpr {
   def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
     case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
       Some(expr, expr.children.head, expr.children.last)
-    case _: BinaryArithmetic =>
-      Some(expr, expr.children.head, expr.children.last)
-    case _: BinaryMathExpression =>
-      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
          _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
       Some(expr, expr.children.head, expr.children.last)
-    case _: FindInSet | _: RoundBase =>
-      Some(expr, expr.children.head, expr.children.last)
+    case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(left, right), _, _, _)
-        if clz.isInstanceOf[Class[ByteArrayMethods]] =>
-      Some(s, left, right)
+        if clz == classOf[ByteArrayMethods] => Some(s, left, right)
     case _ => None
   }
 }

@@ -485,10 +485,10 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
 }
 
 object StringPredicate {
-  def unapply(expr: Expression): Option[Expression] = {
+  def unapply(expr: Expression): Option[Expression] = expr match {
     case _: StringPredicate => Some(expr)
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _)
-      if clz.isInstanceOf[Class[ByteArrayMethods]] => Some(s)
+      if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
   }
 }
