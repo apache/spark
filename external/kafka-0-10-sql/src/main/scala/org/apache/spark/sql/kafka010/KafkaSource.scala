@@ -77,7 +77,10 @@ private[kafka010] class KafkaSource(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsAdmissionControl with Source with Logging {
+  extends SupportsAdmissionControl
+  with SupportsTriggerAvailableNow
+  with Source
+  with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -98,6 +101,8 @@ private[kafka010] class KafkaSource(
     sourceOptions.getOrElse(INCLUDE_HEADERS, "false").toBoolean
 
   private var lastTriggerMillis = 0L
+
+  private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -159,7 +164,14 @@ private[kafka010] class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
     val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
-    val latest = kafkaReader.fetchLatestOffsets(currentOffsets)
+
+    // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
+    val latest = if (allDataForTriggerAvailableNow != null) {
+      allDataForTriggerAvailableNow
+    } else {
+      kafkaReader.fetchLatestOffsets(currentOffsets)
+    }
+
     latestPartitionOffsets = Some(latest)
 
     val limits: Seq[ReadLimit] = limit match {
@@ -330,6 +342,10 @@ private[kafka010] class KafkaSource(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
   }
 }
 
