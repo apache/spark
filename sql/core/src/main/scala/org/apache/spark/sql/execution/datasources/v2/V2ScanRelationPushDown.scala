@@ -115,13 +115,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // we have the following
                   // Aggregate [c2#10],[sum(c1#9)/count(c1#9) AS avg(c1)#19]
                   // +- ScanOperation[...]
+                  // scalastyle:on
                   val newResultExpressions = resultExpressions.map { expr =>
                     expr.transform {
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
                         val sum = addCastIfNeeded(aggregate.Sum(avg.child)
-                          .toAggregateExpression(isDistinct), avg.sumDataType)
+                          .toAggregateExpression(isDistinct), avg.dataType)
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
-                        val aggExpr = avg.sumDataType match {
+                        avg.dataType match {
                           case _: YearMonthIntervalType =>
                             If(EqualTo(count, Literal(0L)),
                               Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
@@ -129,10 +130,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                             If(EqualTo(count, Literal(0L)),
                               Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
                           case _ =>
-                            Divide(sum, addCastIfNeeded(count, avg.sumDataType), false)
+                            Divide(sum, addCastIfNeeded(count, avg.dataType), false)
                         }
-
-                        Cast(aggExpr, avg.dataType)
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
                   // Because aggregate expressions changed, translate them again.
@@ -272,11 +271,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
   }
 
-  private def addCastIfNeeded(expression: Expression, aggDataType: DataType) =
-    if (expression.dataType == aggDataType) {
+  private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) =
+    if (expression.dataType == expectedDataType) {
       expression
     } else {
-      Cast(expression, aggDataType)
+      Cast(expression, expectedDataType)
     }
 
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {

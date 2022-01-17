@@ -23,8 +23,6 @@ import java.util.Properties
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Divide}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Average}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
@@ -877,19 +875,44 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // scalastyle:on
   }
 
-  private def checkAverageConversion(df: DataFrame): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
-      case agg: Aggregate => agg
+  test("scan with aggregate push-down: complete push-down SUM, AVG, COUNT") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "1")
+      .table("h2.test.employee")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), AVG(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    assert(aggregates.length == 1)
-    val avgs = aggregates(0).aggregateExpressions.collect {
-      case Alias(AggregateExpression(avg: Average, _, _, _, _), _) => avg
+    checkAnswer(df, Seq(Row(53000.00, 10600.000000, 5)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "1")
+      .table("h2.test.employee")
+      .groupBy($"name")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), AVG(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    assert(avgs.isEmpty)
-    val divs = aggregates(0).aggregateExpressions.collect {
-      case Alias(Cast(div: Divide, _, _, _), _) => div
-    }
-    assert(divs.nonEmpty)
+    checkAnswer(df2, Seq(
+      Row("alex", 12000.00, 12000.000000, 1),
+      Row("amy", 10000.00, 10000.000000, 1),
+      Row("cathy", 9000.00, 9000.000000, 1),
+      Row("david", 10000.00, 10000.000000, 1),
+      Row("jen", 12000.00, 12000.000000, 1)))
   }
 
   test("scan with aggregate push-down: partial push-down SUM, AVG, COUNT") {
@@ -900,7 +923,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .option("numPartitions", "2")
       .table("h2.test.employee")
       .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
-    checkAverageConversion(df)
+    checkAggregateRemoved(df, false)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
     checkAnswer(df, Seq(Row(53000.00, 10600.000000, 5)))
 
     val df2 = spark.read
@@ -911,7 +940,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .groupBy($"name")
       .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
-    checkAverageConversion(df)
+    checkAggregateRemoved(df, false)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
     checkAnswer(df2, Seq(
       Row("alex", 12000.00, 12000.000000, 1),
       Row("amy", 10000.00, 10000.000000, 1),
