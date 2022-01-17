@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -742,11 +742,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {
     val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("SPARK-37906")
+    val sparkContext = new SparkContext(sparkConf)
+    SparkSQLEnv.sparkContext = sparkContext
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
-
     val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
-
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver
@@ -766,5 +768,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       assert(cli.splitSemiColon(query).asScala === ret)
     }
     sessionState.close()
+    SparkSQLEnv.stop()
   }
 }

@@ -48,7 +48,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.internal.SharedState
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ShutdownHookManager
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -324,11 +324,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
-    if (!Utils.isTesting) {
-      SparkSQLEnv.init()
-      if (sessionState.getIsSilent) {
-        SparkSQLEnv.sparkContext.setLogLevel("warn")
-      }
+    SparkSQLEnv.init()
+    if (sessionState.getIsSilent) {
+      SparkSQLEnv.sparkContext.setLogLevel("warn")
     }
   } else {
     // Hive 1.2 + not supported in CLI
