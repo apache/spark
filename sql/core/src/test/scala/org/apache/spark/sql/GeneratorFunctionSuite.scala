@@ -303,26 +303,6 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       Row(1, null) :: Row(2, null) :: Nil)
   }
 
-  test("lateral view <func>_outer()") {
-    checkAnswer(
-      sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
-      Row(1, null) :: Row(2, null) :: Nil)
-
-    withTempView("t1") {
-      sql(
-        """select * from values
-          |array(struct(0, 1), struct(3, 4)),
-          |array(struct(6, 7)),
-          |array(),
-          |null
-          |as tbl(arr)
-         """.stripMargin).createOrReplaceTempView("t1")
-      checkAnswer(
-        sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
-        Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
-    }
-  }
-
   test("outer generator()") {
     spark.sessionState.functionRegistry
       .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator(), "scala_udf")
@@ -376,6 +356,26 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-30997: generators in aggregate expressions for dataframe") {
     val df = Seq(1, 2, 3).toDF("v")
     checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-37947: lateral view <func>_outer()") {
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
+    withTempView("t1") {
+      sql(
+        """select * from values
+          |array(struct(0, 1), struct(3, 4)),
+          |array(struct(6, 7)),
+          |array(),
+          |null
+          |as tbl(arr)
+         """.stripMargin).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
+        Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
+    }
   }
 }
 
