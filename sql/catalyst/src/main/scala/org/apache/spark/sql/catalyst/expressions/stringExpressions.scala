@@ -484,13 +484,20 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
-/**
- * Returns true if `left` contains `right`. Both expressions must be of STRING or BINARY type.
- */
+object StringPredicate {
+  def unapply(expr: Expression): Option[Expression] = {
+    case _: StringPredicate => Some(expr)
+    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _)
+      if clz.isInstanceOf[Class[ByteArrayMethods]] => Some(s)
+    case _ => None
+  }
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:
@@ -552,6 +559,7 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
   usage = """
     _FUNC_(left, right) - Returns a boolean. The value is True if left starts with right.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:
@@ -615,6 +623,7 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
   usage = """
     _FUNC_(left, right) - Returns a boolean. The value is True if left ends with right.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:

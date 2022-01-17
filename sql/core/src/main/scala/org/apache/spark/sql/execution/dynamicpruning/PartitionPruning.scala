@@ -205,8 +205,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _: StringRegexExpression => true
     case _: BinaryComparison => true
     case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case StaticInvoke(_, _, "contains" | "startsWith" | "endsWith", _, _, _, _) => true
+    case StringPredicate(_) => true
     case _: MultiLikeBase => true
     case _ => false
   }
