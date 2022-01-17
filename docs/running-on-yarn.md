@@ -913,7 +913,11 @@ with a mixed workload of applications running multiple Spark versions, since a g
 the shuffle service is not always compatible with other versions of Spark. YARN versions since 2.9.0
 support the ability to run shuffle services within an isolated classloader
 (see [YARN-4577](https://issues.apache.org/jira/browse/YARN-4577)), meaning multiple Spark versions
-can coexist within a single NodeManager. The
+can coexist within a single NodeManager. There is an issue
+[YARN-11053](https://issues.apache.org/jira/browse/YARN-11053) of YARN isolated classloader which has
+been addressed in YARN 3.3.2/3.4.0, you need to explicitly set
+`yarn.nodemanager.aux-services.<service-name>.system-classes` to some classes other than Spark shuffle
+service classes as a workaround for the former versions. The
 `yarn.nodemanager.aux-services.<service-name>.classpath` and, starting from YARN 2.10.2/3.1.1/3.2.0,
 `yarn.nodemanager.aux-services.<service-name>.remote-classpath` options can be used to configure
 this. In addition to setting up separate classpaths, it's necessary to ensure the two versions
@@ -923,7 +927,11 @@ above. For example, you may have configuration like:
 ```properties
   yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
   yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-yarn-shuffle.jar,/path/to/spark-x-config
+  # workaround for YARN-11053
+  yarn.nodemanager.aux-services.spark_shuffle_x.system-classes = classes.other.than.spark.shuffle.service.classes
   yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-yarn-shuffle.jar,/path/to/spark-y-config
+  # workaround for YARN-11053
+  yarn.nodemanager.aux-services.spark_shuffle_y.system-classes = classes.other.than.spark.shuffle.service.classes
 ```
 
 The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML
