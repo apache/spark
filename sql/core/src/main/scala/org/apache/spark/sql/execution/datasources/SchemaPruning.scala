@@ -169,7 +169,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   /**
    * Builds a pruned logical relation from the output of the output relation and the schema of the
-   * pruned base relation
+   * pruned base relation.
    */
   private def buildPrunedRelation(
       outputRelation: LogicalRelation,
@@ -184,12 +184,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
   private def getPrunedOutput(
       output: Seq[AttributeReference],
       requiredSchema: StructType): Seq[AttributeReference] = {
-    // We need to replace the expression ids of the pruned relation output attributes
-    // with the expression ids of the original relation output attributes so that
-    // references to the original relation's output are not broken
-
-    // We also need to keep the metadata of the attribute,
-    // so that references to the metadata struct is not broken
+    // We need to update the data type of the output attributes to use the pruned ones.
+    // so that references to the original relation's output are not broken
     val nameAttributeMap = output.map(att => (att.name, att)).toMap
     requiredSchema
       .toAttributes
