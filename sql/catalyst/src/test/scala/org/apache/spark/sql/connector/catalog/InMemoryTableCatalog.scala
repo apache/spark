@@ -213,8 +213,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).foreach(dropNamespace)
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
+    listNamespaces(namespace).foreach(namespace => dropNamespace(namespace, cascade))
     try {
       listTables(namespace).foreach(dropTable)
     } catch {

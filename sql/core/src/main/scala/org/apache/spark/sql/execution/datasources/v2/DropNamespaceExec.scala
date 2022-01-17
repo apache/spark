@@ -37,16 +37,7 @@ case class DropNamespaceExec(
     val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
     if (nsCatalog.namespaceExists(ns)) {
-      // The default behavior of `SupportsNamespace.dropNamespace()` is cascading,
-      // so make sure the namespace to drop is empty.
-      if (!cascade) {
-        if (catalog.asTableCatalog.listTables(ns).nonEmpty
-          || nsCatalog.listNamespaces(ns).nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
-        }
-      }
-
-      if (!nsCatalog.dropNamespace(ns)) {
+      if (!nsCatalog.dropNamespace(ns, cascade)) {
         throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
       }
     } else if (!ifExists) {

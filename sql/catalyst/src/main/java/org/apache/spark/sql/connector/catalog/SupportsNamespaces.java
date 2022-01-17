@@ -136,7 +136,8 @@ public interface SupportsNamespaces extends CatalogPlugin {
       NamespaceChange... changes) throws NoSuchNamespaceException;
 
   /**
-   * Drop a namespace from the catalog, recursively dropping all objects within the namespace.
+   * Drop a namespace from the catalog with cascade mode, recursively dropping all objects
+   * within the namespace if cascade is true.
    * <p>
    * If the catalog implementation does not support this operation, it may throw
    * {@link UnsupportedOperationException}.
@@ -146,5 +147,5 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
-  boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException;
+  boolean dropNamespace(String[] namespace, boolean cascade) throws NoSuchNamespaceException;
 }
