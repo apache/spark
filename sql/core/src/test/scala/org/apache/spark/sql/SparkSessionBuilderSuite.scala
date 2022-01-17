@@ -229,6 +229,35 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     assert(postFirstCreation == postSecondCreation)
+    context.stop()
+  }
+
+  test("SPARK-32165: Ensure Spark only initiates SharedState once across SparkSessions") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-app-SPARK-32165-1")
+    val context = new SparkContext(conf)
+    SparkSession
+      .builder()
+      .master("local")
+      .getOrCreate()
+      .sessionState // this touches the sessionState
+    val postFirstCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+      .sessionState // this touches the sessionState
+    val postSecondCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    // minus 1 to account for ExecutionListenerBus
+    assert(postFirstCreation == postSecondCreation - 1)
   }
 
   test("SPARK-31532: should not propagate static sql configs to the existing" +
