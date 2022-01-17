@@ -790,6 +790,28 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-37904: Improve rebalance in NestedColumnAliasing") {
+    // alias nested columns through rebalance
+    val plan1 = contact.rebalance($"id").select($"name.first").analyze
+    val optimized1 = Optimize.execute(plan1)
+    val expected1 = contact.select($"id", $"name.first".as("_extract_first"))
+      .rebalance($"id").select($"_extract_first".as("first")).analyze
+    comparePlans(optimized1, expected1)
+
+    // also alias rebalance nested columns
+    val plan2 = contact.rebalance($"name.first").select($"name.first").analyze
+    val optimized2 = Optimize.execute(plan2)
+    val expected2 = contact.select($"name.first".as("_extract_first"))
+      .rebalance($"_extract_first".as("first")).select($"_extract_first".as("first")).analyze
+    comparePlans(optimized2, expected2)
+
+    // do not alias nested columns if its child contains root reference
+    val plan3 = contact.rebalance($"name").select($"name.first").analyze
+    val optimized3 = Optimize.execute(plan3)
+    val expected3 = contact.select($"name").rebalance($"name").select($"name.first").analyze
+    comparePlans(optimized3, expected3)
+  }
 }
 
 object NestedColumnAliasingSuite {
