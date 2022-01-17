@@ -28,6 +28,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.sql.execution.ui.SQLAppStatusListener
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.util.ExecutionListenerBus
@@ -71,6 +72,41 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       // Since GC can't 100% guarantee all out-of-referenced objects be cleaned at one time,
       // here, we check at least one listener is cleaned up to prove the mechanism works.
       assert(listenersNum() < 11)
+    }
+  }
+
+  test("SPARK-32165: Fix memory leak of SQLAppStatusListener") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-app-SPARK-32165")
+    val context = new SparkContext(conf)
+
+    @inline def listenersNum(): Int = {
+      context
+        .listenerBus
+        .listeners
+        .asScala
+        .count(_.isInstanceOf[SQLAppStatusListener])
+    }
+
+    (1 to 10).foreach { _ =>
+      SparkSession
+        .builder()
+        .sparkContext(context)
+        .master("local")
+        .getOrCreate()
+        .sessionState // this touches the sessionState
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
+
+    eventually(timeout(10.seconds), interval(1.seconds)) {
+      System.gc()
+      // After GC, the number of SQLAppStatusListener should be less than 10 (we created 10
+      // SparkSessions in total).
+      // Since GC can't 100% guarantee all out-of-referenced objects be cleaned at one time,
+      // here, we check at least one listener is cleaned up to prove the mechanism works.
+      assert(listenersNum() < 10)
     }
   }
 

@@ -113,6 +113,9 @@ private[sql] class SharedState(
     val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
     val listener = new SQLAppStatusListener(conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
+    sparkContext.cleaner.foreach { cleaner =>
+      cleaner.registerSparkListenerForCleanup(this, listener)
+    }
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
