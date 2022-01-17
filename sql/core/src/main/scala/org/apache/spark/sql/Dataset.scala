@@ -1173,8 +1173,20 @@ class Dataset[T] private[sql](
       joined = resolveSelfJoinCondition(joined)
     }
 
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+    // SPARK-37829: an outer-join requires the null semantics to represent missing keys.
+    // As we might be running on DataFrames, we need a custom encoder that will properly
+    // handle null top-level Rows.
+    def nullSafe[V](exprEnc: ExpressionEncoder[V]): ExpressionEncoder[V] = {
+      if (exprEnc.clsTag.runtimeClass != classOf[Row]) {
+        exprEnc
+      } else {
+        RowEncoder.nullSafe(exprEnc.asInstanceOf[ExpressionEncoder[Row]])
+          .asInstanceOf[ExpressionEncoder[V]]
+      }
+    }
+    implicit val tuple2Encoder: Encoder[(T, U)] = ExpressionEncoder.tuple(
+      nullSafe(this.exprEnc), nullSafe(other.exprEnc)
+    )
 
     val leftResultExpr = {
       if (!this.exprEnc.isSerializedAsStructForTopLevel) {

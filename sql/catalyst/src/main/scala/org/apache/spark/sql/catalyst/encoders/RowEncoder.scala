@@ -77,6 +77,28 @@ object RowEncoder {
       ClassTag(cls))
   }
 
+  /**
+   * Returns an ExpressionEncoder allowing null top-level rows.
+   * @param exprEnc an ExpressionEncoder[Row].
+   * @return an ExpressionEncoder[Row] whom deserializer supports null values.
+   *
+   * @see SPARK-37829
+   */
+  private[sql] def nullSafe(exprEnc: ExpressionEncoder[Row]): ExpressionEncoder[Row] = {
+    val newDeserializerInput = GetColumnByOrdinal(0, exprEnc.objSerializer.dataType)
+    val newDeserializer: Expression = if (exprEnc.objSerializer.nullable) {
+      If(
+        IsNull(newDeserializerInput),
+        Literal.create(null, exprEnc.objDeserializer.dataType),
+        exprEnc.objDeserializer)
+    } else {
+      exprEnc.objDeserializer
+    }
+    exprEnc.copy(
+      objDeserializer = newDeserializer
+    )
+  }
+
   private def serializerFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
