@@ -23,14 +23,14 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
 if extension_object_dtypes_available:
     from pandas import StringDtype
 
 
-class StringOpsTest(OpsTestCase):
+class StringOpsTest(OpsTestBase):
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})

@@ -43,8 +43,8 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class OpsTestCase(ComparisonTestBase):
-    """A utility holding common test cases for arithmetic operations of different data types."""
+class OpsTestBase(ComparisonTestBase):
+    """The test base for arithmetic operations of different data types."""
 
     @property
     def numeric_pdf(self):

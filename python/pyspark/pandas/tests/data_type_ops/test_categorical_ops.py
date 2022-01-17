@@ -23,10 +23,10 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class CategoricalOpsTest(OpsTestCase):
+class CategoricalOpsTest(OpsTestBase):
     @property
     def pdf(self):
         return pd.DataFrame(

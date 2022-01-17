@@ -19,10 +19,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class NullOpsTest(OpsTestCase):
+class NullOpsTest(OpsTestBase):
     @property
     def pser(self):
         return pd.Series([None, None, None])
