@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -46,11 +45,8 @@ import org.apache.spark.util.Utils
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG)) {
+    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
     case e: RuntimeReplaceable => e.child
-    case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
-    case BoolOr(arg) => Max(arg)
-    case BoolAnd(arg) => Min(arg)
   }
 }
 

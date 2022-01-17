@@ -366,7 +366,14 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   // are semantically equal.
   override lazy val preCanonicalized: Expression = child.preCanonicalized
 
-  def isAggregate: Boolean = child.isInstanceOf[AggregateFunction]
+  def isAggregate: Boolean = {
+    if (child.isInstanceOf[AggregateFunction]) {
+      true
+    } else {
+      assert(child.find(_.isInstanceOf[AggregateFunction]).isEmpty)
+      false
+    }
+  }
 
   /**
    * Only used to generate SQL representation of this expression.

@@ -33,13 +33,11 @@ object TreePattern extends Enumeration  {
   val GROUPING_ANALYTICS: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
-  val BOOL_AGG: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val COALESCE: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
-  val COUNT_IF: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value

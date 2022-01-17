@@ -17,31 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BOOL_AGG, TreePattern}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
 
-abstract class UnevaluableBooleanAggBase(arg: Expression)
-  extends UnevaluableAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
+abstract class BoolAggBase(arg: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes {
 
-  override def child: Expression = arg
-
-  override def dataType: DataType = BooleanType
+  override def flatArguments: Iterator[Any] = Iterator(arg)
+  override def exprsReplaced: Seq[Expression] = Seq(arg)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(BOOL_AGG)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    arg.dataType match {
-      case dt if dt != BooleanType =>
-        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
-          s"${BooleanType.simpleString}, but it's [${arg.dataType.catalogString}].")
-      case _ => TypeCheckResult.TypeCheckSuccess
-    }
-  }
 }
 
 @ExpressionDescription(
@@ -57,10 +43,15 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   """,
   group = "agg_funcs",
   since = "3.0.0")
-case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+case class BoolAnd(arg: Expression, child: Expression) extends BoolAggBase(arg) {
+
+  def this(arg: Expression) = {
+    this(arg, Min(arg))
+  }
+
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(arg = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BoolAnd =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -76,8 +67,13 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   """,
   group = "agg_funcs",
   since = "3.0.0")
-case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
+case class BoolOr(arg: Expression, child: Expression) extends BoolAggBase(arg) {
+
+  def this(arg: Expression) = {
+    this(arg, Max(arg))
+  }
+
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")
-  override protected def withNewChildInternal(newChild: Expression): Expression =
+  override protected def withNewChildInternal(newChild: Expression): BoolOr =
     copy(arg = newChild)
 }
