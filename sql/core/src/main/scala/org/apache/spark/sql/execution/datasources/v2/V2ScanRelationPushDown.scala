@@ -119,8 +119,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val newResultExpressions = resultExpressions.map { expr =>
                     expr.transform {
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
-                        val sum = addCastIfNeeded(aggregate.Sum(avg.child)
-                          .toAggregateExpression(isDistinct), avg.dataType)
+                        val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
                         avg.dataType match {
                           case _: YearMonthIntervalType =>
@@ -130,7 +129,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                             If(EqualTo(count, Literal(0L)),
                               Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
                           case _ =>
-                            Divide(sum, addCastIfNeeded(count, avg.dataType), false)
+                            Divide(addCastIfNeeded(sum, avg.dataType),
+                              addCastIfNeeded(count, avg.dataType), false)
                         }
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
