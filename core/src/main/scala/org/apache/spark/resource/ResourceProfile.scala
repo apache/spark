@@ -29,7 +29,6 @@ import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
-import org.apache.spark.resource.ResourceProfile.hasCustomExecutorResources
 import org.apache.spark.util.Utils
 
 /**
@@ -259,29 +258,62 @@ class ResourceProfile(
 
 /**
  * Resource profile compatibility based on user policy
- * strict match:
- *     only reuse executors with exact same resources (including all 3rd party resources),
- *     there is no resource waste but less user flexibility
- * reuse larger executor:
- *     if there is a larger executor which has resources larger than or equal to current
- *     requirements, eg. if you define less memory in the new stage then you can reuse previous
- *     executor with larger memory. or if you define new stage with no GPU, you can reuse
- *     previous executor with GPU.
- *     in both cases, new stage has less resource requirements. But in this policy user should know
- *     there is some resource waste. They need to tradeoff reuse executor or create new ones.
+ *
+ * EQUAL_RESOURCES:
+ *     only reuse executors with same resources (including cores, memory and all 3rd party
+ *     resources)
+ * MORE_RESOURCES:
+ *     reuse executors with equal or more resources (including cores, memory and all 3rd party
+ *     resources)
+ * Notes:
+ *     if EQUAL_RESOURCES is specified, there is no resource waste but less
+ *     user flexibility.
+ *     if MORE_RESOURCES is specified, users should know there are some resources
+ *     wasted. They need to tradeoff between reusing executors and creating new ones.
  */
-object ResourceProfileCompatiblePolicy {
+object ResourceProfileCompatiblePolicy extends Enumeration {
+
+  type ResourceProfileCompatiblePolicy = Value
+
+  val EQUAL_RESOURCES, MORE_RESOURCES = Value
+
+  def resourceProfileCompatibleWithPolicy(
+      prevRP: ResourceProfile, curRP: ResourceProfile,
+      resourceNames: Set[String], policy: ResourceProfileCompatiblePolicy): Boolean = {
+    resourceNames.forall { resourceName: String =>
+      policy match {
+        case EQUAL_RESOURCES =>
+          ! prevRP.executorResources.get(resourceName).isEmpty &&
+          ! curRP.executorResources.get(resourceName).isEmpty &&
+          prevRP.executorResources(resourceName).amount ==
+            curRP.executorResources(resourceName).amount
+        case MORE_RESOURCES =>
+          ! prevRP.executorResources.get(resourceName).isEmpty &&
+          ! curRP.executorResources.get(resourceName).isEmpty &&
+          prevRP.executorResources(resourceName).amount >=
+            curRP.executorResources(resourceName).amount
+      }
+    }
+  }
 
   def resourceProfileCompatibleWithEqualCores(prevRP: ResourceProfile,
                                               curRP: ResourceProfile): Boolean = {
-    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
-      prevRP.executorResources("cores") == curRP.executorResources("cores")
+    resourceProfileCompatibleWithPolicy(prevRP, curRP, Set("cores"), EQUAL_RESOURCES)
   }
 
   def resourceProfileCompatibleWithMoreCores(prevRP: ResourceProfile,
                                              curRP: ResourceProfile): Boolean = {
-    !hasCustomExecutorResources(prevRP) && !hasCustomExecutorResources(curRP) &&
-      prevRP.executorResources("cores").amount > curRP.executorResources("cores").amount
+    resourceProfileCompatibleWithPolicy(prevRP, curRP, Set("cores"), MORE_RESOURCES)
+  }
+
+  def resourceProfileCompatibleWithEqualResources(
+    prevRP: ResourceProfile, curRP: ResourceProfile, resourceNames: Set[String]): Boolean = {
+    resourceProfileCompatibleWithPolicy(prevRP, curRP, resourceNames, EQUAL_RESOURCES)
+  }
+
+  def resourceProfileCompatibleWithMoreResources(
+      prevRP: ResourceProfile, curRP: ResourceProfile, resourceNames: Set[String]): Boolean = {
+    resourceProfileCompatibleWithPolicy(prevRP, curRP, resourceNames, MORE_RESOURCES)
   }
 }
 
