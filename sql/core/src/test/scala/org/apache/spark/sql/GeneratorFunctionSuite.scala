@@ -304,24 +304,22 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("lateral view <func>_outer()") {
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
     withTempView("t1") {
       sql(
         """select * from values
-          |(0, array(1), array(struct(0, 1), struct(3, 4))),
-          |(1, array(4, 5), array(struct(6, 7))),
-          |(2, array(), array()),
-          |(3, null, null)
-          |tbl(id, arr1, arr2)
+          |array(struct(0, 1), struct(3, 4)),
+          |array(struct(6, 7)),
+          |array(),
+          |null
+          |as tbl(arr)
          """.stripMargin).createOrReplaceTempView("t1")
-
       checkAnswer(
-        sql("select id, c3 from t1 lateral view explode_outer(arr1) as c3"),
-        Row(0, 1) :: Row(1, 4) :: Row(1, 5) :: Row(2, null) :: Row(3, null) :: Nil)
-
-      checkAnswer(
-        sql("select id, f1, f2 from t1 lateral view inline_outer(arr2) as f1, f2"),
-        Row(0, 0, 1) :: Row(0, 3, 4) :: Row(1, 6, 7) ::
-          Row(2, null, null) :: Row(3, null, null) :: Nil)
+        sql("select f1, f2 from t1 lateral view inline_outer(arr) as f1, f2"),
+        Row(0, 1) :: Row(3, 4) :: Row(6, 7) :: Row(null, null) :: Row(null, null) :: Nil)
     }
   }
 
