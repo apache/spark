@@ -185,7 +185,7 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
         allConstraints += EqualNullSafe(a.toAttribute, l)
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
-        allConstraints ++= allConstraints.map(_ transform {
+        allConstraints ++= allConstraints.filter(_.deterministic).map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
