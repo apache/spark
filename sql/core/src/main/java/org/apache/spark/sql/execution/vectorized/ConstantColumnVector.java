@@ -30,11 +30,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  * It supports all the types and contains `set` APIs,
  * which will set the exact same value to all rows.
  *
- * Capacity: The vector only stores one copy of the data, and acts as an unbounded vector
- * (get from any row will return the same value)
+ * Capacity: The vector stores only one copy of the data.
  */
 public class ConstantColumnVector extends ColumnVector {
 
+  // The data stored in this ConstantColumnVector, the vector stores only one copy of the data.
   private byte nullData;
   private byte byteData;
   private short shortData;
@@ -49,6 +49,10 @@ public class ConstantColumnVector extends ColumnVector {
 
   private final int numRows;
 
+  /**
+   * @param numRows: The number of rows for this ConstantColumnVector
+   * @param type: The data type of this ConstantColumnVector
+   */
   public ConstantColumnVector(int numRows, DataType type) {
     super(type);
     this.numRows = numRows;
@@ -90,10 +94,16 @@ public class ConstantColumnVector extends ColumnVector {
     return nullData == 1;
   }
 
+  /**
+   * Sets all rows as `null`
+   */
   public void setNull() {
     nullData = (byte) 1;
   }
 
+  /**
+   * Sets all rows as not `null`
+   */
   public void setNotNull() {
     nullData = (byte) 0;
   }
@@ -103,6 +113,9 @@ public class ConstantColumnVector extends ColumnVector {
     return byteData == 1;
   }
 
+  /**
+   * Sets the boolean `value` for all rows
+   */
   public void setBoolean(boolean value) {
     byteData = (byte) ((value) ? 1 : 0);
   }
@@ -112,6 +125,9 @@ public class ConstantColumnVector extends ColumnVector {
     return byteData;
   }
 
+  /**
+   * Sets the byte `value` for all rows
+   */
   public void setByte(byte value) {
     byteData = value;
   }
@@ -121,6 +137,9 @@ public class ConstantColumnVector extends ColumnVector {
     return shortData;
   }
 
+  /**
+   * Sets the short `value` for all rows
+   */
   public void setShort(short value) {
     shortData = value;
   }
@@ -130,6 +149,9 @@ public class ConstantColumnVector extends ColumnVector {
     return intData;
   }
 
+  /**
+   * Sets the int `value` for all rows
+   */
   public void setInt(int value) {
     intData = value;
   }
@@ -139,6 +161,9 @@ public class ConstantColumnVector extends ColumnVector {
     return longData;
   }
 
+  /**
+   * Sets the long `value` for all rows
+   */
   public void setLong(long value) {
     longData = value;
   }
@@ -148,6 +173,9 @@ public class ConstantColumnVector extends ColumnVector {
     return floatData;
   }
 
+  /**
+   * Sets the float `value` for all rows
+   */
   public void setFloat(float value) {
     floatData = value;
   }
@@ -157,6 +185,9 @@ public class ConstantColumnVector extends ColumnVector {
     return doubleData;
   }
 
+  /**
+   * Sets the double `value` for all rows
+   */
   public void setDouble(double value) {
     doubleData = value;
   }
@@ -166,6 +197,9 @@ public class ConstantColumnVector extends ColumnVector {
     return arrayData;
   }
 
+  /**
+   * Sets the `ColumnarArray` `value` for all rows
+   */
   public void setArray(ColumnarArray value) {
     arrayData = value;
   }
@@ -175,6 +209,9 @@ public class ConstantColumnVector extends ColumnVector {
     return mapData;
   }
 
+  /**
+   * Sets the `ColumnarMap` `value` for all rows
+   */
   public void setMap(ColumnarMap value) {
     mapData = value;
   }
@@ -194,6 +231,9 @@ public class ConstantColumnVector extends ColumnVector {
     }
   }
 
+  /**
+   * Sets the `Decimal` `value` with the precision for all rows
+   */
   public void setDecimal(Decimal value, int precision) {
     // copy and modify from WritableColumnVector
     if (precision <= Decimal.MAX_INT_DIGITS()) {
@@ -211,10 +251,16 @@ public class ConstantColumnVector extends ColumnVector {
     return UTF8String.fromBytes(byteArrayData);
   }
 
+  /**
+   * Sets the `UTF8String` `value` for all rows
+   */
   public void setUtf8String(UTF8String value) {
     setByteArray(value.getBytes());
   }
 
+  /**
+   * Sets the byte array `value` for all rows
+   */
   private void setByteArray(byte[] value) {
     byteArrayData =  value;
   }
@@ -224,6 +270,9 @@ public class ConstantColumnVector extends ColumnVector {
     return byteArrayData;
   }
 
+  /**
+   * Sets the binary `value` for all rows
+   */
   public void setBinary(byte[] value) {
     setByteArray(value);
   }
@@ -233,6 +282,9 @@ public class ConstantColumnVector extends ColumnVector {
     return childData[ordinal];
   }
 
+  /**
+   * Sets the child `ConstantColumnVector` `value` at the given ordinal for all rows
+   */
   public void setChild(int ordinal, ConstantColumnVector value) {
     childData[ordinal] = value;
   }
