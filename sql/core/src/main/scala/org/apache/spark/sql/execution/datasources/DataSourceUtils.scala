@@ -81,12 +81,16 @@ object DataSourceUtils extends PredicateHelper {
    * in a driver side.
    */
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
+    checkFieldType(format, schema)
+    checkFieldNames(format, schema)
+  }
+
+  def checkFieldType(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be
