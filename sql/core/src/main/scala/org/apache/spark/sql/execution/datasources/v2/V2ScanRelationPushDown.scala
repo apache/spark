@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.mutable
+import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import scala.collection.mutable
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, CheckOverflowInSum, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression, aggregate}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, G
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DecimalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
@@ -130,6 +130,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                             If(EqualTo(count, Literal(0L)),
                               Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
                           case _ =>
+                            // TODO deal with the overflow issue
                             Divide(addCastIfNeeded(sum, avg.dataType),
                               addCastIfNeeded(count, avg.dataType), false)
                         }
