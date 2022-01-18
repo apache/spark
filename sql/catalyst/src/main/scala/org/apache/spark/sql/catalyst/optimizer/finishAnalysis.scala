@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{UnevaluableAggregate, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -40,18 +39,12 @@ import org.apache.spark.util.Utils
  * Few examples are:
  *   we use this to support "nvl" by replacing it with "coalesce".
  *   we use this to replace Every and Any with Min and Max respectively.
- *
- * TODO: In future, explore an option to replace aggregate functions similar to
- * how RuntimeReplaceable does.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG, REGR_COUNT)) {
+    _.containsAnyPattern(RUNTIME_REPLACEABLE, UNEVALUABLE_AGGREGATE)) {
     case e: RuntimeReplaceable => e.child
-    case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
-    case BoolOr(arg) => Max(arg)
-    case BoolAnd(arg) => Min(arg)
-    case RegrCount(left, right) => Count(Seq(left, right))
+    case ua: UnevaluableAggregate => ua.evaluableAggregateFunction
   }
 }
 

@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT_IF, TreePattern}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal, NullIf, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, LongType}
 
@@ -45,11 +44,12 @@ case class CountIf(predicate: Expression) extends UnevaluableAggregate with Impl
 
   override def nullable: Boolean = false
 
+  override def evaluableAggregateFunction: DeclarativeAggregate =
+    Count(new NullIf(predicate, Literal.FalseLiteral))
+
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(COUNT_IF)
 
   override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
     case BooleanType =>

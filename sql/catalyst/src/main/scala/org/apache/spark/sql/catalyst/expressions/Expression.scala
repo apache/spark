@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern, UNEVALUABLE_AGGREGATE}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -391,6 +391,10 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
 trait UnevaluableAggregate extends DeclarativeAggregate {
 
   override def nullable: Boolean = true
+
+  def evaluableAggregateFunction: DeclarativeAggregate
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNEVALUABLE_AGGREGATE)
 
   override lazy val aggBufferAttributes =
     throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
