@@ -4247,9 +4247,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-27442: Spark support read parquet file with invalid char in field name") {
     withResourceTempPath("test-data/field_with_invalid_char.snappy.parquet") { dir =>
       val df = spark.read.parquet(dir.getAbsolutePath)
-      checkAnswer(df, Row(1, 2, 3, 4, 5) :: Nil)
-      assert(df.schema.names.sameElements(Array("max(t)", "a b", "{", ".", "a.b")))
-      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"), Row(1, 2, 3, 4, 5) :: Nil)
+      checkAnswer(df, Row(1, 2, 3, 4, 5, 6) :: Row(2, 4, 6, 8, 10, 12) :: Nil)
+      assert(df.schema.names.sameElements(Array("max(t)", "a b", "{", ".", "a.b", "a")))
+      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`")
+        , Row(1, 2, 3, 4, 5) :: Row(2, 4, 6, 8, 10) :: Nil)
+      checkAnswer(df.where("`a.b` > 8"),
+        Row(2, 4, 6, 8, 10, 12) :: Nil)
     }
   }
 }
