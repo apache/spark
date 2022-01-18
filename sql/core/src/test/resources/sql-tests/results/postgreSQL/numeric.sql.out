@@ -4608,7 +4608,7 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Format '99G999G999D999G999' used for parsing string to number or formatting number to string is invalid
+The input string '-34,338,492.654,878' does not match the given number format: '99G999G999D999G999'
 
 
 -- !query
@@ -4657,7 +4657,7 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Format '999G' used for parsing string to number or formatting number to string is invalid
+The input string '123,000' does not match the given number format: '999G'
 
 
 -- !query

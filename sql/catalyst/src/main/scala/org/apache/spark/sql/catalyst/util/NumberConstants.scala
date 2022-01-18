@@ -45,7 +45,7 @@ object NumberConstants {
   final val SIGN_SET = Set(POINT_SIGN, COMMA_SIGN, MINUS_SIGN, DOLLAR_SIGN)
 }
 
-class NumberFormatter(originNumberFormat: String) extends Serializable {
+class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) extends Serializable {
   import NumberConstants._
 
   protected val normalizedNumberFormat = normalize(originNumberFormat)
@@ -58,15 +58,12 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     decimalFormat
   }
 
-  private val precision = normalizedNumberFormat.filterNot(isSign).length
-
-  private val scale = {
-    val formatSplits = normalizedNumberFormat.split(POINT_SIGN)
-    if (formatSplits.length == 1) {
-      0
-    } else {
-      formatSplits(1).filterNot(isSign).length
-    }
+  private lazy val (precision, scale) = {
+    val formatSplits = normalizedNumberFormat.split(POINT_SIGN).map(_.filterNot(isSign))
+    assert(formatSplits.length <= 2)
+    val precision = formatSplits.map(_.length).sum
+    val scale = if (formatSplits.length == 2) formatSplits.last.length else 0
+    (precision, scale)
   }
 
   def parsedDecimalType: DecimalType = DecimalType(precision, scale)
@@ -92,6 +89,7 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     var notFindDecimalPoint = true
     val normalizedFormat = format.toUpperCase(Locale.ROOT).map {
       case NINE_DIGIT if notFindDecimalPoint => POUND_SIGN
+      case ZERO_DIGIT if isParse && notFindDecimalPoint => POUND_SIGN
       case NINE_DIGIT if !notFindDecimalPoint => ZERO_DIGIT
       case COMMA_LETTER => COMMA_SIGN
       case POINT_LETTER | POINT_SIGN =>
@@ -174,11 +172,11 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
     assert(inputSplits.length <= 2)
     if (inputSplits.length == 1) {
       if (inputStr.filterNot(isSign).length > precision - scale) {
-        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
+        throw QueryExecutionErrors.invalidNumberFormatError(input, originNumberFormat)
       }
     } else if (inputSplits(0).filterNot(isSign).length > precision - scale ||
       inputSplits(1).filterNot(isSign).length > scale) {
-      throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
+      throw QueryExecutionErrors.invalidNumberFormatError(input, originNumberFormat)
     }
 
     try {
@@ -187,7 +185,7 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
       Decimal(number.asInstanceOf[BigDecimal])
     } catch {
       case _: IllegalArgumentException =>
-        throw QueryExecutionErrors.invalidNumberFormatError(originNumberFormat)
+        throw QueryExecutionErrors.invalidNumberFormatError(input, originNumberFormat)
     }
   }
 
@@ -233,7 +231,8 @@ class NumberFormatter(originNumberFormat: String) extends Serializable {
 }
 
 // Visible for testing
-class TestNumberFormatter(originNumberFormat: String) extends NumberFormatter(originNumberFormat) {
+class TestNumberFormatter(originNumberFormat: String, isParse: Boolean = true)
+  extends NumberFormatter(originNumberFormat, isParse) {
   def checkWithException(): Unit = {
     check() match {
       case TypeCheckResult.TypeCheckFailure(message) =>

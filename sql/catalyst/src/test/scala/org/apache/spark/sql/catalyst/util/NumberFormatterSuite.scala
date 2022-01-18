@@ -42,9 +42,9 @@ class NumberFormatterSuite extends SparkFunSuite {
 
     // Test '9' and '0'
     failParseWithInvalidInput(UTF8String.fromString("454"), "9",
-      "Format '9' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454' does not match the given number format: '9'")
     failParseWithInvalidInput(UTF8String.fromString("454"), "99",
-      "Format '99' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454' does not match the given number format: '99'")
 
     Seq(
       ("454", "999") -> Decimal(454),
@@ -63,9 +63,9 @@ class NumberFormatterSuite extends SparkFunSuite {
     }
 
     failParseWithInvalidInput(UTF8String.fromString("454"), "0",
-      "Format '0' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454' does not match the given number format: '0'")
     failParseWithInvalidInput(UTF8String.fromString("454"), "00",
-      "Format '00' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454' does not match the given number format: '00'")
 
     Seq(
       ("454", "000") -> Decimal(454),
@@ -85,9 +85,9 @@ class NumberFormatterSuite extends SparkFunSuite {
 
     // Test '.' and 'D'
     failParseWithInvalidInput(UTF8String.fromString("454.2"), "999",
-      "Format '999' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454.2' does not match the given number format: '999'")
     failParseWithInvalidInput(UTF8String.fromString("454.23"), "999.9",
-      "Format '999.9' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454.23' does not match the given number format: '999.9'")
 
     Seq(
       ("454.2", "999.9") -> Decimal(454.2),
@@ -224,7 +224,7 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(404), "0000") -> "0404",
       (Decimal(450), "0000") -> "0450"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format)
+      val builder = new TestNumberFormatter(format, false)
       builder.check()
       assert(builder.format(decimal) === expected)
     }
@@ -252,7 +252,7 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(4542), "9999D") -> "4542.",
       (Decimal(4542), "0000D") -> "4542."
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format)
+      val builder = new TestNumberFormatter(format, false)
       builder.check()
       assert(builder.format(decimal) === expected)
     }
@@ -276,7 +276,7 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(454367), "G999G999") -> ",454,367",
       (Decimal(454367), "G000G000") -> ",454,367"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format)
+      val builder = new TestNumberFormatter(format, false)
       builder.check()
       assert(builder.format(decimal) === expected)
     }
@@ -288,7 +288,7 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(78.12), "99.99$") -> "78.12$",
       (Decimal(78.12), "00.00$") -> "78.12$"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format)
+      val builder = new TestNumberFormatter(format, false)
       builder.check()
       assert(builder.format(decimal) === expected)
     }
@@ -306,7 +306,7 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(-12454.8), "99G999D9S") -> "12,454.8-",
       (Decimal(-454.8), "99G999.9S") -> "454.8-"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format)
+      val builder = new TestNumberFormatter(format, false)
       builder.check()
       assert(builder.format(decimal) === expected)
     }

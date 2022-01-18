@@ -910,16 +910,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(invalidFormat1, invalidFormat2, invalidFormat3, invalidFormat4)
         .filter(_.nonEmpty).foreach { format =>
         checkExceptionInExpression[IllegalArgumentException](
-          ToNumber(Literal("454"), Literal(format)), s"Format '$format' used for" +
-            " parsing string to number or formatting number to string is invalid")
+          ToNumber(Literal(input), Literal(format)),
+          s"The input string '$input' does not match the given number format: '$format'")
       }
 
       val format1 = 0.until(input.length).map(_ => '0').mkString
       val format2 = 0.until(input.length).map(_ => '9').mkString
-      val format3 = 0.until(input.length + 1).map(_ => '0').mkString
-      val format4 = 0.until(input.length + 1).map(_ => '9').mkString
-      val format5 = 0.until(input.length + 2).map(_ => '0').mkString
-      val format6 = 0.until(input.length + 2).map(_ => '9').mkString
+      val format3 = 0.until(input.length).map(i => i % 2 * 9).mkString
+      val format4 = 0.until(input.length + 1).map(_ => '0').mkString
+      val format5 = 0.until(input.length + 1).map(_ => '9').mkString
+      val format6 = 0.until(input.length + 1).map(i => i % 2 * 9).mkString
       Seq(format1, format2, format3, format4, format5, format6).foreach { format =>
         checkEvaluation(ToNumber(Literal(input), Literal(format)), Decimal(input))
       }
@@ -928,34 +928,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test '.' and 'D'
     checkExceptionInExpression[IllegalArgumentException](
       ToNumber(Literal("454.2"), Literal("999")),
-      "Format '999' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("999.9")),
-      "Format '999.9' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("000.0")),
-      "Format '000.0' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("000D0")),
-      "Format '000D0' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("00.00")),
-      "Format '00.00' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("00D00")),
-      "Format '00D00' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("0000.0")),
-      "Format '0000.0' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("0000D0")),
-      "Format '0000D0' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("00.000")),
-      "Format '00.000' used for parsing string to number or formatting number to string is invalid")
-    checkExceptionInExpression[IllegalArgumentException](
-      ToNumber(Literal("454.23"), Literal("00D000")),
-      "Format '00D000' used for parsing string to number or formatting number to string is invalid")
+      "The input string '454.2' does not match the given number format: '999'")
+    Seq("999.9", "000.0", "99.99", "00.00", "0000.0", "9999.9", "00.000", "99.999")
+      .foreach { format =>
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal("454.23"), Literal(format)),
+          s"The input string '454.23' does not match the given number format: '$format'")
+        val format2 = format.replace('.', 'D')
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal("454.23"), Literal(format2)),
+          s"The input string '454.23' does not match the given number format: '$format2'")
+    }
 
     Seq(
       ("454.2", "000.0") -> Decimal(454.2),
@@ -986,31 +969,27 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test ',' and 'G'
     checkExceptionInExpression[IllegalArgumentException](
       ToNumber(Literal("123,456"), Literal("9G9")),
-      "Format '9G9' used for parsing string to number or formatting number to string is invalid")
+      "The input string '123,456' does not match the given number format: '9G9'")
 
     Seq(
       ("12,454", "99,999") -> Decimal(12454),
       ("12,454", "00,000") -> Decimal(12454),
-      ("12,454", "99G999") -> Decimal(12454),
-      ("12,454", "00G000") -> Decimal(12454),
       ("12,454,367", "99,999,999") -> Decimal(12454367),
       ("12,454,367", "00,000,000") -> Decimal(12454367),
-      ("12,454,367", "99G999G999") -> Decimal(12454367),
-      ("12,454,367", "00G000G000") -> Decimal(12454367),
       ("12,454,", "99,999,") -> Decimal(12454),
       ("12,454,", "00,000,") -> Decimal(12454),
-      ("12,454,", "99G999G") -> Decimal(12454),
-      ("12,454,", "00G000G") -> Decimal(12454),
       (",454,367", ",999,999") -> Decimal(454367),
       (",454,367", ",000,000") -> Decimal(454367),
-      (",454,367", "G999G999") -> Decimal(454367),
-      (",454,367", "G000G000") -> Decimal(454367),
       (",454,367", "999,999") -> Decimal(454367),
-      (",454,367", "000,000") -> Decimal(454367),
-      (",454,367", "999G999") -> Decimal(454367),
-      (",454,367", "000G000") -> Decimal(454367)
+      (",454,367", "000,000") -> Decimal(454367)
     ).foreach { case ((str, format), expected) =>
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace(',', 'G')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = s"${format}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = s"0${format}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
     }
 
     // Test '$'
