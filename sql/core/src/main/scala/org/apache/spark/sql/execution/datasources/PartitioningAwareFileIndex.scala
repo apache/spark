@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_STRUCT
+import org.apache.spark.sql.execution.datasources.FileFormat.{FILE_MODIFICATION_TIME, FILE_NAME, FILE_PATH, FILE_SIZE}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -80,22 +80,31 @@ abstract class PartitioningAwareFileIndex(
       case _ => false
     }).reduceOption(expressions.And)
 
-    // will create internal rows for each file, position 0: Metadata Struct
-    val boundedFilterOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-      Predicate.createInterpreted(fileMetadataFilter.transform {
-        case _: AttributeReference => BoundReference(0, METADATA_STRUCT, nullable = true)
+    // - create a bound references for filters: put the metadata struct at 0 position for each file
+    // - retrieve the final metadata struct (could be pruned) from filters
+    val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
+      val metadataStruct = fileMetadataFilter.references.head.dataType
+      val boundedFilter = Predicate.createInterpreted(fileMetadataFilter.transform {
+        case _: AttributeReference => BoundReference(0, metadataStruct, nullable = true)
       })
+      (boundedFilter, metadataStruct)
     }
 
     def matchFileMetadataPredicate(f: FileStatus): Boolean = {
-      // use option.forall, so if there is no filter, return true
-      boundedFilterOpt.forall(_.eval(
-        InternalRow.fromSeq(Seq(InternalRow.fromSeq(Seq(
-          UTF8String.fromString(f.getPath.toString),
-          UTF8String.fromString(f.getPath.getName),
-          f.getLen,
-          f.getModificationTime * 1000L))))
-      ))
+      // use option.forall, so if there is no filter no metadata struct, return true
+      boundedFilterMetadataStructOpt.forall { case (boundedFilter, metadataStruct) =>
+        val row = InternalRow.fromSeq(Seq(InternalRow.fromSeq(
+          metadataStruct.asInstanceOf[StructType].fields.map { attr =>
+            attr.name match {
+              case FILE_PATH => UTF8String.fromString(f.getPath.toString)
+              case FILE_NAME => UTF8String.fromString(f.getPath.getName)
+              case FILE_SIZE => f.getLen
+              case FILE_MODIFICATION_TIME => f.getModificationTime * 1000L
+            }
+          }
+        )))
+        boundedFilter.eval(row)
+      }
     }
 
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
