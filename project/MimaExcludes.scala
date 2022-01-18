@@ -43,6 +43,8 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$"),
     // [SPARK-36699][Core] Reuse compatible executors for stage-level scheduling
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerResourceProfileAdded$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerResourceProfileAdded.*"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ResourceProfileInfo.this"),
 
     // [SPARK-37391][SQL] JdbcConnectionProvider tells if it modifies security context
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
