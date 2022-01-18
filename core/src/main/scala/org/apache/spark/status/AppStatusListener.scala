@@ -158,10 +158,11 @@ private[spark] class AppStatusListener(
       None
     }
     val liveRP = new LiveResourceProfile(event.resourceProfile.id,
-      event.resourceProfile.executorResources, event.resourceProfile.taskResources, maxTasks)
+      event.resourceProfile.executorResources, event.resourceProfile.taskResources,
+      event.compatibleResourceProfileIds, maxTasks)
     liveResourceProfiles(event.resourceProfile.id) = liveRP
     val rpInfo = new v1.ResourceProfileInfo(liveRP.resourceProfileId,
-      liveRP.executorResources, liveRP.taskResources)
+      liveRP.executorResources, liveRP.taskResources, liveRP.compatibleResourceProfileIds)
     kvstore.write(new ResourceProfileWrapper(rpInfo))
   }
 

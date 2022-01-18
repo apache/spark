@@ -248,10 +248,12 @@ private class LiveResourceProfile(
     val resourceProfileId: Int,
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest],
+    val compatibleResourceProfileIds: Option[Set[Int]],
     val maxTasksPerExecutor: Option[Int]) extends LiveEntity {
 
   def toApi(): v1.ResourceProfileInfo = {
-    new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)
+    new v1.ResourceProfileInfo(resourceProfileId, executorResources,
+      taskResources, compatibleResourceProfileIds)
   }
 
   override protected def doUpdate(): Any = {

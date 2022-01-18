@@ -283,8 +283,9 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 @DeveloperApi
-@Since("3.1.0")
-case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile)
+@Since("3.3.0")
+case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile,
+  compatibleResourceProfileIds: Option[Set[Int]])
   extends SparkListenerEvent
 
 /**

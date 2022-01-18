@@ -61,10 +61,20 @@ private[ui] class EnvironmentPage(
       }.mkString("\n")
     }
 
+    def constructCompatibleResourceProfileIdsString(ids: Option[Set[Int]]): String = {
+      ids match {
+        case Some(value) => value.mkString(", ")
+        case None => "N/A"
+      }
+    }
+
     val resourceProfileInfo = store.resourceProfileInfo().map { rinfo =>
       val einfo = constructExecutorRequestString(rinfo.executorResources)
+      val compatibleInfo = constructCompatibleResourceProfileIdsString(
+        rinfo.compatibleResourceProfileIds)
       val tinfo = constructTaskRequestString(rinfo.taskResources)
-      val res = s"Executor Reqs:\n$einfo\nTask Reqs:\n$tinfo"
+      val res = s"Compatible Resource Profile Ids: $compatibleInfo\n" +
+        s"Executor Reqs:\n$einfo\nTask Reqs:\n$tinfo"
       (rinfo.id.toString, res)
     }.toMap
 

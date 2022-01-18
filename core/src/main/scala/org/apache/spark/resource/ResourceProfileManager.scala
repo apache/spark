@@ -116,7 +116,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       // force the computation of maxTasks and limitingResource now so we don't have cost later
       rp.limitingResource(sparkConf)
       logInfo(s"Added ResourceProfile id: ${rp.id}")
-      listenerBus.post(SparkListenerResourceProfileAdded(rp))
+      listenerBus.post(SparkListenerResourceProfileAdded(rp,
+        resourceProfileIdToCompatibleResourceProfileIds.get(rp.id)))
     }
   }
 

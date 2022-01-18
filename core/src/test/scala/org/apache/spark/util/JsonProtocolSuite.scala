@@ -137,7 +137,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     rprofBuilder.require(taskReq).require(execReq)
     val resourceProfile = rprofBuilder.build
     resourceProfile.setResourceProfileId(21)
-    val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)
+    val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile, None)
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)

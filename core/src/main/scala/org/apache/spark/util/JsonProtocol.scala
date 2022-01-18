@@ -228,12 +228,24 @@ private[spark] object JsonProtocol {
   }
 
   def resourceProfileAddedToJson(profileAdded: SparkListenerResourceProfileAdded): JValue = {
-    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.resourceProfileAdded) ~
-      ("Resource Profile Id" -> profileAdded.resourceProfile.id) ~
-      ("Executor Resource Requests" ->
-        executorResourceRequestMapToJson(profileAdded.resourceProfile.executorResources)) ~
-      ("Task Resource Requests" ->
-        taskResourceRequestMapToJson(profileAdded.resourceProfile.taskResources))
+    profileAdded.compatibleResourceProfileIds match {
+      case Some(value) =>
+        ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.resourceProfileAdded) ~
+        ("Resource Profile Id" -> profileAdded.resourceProfile.id) ~
+        ("Resource Profile Compatible Ids" ->
+          resourceProfileCompatibleIdsToJson(Some(value)))
+        ("Executor Resource Requests" ->
+          executorResourceRequestMapToJson(profileAdded.resourceProfile.executorResources)) ~
+        ("Task Resource Requests" ->
+            taskResourceRequestMapToJson(profileAdded.resourceProfile.taskResources))
+      case None =>
+        ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.resourceProfileAdded) ~
+        ("Resource Profile Id" -> profileAdded.resourceProfile.id) ~
+        ("Executor Resource Requests" ->
+          executorResourceRequestMapToJson(profileAdded.resourceProfile.executorResources)) ~
+        ("Task Resource Requests" ->
+          taskResourceRequestMapToJson(profileAdded.resourceProfile.taskResources))
+    }
   }
 
   def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
@@ -544,6 +556,13 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockUpdatedInfo.diskSize)
   }
 
+  def resourceProfileCompatibleIdsToJson(ids: Option[Set[Int]]): JValue = {
+    ids match {
+      case Some(value) => JSet(value.map(JInt(_)))
+      case None => JSet(Set[JValue]())
+    }
+  }
+
   def executorResourceRequestToJson(execReq: ExecutorResourceRequest): JValue = {
     ("Resource Name" -> execReq.resourceName) ~
     ("Amount" -> execReq.amount) ~
@@ -736,11 +755,16 @@ private[spark] object JsonProtocol {
 
   def resourceProfileAddedFromJson(json: JValue): SparkListenerResourceProfileAdded = {
     val profId = (json \ "Resource Profile Id").extract[Int]
+    val compatibleIds = (json \ "Resource Profile Compatible Ids").extract[Set[Int]]
     val executorReqs = executorResourceRequestMapFromJson(json \ "Executor Resource Requests")
     val taskReqs = taskResourceRequestMapFromJson(json \ "Task Resource Requests")
     val rp = new ResourceProfile(executorReqs.toMap, taskReqs.toMap)
     rp.setResourceProfileId(profId)
-    SparkListenerResourceProfileAdded(rp)
+    if (!compatibleIds.isEmpty) {
+      SparkListenerResourceProfileAdded(rp, Some(compatibleIds))
+    } else {
+      SparkListenerResourceProfileAdded(rp, None)
+    }
   }
 
   def executorResourceRequestFromJson(json: JValue): ExecutorResourceRequest = {

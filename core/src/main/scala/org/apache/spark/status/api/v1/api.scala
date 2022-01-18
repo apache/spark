@@ -65,7 +65,8 @@ case class ApplicationAttemptInfo private[spark](
 class ResourceProfileInfo private[spark](
     val id: Int,
     val executorResources: Map[String, ExecutorResourceRequest],
-    val taskResources: Map[String, TaskResourceRequest])
+    val taskResources: Map[String, TaskResourceRequest],
+    val compatibleResourceProfileIds: Option[Set[Int]])
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
