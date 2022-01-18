@@ -6185,6 +6185,13 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaisesRegex(KeyError, "none key"):
             psdf[None]
 
+    def test_getitem_with_same_key(self):
+        # SPARK-37930: Fix DataFrame select subset with duplicated columns
+        pdf, psdf = self.df_pair
+
+        self.assert_eq(pdf[["a", "a", "a"]], psdf[["a", "a", "a"]])
+        self.assert_eq(pdf.loc[:, ["a", "a", "a"]], psdf.loc[:, ["a", "a", "a"]])
+
     def test_iter_dataframe(self):
         pdf, psdf = self.df_pair
 

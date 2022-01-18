@@ -1143,7 +1143,10 @@ class InternalFrame:
             drop = index_field not in data_columns
             pdf = pdf.set_index(index_field, drop=drop, append=append)
             append = True
-        pdf = pdf[data_columns]
+
+        # SPARK-37930: Fix DataFrame select subset with duplicated columns
+        # Remove duplicated columns before select `data_columns`
+        pdf = pdf.loc[:, ~pdf.columns.duplicated()][data_columns]
 
         pdf.index.names = [
             name if name is None or len(name) > 1 else name[0] for name in index_names
