@@ -134,7 +134,7 @@ private[kafka010] class KafkaSource(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable() )
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }
 
