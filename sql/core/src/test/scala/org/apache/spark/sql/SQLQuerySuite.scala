@@ -4243,6 +4243,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df3, df4)
     }
   }
+
+  test("SPARK-27442: Spark support read parquet file with invalid char in field name") {
+    withResourceTempPath("test-data/field_with_invalid_char.snappy.parquet") { dir =>
+      val df = spark.read.parquet(dir.getAbsolutePath)
+      checkAnswer(df, Row(1, 2, 3) :: Nil)
+      assert(df.schema.names.sameElements(Array("max(t)", "a b", "{")))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
