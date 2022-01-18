@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, RuntimeReplaceable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, RuntimeReplaceable}
+import org.apache.spark.sql.types.{AbstractDataType, NumericType}
 
 @ExpressionDescription(
   usage = """
@@ -35,11 +36,15 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescript
   group = "agg_funcs",
   since = "3.3.0")
 case class RegrCount(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(left: Expression, right: Expression) = {
     this(left, right, Count(Seq(left, right)))
   }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
+
+  override def prettyName: String = "regr_count"
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)

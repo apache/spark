@@ -2198,7 +2198,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           } else {
             AggregateExpression(agg, Complete, u.isDistinct, u.filter)
           }
-        case re: RuntimeReplaceable if re.isAggregate => validateFunction(re.child, numArgs, u)
+        // Replace with real aggregate function only if check input data types is success.
+        case re: RuntimeReplaceable if re.isAggregate && re.checkInputDataTypes().isSuccess =>
+          re.child.setTagValue(FunctionRegistry.FUNC_ALIAS, re.prettyName)
+          validateFunction(re.child, numArgs, u)
         // This function is not an aggregate function, just return the resolved one.
         case other if u.isDistinct =>
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
