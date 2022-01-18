@@ -927,7 +927,9 @@ class SparkSession(SparkConversionMixin):
                 return (obj,)
 
         else:
-            prepare = lambda obj: obj
+
+            def prepare(obj: Any) -> Any:
+                return obj
 
         if isinstance(data, RDD):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
