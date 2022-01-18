@@ -330,26 +330,44 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("SPARK-37915: combine unions if there is a project between them") {
-    val testRelation1 = LocalRelation('a.decimal(18, 1), 'b.int)
-    val testRelation2 = LocalRelation('a.decimal(18, 2), 'b.int)
-    val testRelation3 = LocalRelation('a.decimal(18, 3), 'b.int)
-    val testRelation4 = LocalRelation('a.decimal(18, 4), 'b.int)
-    val testRelation5 = LocalRelation('a.decimal(18, 5), 'b.int)
-    val query = Distinct(Distinct(Distinct(Distinct(testRelation1.union(testRelation2))
-      .union(testRelation3)).union(testRelation4)).union(testRelation5))
-    val optimized = Optimize.execute(query.analyze)
+    val relation1 = LocalRelation('a.decimal(18, 1), 'b.int)
+    val relation2 = LocalRelation('a.decimal(18, 2), 'b.int)
+    val relation3 = LocalRelation('a.decimal(18, 3), 'b.int)
+    val relation4 = LocalRelation('a.decimal(18, 4), 'b.int)
+    val relation5 = LocalRelation('a.decimal(18, 5), 'b.int)
 
-    val expected = Distinct(Union(
-      Seq(
-        testRelation1.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
-          .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b),
-        testRelation2.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
-          .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b),
-        testRelation3.select('a.cast(DecimalType(20, 3)).cast(DecimalType(21, 4))
-          .cast(DecimalType(22, 5)).as("a"), 'b),
-        testRelation4.select('a.cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b),
-        testRelation5.select('a.cast(DecimalType(22, 5)).as("a"), 'b))))
+    val optimizedRelation1 = relation1.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation2 = relation2.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation3 = relation3.select('a.cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation4 = relation4
+      .select('a.cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation5 = relation5.select('a.cast(DecimalType(22, 5)).as("a"), 'b)
 
-    comparePlans(optimized, expected.analyze)
+    // SQL UNION ALL
+    comparePlans(
+      Optimize.execute(relation1.union(relation2)
+        .union(relation3).union(relation4).union(relation5).analyze),
+      Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5)).analyze)
+
+    // SQL UNION
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Deduplicate
+    comparePlans(
+      Optimize.execute(relation1.union(relation2).deduplicate('a, 'b).union(relation3)
+        .deduplicate('a, 'b).union(relation4).deduplicate('a, 'b).union(relation5)
+        .deduplicate('a, 'b).analyze),
+      Deduplicate(
+        Seq('a, 'b),
+        Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+          optimizedRelation4, optimizedRelation5))).analyze)
   }
 }

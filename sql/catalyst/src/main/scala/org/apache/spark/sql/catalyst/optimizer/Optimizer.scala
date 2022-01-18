@@ -1332,9 +1332,22 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        // Push down projection and then push pushed plan to Stack if there is a Project.
         case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
             if projectList.forall(_.deterministic) && children.nonEmpty &&
               flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+          val newChildren = PushProjectionThroughUnion.pushProjectionThroughUnion(projectList, u)
+            .map(CollapseProject(_))
+          stack.pushAll(newChildren.reverse)
+        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          val newChildren = PushProjectionThroughUnion.pushProjectionThroughUnion(projectList, u)
+            .map(CollapseProject(_))
+          stack.pushAll(newChildren.reverse)
+        case Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              byName == topByName && allowMissingCol == topAllowMissingCol =>
           val newChildren = PushProjectionThroughUnion.pushProjectionThroughUnion(projectList, u)
             .map(CollapseProject(_))
           stack.pushAll(newChildren.reverse)
