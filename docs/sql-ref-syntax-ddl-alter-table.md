@@ -75,6 +75,54 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 
     Specifies the columns to be added.
 
+### DROP COLUMNS
+
+`ALTER TABLE DROP COLUMNS` statement drops mentioned columns of an existing table.
+Note that this statement is only supported with v2 tables.
+
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier DROP COLUMNS ( col_spec [ , ... ] )
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **COLUMNS ( col_spec )**
+
+  Specifies the columns to be dropped.
+
+### RENAME COLUMN
+
+`ALTER TABLE RENAME COLUMN` statement changes the column name of an existing table.
+Note that this statement is only supported with v2 tables.
+
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier RENAME COLUMN ( col_spec )
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **COLUMN ( col_spec )**
+
+  Specifies the column to be renamed.
+
 ### ALTER OR CHANGE COLUMN
 
 `ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's definition.
@@ -100,6 +148,27 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 * **alterColumnAction**
 
     Change column's definition.
+
+### REPLACE COLUMNS
+
+`ALTER TABLE REPLACE COLUMNS` statement removes all existing columns and adds the new set of columns.
+Note that this statement is only supported with v2 tables.
+
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier REPLACE COLUMNS  
+  [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
 
 ### ADD AND DROP PARTITION
 
@@ -224,6 +293,25 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 * **SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )**
 
     Specifies the SERDE properties to be set.
+
+### RECOVER PARTITIONS
+
+`RECOVER PARTITIONS` statement recovers all the partitions in the directory of a table and updates the Hive metastore.
+Another way to recover partitions is to use `MSCK REPAIR TABLE`.
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier RECOVER PARTITIONS
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
