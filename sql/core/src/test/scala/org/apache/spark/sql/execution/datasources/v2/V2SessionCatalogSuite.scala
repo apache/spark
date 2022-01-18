@@ -993,7 +993,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    val exc = intercept[IllegalStateException] {
+    val exc = intercept[AnalysisException] {
       catalog.dropNamespace(testNs, cascade = false)
     }
 
