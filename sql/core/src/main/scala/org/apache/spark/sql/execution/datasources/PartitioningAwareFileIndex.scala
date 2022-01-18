@@ -27,9 +27,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.FileFormat.{FILE_MODIFICATION_TIME, FILE_NAME, FILE_PATH, FILE_SIZE}
+import org.apache.spark.sql.execution.datasources.FileFormat.createMetadataInternalRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
@@ -93,16 +92,10 @@ abstract class PartitioningAwareFileIndex(
     def matchFileMetadataPredicate(f: FileStatus): Boolean = {
       // use option.forall, so if there is no filter no metadata struct, return true
       boundedFilterMetadataStructOpt.forall { case (boundedFilter, metadataStruct) =>
-        val row = InternalRow.fromSeq(Seq(InternalRow.fromSeq(
-          metadataStruct.asInstanceOf[StructType].fields.map { attr =>
-            attr.name match {
-              case FILE_PATH => UTF8String.fromString(f.getPath.toString)
-              case FILE_NAME => UTF8String.fromString(f.getPath.getName)
-              case FILE_SIZE => f.getLen
-              case FILE_MODIFICATION_TIME => f.getModificationTime * 1000L
-            }
-          }
-        )))
+        val row = InternalRow.fromSeq(Seq(
+          createMetadataInternalRow(metadataStruct.asInstanceOf[StructType].names,
+            f.getPath, f.getLen, f.getModificationTime)
+        ))
         boundedFilter.eval(row)
       }
     }

@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
 /**
@@ -136,18 +135,8 @@ class FileScanRDD(
        */
       private def updateMetadataRow(): Unit = {
         if (metadataColumns.nonEmpty && currentFile != null) {
-          val path = new Path(currentFile.filePath)
-          metadataColumns.zipWithIndex.foreach { case (attr, i) =>
-            attr.name match {
-              case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
-              case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
-              case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
-              case FILE_MODIFICATION_TIME =>
-                // the modificationTime from the file is in millisecond,
-                // while internally, the TimestampType is stored in microsecond
-                metadataRow.update(i, currentFile.modificationTime * 1000L)
-            }
-          }
+          updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
+            new Path(currentFile.filePath), currentFile.fileSize, currentFile.modificationTime)
         }
       }
 
