@@ -434,7 +434,8 @@ case class DataSource(
           hs.partitionSchema,
           "in the partition schema",
           equality)
-        DataSourceUtils.checkFieldType(hs.fileFormat, hs.dataSchema)
+        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema,
+          !hs.fileFormat.isInstanceOf[ParquetFileFormat])
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,
