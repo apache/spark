@@ -34,7 +34,7 @@ class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
       rightPartitionKeyIndices: Seq[Int],
       leftPartitionNum: Int,
       rightPartitionNum: Int,
-      success: Boolean) {
+      success: Boolean): Unit = {
     val table1 =
       spark.range(10).select('id + 1 as 'a1, 'id + 2 as 'b1, 'id + 3 as 'c1)
         .queryExecution.executedPlan
@@ -87,7 +87,7 @@ class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
       joinKeyIndices1: Seq[(Int, Int)],
       joinKeyIndices2: Seq[(Int, Int)],
       partNums: Seq[Int],
-      success: Boolean) {
+      success: Boolean): Unit = {
     val table1 =
       spark.range(10).select('id + 1 as 'a1, 'id + 2 as 'b1, 'id + 3 as 'c1)
         .queryExecution.executedPlan
