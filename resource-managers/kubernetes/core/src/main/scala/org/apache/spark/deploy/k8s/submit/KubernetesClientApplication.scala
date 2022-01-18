@@ -100,13 +100,18 @@ private[spark] class Client(
     kubernetesClient: KubernetesClient,
     watcher: LoggingPodStatusWatcher) extends Logging {
 
-  def run(): Unit = {
+  private[spark] def createConfigs(): (KubernetesDriverSpec, Map[String, String], ConfigMap) = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
     val configMapName = KubernetesClientUtils.configMapNameDriver
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
       conf.sparkConf, resolvedDriverSpec.systemProperties)
-    val configMap = KubernetesClientUtils
-      .buildConfigMap(configMapName, confFilesMap, conf.namespace)
+    (resolvedDriverSpec, confFilesMap, KubernetesClientUtils
+      .buildConfigMap(configMapName, confFilesMap, conf.namespace))
+  }
+
+  def run(): Unit = {
+    val configMapName = KubernetesClientUtils.configMapNameDriver
+    val (resolvedDriverSpec, confFilesMap, configMap) = createConfigs()
 
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap

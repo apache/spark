@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
+import io.fabric8.kubernetes.api.model.ConfigMap
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -74,14 +75,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
     removeExecutor(executorId, reason)
   }
 
-  private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
+  private[k8s] def createConfigMap(): ConfigMap = {
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, conf, Map.empty)
     val labels =
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
-    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap,
+    KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap,
       conf.get(KUBERNETES_NAMESPACE), labels)
+  }
+
+  private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
+    val configMap = createConfigMap()
     KubernetesUtils.addOwnerReference(driverPod.orNull, Seq(configMap))
     kubernetesClient.configMaps().create(configMap)
   }

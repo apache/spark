@@ -337,4 +337,32 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     submissionClient.run()
     verify(loggingPodStatusWatcher).watchOrStop(kconf.namespace + ":driver")
   }
+
+  test("driver's confimap.metadata.namespace set to conf.namespace otherwise default") {
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    assert(submissionClient.createConfigs()._3.getMetadata.getNamespace === "default")
+
+    val sparkConf = new SparkConf(false)
+      .set(Config.KUBERNETES_NAMESPACE, "namespace")
+
+    val kconf2 = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX)
+    )
+
+    when(driverBuilder.buildFromFeatures(kconf2, kubernetesClient))
+      .thenReturn(BUILT_KUBERNETES_SPEC)
+
+    val submissionClient2 = new Client(
+      kconf2,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    assert(submissionClient2.createConfigs()._3.getMetadata.getNamespace === "namespace")
+  }
 }
