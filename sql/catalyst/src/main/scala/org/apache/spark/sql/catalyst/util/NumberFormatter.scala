@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object NumberConstants {
+object NumberFormatter {
   final val POINT_SIGN = '.'
   final val POINT_LETTER = 'D'
   final val COMMA_SIGN = ','
@@ -46,7 +46,7 @@ object NumberConstants {
 }
 
 class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) extends Serializable {
-  import NumberConstants._
+  import NumberFormatter._
 
   protected val normalizedNumberFormat = normalize(originNumberFormat)
 
