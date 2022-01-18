@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, Literal, NullIf, RuntimeReplaceable}
+import org.apache.spark.sql.types.BooleanType
 
 @ExpressionDescription(
   usage = """
@@ -36,6 +38,17 @@ case class CountIf(predicate: Expression, child: Expression) extends RuntimeRepl
 
   def this(predicate: Expression) = {
     this(predicate, Count(new NullIf(predicate, Literal.FalseLiteral)))
+  }
+
+  override def prettyName: String = "count_if"
+
+  override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
+    case BooleanType =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
+      )
   }
 
   override def flatArguments: Iterator[Any] = Iterator(predicate)

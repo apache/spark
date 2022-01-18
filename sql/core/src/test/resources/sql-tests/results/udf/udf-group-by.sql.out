@@ -293,7 +293,7 @@ struct<>
 -- !query
 SELECT udf(every(v)), udf(some(v)), any(v) FROM test_agg WHERE 1 = 0
 -- !query schema
-struct<udf(every(v)):boolean,udf(some(v)):boolean,any(v):boolean>
+struct<udf(min(v)):boolean,udf(max(v)):boolean,max(v):boolean>
 -- !query output
 NULL	NULL	NULL
 
@@ -301,7 +301,7 @@ NULL	NULL	NULL
 -- !query
 SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4
 -- !query schema
-struct<udf(every(udf(v))):boolean,some(v):boolean,any(v):boolean>
+struct<udf(min(udf(v))):boolean,max(v):boolean,max(v):boolean>
 -- !query output
 NULL	NULL	NULL
 
@@ -309,7 +309,7 @@ NULL	NULL	NULL
 -- !query
 SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5
 -- !query schema
-struct<every(v):boolean,udf(some(v)):boolean,any(v):boolean>
+struct<min(v):boolean,udf(max(v)):boolean,max(v):boolean>
 -- !query output
 false	true	true
 
@@ -317,7 +317,7 @@ false	true	true
 -- !query
 SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k)
 -- !query schema
-struct<udf(k):int,every(v):boolean,udf(some(v)):boolean,any(v):boolean>
+struct<udf(k):int,min(v):boolean,udf(max(v)):boolean,max(v):boolean>
 -- !query output
 1	false	true	true
 2	true	true	true
@@ -329,7 +329,7 @@ struct<udf(k):int,every(v):boolean,udf(some(v)):boolean,any(v):boolean>
 -- !query
 SELECT udf(k), every(v) FROM test_agg GROUP BY k HAVING every(v) = false
 -- !query schema
-struct<udf(k):int,every(v):boolean>
+struct<udf(k):int,min(v):boolean>
 -- !query output
 1	false
 3	false
@@ -339,7 +339,7 @@ struct<udf(k):int,every(v):boolean>
 -- !query
 SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL
 -- !query schema
-struct<udf(k):int,udf(every(v)):boolean>
+struct<udf(k):int,udf(min(v)):boolean>
 -- !query output
 4	NULL
 
@@ -380,7 +380,7 @@ SELECT every(udf(1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: argument 1 requires boolean type, however, 'min(CAST(udf(cast(1 as string)) AS INT))' is of int type.; line 1 pos 7
+cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: Input to function 'every' should have been boolean, but it's [int].; line 1 pos 7
 
 
 -- !query
@@ -389,7 +389,7 @@ SELECT some(udf(1S))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: argument 1 requires boolean type, however, 'max(CAST(udf(cast(1 as string)) AS SMALLINT))' is of smallint type.; line 1 pos 7
+cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
 
 
 -- !query
@@ -398,7 +398,7 @@ SELECT any(udf(1L))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: argument 1 requires boolean type, however, 'max(CAST(udf(cast(1 as string)) AS BIGINT))' is of bigint type.; line 1 pos 7
+cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: Input to function 'any' should have been boolean, but it's [bigint].; line 1 pos 7
 
 
 -- !query
@@ -407,13 +407,13 @@ SELECT udf(every("true"))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, 'min('true')' is of string type.; line 1 pos 11
+cannot resolve 'every('true')' due to data type mismatch: Input to function 'every' should have been boolean, but it's [string].; line 1 pos 11
 
 
 -- !query
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,v:boolean,min(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query output
 1	false	false
 1	true	false
@@ -430,7 +430,7 @@ struct<k:int,v:boolean,every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST 
 -- !query
 SELECT k, udf(udf(v)), some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<k:int,udf(udf(v)):boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<k:int,udf(udf(v)):boolean,max(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query output
 1	false	false
 1	true	true
@@ -447,7 +447,7 @@ struct<k:int,udf(udf(v)):boolean,some(v) OVER (PARTITION BY k ORDER BY v ASC NUL
 -- !query
 SELECT udf(udf(k)), v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg
 -- !query schema
-struct<udf(udf(k)):int,v:boolean,any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
+struct<udf(udf(k)):int,v:boolean,max(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):boolean>
 -- !query output
 1	false	false
 1	true	true

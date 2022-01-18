@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
 
@@ -28,6 +28,15 @@ abstract class BoolAggBase(arg: Expression) extends RuntimeReplaceable
   override def exprsReplaced: Seq[Expression] = Seq(arg)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    arg.dataType match {
+      case dt if dt != BooleanType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
+          s"${BooleanType.simpleString}, but it's [${arg.dataType.catalogString}].")
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
+  }
 }
 
 @ExpressionDescription(
