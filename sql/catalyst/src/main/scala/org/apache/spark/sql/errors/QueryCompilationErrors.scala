@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -255,6 +255,14 @@ object QueryCompilationErrors {
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectPersistentFuncError(
+      name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(
+      s"$name is a built-in/temporary function. '$cmd' expects a persistent function.$hintStr",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -507,11 +515,6 @@ object QueryCompilationErrors {
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
-  def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
-    new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
-      "SHOW VIEWS, only SessionCatalog supports this command.")
-  }
-
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
@@ -540,8 +543,14 @@ object QueryCompilationErrors {
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
 
-  def databaseNotEmptyError(db: String, details: String): Throwable = {
-    new AnalysisException(s"Database $db is not empty. One or more $details exist.")
+  def cannotDropNonemptyDatabaseError(db: String): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty database: $db. " +
+      "Use CASCADE option to drop a non-empty database.")
+  }
+
+  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+      "Use CASCADE option to drop a non-empty namespace.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -1369,8 +1378,8 @@ object QueryCompilationErrors {
     new AnalysisException(s"Cannot partition by nested column: $reference")
   }
 
-  def cannotUseCatalogError(plugin: CatalogPlugin, msg: String): Throwable = {
-    new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
+  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+    new AnalysisException(s"Catalog ${plugin.name} does not support $ability")
   }
 
   def identifierHavingMoreThanTwoNamePartsError(
@@ -1380,10 +1389,6 @@ object QueryCompilationErrors {
 
   def emptyMultipartIdentifierError(): Throwable = {
     new AnalysisException("multi-part identifier cannot be empty.")
-  }
-
-  def functionUnsupportedInV2CatalogError(): Throwable = {
-    new AnalysisException("function is only supported in v1 catalog")
   }
 
   def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
@@ -1753,6 +1758,21 @@ object QueryCompilationErrors {
     new AnalysisException(s"Table or view not found: $table")
   }
 
+  def noSuchFunctionError(
+      rawName: Seq[String],
+      t: TreeNode[_],
+      fullName: Option[Seq[String]] = None): Throwable = {
+    if (rawName.length == 1 && fullName.isDefined) {
+      new AnalysisException(s"Undefined function: ${rawName.head}. " +
+        "This function is neither a built-in/temporary function, nor a persistent " +
+        s"function that is qualified as ${fullName.get.quoted}.",
+        t.origin.line, t.origin.startPosition)
+    } else {
+      new AnalysisException(s"Undefined function: ${rawName.quoted}",
+        t.origin.line, t.origin.startPosition)
+    }
+  }
+
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
     new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
   }
@@ -1822,13 +1842,8 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
-  def cannotDropNativeFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot drop native function '$functionName'")
+  def cannotDropBuiltinFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop built-in function '$functionName'")
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {

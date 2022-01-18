@@ -118,7 +118,7 @@
     <maven.version>3.8.4</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.30</slf4j.version>
+    <slf4j.version>1.7.32</slf4j.version>
     <log4j.version>2.17.1</log4j.version>
     <hadoop.version>3.3.1</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -204,7 +204,7 @@
     <arrow.version>6.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.10.1</kubernetes-client.version>
+    <kubernetes-client.version>5.10.2</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -285,11 +285,6 @@
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
 
     <!-- SPARK-36796 for JDK-17 test-->
-    <!--
-      SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
-      to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
-      is added. Should remove it when `mockito` can mock `j.u.Random` directly.
-    -->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
       --add-opens=java.base/java.lang=ALL-UNNAMED
@@ -305,7 +300,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      --add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED
     </extraJavaTestArgs>
   </properties>
   <repositories>
@@ -399,7 +393,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
+      <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -817,7 +811,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.72.Final</version>
+        <version>4.1.73.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1081,31 +1075,37 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.9</version>
+        <version>3.3.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-15_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-3-4_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
+        <version>3.2.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>selenium-3-141_${scala.binary.version}</artifactId>
-        <version>3.2.9.0</version>
+        <version>3.3.0.0-SNAP3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>3.4.6</version>
+        <version>3.12.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-inline</artifactId>
+        <version>3.12.4</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1364,6 +1364,10 @@
           <exclusion>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2752,39 +2756,39 @@
             </execution>
           </executions>
         </plugin>
-	<plugin>
-	  <groupId>org.codehaus.mojo</groupId>
-	  <artifactId>build-helper-maven-plugin</artifactId>
-	  <version>3.2.0</version>
-	  <executions>
-	    <execution>
-	      <id>module-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>module.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>current</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	    <execution>
-	      <id>local-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>local.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>build</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	  </executions>
-	</plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>3.2.0</version>
+          <executions>
+            <execution>
+              <id>module-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>module.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>current</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+            <execution>
+              <id>local-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>local.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>build</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
@@ -3560,9 +3564,9 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <!-- 
+        <!--
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
-         property correctly. 
+         property correctly.
         -->
         <scala.version>2.12.15</scala.version>
       </properties>
@@ -3577,7 +3581,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.7</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>

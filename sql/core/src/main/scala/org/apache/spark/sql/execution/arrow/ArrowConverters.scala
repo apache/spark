@@ -239,6 +239,7 @@ private[sql] object ArrowConverters {
       // This gets the next serialized ArrowRecordBatch by reading message metadata to check if it
       // is a RecordBatch message and then returning the complete serialized message which consists
       // of a int32 length, serialized message metadata and a serialized RecordBatch message body
+      @scala.annotation.tailrec
       def readNextBatch(): Array[Byte] = {
         val msgMetadata = MessageSerializer.readMessage(new ReadChannel(in))
         if (msgMetadata == null) {

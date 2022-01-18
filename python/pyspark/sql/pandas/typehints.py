@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from inspect import Signature
-from typing import Any, Callable, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
@@ -28,11 +28,11 @@ if TYPE_CHECKING:
 
 
 def infer_eval_type(
-    sig: Signature,
+    sig: Signature, type_hints: Dict[str, Any]
 ) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
     """
     Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
-    :class:`inspect.Signature` instance.
+    :class:`inspect.Signature` instance and type hints.
     """
     from pyspark.sql.pandas.functions import PandasUDFType
 
@@ -43,7 +43,7 @@ def infer_eval_type(
     annotations = {}
     for param in sig.parameters.values():
         if param.annotation is not param.empty:
-            annotations[param.name] = param.annotation
+            annotations[param.name] = type_hints.get(param.name, param.annotation)
 
     # Check if all arguments have type hints
     parameters_sig = [
@@ -53,7 +53,7 @@ def infer_eval_type(
         raise ValueError("Type hints for all parameters should be specified; however, got %s" % sig)
 
     # Check if the return has a type hint
-    return_annotation = sig.return_annotation
+    return_annotation = type_hints.get("return", sig.return_annotation)
     if sig.empty is return_annotation:
         raise ValueError("Type hint for the return type should be specified; however, got %s" % sig)
 

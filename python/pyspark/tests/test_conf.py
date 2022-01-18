@@ -25,10 +25,10 @@ class ConfTests(unittest.TestCase):
         memoryList = ["1T", "1G", "1M", "1024K"]
         for memory in memoryList:
             sc = SparkContext(conf=SparkConf().set("spark.python.worker.memory", memory))
-            l = list(range(1024))
-            random.shuffle(l)
-            rdd = sc.parallelize(l, 4)
-            self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+            lst = list(range(1024))
+            random.shuffle(lst)
+            rdd = sc.parallelize(lst, 4)
+            self.assertEqual(sorted(lst), rdd.sortBy(lambda x: x).collect())
             sc.stop()
 
 

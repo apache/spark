@@ -383,7 +383,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
             from pyspark.pandas.frame import DataFrame
             from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
-            len_right = len(right)
             if len(left) != len(right):
                 raise ValueError("Lengths must be equal")
 

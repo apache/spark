@@ -80,6 +80,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         .executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200)")
         .executeUpdate()
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (2)").executeUpdate()
+
+      // scalastyle:off
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)").executeUpdate()
+      // scalastyle:on
+      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
     }
   }
 
@@ -305,7 +316,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false)))
+        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false)))
   }
 
   test("SQL API: create table as select") {
@@ -386,20 +397,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("scan with aggregate push-down: MAX MIN with filter and group by") {
-    val df = sql("select MAX(SaLaRY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+  test("scan with aggregate push-down: MAX AVG with filter and group by") {
+    val df = sql("select MAX(SaLaRY), AVG(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DePt")
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
+          "PushedAggregates: [MAX(SALARY), AVG(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
+    checkAnswer(df, Seq(Row(10000, 1100.0), Row(12000, 1250.0), Row(12000, 1200.0)))
   }
 
   private def checkFiltersRemoved(df: DataFrame): Unit = {
@@ -409,19 +420,36 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     assert(filters.isEmpty)
   }
 
-  test("scan with aggregate push-down: MAX MIN with filter without group by") {
-    val df = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+  test("scan with aggregate push-down: MAX AVG with filter without group by") {
+    val df = sql("select MAX(ID), AVG(ID) FROM h2.test.people where id > 0")
     checkFiltersRemoved(df)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [MAX(ID), MIN(ID)], " +
+          "PushedAggregates: [MAX(ID), AVG(ID)], " +
             "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
             "PushedGroupByColumns: []"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(2, 1)))
+    checkAnswer(df, Seq(Row(2, 1.5)))
+  }
+
+  test("partitioned scan with aggregate push-down: complete push-down only") {
+    withTempView("v") {
+      spark.read
+        .option("partitionColumn", "dept")
+        .option("lowerBound", "0")
+        .option("upperBound", "2")
+        .option("numPartitions", "2")
+        .table("h2.test.employee")
+        .createTempView("v")
+      val df = sql("select AVG(SALARY) FROM v GROUP BY name")
+      // Partitioned JDBC Scan doesn't support complete aggregate push-down, and AVG requires
+      // complete push-down so aggregate is not pushed at the end.
+      checkAggregateRemoved(df, removed = false)
+      checkAnswer(df, Seq(Row(9000.0), Row(10000.0), Row(10000.0), Row(12000.0), Row(12000.0)))
+    }
   }
 
   test("scan with aggregate push-down: aggregate + number") {
@@ -668,6 +696,83 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(query, Seq(Row(47100.0)))
   }
 
+  test("scan with aggregate push-down: partition columns are same as group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"dept")
+      .count()
+    checkAggregateRemoved(df)
+    checkAnswer(df, Seq(Row(1, 2), Row(2, 2), Row(6, 1)))
+  }
+
+  test("scan with aggregate push-down: VAR_POP VAR_SAMP with filter and group by") {
+    val df = sql("select VAR_POP(bonus), VAR_SAMP(bonus) FROM h2.test.employee where dept > 0" +
+      " group by DePt")
+    checkFiltersRemoved(df)
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [VAR_POP(BONUS), VAR_SAMP(BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+  }
+
+  test("scan with aggregate push-down: STDDEV_POP STDDEV_SAMP with filter and group by") {
+    val df = sql("select STDDEV_POP(bonus), STDDEV_SAMP(bonus) FROM h2.test.employee" +
+      " where dept > 0 group by DePt")
+    checkFiltersRemoved(df)
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [STDDEV_POP(BONUS), STDDEV_SAMP(BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(100d, 141.4213562373095d), Row(50d, 70.71067811865476d), Row(0d, null)))
+  }
+
+  test("scan with aggregate push-down: COVAR_POP COVAR_SAMP with filter and group by") {
+    val df = sql("select COVAR_POP(bonus, bonus), COVAR_SAMP(bonus, bonus)" +
+      " FROM h2.test.employee where dept > 0 group by DePt")
+    checkFiltersRemoved(df)
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [COVAR_POP(BONUS, BONUS), COVAR_SAMP(BONUS, BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(10000d, 20000d), Row(2500d, 5000d), Row(0d, null)))
+  }
+
+  test("scan with aggregate push-down: CORR with filter and group by") {
+    val df = sql("select CORR(bonus, bonus) FROM h2.test.employee where dept > 0" +
+      " group by DePt")
+    checkFiltersRemoved(df)
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [CORR(BONUS, BONUS)], " +
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(1d), Row(1d), Row(null)))
+  }
+
   test("scan with aggregate push-down: aggregate over alias NOT push down") {
     val cols = Seq("a", "b", "c", "d")
     val df1 = sql("select * from h2.test.employee").toDF(cols: _*)
@@ -712,5 +817,61 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1), Row(2), Row(2)))
+  }
+
+  test("scan with aggregate push-down: partition columns with multi group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"dept", $"name")
+      .count()
+    checkAggregateRemoved(df, false)
+    checkAnswer(df, Seq(Row(1, "amy", 1), Row(1, "cathy", 1),
+      Row(2, "alex", 1), Row(2, "david", 1), Row(6, "jen", 1)))
+  }
+
+  test("scan with aggregate push-down: partition columns is different from group by columns") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"name")
+      .count()
+    checkAggregateRemoved(df, false)
+    checkAnswer(df,
+      Seq(Row("alex", 1), Row("amy", 1), Row("cathy", 1), Row("david", 1), Row("jen", 1)))
+  }
+
+  test("column name with composite field") {
+    checkAnswer(sql("SELECT `dept id` FROM h2.test.dept"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(`dept id`) FROM h2.test.dept")
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [COUNT(`dept id`)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(2)))
+  }
+
+  test("column name with non-ascii") {
+    // scalastyle:off
+    checkAnswer(sql("SELECT `名` FROM h2.test.person"), Seq(Row(1), Row(2)))
+    val df = sql("SELECT COUNT(`名`) FROM h2.test.person")
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [COUNT(`名`)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(2)))
+    // scalastyle:on
   }
 }

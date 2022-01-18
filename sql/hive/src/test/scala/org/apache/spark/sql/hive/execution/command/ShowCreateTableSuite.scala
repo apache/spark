@@ -15,77 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.util.escapeSingleQuotedString
+import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.HiveSerDe
 
-class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
+/**
+ * The class contains tests for the `SHOW CREATE TABLE` command to check V1 Hive external
+ * table catalog.
+ */
+class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
 
-  private var origCreateHiveTableConfig = false
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    origCreateHiveTableConfig =
-      spark.conf.get(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
-    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key, true)
-  }
-
-  protected override def afterAll(): Unit = {
-    spark.conf.set(
-      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key,
-      origCreateHiveTableConfig)
-    super.afterAll()
-  }
-
-  test("view") {
-    Seq(true, false).foreach { serde =>
-      withView("v1") {
-        sql("CREATE VIEW v1 AS SELECT 1 AS a")
-        checkCreateView("v1", serde)
-      }
-    }
-  }
-
-  test("view with output columns") {
-    Seq(true, false).foreach { serde =>
-      withView("v1") {
-        sql("CREATE VIEW v1 (a, b COMMENT 'b column') AS SELECT 1 AS a, 2 AS b")
-        checkCreateView("v1", serde)
-      }
-    }
-  }
-
-  test("view with table comment and properties") {
-    Seq(true, false).foreach { serde =>
-      withView("v1") {
-        sql(
-          s"""
-             |CREATE VIEW v1 (
-             |  c1 COMMENT 'bla',
-             |  c2
-             |)
-             |COMMENT 'table comment'
-             |TBLPROPERTIES (
-             |  'prop1' = 'value1',
-             |  'prop2' = 'value2'
-             |)
-             |AS SELECT 1 AS c1, '2' AS c2
-         """.stripMargin
-        )
-
-        checkCreateView("v1", serde)
-      }
-    }
+  override def getShowCreateDDL(table: String, serde: Boolean = false): Array[String] = {
+    super.getShowCreateDDL(table, serde).filter(!_.startsWith("'transient_lastDdlTime'"))
   }
 
   test("simple hive table") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (
+        s"""CREATE TABLE $t (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -95,16 +48,21 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
            |)
          """.stripMargin
       )
-
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
+        " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2',"
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
 
   test("simple external hive table") {
     withTempDir { dir =>
-      withTable("t1") {
+      withNamespaceAndTable(ns, table) { t =>
         sql(
-          s"""CREATE TABLE t1 (
+          s"""CREATE TABLE $t (
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
@@ -115,16 +73,23 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
              |)
            """.stripMargin
         )
-
-        checkCreateTable("t1", serde = true)
+        val expected = s"CREATE EXTERNAL TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+          s" ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
+          s" WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
+          s" STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
+          s" OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
+          s" LOCATION" +
+          s" '${escapeSingleQuotedString(CatalogUtils.URIToString(dir.toURI)).dropRight(1)}'" +
+          s" TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2',"
+        assert(getShowCreateDDL(t, true).mkString(" ") == expected)
       }
     }
   }
 
   test("partitioned hive table") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (
+        s"""CREATE TABLE $t (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -135,15 +100,21 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
            |)
          """.stripMargin
       )
-
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+        " COMMENT 'bla' PARTITIONED BY (`p1` BIGINT COMMENT 'bla', `p2` STRING)" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
+        " TBLPROPERTIES ("
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
 
   test("hive table with explicit storage info") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (
+        s"""CREATE TABLE $t (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -153,30 +124,44 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
            |NULL DEFINED AS 'NaN'
          """.stripMargin
       )
-
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
+        " WITH SERDEPROPERTIES (" +
+        " 'colelction.delim' = '@'," +
+        " 'mapkey.delim' = '#'," +
+        " 'serialization.format' = ','," +
+        " 'field.delim' = ',')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
+        " TBLPROPERTIES ("
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
 
   test("hive table with STORED AS clause") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (
+        s"""CREATE TABLE $t (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
            |STORED AS PARQUET
          """.stripMargin
       )
-
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'" +
+        " TBLPROPERTIES ("
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
 
   test("hive table with serde info") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (
+        s"""CREATE TABLE $t (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -190,73 +175,37 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
            |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
          """.stripMargin
       )
-
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `c1` INT COMMENT 'bla', `c2` STRING)" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
+        " WITH SERDEPROPERTIES (" +
+        " 'mapkey.delim' = ','," +
+        " 'serialization.format' = '1'," +
+        " 'field.delim' = ',')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'" +
+        " TBLPROPERTIES ("
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
 
   test("hive bucketing is supported") {
-    withTable("t1") {
+    withNamespaceAndTable(ns, table) { t =>
       sql(
-        s"""CREATE TABLE t1 (a INT, b STRING)
+        s"""CREATE TABLE $t (a INT, b STRING)
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS
          """.stripMargin
       )
-      checkCreateTable("t1", serde = true)
+      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING)" +
+        " CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS" +
+        " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
+        " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
+        " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
+        " TBLPROPERTIES ("
+      assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
-  }
-
-  test("hive partitioned view is not supported") {
-    withTable("t1") {
-      withView("v1") {
-        sql(
-          s"""
-             |CREATE TABLE t1 (c1 INT, c2 STRING)
-             |PARTITIONED BY (
-             |  p1 BIGINT COMMENT 'bla',
-             |  p2 STRING )
-           """.stripMargin)
-
-        createRawHiveTable(
-          s"""
-             |CREATE VIEW v1
-             |PARTITIONED ON (p1, p2)
-             |AS SELECT * from t1
-           """.stripMargin
-        )
-
-        val cause = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1")
-        }
-
-        assert(cause.getMessage.contains(" - partitioned view"))
-
-        val causeForSpark = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1 AS SERDE")
-        }
-
-        assert(causeForSpark.getMessage.contains(" - partitioned view"))
-      }
-    }
-  }
-
-  test("SPARK-24911: keep quotes for nested fields in hive") {
-    withTable("t1") {
-      val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>) USING hive"
-      sql(createTable)
-      val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL.substring(0, shownDDL.indexOf(" USING")) ==
-        "CREATE TABLE `default`.`t1` ( `a` STRUCT<`b`: STRING>)")
-
-      checkCreateTable("t1", serde = true)
-    }
-  }
-
-  private def createRawHiveTable(ddl: String): Unit = {
-    hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
-      .client.runSqlHive(ddl)
   }
 
   private def checkCreateSparkTableAsHive(tableName: String): Unit = {
@@ -336,26 +285,6 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
       )
 
       checkCreateSparkTableAsHive("t1")
-    }
-  }
-
-  test("show create table as serde can't work on data source table") {
-    withTable("t1") {
-      sql(
-        s"""
-           |CREATE TABLE t1 (
-           |  c1 STRING COMMENT 'bla',
-           |  c2 STRING
-           |)
-           |USING orc
-         """.stripMargin
-      )
-
-      val cause = intercept[AnalysisException] {
-        checkCreateTable("t1", serde = true)
-      }
-
-      assert(cause.getMessage.contains("Use `SHOW CREATE TABLE` without `AS SERDE` instead"))
     }
   }
 

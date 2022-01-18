@@ -1023,7 +1023,7 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getActiveSession: Option[SparkSession] = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       // Return None when running on executors.
       None
     } else {
@@ -1039,7 +1039,7 @@ object SparkSession extends Logging {
    * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       // Return None when running on executors.
       None
     } else {

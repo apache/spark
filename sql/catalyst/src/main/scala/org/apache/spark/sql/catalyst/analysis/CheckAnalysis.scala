@@ -125,6 +125,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedFunc =>
+        throw QueryCompilationErrors.noSuchFunctionError(
+          u.multipartIdentifier, u, u.possibleQualifiedName)
+
       case u: UnresolvedHint =>
         u.failAnalysis(s"Hint not found: ${u.name}")
 
@@ -701,6 +705,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Skip subquery aliases added by the Analyzer.
     // For projects, do the necessary mapping and skip to its child.
+    @scala.annotation.tailrec
     def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
       case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
       case p: Project => cleanQueryInScalarSubquery(p.child)

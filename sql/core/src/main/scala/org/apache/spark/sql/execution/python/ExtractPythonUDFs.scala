@@ -167,6 +167,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
     e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
+  @scala.annotation.tailrec
   private def canEvaluateInPython(e: PythonUDF): Boolean = {
     e.children match {
       // single PythonUDF child could be chained and evaluated in Python

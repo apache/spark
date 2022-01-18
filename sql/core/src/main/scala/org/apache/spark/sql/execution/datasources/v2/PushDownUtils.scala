@@ -118,7 +118,7 @@ object PushDownUtils extends PredicateHelper {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
       case PushableColumnWithoutNestedColumn(name) =>
-        Some(FieldReference(name).asInstanceOf[FieldReference])
+        Some(FieldReference.column(name).asInstanceOf[FieldReference])
       case _ => None
     }
 
@@ -187,7 +187,7 @@ object PushDownUtils extends PredicateHelper {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
         val rootFields = SchemaPruning.identifyRootFields(projects, filters)
         val prunedSchema = if (rootFields.nonEmpty) {
-          SchemaPruning.pruneDataSchema(relation.schema, rootFields)
+          SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {
           new StructType()
         }

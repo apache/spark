@@ -222,7 +222,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
       if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serializers.
-        val prunedSchema = SchemaPruning.pruneDataSchema(
+        val prunedSchema = SchemaPruning.pruneSchema(
           StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
         val nestedPrunedSerializer = prunedSerializer.zipWithIndex.map { case (serializer, idx) =>
           pruneSerializer(serializer, prunedSchema(idx).dataType)
