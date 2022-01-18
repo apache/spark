@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -383,5 +384,52 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         )
       }
     }
+  }
+
+  metadataColumnsTest("prune metadata schema in projects", schema) { (df, f0, f1) =>
+    val prunedDF = df.select("name", "age", "info.id", METADATA_FILE_NAME)
+    val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p.metadataColumns
+    }.get
+    assert(fileSourceScanMetaCols.size == 1)
+    assert(fileSourceScanMetaCols.head.name == "file_name")
+
+    checkAnswer(
+      prunedDF,
+      Seq(Row("jack", 24, 12345L, f0(METADATA_FILE_NAME)),
+        Row("lily", 31, 54321L, f1(METADATA_FILE_NAME)))
+    )
+  }
+
+  metadataColumnsTest("prune metadata schema in filters", schema) { (df, f0, f1) =>
+    val prunedDF = df.select("name", "age", "info.id")
+      .where(col(METADATA_FILE_PATH).contains("data/f0"))
+
+    val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p.metadataColumns
+    }.get
+    assert(fileSourceScanMetaCols.size == 1)
+    assert(fileSourceScanMetaCols.head.name == "file_path")
+
+    checkAnswer(
+      prunedDF,
+      Seq(Row("jack", 24, 12345L))
+    )
+  }
+
+  metadataColumnsTest("prune metadata schema in projects and filters", schema) { (df, f0, f1) =>
+    val prunedDF = df.select("name", "age", "info.id", METADATA_FILE_SIZE)
+      .where(col(METADATA_FILE_PATH).contains("data/f0"))
+
+    val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p.metadataColumns
+    }.get
+    assert(fileSourceScanMetaCols.size == 2)
+    assert(fileSourceScanMetaCols.map(_.name).toSet == Set("file_size", "file_path"))
+
+    checkAnswer(
+      prunedDF,
+      Seq(Row("jack", 24, 12345L, f0(METADATA_FILE_SIZE)))
+    )
   }
 }

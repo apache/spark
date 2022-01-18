@@ -132,7 +132,9 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "`b` STRING,",
         "`ts` TIMESTAMP)",
         defaultUsing,
-        "PARTITIONED BY (a, bucket(16, b), years(ts), months(ts), days(ts), hours(ts))"
+        "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
+        "CLUSTERED BY (b)",
+        "INTO 16 BUCKETS"
       ))
     }
   }

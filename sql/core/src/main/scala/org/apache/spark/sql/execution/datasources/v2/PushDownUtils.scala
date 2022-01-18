@@ -187,7 +187,7 @@ object PushDownUtils extends PredicateHelper {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
         val rootFields = SchemaPruning.identifyRootFields(projects, filters)
         val prunedSchema = if (rootFields.nonEmpty) {
-          SchemaPruning.pruneDataSchema(relation.schema, rootFields)
+          SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {
           new StructType()
         }

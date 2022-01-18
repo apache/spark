@@ -22,9 +22,8 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
@@ -33,17 +32,6 @@ import org.apache.spark.sql.types.StructType
  * An implementation of catalog v2 `Table` to expose v1 table metadata.
  */
 private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
-  implicit class IdentifierHelper(identifier: TableIdentifier) {
-    def quoted: String = {
-      identifier.database match {
-        case Some(db) =>
-          Seq(db, identifier.table).map(quoteIfNeeded).mkString(".")
-        case _ =>
-          quoteIfNeeded(identifier.table)
-
-      }
-    }
-  }
 
   def catalogTable: CatalogTable = v1Table
 
@@ -92,7 +80,9 @@ private[sql] object V1Table {
         TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString) ++
+      (if (external) {
+        v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString)
+      } else None) ++
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)
   }
