@@ -40,16 +40,16 @@ FROM (
 -- !query schema
 struct<col:string>
 -- !query output
-prefix_0120
-prefix_1231
-prefix_2342
-prefix_3453
-prefix_4564
-prefix_5675
-prefix_6786
-prefix_7897
-prefix_89108
-prefix_910119
+prefix_0120.0
+prefix_1231.0
+prefix_2342.0
+prefix_3453.0
+prefix_4564.0
+prefix_5675.0
+prefix_6786.0
+prefix_7897.0
+prefix_89108.0
+prefix_910119.0
 
 
 -- !query
