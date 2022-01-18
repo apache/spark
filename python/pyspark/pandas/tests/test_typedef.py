@@ -63,7 +63,9 @@ class TypeHintTests(unittest.TestCase):
 
             infer_return_type(f)
 
-        self.assertRaisesRegex(TypeError, "Unsupported callable", try_infer_return_type)
+        self.assertRaisesRegex(
+            TypeError, "A return value is required for the input function", try_infer_return_type
+        )
 
         def try_infer_return_type():
             def f() -> None:
@@ -71,7 +73,9 @@ class TypeHintTests(unittest.TestCase):
 
             infer_return_type(f)
 
-        self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
+        self.assertRaisesRegex(
+            TypeError, "Type <class 'NoneType'> was not understood", try_infer_return_type
+        )
 
     def test_infer_schema_from_pandas_instances(self):
         def func() -> pd.Series[int]:
