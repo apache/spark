@@ -77,8 +77,7 @@ private[kafka010] class KafkaSource(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsAdmissionControl
-  with SupportsTriggerAvailableNow
+  extends SupportsTriggerAvailableNow
   with Source
   with Logging {
 
@@ -135,7 +134,7 @@ private[kafka010] class KafkaSource(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable() )
     }
   }
 

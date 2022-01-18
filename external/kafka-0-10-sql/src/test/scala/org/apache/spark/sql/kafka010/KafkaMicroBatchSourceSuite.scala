@@ -196,9 +196,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("Trigger.AvailableNow") {
-
-    println("start")
-
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
 
@@ -206,37 +203,37 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       "foo-" + x
     }).toArray, Some(0))
 
-
     val reader = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("maxOffsetsPerTrigger", 10)
+      .option("maxOffsetsPerTrigger", 5)
       .option("subscribe", topic)
-      .option("startingOffsets", "earliest").load()
+      .option("startingOffsets", "earliest")
+      .load()
 
+    var index: Int = 0
     def startTriggerAvailableNowQuery(): StreamingQuery = {
       reader.writeStream
         .foreachBatch((df: Dataset[Row], i: Long) => {
-          println("i: " + i)
-          df.printSchema()
-          println(df.getRows(5, 0))
+          index+=1
           df.foreach((f: Row) => {
-            println("e: " + new String(f.getAs("value").asInstanceOf[Array[Byte]]))
           })
         })
         .trigger(Trigger.AvailableNow)
-        .trigger(Trigger.AvailableNow())
         .start()
     }
 
-    val q2 = startTriggerAvailableNowQuery()
+    val q1 = startTriggerAvailableNowQuery()
     try {
-      assert(q2.awaitTermination(streamingTimeout.toMillis))
+      assert(q1.awaitTermination(streamingTimeout.toMillis))
     } finally {
-      q2.stop()
+      q1.stop()
     }
+
+    // should have 3 batches now i.e. 15 / 5 = 3
+    assert(index == 3)
   }
 
   test("(de)serialization of initial offsets") {
