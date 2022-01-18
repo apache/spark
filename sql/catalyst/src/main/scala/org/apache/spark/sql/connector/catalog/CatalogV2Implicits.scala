@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, SortedBucketTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -50,15 +50,39 @@ private[sql] object CatalogV2Implicits {
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
     def asPartitionColumns: Seq[String] = {
-      val idTransforms = transforms.filter(_.isInstanceOf[IdentityTransform])
+      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
+
+      var partitionCols: Seq[String] = Seq.empty[String]
+      nonIdTransforms.foreach {
+        case bucket: BucketTransform =>
+          bucket.columns.foreach { col =>
+            val parts = col.fieldNames
+            if (parts.size > 1) {
+              throw QueryCompilationErrors.cannotPartitionByNestedColumnError(col)
+            } else {
+              partitionCols = partitionCols :+ parts(0)
+            }
+          }
+        case sortedBucket: SortedBucketTransform =>
+          sortedBucket.columns.foreach { col =>
+            val parts = col.fieldNames
+            if (parts.size > 1) {
+              throw QueryCompilationErrors.cannotPartitionByNestedColumnError(col)
+            } else {
+              partitionCols = partitionCols :+ parts(0)
+            }
+          }
+      }
+
       idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
         val parts = ref.fieldNames
         if (parts.size > 1) {
           throw QueryCompilationErrors.cannotPartitionByNestedColumnError(ref)
         } else {
-          parts(0)
+          partitionCols = partitionCols :+ parts(0)
         }
       }
+      partitionCols
     }
   }
 

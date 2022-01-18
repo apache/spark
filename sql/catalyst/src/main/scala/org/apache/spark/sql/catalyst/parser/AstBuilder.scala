@@ -3471,7 +3471,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
@@ -3556,7 +3556,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, false)
 
     Option(ctx.query).map(plan) match {
