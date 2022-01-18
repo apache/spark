@@ -8,15 +8,15 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
               InputAdapter
                 Exchange [lochierarchy,_w0] #1
                   WholeStageCodegen (31)
-                    HashAggregate [total_sum,s_state,s_county,lochierarchy,_w0]
+                    HashAggregate [total_sum,s_state,s_county,g_state,g_county,lochierarchy] [_w0]
                       InputAdapter
-                        Exchange [total_sum,s_state,s_county,lochierarchy,_w0] #2
+                        Exchange [total_sum,s_state,s_county,g_state,g_county,lochierarchy] #2
                           WholeStageCodegen (30)
-                            HashAggregate [total_sum,s_state,s_county,lochierarchy,_w0]
+                            HashAggregate [total_sum,s_state,s_county,g_state,g_county,lochierarchy]
                               InputAdapter
                                 Union
                                   WholeStageCodegen (9)
-                                    HashAggregate [s_state,s_county,sum] [sum(UnscaledValue(ss_net_profit)),total_sum,lochierarchy,_w0,sum]
+                                    HashAggregate [s_state,s_county,sum] [sum(UnscaledValue(ss_net_profit)),total_sum,g_state,g_county,lochierarchy,sum]
                                       InputAdapter
                                         Exchange [s_state,s_county] #3
                                           WholeStageCodegen (8)
@@ -80,7 +80,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                                                     InputAdapter
                                                                                                       Scan parquet default.store [s_store_sk,s_state]
                                   WholeStageCodegen (19)
-                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_county,lochierarchy,_w0,sum,isEmpty]
+                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
                                       InputAdapter
                                         Exchange [s_state] #9
                                           WholeStageCodegen (18)
@@ -89,7 +89,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                 InputAdapter
                                                   ReusedExchange [s_state,s_county,sum] #3
                                   WholeStageCodegen (29)
-                                    HashAggregate [sum,isEmpty] [sum(total_sum),total_sum,s_state,s_county,lochierarchy,_w0,sum,isEmpty]
+                                    HashAggregate [sum,isEmpty] [sum(total_sum),total_sum,s_state,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
                                       InputAdapter
                                         Exchange #10
                                           WholeStageCodegen (28)

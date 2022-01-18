@@ -78,6 +78,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationRuleSet =
       Seq(
         // Operator push down
+        PushProjectionThroughUnion,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
@@ -166,13 +167,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
-    // - Do the first call of PushProjectionThroughUnion and CombineUnions before starting the major
-    //   Optimizer rules, since it can reduce the number of iteration and the other rules could
-    // add/move extra operators between two adjacent Union operators.
+    // - Do the first call of CombineUnions before starting the major Optimizer rules,
+    //   since it can reduce the number of iteration and the other rules could add/move
+    //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("PushProjectionThroughUnion", fixedPoint,
-      PushProjectionThroughUnion) ::
     Batch("Union", Once,
       RemoveNoopOperators,
       CombineUnions,
@@ -765,28 +764,22 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
+  def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
+    val newFirstChild = Project(projectList, u.children.head)
+    val newOtherChildren = u.children.tail.map { child =>
+      val rewrites = buildRewrites(u.children.head, child)
+      Project(projectList.map(pushToRight(_, rewrites)), child)
+    }
+    newFirstChild +: newOtherChildren
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case Project(projectList, u: Union) if projectList.forall(_.deterministic) =>
-      assert(u.children.nonEmpty)
-      val newFirstChild = Project(projectList, u.children.head)
-      val newOtherChildren = u.children.tail.map { child =>
-        val rewrites = buildRewrites(u.children.head, child)
-        Project(projectList.map(pushToRight(_, rewrites)), child)
-      }
-      u.copy(children = newFirstChild +: newOtherChildren)
-
-    // Push down deterministic projection through SQL UNION
-    case Project(projectList, Distinct(u: Union)) if projectList.forall(_.deterministic) =>
-      assert(u.children.nonEmpty)
-      val newFirstChild = Project(projectList, u.children.head)
-      val newOtherChildren = u.children.tail.map { child =>
-        val rewrites = buildRewrites(u.children.head, child)
-        Project(projectList.map(pushToRight(_, rewrites)), child)
-      }
-      Distinct(u.copy(children = newFirstChild +: newOtherChildren))
+    case p @ Project(projectList, u: Union)
+        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+      u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
 
@@ -1339,6 +1332,12 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+          val newChildren = PushProjectionThroughUnion.pushProjectionThroughUnion(projectList, u)
+            .map(CollapseProject(_))
+          stack.pushAll(newChildren.reverse)
         case child =>
           flattened += child
       }

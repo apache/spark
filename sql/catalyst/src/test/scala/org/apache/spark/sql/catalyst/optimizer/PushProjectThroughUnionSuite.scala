@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.DecimalType
 
 class PushProjectThroughUnionSuite extends PlanTest {
 
@@ -51,27 +50,5 @@ class PushProjectThroughUnionSuite extends PlanTest {
         .select("bar".as("n"), "dummy")).analyze
 
     comparePlans(optimized, expected)
-  }
-
-  test("SPARK-37915: Push down deterministic projection through SQL UNION") {
-    val testRelation1 = LocalRelation('a.decimal(18, 1), 'b.int)
-    val testRelation2 = LocalRelation('a.decimal(18, 2), 'b.int)
-    val testRelation3 = LocalRelation('a.decimal(18, 3), 'b.int)
-    val query = Distinct(Distinct(testRelation1.union(testRelation2)).union(testRelation3))
-    val optimized = Optimize.execute(query.analyze)
-
-    val expected =
-      Distinct(
-        Distinct(
-          testRelation1
-            .select('a.cast(DecimalType(19, 2)).as("a"), 'b)
-            .select('a.cast(DecimalType(20, 3)), 'b)
-          .union(testRelation2
-            .select('a.cast(DecimalType(19, 2)).as("a"), 'b)
-            .select('a.cast(DecimalType(20, 3)), 'b)))
-          .union(testRelation3
-            .select('a.cast(DecimalType(20, 3)), 'b)))
-
-    comparePlans(optimized, expected.analyze)
   }
 }
