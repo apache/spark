@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.2.0-kylin-4.x-r46</version>
+    <version>3.1.1-kylin-4.x-r47</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -71,10 +71,6 @@
      <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>log4j-over-slf4j</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
