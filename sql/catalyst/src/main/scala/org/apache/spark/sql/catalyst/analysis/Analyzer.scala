@@ -2274,12 +2274,14 @@ class Analyzer(override val catalogManager: CatalogManager)
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
               MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
-                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable,
+                isDeterministic = scalarFunc.isDeterministic)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
               arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              returnNullable = scalarFunc.isResultNullable,
+              isDeterministic = scalarFunc.isDeterministic)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
