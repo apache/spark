@@ -218,8 +218,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       reader.writeStream
         .foreachBatch((df: Dataset[Row], i: Long) => {
           index+=1
-          df.foreach((f: Row) => {
-          })
         })
         .trigger(Trigger.AvailableNow)
         .start()
