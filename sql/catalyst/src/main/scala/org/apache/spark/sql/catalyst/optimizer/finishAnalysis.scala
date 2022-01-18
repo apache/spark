@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions.{UnevaluableAggregate, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
