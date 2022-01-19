@@ -3613,8 +3613,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
 
-    assert(shuffleStage2.shuffleDep.isShuffleMergeFinalized)
-    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(shuffleStage2.shuffleDep.shuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
 
@@ -3925,7 +3925,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val finalizeTask1 = shuffleStage1.shuffleDep.getFinalizeTask.get
       .asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask1.delay == 10 && finalizeTask1.registerMergeResults)
-    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
 
     complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
       case (_, idx) =>
@@ -4051,7 +4051,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.handleShuffleMergeFinalized(shuffleStage1, shuffleStage1.shuffleDep.shuffleMergeId)
 
     assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(!shuffleStage1.shuffleDep.shuffleMergeFinalized)
     assert(mapOutputTracker.
       getNumAvailableMergeResults(shuffleStage1.shuffleDep.shuffleId) == 0)
 
@@ -4081,7 +4081,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(shuffleIndeterminateStage.isIndeterminate)
     scheduler.handleShuffleMergeFinalized(shuffleIndeterminateStage, 2)
     assert(shuffleIndeterminateStage.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleIndeterminateStage.shuffleDep.isShuffleMergeFinalized)
+    assert(!shuffleIndeterminateStage.shuffleDep.shuffleMergeFinalized)
   }
 
   // With Adaptive shuffle merge finalization, once minimum shuffle pushes complete after stage
@@ -4129,7 +4129,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(!shuffleStage1.shuffleDep.shuffleMergeFinalized)
     val finalizeTask1 = shuffleStage1.shuffleDep.getFinalizeTask.get.
       asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask1.delay == 10 && finalizeTask1.registerMergeResults)
@@ -4149,7 +4149,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-34826: Adaptively fetch shuffle mergers") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 6)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 7
 
@@ -4166,24 +4166,20 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage1.shuffleDep.getMergerLocs.isEmpty)
-    assert(mapOutputTracker.getShufflePushMergerLocations(0).isEmpty)
+    assert(mapOutputTracker.getShufflePushMergerLocations(0, 0).isEmpty)
 
     DAGSchedulerSuite.addMergerLocs(Seq("host6", "host7", "host8"))
 
-    runEvent(makeCompletionEvent(
-      taskSets(0).tasks(1), Success, makeMapStatus("hostA", parts),
-      Seq.empty, Array.empty, createFakeTaskInfoWithId(1)))
-
-    // Dummy executor added event to trigger registering of shuffle merger locations
+    // host6 executor added event to trigger registering of shuffle merger locations
     // as shuffle mergers are tracked separately for test
-    runEvent(ExecutorAdded("dummy", "dummy"))
+    runEvent(ExecutorAdded("host6", "host6"))
 
     // Check if new shuffle merger locations are available for push or not
-    assert(mapOutputTracker.getShufflePushMergerLocations(0).size == 7)
+    assert(mapOutputTracker.getShufflePushMergerLocations(0, 0).size == 7)
     assert(shuffleStage1.shuffleDep.getMergerLocs.size == 7)
 
     // Complete remaining tasks in ShuffleMapStage 0
-    (2 to 6).foreach(x => {
+    (1 to 6).foreach(x => {
       runEvent(makeCompletionEvent(taskSets(0).tasks(x), Success, makeMapStatus("hostA", parts),
         Seq.empty, Array.empty, createFakeTaskInfoWithId(x)))
     })
@@ -4198,7 +4194,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-34826: Adaptively fetch shuffle mergers with stage retry") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 6)
-    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
     val parts = 7
 
@@ -4223,7 +4219,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // as shuffle mergers are tracked separately for test
     runEvent(ExecutorAdded("dummy", "dummy"))
     // Check if new shuffle merger locations are available for push or not
-    assert(mapOutputTracker.getShufflePushMergerLocations(0).size == 7)
+    assert(mapOutputTracker.getShufflePushMergerLocations(0, 0).size == 7)
     assert(shuffleStage1.shuffleDep.getMergerLocs.size == 7)
     val mergerLocsBeforeRetry = shuffleStage1.shuffleDep.getMergerLocs
 
@@ -4239,7 +4235,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       }
     }
 
-    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
 
     // Successfully completing the retry of stage 0.
     complete(taskSets(2), taskSets(2).tasks.zipWithIndex.map {
@@ -4251,7 +4247,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Dummy executor added event to trigger registering of shuffle merger locations
     runEvent(ExecutorAdded("dummy1", "dummy1"))
     assert(shuffleStage1.shuffleDep.getMergerLocs.size == 7)
-    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
     complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
       case (_, idx) =>
         (Success, makeMapStatus("host" + ('A' + idx).toChar, parts, 10))

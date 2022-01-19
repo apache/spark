@@ -924,18 +924,18 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.stop(masterTracker.trackerEndpoint)
       rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
-      val slaveTracker = new MapOutputTrackerWorker(newConf)
-      slaveTracker.trackerEndpoint =
+      val worker = new MapOutputTrackerWorker(newConf)
+      worker.trackerEndpoint =
         rpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       masterTracker.registerShuffle(20, 100, 100)
-      slaveTracker.updateEpoch(masterTracker.getEpoch)
+      worker.updateEpoch(masterTracker.getEpoch)
       val mergerLocs = (1 to 10).map(x => BlockManagerId(s"exec-$x", s"host-$x", 7337))
-      masterTracker.registerShufflePushMergerLocations(20, mergerLocs)
+      masterTracker.registerShufflePushMergerLocations(20, 0, mergerLocs)
 
-      assert(slaveTracker.getShufflePushMergerLocations(20).size == 10)
-      slaveTracker.unregisterShuffle(20)
-      assert(slaveTracker.shufflePushMergerLocations.isEmpty)
+      assert(worker.getShufflePushMergerLocations(20, 0).size == 10)
+      worker.unregisterShuffle(20)
+      assert(worker.shufflePushMergerLocations.isEmpty)
     }
   }
 }

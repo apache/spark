@@ -104,7 +104,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private[this] val numPartitions = rdd.partitions.length
 
-  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
+  // By default, shuffle merge is allowed for ShuffleDependency if push based shuffle
   // is enabled
   private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
 
@@ -114,8 +114,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
 
-  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
-  // is enabled
+  // By default, shuffle merge is enabled for ShuffleDependency if shuffleMergeAllowed
   private[this] var _shuffleMergeEnabled = shuffleMergeAllowed
 
   private[spark] def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
@@ -145,6 +144,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
+    assert(shuffleMergeEnabled || shuffleMergeAllowed)
     this.mergerLocs = mergerLocs
   }
 
@@ -158,13 +158,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * Returns true if the RDD is an empty RDD or if the shuffle merge for this shuffle is
    * finalized.
    */
-  def isShuffleMergeFinalized: Boolean = {
-    // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
-    if (numPartitions > 0) {
-      _shuffleMergedFinalized
-    } else {
-      true
-    }
+  def shuffleMergeFinalized: Boolean = {
+    _shuffleMergedFinalized
   }
 
   /**
@@ -173,7 +168,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    */
   def isShuffleMergeFinalizedIfEnabled: Boolean = {
     if (shuffleMergeEnabled) {
-      isShuffleMergeFinalized
+      shuffleMergeFinalized
     } else {
       true
     }

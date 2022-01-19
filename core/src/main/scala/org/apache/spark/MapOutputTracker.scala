@@ -144,7 +144,8 @@ private class ShuffleStatus(
    */
   private[this] var _numAvailableMergeResults: Int = 0
 
-  private[this] var mergers: Seq[BlockManagerId] = Seq.empty[BlockManagerId]
+  private[this] val mergers: Map[Int, Seq[BlockManagerId]] =
+    new HashMap[Int, Seq[BlockManagerId]]()
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
@@ -215,9 +216,11 @@ private class ShuffleStatus(
     mergeStatuses(reduceId) = status
   }
 
-  def addShuffleMergerLocations(shuffleMergers: Seq[BlockManagerId]): Unit = withWriteLock {
-    if (mergers.isEmpty) {
-      mergers = shuffleMergers
+  def addShuffleMergerLocations(
+      shuffleMergeId: Int,
+      shuffleMergers: Seq[BlockManagerId]): Unit = withWriteLock {
+    if (!mergers.contains(shuffleMergeId)) {
+      mergers(shuffleMergeId) = shuffleMergers
     }
   }
 
@@ -400,8 +403,12 @@ private class ShuffleStatus(
     f(mergeStatuses)
   }
 
-  def getShufflePushMergerLocations: Seq[BlockManagerId] = withReadLock {
-    mergers
+  def getShufflePushMergerLocations(shuffleMergeId: Int): Seq[BlockManagerId] = withReadLock {
+    if (mergers.contains(shuffleMergeId)) {
+      mergers(shuffleMergeId)
+    } else {
+      Seq.empty
+    }
   }
 
   /**
@@ -441,7 +448,7 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case class GetMapAndMergeResultStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
-private[spark] case class GetShufflePushMergerLocations(shuffleId: Int)
+private[spark] case class GetShufflePushMergerLocations(shuffleId: Int, shuffleMergeId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
@@ -450,7 +457,7 @@ private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
-private[spark] case class GetShufflePushMergersMessage(shuffleId: Int,
+private[spark] case class GetmapMessage(shuffleId: Int, shuffleMergeId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class MapSizesByExecutorId(
   iter: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])], enableBatchFetch: Boolean)
@@ -473,10 +480,10 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       logInfo(s"Asked to send map/merge result locations for shuffle $shuffleId to $hostPort")
       tracker.post(GetMapAndMergeOutputMessage(shuffleId, context))
 
-    case GetShufflePushMergerLocations(shuffleId: Int) =>
+    case GetShufflePushMergerLocations(shuffleId: Int, shuffleMergeId: Int) =>
       logInfo(s"Asked to send shuffle push merger locations for shuffle" +
         s" $shuffleId to ${context.senderAddress.hostPort}")
-      tracker.post(GetShufflePushMergersMessage(shuffleId, context))
+      tracker.post(GetmapMessage(shuffleId, shuffleMergeId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -624,8 +631,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * if there is not enough shuffle mergers available for this stage then an empty sequence would
    * be returned indicating the task to avoid shuffle push.
    * @param shuffleId
+   * @param shuffleMergeId
    */
-  def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId]
+  def getShufflePushMergerLocations(shuffleId: Int, shuffleMergeId: Int): Seq[BlockManagerId]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -742,11 +750,12 @@ private[spark] class MapOutputTrackerMaster(
                 handleStatusMessage(shuffleId, context, false)
               case GetMapAndMergeOutputMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, true)
-              case GetShufflePushMergersMessage(shuffleId, context) =>
+              case GetmapMessage(shuffleId, shuffleMergeId, context) =>
                 logDebug(s"Handling request to send shuffle push merger locations for shuffle" +
                   s" $shuffleId to ${context.senderAddress.hostPort}")
-                context.reply(shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations)
-                  .getOrElse(Seq.empty[BlockManagerId]))
+                shuffleStatuses(shuffleId).getShufflePushMergerLocations(shuffleMergeId)
+                context.reply(
+                  shuffleStatuses(shuffleId).getShufflePushMergerLocations(shuffleMergeId))
             }
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
@@ -827,8 +836,9 @@ private[spark] class MapOutputTrackerMaster(
 
   def registerShufflePushMergerLocations(
       shuffleId: Int,
+      shuffleMergeId: Int,
       shuffleMergers: Seq[BlockManagerId]): Unit = {
-    shuffleStatuses(shuffleId).addShuffleMergerLocations(shuffleMergers)
+    shuffleStatuses(shuffleId).addShuffleMergerLocations(shuffleMergeId, shuffleMergers)
   }
 
   /**
@@ -1185,8 +1195,9 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   // This method is only called in local-mode.
-  override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    shuffleStatuses(shuffleId).getShufflePushMergerLocations
+  override def getShufflePushMergerLocations(
+      shuffleId: Int, shuffleMergeId: Int): Seq[BlockManagerId] = {
+    shuffleStatuses(shuffleId).getShufflePushMergerLocations(shuffleMergeId)
   }
 
   override def stop(): Unit = {
@@ -1224,7 +1235,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   private lazy val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf, isDriver = false)
 
   // Exposed for testing
-  val shufflePushMergerLocations = new ConcurrentHashMap[Int, Seq[BlockManagerId]]().asScala
+  // shufflePushMergerLocations tracks shuffle push merger locations for the corresponding
+  // (shuffleId, shuffleMergeId)
+  val shufflePushMergerLocations =
+    new ConcurrentHashMap[Int, Map[Int, Seq[BlockManagerId]]]().asScala
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
@@ -1331,19 +1345,50 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     }
   }
 
-  override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    shufflePushMergerLocations.getOrElse(shuffleId, getMergerLocations(shuffleId))
+  override def getShufflePushMergerLocations(
+      shuffleId: Int, shuffleMergeId: Int): Seq[BlockManagerId] = {
+    if (shufflePushMergerLocations.contains(shuffleId)) {
+      shufflePushMergerLocations(shuffleId).getOrElse(shuffleMergeId,
+        getMergerLocations(shuffleId, shuffleMergeId))
+    } else {
+      val mergers = getMergerLocations(shuffleId, shuffleMergeId)
+      mergers
+    }
   }
 
-  private def getMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    fetchingLock.withLock(shuffleId) {
-      val mergers = askTracker[Seq[BlockManagerId]](GetShufflePushMergerLocations(shuffleId))
-      if (mergers.nonEmpty) {
-        shufflePushMergerLocations(shuffleId) = mergers
-        mergers
-      } else {
-        Seq.empty[BlockManagerId]
+  private def getMergerLocations(shuffleId: Int, shuffleMergeId: Int): Seq[BlockManagerId] = {
+    val shuffleMergersMap = shufflePushMergerLocations.get(shuffleId)
+    val shuffleMergers = shuffleMergersMap.map(map => map.get(shuffleMergeId).orNull)
+
+    if (!shuffleMergersMap.isDefined || !shuffleMergers.isDefined) {
+      fetchingLock.withLock(shuffleId) {
+        val fetchedShuffleMergersMap = shufflePushMergerLocations.get(shuffleId).orNull
+        if (fetchedShuffleMergersMap == null) {
+          val mergers = askTracker[Seq[BlockManagerId]](
+            GetShufflePushMergerLocations(shuffleId, shuffleMergeId))
+          if (mergers.nonEmpty) {
+            val map = new HashMap[Int, Seq[BlockManagerId]]()
+            map.put(shuffleMergeId, mergers)
+            shufflePushMergerLocations(shuffleId) = map
+            mergers
+          } else {
+            Seq.empty[BlockManagerId]
+          }
+        } else if (fetchedShuffleMergersMap.get(shuffleMergeId).orNull == null) {
+          val mergers = askTracker[Seq[BlockManagerId]](
+            GetShufflePushMergerLocations(shuffleId, shuffleMergeId))
+          if (mergers.nonEmpty) {
+            shufflePushMergerLocations(shuffleId).put(shuffleMergeId, mergers)
+            mergers
+          } else {
+            Seq.empty[BlockManagerId]
+          }
+        } else {
+          shufflePushMergerLocations(shuffleId)(shuffleMergeId)
+        }
       }
+    } else {
+      shuffleMergers.getOrElse(Seq.empty)
     }
   }
 

@@ -1370,7 +1370,7 @@ private[spark] class DAGScheduler(
    * locations for block push/merge by getting the historical locations of past executors.
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
-    assert(stage.shuffleDep.shuffleMergeAllowed && !stage.shuffleDep.isShuffleMergeFinalized)
+    assert(stage.shuffleDep.shuffleMergeAllowed && !stage.shuffleDep.shuffleMergeFinalized)
     if (stage.shuffleDep.getMergerLocs.isEmpty) {
       getAndSetShufflePushMergerLocations(stage)
     }
@@ -1430,7 +1430,7 @@ private[spark] class DAGScheduler(
         outputCommitCoordinator.stageStart(stage = s.id, maxPartitionId = s.numPartitions - 1)
         // Only generate merger location for a given shuffle dependency once.
         if (s.shuffleDep.shuffleMergeAllowed) {
-          if (!s.shuffleDep.isShuffleMergeFinalized) {
+          if (!s.shuffleDep.shuffleMergeFinalized) {
             prepareShuffleServicesForShuffleMapStage(s)
           } else {
             // Disable Shuffle merge for the retry/reuse of the same shuffle dependency if it has
@@ -1832,7 +1832,7 @@ private[spark] class DAGScheduler(
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
-              if (!shuffleStage.shuffleDep.isShuffleMergeFinalized &&
+              if (!shuffleStage.shuffleDep.shuffleMergeFinalized &&
                 shuffleStage.shuffleDep.getMergerLocs.nonEmpty) {
                 checkAndScheduleShuffleMergeFinalize(shuffleStage)
               } else {
@@ -2324,7 +2324,7 @@ private[spark] class DAGScheduler(
     // Register merge statuses if the stage is still running and shuffle merge is not finalized yet.
     // TODO: SPARK-35549: Currently merge statuses results which come after shuffle merge
     // TODO: is finalized is not registered.
-    if (runningStages.contains(stage) && !stage.shuffleDep.isShuffleMergeFinalized) {
+    if (runningStages.contains(stage) && !stage.shuffleDep.shuffleMergeFinalized) {
       mapOutputTracker.registerMergeResults(stage.shuffleDep.shuffleId, mergeStatuses)
     }
   }
@@ -2361,7 +2361,7 @@ private[spark] class DAGScheduler(
         // This is required to prevent shuffle merge finalization by dangling tasks of a
         // previous attempt in the case of indeterminate stage.
         if (shuffleDep.shuffleMergeId == shuffleMergeId) {
-          if (!shuffleDep.isShuffleMergeFinalized &&
+          if (!shuffleDep.shuffleMergeFinalized &&
             shuffleDep.incPushCompleted(mapIndex).toDouble / shuffleDep.rdd.partitions.length
               >= shufflePushMinRatio) {
             scheduleShuffleMergeFinalize(mapStage, delay = 0)
@@ -2508,8 +2508,8 @@ private[spark] class DAGScheduler(
           if (getAndSetShufflePushMergerLocations(stage).nonEmpty) {
             logInfo(s"Shuffle merge enabled adaptively for the stage $stage (${stage.name})" +
               s" with ${stage.shuffleDep.getMergerLocs.size} merger locations")
-            mapOutputTracker.registerShufflePushMergerLocations(
-              stage.shuffleDep.shuffleId, stage.shuffleDep.getMergerLocs)
+            mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId,
+              stage.shuffleDep.shuffleMergeId, stage.shuffleDep.getMergerLocs)
           }
         }
     }
