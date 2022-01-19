@@ -994,6 +994,54 @@ struct<c1:int,c2:int,c2:int>
 
 -- !query
 SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  GROUP BY t2.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2)
+-- !query schema
+struct<c1:int,c2:int,c2:int>
+-- !query output
+0	1	2
+0	1	3
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1 - t1.c1
+  FROM   t2
+  GROUP BY t2.c1 - t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(c1 - c1)\",\"(c1 - c1) AS `(c1 - outer(spark_catalog.default.t1.c1))`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 90,
+    "fragment" : "GROUP BY t2.c1 - t1.c1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN LATERAL
   (SELECT sum(t2.c2) over (order by t2.c1)
   FROM   t2
   WHERE  t2.c1 >= t1.c1

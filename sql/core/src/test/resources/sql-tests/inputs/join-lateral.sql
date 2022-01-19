@@ -239,6 +239,29 @@ SELECT * FROM t1 JOIN LATERAL
   SELECT t4.c2
   FROM   t4);
 
+-- Correlation under group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  GROUP BY t2.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
+-- Correlation in group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1 - t1.c1
+  FROM   t2
+  GROUP BY t2.c1 - t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
 -- Window func - unsupported
 SELECT * FROM t1 JOIN LATERAL
   (SELECT sum(t2.c2) over (order by t2.c1)
