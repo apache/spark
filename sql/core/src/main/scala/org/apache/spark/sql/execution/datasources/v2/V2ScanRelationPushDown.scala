@@ -289,7 +289,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def pushdownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
+  private def pushDownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
       val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (limitPushed) {
@@ -312,14 +312,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         s
       }
     case p: Project =>
-      val newChild = pushdownLimit(p.child, limit)
+      val newChild = pushDownLimit(p.child, limit)
       p.withNewChildren(Seq(newChild))
     case other => other
   }
 
   def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      val newChild = pushdownLimit(child, limitValue)
+      val newChild = pushDownLimit(child, limitValue)
       val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
       globalLimit.withNewChildren(Seq(newLocalLimit))
   }
