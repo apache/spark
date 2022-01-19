@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -72,16 +72,6 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
         assert(errMsg.matches("Can not rename the managed table(.+). " +
           "The associated location(.+) already exists."))
       }
-    }
-  }
-
-  test("preserve partition info") {
-    withNamespaceAndTable("ns", "dst_tbl") { dst =>
-      val src = dst.replace("dst", "src")
-      sql(s"CREATE TABLE $src (i int, j int) $defaultUsing partitioned by (j)")
-      sql(s"insert into table $src partition(j=2) values (1)")
-      sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
-      checkAnswer(spark.table(dst), Row(1, 2))
     }
   }
 }
