@@ -50,7 +50,7 @@ object MimaExcludes {
     // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this"),
 
-    // [SPARK-37831][CORE] TaskInfo add partitionId as a constructor parameter
+    // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this")
   )
 
