@@ -80,18 +80,13 @@ object DataSourceUtils extends PredicateHelper {
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  def verifySchema(
-      format: FileFormat,
-      schema: StructType,
-      shouldCheckFieldName: Boolean = true): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    if (shouldCheckFieldName) {
-      checkFieldNames(format, schema)
-    }
+    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be
