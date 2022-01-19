@@ -809,11 +809,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: SUM(CASE WHEN) with group by") {
     val df =
       sql("SELECT SUM(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END) FROM h2.test.employee GROUP BY DEPT")
-    checkAggregateRemoved(df, false)
+    checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [], "
+          "PushedAggregates: [SUM(CASE WHEN SALARY > 0.00 THEN 1 ELSE 0 END)], " +
+            "PushedFilters: [], " +
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
     checkAnswer(df, Seq(Row(1), Row(2), Row(2)))

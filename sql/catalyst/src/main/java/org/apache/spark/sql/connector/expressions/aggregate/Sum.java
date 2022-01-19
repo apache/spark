@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -27,15 +28,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class Sum implements AggregateFunc {
-  private final NamedReference column;
+  private final Expression column;
   private final boolean isDistinct;
 
-  public Sum(NamedReference column, boolean isDistinct) {
+  public Sum(Expression column, boolean isDistinct) {
     this.column = column;
     this.isDistinct = isDistinct;
   }
 
-  public NamedReference column() { return column; }
+  public Expression column() { return column; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override
