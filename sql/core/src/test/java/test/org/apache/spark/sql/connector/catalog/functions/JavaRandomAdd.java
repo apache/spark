@@ -60,7 +60,7 @@ public class JavaRandomAdd implements UnboundFunction {
       "rand_add(int) -> int";
   }
 
-  public static abstract class JavaRandomAddBase implements ScalarFunction<Integer> {
+  public abstract static class JavaRandomAddBase implements ScalarFunction<Integer> {
     @Override
     public DataType[] inputTypes() {
       return new DataType[] { DataTypes.IntegerType };
@@ -107,5 +107,4 @@ public class JavaRandomAdd implements UnboundFunction {
     }
   }
 }
-
 
