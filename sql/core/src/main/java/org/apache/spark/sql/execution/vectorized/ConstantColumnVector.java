@@ -42,6 +42,7 @@ public class ConstantColumnVector extends ColumnVector {
   private long longData;
   private float floatData;
   private double doubleData;
+  private UTF8String stringData;
   private byte[] byteArrayData;
   private ConstantColumnVector[] childData;
   private ColumnarArray arrayData;
@@ -248,14 +249,14 @@ public class ConstantColumnVector extends ColumnVector {
 
   @Override
   public UTF8String getUTF8String(int rowId) {
-    return UTF8String.fromBytes(byteArrayData);
+    return stringData;
   }
 
   /**
    * Sets the `UTF8String` `value` for all rows
    */
   public void setUtf8String(UTF8String value) {
-    setByteArray(value.getBytes());
+    stringData = value;
   }
 
   /**
