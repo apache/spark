@@ -134,6 +134,9 @@ private[kafka010] class KafkaSource(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
+      // Calling ReadLimit.allAvailable() explicitly instead of super.getDefaultReadLimit because
+      // scala compiler bug https://github.com/scala/bug/issues/12523
+      // TODO revert to calling super.getDefaultReadLimit when scala complier bug is fixed
       maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }

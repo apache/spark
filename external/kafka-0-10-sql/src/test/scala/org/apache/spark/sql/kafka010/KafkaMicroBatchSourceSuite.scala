@@ -199,9 +199,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
 
-    testUtils.sendMessages(topic, (0 until 15).map(x => {
-      "foo-" + x
-    }).toArray, Some(0))
+    testUtils.sendMessages(topic, (0 until 15).map{ case x =>
+      s"foo-$x"
+    }.toArray, Some(0))
 
     val reader = spark
       .readStream
@@ -216,9 +216,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     var index: Int = 0
     def startTriggerAvailableNowQuery(): StreamingQuery = {
       reader.writeStream
-        .foreachBatch((df: Dataset[Row], i: Long) => {
+        .foreachBatch{ case (_: Dataset[Row], _: Long) =>
           index+=1
-        })
+        }
         .trigger(Trigger.AvailableNow)
         .start()
     }
