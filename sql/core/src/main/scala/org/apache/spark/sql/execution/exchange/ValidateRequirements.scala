@@ -60,7 +60,12 @@ object ValidateRequirements extends Logging {
       val specs = children.map(_.outputPartitioning).zip(requiredChildDistributions).map {
         case (p, d) => p.createShuffleSpec(d.asInstanceOf[ClusteredDistribution])
       }
-      specs.tail.forall(_.isCompatibleWith(specs.head))
+      if (specs.tail.forall(_.isCompatibleWith(specs.head))) {
+        true
+      } else {
+        logDebug(s"ValidateRequirements failed: children not co-partitioned in\n$plan")
+        false
+      }
     } else {
       satisfied
     }

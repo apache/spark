@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.test.SharedSparkSession
@@ -81,6 +81,22 @@ class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
 
   test("SMJ requirements not satisfied with unequal partition number") {
     testValidate(Seq(0, 1, 2), Seq(0, 1, 2), Seq(0, 1, 2), 12, 10, false)
+  }
+
+  test("SMJ with HashPartitioning(1) and SinglePartition") {
+    val table1 = spark.range(10).queryExecution.executedPlan
+    val table2 = spark.range(10).queryExecution.executedPlan
+    val leftPartitioning = HashPartitioning(table1.output, 1)
+    val rightPartitioning = SinglePartition
+    val left =
+      SortExec(table1.output.map(SortOrder(_, Ascending)), false,
+        ShuffleExchangeExec(leftPartitioning, table1))
+    val right =
+      SortExec(table2.output.map(SortOrder(_, Ascending)), false,
+        ShuffleExchangeExec(rightPartitioning, table2))
+
+    val plan = SortMergeJoinExec(table1.output, table2.output, Inner, None, left, right)
+    assert(ValidateRequirements.validate(plan), plan)
   }
 
   private def testNestedJoin(
