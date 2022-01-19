@@ -56,6 +56,8 @@ license: |
 
   - Since Spark 3.3, DESCRIBE FUNCTION fails if the function does not exist. In Spark 3.2 or earlier, DESCRIBE FUNCTION can still run and print "Function: func_name not found".
 
+  - Since Spark 3.3, the table property `external` becomes reserved. Certain commands will fail if you specify the `external` property, such as `CREATE TABLE ... TBLPROPERTIES` and `ALTER TABLE ... SET TBLPROPERTIES`. In Spark 3.2 and earlier, the table property `external` is silently ignored. You can set `spark.sql.legacy.notReserveProperties` to `true` to restore the old behavior.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
