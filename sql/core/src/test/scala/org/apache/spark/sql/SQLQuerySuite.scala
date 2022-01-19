@@ -4258,8 +4258,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")))
       checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
-      checkAnswer(df.where("`a.b` > 8"),
-        Row(2, 4, 6, 8, 10, 12) :: Nil)
+      checkAnswer(df.where("`a.b` > 10"),
+        Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
     }
   }
 }
