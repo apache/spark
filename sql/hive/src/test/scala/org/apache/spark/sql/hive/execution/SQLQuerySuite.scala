@@ -2694,7 +2694,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTable("tb") {
       val dt = "2018-11-17 13:33:33.0"
       val ddl =
-        s"CREATE TABLE tb as SELECT TIMESTAMP_LTZ'$dt' as c0, TIMESTAMP_NTZ '$dt' as c1"
+        s"CREATE TABLE tb as SELECT TIMESTAMP_LTZ '$dt' as c0, TIMESTAMP_NTZ '$dt' as c1"
       sql(ddl)
       val df = sql("SELECT c0, c1 FROM tb")
       checkAnswer(df, Row(
