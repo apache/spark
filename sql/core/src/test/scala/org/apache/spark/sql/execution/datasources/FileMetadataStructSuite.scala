@@ -279,13 +279,55 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   }
 
   metadataColumnsTest("filter", schema) { (df, f0, _) =>
+    val filteredDF = df.select("name", "age", METADATA_FILE_NAME)
+      .where(Column(METADATA_FILE_NAME) === f0(METADATA_FILE_NAME))
+
+    // check the filtered file
+    val partitions = filteredDF.queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p.selectedPartitions
+    }.get
+
+    assert(partitions.length == 1) // 1 partition
+    assert(partitions.head.files.length == 1) // 1 file in that partition
+    assert(partitions.head.files.head.getPath.toString == f0(METADATA_FILE_PATH)) // the file is f0
+
+    // check result
     checkAnswer(
-      df.select("name", "age", METADATA_FILE_NAME)
-        .where(Column(METADATA_FILE_NAME) === f0(METADATA_FILE_NAME)),
+      filteredDF,
       Seq(
         // _file_name == f0's name, so we will only have 1 row
         Row("jack", 24, f0(METADATA_FILE_NAME))
       )
+    )
+  }
+
+  metadataColumnsTest("filter on metadata and user data", schema) { (df, _, f1) =>
+
+    val filteredDF = df.select("name", "age", "info",
+      METADATA_FILE_NAME, METADATA_FILE_PATH,
+      METADATA_FILE_SIZE, METADATA_FILE_MODIFICATION_TIME)
+      // mix metadata column + user column
+      .where(Column(METADATA_FILE_NAME) === f1(METADATA_FILE_NAME) and Column("name") === "lily")
+      // only metadata columns
+      .where(Column(METADATA_FILE_PATH) === f1(METADATA_FILE_PATH))
+      // only user column
+      .where("age == 31")
+
+    // check the filtered file
+    val partitions = filteredDF.queryExecution.sparkPlan.collectFirst {
+      case p: FileSourceScanExec => p.selectedPartitions
+    }.get
+
+    assert(partitions.length == 1) // 1 partition
+    assert(partitions.head.files.length == 1) // 1 file in that partition
+    assert(partitions.head.files.head.getPath.toString == f1(METADATA_FILE_PATH)) // the file is f1
+
+    // check result
+    checkAnswer(
+      filteredDF,
+      Seq(Row("lily", 31, Row(54321L, "ucb"),
+        f1(METADATA_FILE_NAME), f1(METADATA_FILE_PATH),
+        f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
     )
   }
 
