@@ -4244,7 +4244,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-27442: Spark support read parquet file with invalid char in field name") {
+  test("SPARK-27442: Spark support read/write parquet file with invalid char in field name") {
     withTempDir { dir =>
       Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10), (2, 4, 6, 8, 10, 12, 14, 16, 18, 20))
         .toDF("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")
