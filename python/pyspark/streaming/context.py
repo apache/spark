@@ -62,25 +62,27 @@ class StreamingContext:
         jssc: Optional[JavaObject] = None,
     ):
         self._sc = sparkContext
-        self._jvm = self._sc._jvm  # type: ignore[attr-defined]
+        self._jvm = self._sc._jvm
         self._jssc = jssc or self._initialize_context(self._sc, batchDuration)
 
     def _initialize_context(self, sc: SparkContext, duration: Optional[int]) -> JavaObject:
         self._ensure_initialized()
-        return self._jvm.JavaStreamingContext(
-            sc._jsc, self._jduration(duration)  # type: ignore[attr-defined, arg-type]
-        )
+        assert self._jvm is not None and duration is not None
+        return self._jvm.JavaStreamingContext(sc._jsc, self._jduration(duration))
 
     def _jduration(self, seconds: int) -> JavaObject:
         """
         Create Duration object given number of seconds
         """
+        assert self._jvm is not None
         return self._jvm.Duration(int(seconds * 1000))
 
     @classmethod
     def _ensure_initialized(cls) -> None:
-        SparkContext._ensure_initialized()  # type: ignore[attr-defined]
-        gw = SparkContext._gateway  # type: ignore[attr-defined]
+        SparkContext._ensure_initialized()
+        gw = SparkContext._gateway
+
+        assert gw is not None
 
         java_import(gw.jvm, "org.apache.spark.streaming.*")
         java_import(gw.jvm, "org.apache.spark.streaming.api.java.*")
@@ -93,7 +95,7 @@ class StreamingContext:
         # register serializer for TransformFunction
         # it happens before creating SparkContext when loading from checkpointing
         cls._transformerSerializer = TransformFunctionSerializer(
-            SparkContext._active_spark_context,  # type: ignore[attr-defined]
+            SparkContext._active_spark_context,
             CloudPickleSerializer(),
             gw,
         )
@@ -116,7 +118,9 @@ class StreamingContext:
             Function to create a new context and setup DStreams
         """
         cls._ensure_initialized()
-        gw = SparkContext._gateway  # type: ignore[attr-defined]
+        gw = SparkContext._gateway
+
+        assert gw is not None
 
         # Check whether valid checkpoint information exists in the given path
         ssc_option = gw.jvm.StreamingContextPythonHelper().tryRecoverFromCheckpoint(checkpointPath)
@@ -128,15 +132,18 @@ class StreamingContext:
         jssc = gw.jvm.JavaStreamingContext(ssc_option.get())
 
         # If there is already an active instance of Python SparkContext use it, or create a new one
-        if not SparkContext._active_spark_context:  # type: ignore[attr-defined]
+        if not SparkContext._active_spark_context:
             jsc = jssc.sparkContext()
             conf = SparkConf(_jconf=jsc.getConf())
             SparkContext(conf=conf, gateway=gw, jsc=jsc)
 
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+
+        assert sc is not None
 
         # update ctx in serializer
-        cls._transformerSerializer.ctx = sc  # type: ignore[union-attr]
+        assert cls._transformerSerializer is not None
+        cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
 
     @classmethod
@@ -297,7 +304,7 @@ class StreamingContext:
         storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects
         """
-        jlevel = self._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
+        jlevel = self._sc._getJavaStorageLevel(storageLevel)
         return DStream(
             self._jssc.socketTextStream(hostname, port, jlevel), self, UTF8Deserializer()
         )
@@ -371,13 +378,15 @@ class StreamingContext:
             rdds = [self._sc.parallelize(input) for input in rdds]  # type: ignore[arg-type]
         self._check_serializers(rdds)
 
+        assert self._jvm is not None
         queue = self._jvm.PythonDStream.toRDDQueue(
             [r._jrdd for r in rdds]  # type: ignore[attr-defined]
         )
         if default:
             default = default._reserialize(rdds[0]._jrdd_deserializer)  # type: ignore[attr-defined]
+            assert default is not None
             jdstream = self._jssc.queueStream(
-                queue, oneAtATime, default._jrdd  # type: ignore[union-attr, attr-defined]
+                queue, oneAtATime, default._jrdd  # type: ignore[attr-defined]
             )
         else:
             jdstream = self._jssc.queueStream(queue, oneAtATime)
@@ -399,9 +408,11 @@ class StreamingContext:
             lambda t, *rdds: transformFunc(rdds),
             *[d._jrdd_deserializer for d in dstreams],  # type: ignore[attr-defined]
         )
+
+        assert self._jvm is not None
         jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)
-        return DStream(jdstream, self, self._sc.serializer)  # type: ignore[attr-defined]
+        return DStream(jdstream, self, self._sc.serializer)
 
     def union(self, *dstreams: "DStream[T]") -> "DStream[T]":
         """
@@ -416,9 +427,11 @@ class StreamingContext:
             raise ValueError("All DStreams should have same serializer")
         if len(set(s._slideDuration for s in dstreams)) > 1:  # type: ignore[attr-defined]
             raise ValueError("All DStreams should have same slide duration")
-        jdstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream  # type: ignore[attr-defined]
-        jpair_dstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaPairDStream  # type: ignore[attr-defined]
-        gw = SparkContext._gateway  # type: ignore[attr-defined]
+
+        assert SparkContext._jvm is not None
+        jdstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
+        jpair_dstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaPairDStream
+        gw = SparkContext._gateway
         if is_instance_of(gw, dstreams[0]._jdstream, jdstream_cls):  # type: ignore[attr-defined]
             cls = jdstream_cls
         elif is_instance_of(
@@ -426,8 +439,12 @@ class StreamingContext:
         ):
             cls = jpair_dstream_cls
         else:
-            cls_name = dstreams[0]._jdstream.getClass().getCanonicalName()  # type: ignore[attr-defined]
+            cls_name = (
+                dstreams[0]._jdstream.getClass().getCanonicalName()  # type: ignore[attr-defined]
+            )
             raise TypeError("Unsupported Java DStream class %s" % cls_name)
+
+        assert gw is not None
         jdstreams = gw.new_array(cls, len(dstreams))
         for i in range(0, len(dstreams)):
             jdstreams[i] = dstreams[i]._jdstream  # type: ignore[attr-defined]
@@ -442,6 +459,7 @@ class StreamingContext:
         Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
         receiving system events related to streaming.
         """
+        assert self._jvm is not None
         self._jssc.addStreamingListener(
             self._jvm.JavaStreamingListenerWrapper(
                 self._jvm.PythonStreamingListenerWrapper(streamingListener)

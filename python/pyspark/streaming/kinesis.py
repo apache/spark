@@ -156,7 +156,8 @@ class KinesisUtils:
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
         jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
 
-        jvm = ssc._jvm  # type: ignore[attr-defined]
+        jvm = ssc._jvm
+        assert jvm is not None
 
         try:
             helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
