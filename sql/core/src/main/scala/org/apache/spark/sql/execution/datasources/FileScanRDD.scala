@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
-import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.unsafe.types.UTF8String
@@ -134,59 +134,35 @@ class FileScanRDD(
        * For each partitioned file, metadata columns for each record in the file are exactly same.
        * Only update metadata row when `currentFile` is changed.
        */
-      private def updateMetadataRow(): Unit = {
+      private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
-          val path = new Path(currentFile.filePath)
-          metadataColumns.zipWithIndex.foreach { case (attr, i) =>
-            attr.name match {
-              case FILE_PATH => metadataRow.update(i, UTF8String.fromString(path.toString))
-              case FILE_NAME => metadataRow.update(i, UTF8String.fromString(path.getName))
-              case FILE_SIZE => metadataRow.update(i, currentFile.fileSize)
-              case FILE_MODIFICATION_TIME =>
-                // the modificationTime from the file is in millisecond,
-                // while internally, the TimestampType is stored in microsecond
-                metadataRow.update(i, currentFile.modificationTime * 1000L)
-            }
-          }
+          updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
+            new Path(currentFile.filePath), currentFile.fileSize, currentFile.modificationTime)
         }
-      }
 
       /**
-       * Create a writable column vector containing all required metadata columns
+       * Create an array of constant column vectors containing all required metadata columns
        */
-      private def createMetadataColumnVector(c: ColumnarBatch): Array[WritableColumnVector] = {
+      private def createMetadataColumnVector(c: ColumnarBatch): Array[ConstantColumnVector] = {
         val path = new Path(currentFile.filePath)
-        val filePathBytes = path.toString.getBytes
-        val fileNameBytes = path.getName.getBytes
-        var rowId = 0
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
-            val columnVector = new OnHeapColumnVector(c.numRows(), StringType)
-            rowId = 0
-            // use a tight-loop for better performance
-            while (rowId < c.numRows()) {
-              columnVector.putByteArray(rowId, filePathBytes)
-              rowId += 1
-            }
+            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
+            columnVector.setUtf8String(UTF8String.fromString(path.toString))
             columnVector
           case FILE_NAME =>
-            val columnVector = new OnHeapColumnVector(c.numRows(), StringType)
-            rowId = 0
-            // use a tight-loop for better performance
-            while (rowId < c.numRows()) {
-              columnVector.putByteArray(rowId, fileNameBytes)
-              rowId += 1
-            }
+            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
+            columnVector.setUtf8String(UTF8String.fromString(path.getName))
             columnVector
           case FILE_SIZE =>
-            val columnVector = new OnHeapColumnVector(c.numRows(), LongType)
-            columnVector.putLongs(0, c.numRows(), currentFile.fileSize)
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
+            columnVector.setLong(currentFile.fileSize)
             columnVector
           case FILE_MODIFICATION_TIME =>
-            val columnVector = new OnHeapColumnVector(c.numRows(), LongType)
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             // the modificationTime from the file is in millisecond,
             // while internally, the TimestampType is stored in microsecond
-            columnVector.putLongs(0, c.numRows(), currentFile.modificationTime * 1000L)
+            columnVector.setLong(currentFile.modificationTime * 1000L)
             columnVector
         }.toArray
       }
@@ -198,10 +174,9 @@ class FileScanRDD(
       private def addMetadataColumnsIfNeeded(nextElement: Object): Object = {
         if (metadataColumns.nonEmpty) {
           nextElement match {
-            case c: ColumnarBatch =>
-              new ColumnarBatch(
-                Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
-                c.numRows())
+            case c: ColumnarBatch => new ColumnarBatch(
+              Array.tabulate(c.numCols())(c.column) ++ createMetadataColumnVector(c),
+              c.numRows())
             case u: UnsafeRow => projection.apply(new JoinedRow(u, metadataRow))
             case i: InternalRow => new JoinedRow(i, metadataRow)
           }
