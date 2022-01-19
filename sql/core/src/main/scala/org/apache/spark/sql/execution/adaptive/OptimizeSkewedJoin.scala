@@ -116,42 +116,41 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    *      1, at Join node, select the splittable paths according to its JoinType;
    *      2, at Agg/Window node, stop;
    *      3, all the reached leave are splittable;
-   *    For example, in the following stage, ShuffleQueryStages s6/s7/s8 are splittable.
-   *                       cross
-   *                 /              \
-   *               agg               \
-   *               /                  \
-   *            left                 cross
-   *          /      \            /           \
-   *        inner    s3        agg          inner
-   *      /      \              /          /       \
-   *     s0    right         inner      inner     left
-   *           /   \         /   \      /   \     /   \
-   *          s1   s2       s4   s5    s6   s7   s8   s9
+   *    For example, in the following example stage, ShuffleQueryStages s0/s2/s4 are splittable.
+   *
+   *                     inner
+   *                   /        \
+   *                cross      right
+   *               /     \    /     \
+   *            inner    s2  s3    inner
+   *           /     \            /     \
+   *          s0     agg         s4     win
+   *                  |                  |
+   *                  s1                 s5
    *
    * 3. Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec;
    * 4. For each splittable ShuffleQueryStageExec, check whether skew partitions exists, if true,
    *    split them into specs. This step also detects and handles Combinatorial Explosion: for
    *    each skew partition, check whether the combination number is too large, if so, re-split the
    *    ShuffleQueryStageExecs.
-   *    For example, for partition 0, stage s6/s7/s8 are split into 100/100/100 specs,
+   *    For example, for partition 0, stage s0/s2/s4 are split into 100/100/100 specs,
    *    respectively. Then there are 1M combinations, which is too large, and will cause
    *    performance regression. Given a threshold (1k by default), the numbers of specs will
    *    be optimized to 10/10/10.
-   * 5. Generate final specs. Suppose above splittable ShuffleQueryStages s6/s7/s8 are finally
+   * 5. Generate final specs. Suppose above splittable ShuffleQueryStages s0/s2/s4 are finally
    *    split into 2/2/3 specs, then there will be following 2X2X3=12 combinations:
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec0, s8_spec0, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec0, s8_spec1, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec0, s8_spec2, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec1, s8_spec0, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec1, s8_spec1, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec0, s7_spec1, s8_spec2, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec0, s8_spec0, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec0, s8_spec1, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec0, s8_spec2, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec0, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec1, s9]
-   *      [s0, s1, s2, s3, s4, s5, s6_spec1, s7_spec1, s8_spec2, s9]
+   *      [s0_spec0, s1, s2_spec0, s3, s4_spec0, s5]
+   *      [s0_spec0, s1, s2_spec0, s3, s4_spec1, s5]
+   *      [s0_spec0, s1, s2_spec0, s3, s4_spec2, s5]
+   *      [s0_spec0, s1, s2_spec1, s3, s4_spec0, s5]
+   *      [s0_spec0, s1, s2_spec1, s3, s4_spec1, s5]
+   *      [s0_spec0, s1, s2_spec1, s3, s4_spec2, s5]
+   *      [s0_spec1, s1, s2_spec0, s3, s4_spec0, s5]
+   *      [s0_spec1, s1, s2_spec0, s3, s4_spec1, s5]
+   *      [s0_spec1, s1, s2_spec0, s3, s4_spec2, s5]
+   *      [s0_spec1, s1, s2_spec1, s3, s4_spec0, s5]
+   *      [s0_spec1, s1, s2_spec1, s3, s4_spec1, s5]
+   *      [s0_spec1, s1, s2_spec1, s3, s4_spec2, s5]
    * 6. Generate optimized plan by attaching new specs to ShuffleQueryStageExecs;
    */
   private def optimizeShuffledJoin(join: ShuffledJoin): SparkPlan = {
