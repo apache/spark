@@ -42,8 +42,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       pushDownSample,
       pushDownFilters,
       pushDownAggregates,
-      pushDownLimit,
-      pushDownColumn)
+      pushDownLimits,
+      pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
       pushDownRule(newPlan)
@@ -231,7 +231,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Cast(aggAttribute, aggDataType)
     }
 
-  def pushDownColumn(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
@@ -289,7 +289,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def pushDownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
+  private def pushdownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
       val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (limitPushed) {
@@ -312,14 +312,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         s
       }
     case p: Project =>
-      val newChild = pushDownLimit(p.child, limit)
+      val newChild = pushdownLimit(p.child, limit)
       p.withNewChildren(Seq(newChild))
     case other => other
   }
 
-  def pushDownLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      val newChild = pushDownLimit(child, limitValue)
+      val newChild = pushdownLimit(child, limitValue)
       val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
       globalLimit.withNewChildren(Seq(newLocalLimit))
   }
