@@ -105,6 +105,17 @@ case class ParquetScanBuilder(
     }
   }
 
+  override def pushLimit(limit: Int): Boolean = {
+    val sqlConf = sparkSession.sessionState.conf
+    // TODO: Support limit push down for row based parquet reader
+    if (sqlConf.parquetVectorizedReaderEnabled && sqlConf.parquetLimitPushDownEnabled) {
+      pushedLimit = Some(limit)
+      true
+    } else {
+      false
+    }
+  }
+
   override def build(): Scan = {
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in readDataSchema() (in regular column pruning). These
@@ -114,6 +125,6 @@ case class ParquetScanBuilder(
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
       readPartitionSchema(), pushedParquetFilters, options, pushedAggregations,
-      partitionFilters, dataFilters)
+      partitionFilters, dataFilters, pushedLimit)
   }
 }

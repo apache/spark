@@ -56,6 +56,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
  * @param aggregation Aggregation to be pushed down in the batch scan.
+ * @param limit Limit to be pushed down in the batch scan.
  * @param parquetOptions The options of Parquet datasource that are set for the read.
  */
 case class ParquetPartitionReaderFactory(
@@ -66,6 +67,7 @@ case class ParquetPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
+    limit: Option[Int],
     parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
@@ -327,7 +329,8 @@ case class ParquetPartitionReaderFactory(
       int96RebaseSpec.mode.toString,
       int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && taskContext.isDefined,
-      capacity)
+      capacity,
+      limit.getOrElse(Int.MaxValue))
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))

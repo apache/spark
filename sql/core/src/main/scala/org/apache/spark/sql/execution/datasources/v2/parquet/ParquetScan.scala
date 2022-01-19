@@ -46,7 +46,8 @@ case class ParquetScan(
     options: CaseInsensitiveStringMap,
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty,
+    pushedLimit: Option[Int] = None) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -99,6 +100,7 @@ case class ParquetScan(
       readPartitionSchema,
       pushedFilters,
       pushedAggregate,
+      pushedLimit,
       new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, sqlConf))
   }
 
@@ -126,7 +128,8 @@ case class ParquetScan(
   override def description(): String = {
     super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
       ", PushedAggregation: " + pushedAggregationsStr +
-      ", PushedGroupBy: " + pushedGroupByStr
+      ", PushedGroupBy: " + pushedGroupByStr +
+      ", PushedLimit: " + pushedLimit
   }
 
   override def getMetaData(): Map[String, String] = {

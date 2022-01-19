@@ -889,6 +889,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARQUET_LIMIT_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.parquet.limitPushdown.enabled")
+      .doc("Enables Parquet limit push-down optimization when set to true.")
+      .version("3.3.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -3796,6 +3804,8 @@ class SQLConf extends Serializable with Logging {
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
+
+  def parquetLimitPushDownEnabled: Boolean = getConf(PARQUET_LIMIT_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 

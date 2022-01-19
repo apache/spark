@@ -20,7 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownLimit, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
@@ -32,7 +32,8 @@ abstract class FileScanBuilder(
     dataSchema: StructType)
   extends ScanBuilder
     with SupportsPushDownRequiredColumns
-    with SupportsPushDownCatalystFilters {
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownLimit {
   private val partitionSchema = fileIndex.partitionSchema
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
@@ -40,6 +41,7 @@ abstract class FileScanBuilder(
   protected var partitionFilters = Seq.empty[Expression]
   protected var dataFilters = Seq.empty[Expression]
   protected var pushedDataFilters = Array.empty[Filter]
+  protected var pushedLimit: Option[Int] = None
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -83,6 +85,8 @@ abstract class FileScanBuilder(
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
     dataFilters
   }
+
+  override def pushLimit(limit: Int): Boolean = false
 
   override def pushedFilters: Array[Filter] = pushedDataFilters
 
