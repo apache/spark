@@ -24,7 +24,7 @@ from pyspark.testing.utils import QuietTest
 
 class ImageFileFormatTest(SparkSessionTestCase):
     def test_read_images(self):
-        data_path = "data/mllib/images/origin/kittens"
+        data_path = "python/test_support/images/kittens"
         df = (
             self.spark.read.format("image")
             .option("dropInvalid", True)
