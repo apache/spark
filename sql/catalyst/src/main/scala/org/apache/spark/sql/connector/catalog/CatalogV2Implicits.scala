@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, SortedBucketTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -49,40 +51,27 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
-    def asPartitionColumns: Seq[String] = {
-      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
+    def convertTransforms: (Seq[String], Option[BucketSpec]) = {
+      val identityCols = new mutable.ArrayBuffer[String]
+      var bucketSpec = Option.empty[BucketSpec]
 
-      var partitionCols: Seq[String] = Seq.empty[String]
-      nonIdTransforms.foreach {
-        case bucket: BucketTransform =>
-          bucket.columns.foreach { col =>
-            val parts = col.fieldNames
-            if (parts.size > 1) {
-              throw QueryCompilationErrors.cannotPartitionByNestedColumnError(col)
-            } else {
-              partitionCols = partitionCols :+ parts(0)
-            }
+      transforms.map {
+        case IdentityTransform(FieldReference(Seq(col))) =>
+          identityCols += col
+
+        case BucketTransform(numBuckets, col, sortCol) =>
+          if (sortCol.isEmpty) {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
+          } else {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+              sortCol.map(_.fieldNames.mkString("."))))
           }
-        case sortedBucket: SortedBucketTransform =>
-          sortedBucket.columns.foreach { col =>
-            val parts = col.fieldNames
-            if (parts.size > 1) {
-              throw QueryCompilationErrors.cannotPartitionByNestedColumnError(col)
-            } else {
-              partitionCols = partitionCols :+ parts(0)
-            }
-          }
+
+        case transform =>
+          throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
       }
 
-      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
-        val parts = ref.fieldNames
-        if (parts.size > 1) {
-          throw QueryCompilationErrors.cannotPartitionByNestedColumnError(ref)
-        } else {
-          partitionCols = partitionCols :+ parts(0)
-        }
-      }
-      partitionCols
+      (identityCols.toSeq, bucketSpec)
     }
   }
 

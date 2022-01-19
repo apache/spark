@@ -669,7 +669,7 @@ object QueryExecutionErrors {
 
   def unsupportedPartitionTransformError(transform: Transform): Throwable = {
     new UnsupportedOperationException(
-      s"SessionCatalog does not support partition transform: $transform")
+      s"Unsupported partition transform: $transform")
   }
 
   def missingDatabaseLocationError(): Throwable = {

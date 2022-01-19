@@ -524,6 +524,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
+    val (partitionColumns, maybeBucketSpec) = partitioning.toSeq.convertTransforms
 
     CatalogTable(
       identifier = table,
@@ -531,7 +532,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       storage = storageFormat,
       schema = schema,
       provider = Some(provider),
-      partitionColumnNames = partitioning.asPartitionColumns,
+      partitionColumnNames = partitionColumns,
+      bucketSpec = maybeBucketSpec,
       properties = properties,
       comment = comment)
   }

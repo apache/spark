@@ -20,9 +20,7 @@ package org.apache.spark.sql.connector.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
-import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Helper methods for working with the logical expressions API.
@@ -46,8 +44,6 @@ private[sql] object LogicalExpressions {
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
   def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform = {
-    SchemaUtils.checkColumnNameDuplication(references.map(_.describe()).toSeq,
-      "in the bucket definition", SQLConf.get.caseSensitiveAnalysis)
     BucketTransform(literal(numBuckets, IntegerType), references)
   }
 
@@ -55,10 +51,6 @@ private[sql] object LogicalExpressions {
       numBuckets: Int,
       references: Array[NamedReference],
       sortedCols: Array[NamedReference]): SortedBucketTransform = {
-    SchemaUtils.checkColumnNameDuplication(references.map(_.describe()).toSeq,
-      "in the bucket definition", SQLConf.get.caseSensitiveAnalysis)
-    SchemaUtils.checkColumnNameDuplication(sortedCols.map(_.describe()).toSeq,
-      "in the sort definition", SQLConf.get.caseSensitiveAnalysis)
     SortedBucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
   }
 

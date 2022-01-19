@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -248,17 +248,35 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
+  test("create table - partitioned by transforms") {
+    val transforms = Seq("years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)")
+    transforms.foreach { transform =>
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING) USING parquet
+           |PARTITIONED BY ($transform)
+           """.stripMargin
+
+      val ae = intercept[UnsupportedOperationException] {
+        parseAndResolve(query)
+      }
+
+      assert(ae.getMessage
+        .contains(s"Unsupported partition transform: $transform"))
+    }
+  }
+
   test("create table - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("my_tab", Some("default")),
-      partitionColumnNames = Seq("a"),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty,
       schema = new StructType().add("a", IntegerType).add("b", StringType),
-      provider = Some("parquet")
+      provider = Some("parquet"),
+      bucketSpec = Some(BucketSpec(5, Seq("a"), Seq("b")))
     )
 
     parseAndResolve(query) match {
@@ -2115,13 +2133,19 @@ class PlanResolutionSuite extends AnalysisTest {
 
     val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
     val (desc1, _) = extractTableDesc(query1)
-    assert(desc1.partitionColumnNames == Seq("id"))
-    assert(desc1.bucketSpec.isEmpty)
+    assert(desc1.bucketSpec.isDefined)
+    val bucketSpec1 = desc1.bucketSpec.get
+    assert(bucketSpec1.numBuckets == numBuckets)
+    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec1.sortColumnNames.isEmpty)
 
     val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
     val (desc2, _) = extractTableDesc(query2)
-    assert(desc2.partitionColumnNames == Seq("id"))
-    assert(desc2.bucketSpec.isEmpty)
+    assert(desc2.bucketSpec.isDefined)
+    val bucketSpec2 = desc2.bucketSpec.get
+    assert(bucketSpec2.numBuckets == numBuckets)
+    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
   test("create table(hive) - skewed by") {

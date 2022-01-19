@@ -537,7 +537,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "partition column c is not defined in table default.tbl, " +
+    assert(e.message == "bucket column c is not defined in table default.tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -734,8 +734,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.provider == Some("parquet"))
-      assert(table.schema == new StructType().add("b", IntegerType).add("a", IntegerType))
-      assert(table.bucketSpec == None)
+      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      assert(table.bucketSpec == Some(BucketSpec(5, Seq("a"), Seq("b"))))
     }
   }
 
@@ -1362,9 +1362,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
         }
-        assert(e.message == "It is not allowed to specify partition columns when the table schema" +
-          " is not defined. When the table schema is not provided, schema and partition columns" +
-          " will be inferred.")
+        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
+          "specified when creating and will be inferred at runtime")
       }
     }
   }
