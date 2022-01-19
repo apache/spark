@@ -231,7 +231,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-      if (namespace.isEmpty || namespaceExists(namespace)) {
+    if (namespace.isEmpty || namespaceExists(namespace)) {
       super.listTables(namespace)
     } else {
       throw new NoSuchNamespaceException(namespace)
