@@ -338,21 +338,19 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     verify(loggingPodStatusWatcher).watchOrStop(kconf.namespace + ":driver")
   }
 
-  test("driver's confimap.metadata.namespace set to conf.namespace otherwise default") {
+  test("SPARK-37916: driver's configmap namespace set to conf.namespace otherwise default") {
     val submissionClient = new Client(
       kconf,
       driverBuilder,
       kubernetesClient,
       loggingPodStatusWatcher)
-    assert(submissionClient.createConfigs()._3.getMetadata.getNamespace === "default")
+    assert(submissionClient.createConfigMap(BUILT_KUBERNETES_SPEC)._2
+      .getMetadata.getNamespace === "default")
 
     val sparkConf = new SparkConf(false)
       .set(Config.KUBERNETES_NAMESPACE, "namespace")
 
-    val kconf2 = KubernetesTestConf.createDriverConf(
-      sparkConf = sparkConf,
-      resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX)
-    )
+    val kconf2 = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
     when(driverBuilder.buildFromFeatures(kconf2, kubernetesClient))
       .thenReturn(BUILT_KUBERNETES_SPEC)
@@ -363,6 +361,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
 
-    assert(submissionClient2.createConfigs()._3.getMetadata.getNamespace === "namespace")
+    assert(submissionClient2.createConfigMap(BUILT_KUBERNETES_SPEC)._2
+      .getMetadata.getNamespace === "namespace")
   }
 }

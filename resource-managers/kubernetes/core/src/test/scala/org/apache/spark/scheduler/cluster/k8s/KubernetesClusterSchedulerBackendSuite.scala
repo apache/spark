@@ -131,10 +131,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       pollEvents)
   }
 
-  test("executor's configmap.metadata.namespace set to conf.namespace otherwise default") {
+  test("SPARK-37916: executor's configmap namespace set to conf.namespace otherwise default") {
     assert(schedulerBackendUnderTest.createConfigMap().getMetadata.getNamespace === "default")
 
-    sparkConf.set(KUBERNETES_NAMESPACE, "namespace")
+    when(sc.conf).thenReturn(new SparkConf(false).set(KUBERNETES_NAMESPACE, "namespace"))
     assert(new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
