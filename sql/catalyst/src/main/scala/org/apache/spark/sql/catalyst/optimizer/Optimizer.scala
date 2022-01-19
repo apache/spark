@@ -762,22 +762,34 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
+  def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
+    val newFirstChild = Project(projectList, u.children.head)
+    val newOtherChildren = u.children.tail.map { child =>
+      val rewrites = buildRewrites(u.children.head, child)
+      Project(projectList.map(pushToRight(_, rewrites)), child)
+    }
+    newFirstChild +: newOtherChildren
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u: Union) =>
-      assert(u.children.nonEmpty)
-      if (projectList.forall(_.deterministic)) {
-        val newFirstChild = Project(projectList, u.children.head)
-        val newOtherChildren = u.children.tail.map { child =>
-          val rewrites = buildRewrites(u.children.head, child)
-          Project(projectList.map(pushToRight(_, rewrites)), child)
-        }
-        u.copy(children = newFirstChild +: newOtherChildren)
-      } else {
-        p
-      }
+    case Project(projectList, u: Union)
+        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+      u.copy(children = pushProjectionThroughUnion(projectList, u))
+
+    // Push down deterministic projection through distinct
+    case Project(projectList, a @ Aggregate(_, _, u: Union))
+        if a.groupOnly && projectList.forall(_.deterministic) && u.children.nonEmpty =>
+      val newChild = u.copy(children = pushProjectionThroughUnion(projectList, u))
+
+      val outputKVs =
+        u.output.zip(newChild.output)(scala.collection.breakOut): Map[Expression, NamedExpression]
+      a.copy(
+        groupingExpressions = a.groupingExpressions.map(e => outputKVs.getOrElse(e, e)),
+        aggregateExpressions = a.aggregateExpressions.map(e => outputKVs.getOrElse(e, e)),
+        child = newChild)
   }
 }
 
@@ -931,6 +943,10 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       case p1 @ Project(_, p2: Project)
           if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
+      case p @ Project(projectList, a @ Aggregate(_, _, _: Union))
+          if a.groupOnly && projectList.forall(_.deterministic) =>
+        // Do nothing. It should be handled by PushProjectionThroughUnion
+        p
       case p @ Project(_, agg: Aggregate)
           if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
              canCollapseAggregate(p, agg) =>
@@ -1294,6 +1310,7 @@ object CombineUnions extends Rule[LogicalPlan] {
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
     case u: Union => flattenUnion(u, false)
     case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+    case a @ Aggregate(_, _, u: Union) if a.groupOnly => a.copy(child = flattenUnion(u, true))
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
@@ -1321,6 +1338,10 @@ object CombineUnions extends Rule[LogicalPlan] {
           stack.pushAll(u.children.reverse)
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(children.reverse)
+        case a @ Aggregate(_, _, Union(children, byName, allowMissingCol))
+            if a.groupOnly &&
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
         case child =>
           flattened += child
