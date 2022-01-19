@@ -172,11 +172,11 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
         sqlBenchmark.run()
 
+        val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
+        val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
         withParquetVersions { version =>
           // Driving the parquet reader in batch mode directly.
           val files = TestUtils.listDirectory(new File(dir, s"parquet$version"))
-          val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
-          val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
           parquetReaderBenchmark.addCase(s"ParquetReader Vectorized: DataPage$version") { _ =>
             var longSum = 0L
             var doubleSum = 0.0
@@ -222,8 +222,6 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         withParquetVersions { version =>
           // Driving the parquet reader in batch mode directly.
           val files = TestUtils.listDirectory(new File(dir, s"parquet$version"))
-          val enableOffHeapColumnVector = spark.sessionState.conf.offHeapColumnVectorEnabled
-          val vectorizedReaderBatchSize = spark.sessionState.conf.parquetVectorizedReaderBatchSize
           // Decoding in vectorized but having the reader return rows.
           parquetReaderBenchmark
             .addCase(s"ParquetReader Vectorized -> Row: DataPage$version") { _ =>
