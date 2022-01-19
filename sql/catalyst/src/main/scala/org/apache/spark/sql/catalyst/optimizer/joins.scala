@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -188,6 +188,23 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * Convert inner join to left semi join.
+ */
+object EliminateInnerJoin extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
+      case p @ Project(_,
+          j @ ExtractEquiJoinKeys(Inner, _, rightKeys, None, _, left, right: Aggregate, _))
+        if right.groupOnly && p.references.subsetOf(left.outputSet) &&
+          getBroadcastBuildSide(j, conf).contains(BuildRight) &&
+          rightKeys.distinct.size == right.output.distinct.size &&
+          rightKeys.forall(key => right.output.exists(_.semanticEquals(key))) =>
+        p.copy(child = j.copy(joinType = LeftSemi))
+    }
+  }
+}
+
+/**
  * PythonUDF in join condition can't be evaluated if it refers to attributes from both join sides.
  * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
  * out from join condition.
@@ -340,11 +357,15 @@ trait JoinSelectionHelper {
     }
   }
 
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+  def getBroadcastBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
     getBroadcastBuildSide(join.left, join.right, join.joinType,
-      join.hint, hintOnly = true, conf).isDefined ||
+      join.hint, hintOnly = true, conf).orElse(
       getBroadcastBuildSide(join.left, join.right, join.joinType,
-        join.hint, hintOnly = false, conf).isDefined
+        join.hint, hintOnly = false, conf))
+  }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join, conf).isDefined
   }
 
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {

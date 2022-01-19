@@ -111,6 +111,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.EliminateAggregateFilter" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateLimits" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateMapObjects" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateInnerJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
