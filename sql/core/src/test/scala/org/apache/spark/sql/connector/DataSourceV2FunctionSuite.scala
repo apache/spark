@@ -430,7 +430,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-37957: pass deterministic flag") {
+  test("SPARK-37957: pass deterministic flag when creating V2 function expression") {
     def checkDeterministic(df: DataFrame): Unit = {
       val result = df.queryExecution.executedPlan.find(_.isInstanceOf[ProjectExec])
       assert(result.isDefined, s"Expect to find ProjectExec")
@@ -439,10 +439,19 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
 
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic, new JavaRandomAddStaticMagic).foreach {
-      fn =>
-        addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
-        checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
+    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic,
+        new JavaRandomAddStaticMagic).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
+      checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
+    }
+
+    // A function call is non-deterministic if one of its arguments is non-deterministic
+    Seq(new JavaLongAddDefault(true), new JavaLongAddMagic(true),
+        new JavaLongAddStaticMagic(true)).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(fn))
+      addFunction(Identifier.of(Array("ns"), "rand_add"),
+        new JavaRandomAdd(new JavaRandomAddDefault))
+      checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
     }
   }
 

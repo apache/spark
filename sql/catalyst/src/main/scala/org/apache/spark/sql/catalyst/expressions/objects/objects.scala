@@ -262,7 +262,7 @@ case class StaticInvoke(
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
-  override lazy val deterministic: Boolean = isDeterministic
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
@@ -361,7 +361,7 @@ case class Invoke(
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
-  override lazy val deterministic: Boolean = isDeterministic
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
   override def inputTypes: Seq[AbstractDataType] =
     if (methodInputTypes.nonEmpty) {
       Seq(targetObject.dataType) ++ methodInputTypes
