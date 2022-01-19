@@ -43,16 +43,14 @@ private[sql] object LogicalExpressions {
 
   def apply(name: String, arguments: Expression*): Transform = ApplyTransform(name, arguments)
 
-  def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform = {
+  def bucket(numBuckets: Int, references: Array[NamedReference]): BucketTransform =
     BucketTransform(literal(numBuckets, IntegerType), references)
-  }
 
   def bucket(
       numBuckets: Int,
       references: Array[NamedReference],
-      sortedCols: Array[NamedReference]): SortedBucketTransform = {
+      sortedCols: Array[NamedReference]): SortedBucketTransform =
     SortedBucketTransform(literal(numBuckets, IntegerType), references, sortedCols)
-  }
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
