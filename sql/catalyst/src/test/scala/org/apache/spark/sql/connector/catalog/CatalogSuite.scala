@@ -845,7 +845,7 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(catalog.dropNamespace(testNs, cascade = false))
+    assert(catalog.dropNamespace(testNs, cascade = true))
 
     assert(!catalog.namespaceExists(testNs))
     intercept[NoSuchNamespaceException](catalog.listTables(testNs))

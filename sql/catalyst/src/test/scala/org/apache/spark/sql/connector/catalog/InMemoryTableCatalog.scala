@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -216,7 +217,13 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
     listNamespaces(namespace).foreach(namespace => dropNamespace(namespace, cascade))
     try {
-      listTables(namespace).foreach(dropTable)
+      if (!cascade) {
+        if (listTables(namespace).nonEmpty || listNamespaces(namespace).nonEmpty) {
+          throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
+        }
+      } else {
+        listTables(namespace).foreach(dropTable)
+      }
     } catch {
       case _: NoSuchNamespaceException =>
     }
@@ -224,7 +231,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
   }
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-    if (namespace.isEmpty || namespaceExists(namespace)) {
+      if (namespace.isEmpty || namespaceExists(namespace)) {
       super.listTables(namespace)
     } else {
       throw new NoSuchNamespaceException(namespace)
