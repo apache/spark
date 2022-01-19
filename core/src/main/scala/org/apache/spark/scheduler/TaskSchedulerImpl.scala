@@ -1207,6 +1207,7 @@ private[spark] object TaskSchedulerImpl {
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Int]]): Int = {
     val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
+    val compatibleProfileIds = scheduler.sc.resourceProfileManager.getCompatibleProfileIds(rpId)
     val coresKnown = resourceProfile.isCoresLimitKnown
     val (limitingResource, limitedByCpu) = {
       val limiting = resourceProfile.limitingResource(conf)
@@ -1221,7 +1222,9 @@ private[spark] object TaskSchedulerImpl {
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).get
 
     availableCpus.zip(availableResources).zip(availableRPIds)
-      .filter { case (_, id) => id == rpId }
+      // if reuse executors, compatible ones are included,
+      // otherwise compatibleProfileIds will be empty
+      .filter { case (_, id) => id == rpId || compatibleProfileIds.contains(id)}
       .map { case ((cpu, resources), _) =>
         val numTasksPerExecCores = cpu / cpusPerTask
         if (limitedByCpu) {
