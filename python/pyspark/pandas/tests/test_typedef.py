@@ -64,7 +64,7 @@ class TypeHintTests(unittest.TestCase):
             infer_return_type(f)
 
         self.assertRaisesRegex(
-            TypeError, "A return value is required for the input function", try_infer_return_type
+            ValueError, "A return value is required for the input function", try_infer_return_type
         )
 
         def try_infer_return_type():
