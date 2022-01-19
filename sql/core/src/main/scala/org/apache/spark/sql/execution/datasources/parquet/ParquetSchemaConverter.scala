@@ -467,7 +467,6 @@ class SparkToParquetSchemaConverter(
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
       // ===================
