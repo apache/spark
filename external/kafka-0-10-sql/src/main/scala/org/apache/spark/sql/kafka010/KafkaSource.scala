@@ -77,9 +77,7 @@ private[kafka010] class KafkaSource(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsTriggerAvailableNow
-  with Source
-  with Logging {
+  extends SupportsTriggerAvailableNow with Source with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -134,9 +132,7 @@ private[kafka010] class KafkaSource(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      // Calling ReadLimit.allAvailable() explicitly instead of super.getDefaultReadLimit because
-      // scala compiler bug https://github.com/scala/bug/issues/12523
-      // TODO revert to calling super.getDefaultReadLimit when scala complier bug is fixed
+      // TODO (SPARK-37973) Directly call super.getDefaultReadLimit when scala issue 12523 is fixed
       maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }

@@ -217,17 +217,17 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     def startTriggerAvailableNowQuery(): StreamingQuery = {
       reader.writeStream
         .foreachBatch((_: Dataset[Row], _: Long) => {
-          index+=1
+          index += 1
         })
         .trigger(Trigger.AvailableNow)
         .start()
     }
 
-    val q1 = startTriggerAvailableNowQuery()
+    val query = startTriggerAvailableNowQuery()
     try {
-      assert(q1.awaitTermination(streamingTimeout.toMillis))
+      assert(query.awaitTermination(streamingTimeout.toMillis))
     } finally {
-      q1.stop()
+      query.stop()
     }
 
     // should have 3 batches now i.e. 15 / 5 = 3
