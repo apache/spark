@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{CaseWhen, FieldReference, NamedReference}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -214,15 +214,15 @@ abstract class JdbcDialect extends Serializable with Logging{
         val column = quoteIdentifier(count.column.fieldNames.head)
         Some(s"COUNT($distinct$column)")
       case sum: Sum =>
-        val content = sum.column match {
+        val sql = sum.column match {
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
-          case caseWhen: CaseWhen =>
-            caseWhen.toString
+          case expr: GeneralSQLExpression =>
+            expr.sql()
         }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        Some(s"SUM($distinct$content)")
+        Some(s"SUM($distinct$sql)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
