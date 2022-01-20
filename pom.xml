@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.2.0-kylin-4.x-r46</version>
+  <version>3.2.0-kylin-4.x-r47</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -140,6 +140,7 @@
     <parquet.version>1.12.2-kylin-r1</parquet.version>
     <orc.version>1.6.11</orc.version>
     <jetty.version>9.4.43.v20210629</jetty.version>
+    <mortbay.jetty.version>7.0.0.pre5</mortbay.jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -493,6 +494,24 @@
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
+      <!-- import from hadoop project 2.7.4 -->
+      <dependency>
+        <groupId>org.mortbay.jetty</groupId>
+        <artifactId>jetty</artifactId>
+        <version>${mortbay.jetty.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.mortbay.jetty</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.mortbay.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
+        <version>${mortbay.jetty.version}</version>
+      </dependency>
+      <!-- import from hadoop project 2.7.4 end -->
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
