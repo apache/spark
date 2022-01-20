@@ -2509,7 +2509,7 @@ private[spark] class DAGScheduler(
             logInfo(s"Shuffle merge enabled adaptively for the stage $stage (${stage.name})" +
               s" with ${stage.shuffleDep.getMergerLocs.size} merger locations")
             mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId,
-              stage.shuffleDep.shuffleMergeId, stage.shuffleDep.getMergerLocs)
+              stage.shuffleDep.getMergerLocs)
           }
         }
     }

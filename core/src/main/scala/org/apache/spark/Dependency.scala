@@ -163,8 +163,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   /**
-   * Returns true if push-based shuffle is disabled or if the RDD is an empty RDD or
-   * if the shuffle merge for this shuffle is finalized.
+   * Returns true if push-based shuffle is disabled or if the shuffle merge for
+   * this shuffle is finalized.
    */
   def isShuffleMergeFinalizedIfEnabled: Boolean = {
     if (shuffleMergeEnabled) {

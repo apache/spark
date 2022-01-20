@@ -63,7 +63,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         if (dep.shuffleMergeAllowed && dep.getMergerLocs.isEmpty) {
           val mapOutputTracker = SparkEnv.get.mapOutputTracker
           val mergerLocs =
-            mapOutputTracker.getShufflePushMergerLocations(dep.shuffleId, dep.shuffleMergeId)
+            mapOutputTracker.getShufflePushMergerLocations(dep.shuffleId)
           if (mergerLocs.nonEmpty) {
             dep.setMergerLocs(mergerLocs)
           }

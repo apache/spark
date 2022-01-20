@@ -931,9 +931,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, 100)
       worker.updateEpoch(masterTracker.getEpoch)
       val mergerLocs = (1 to 10).map(x => BlockManagerId(s"exec-$x", s"host-$x", 7337))
-      masterTracker.registerShufflePushMergerLocations(20, 0, mergerLocs)
+      masterTracker.registerShufflePushMergerLocations(20, mergerLocs)
 
-      assert(worker.getShufflePushMergerLocations(20, 0).size == 10)
+      assert(worker.getShufflePushMergerLocations(20).size == 10)
       worker.unregisterShuffle(20)
       assert(worker.shufflePushMergerLocations.isEmpty)
     }
