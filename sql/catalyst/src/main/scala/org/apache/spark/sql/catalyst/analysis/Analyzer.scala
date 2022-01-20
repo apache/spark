@@ -1879,9 +1879,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       }}
     }
 
-    // Group by alias is not allowed in ANSI mode.
-    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
-
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
       _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
