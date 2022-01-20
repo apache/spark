@@ -2926,6 +2926,20 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-33844: Insert overwrite directory should check schema too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[SparkException] {
+          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+        }
+        assert(e.getCause.getCause.getMessage.contains(
+          "field ended by ';': expected ';' but got 'IF' at line 2:   optional int32 (IF"))
+      }
+    }
+  }
+
   test("SPARK-34261: Avoid side effect if create exists temporary function") {
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
