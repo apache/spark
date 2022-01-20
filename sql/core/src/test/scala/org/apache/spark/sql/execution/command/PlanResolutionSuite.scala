@@ -266,6 +266,24 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
+  test("create table - partitioned by multiple bucket transforms") {
+    val transforms = Seq("bucket(32, b), sorted_bucket(b, 32, c)")
+    transforms.foreach { transform =>
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING, c String) USING parquet
+           |PARTITIONED BY ($transform)
+           """.stripMargin
+
+      val ae = intercept[UnsupportedOperationException] {
+        parseAndResolve(query)
+      }
+
+      assert(ae.getMessage
+        .contains("Multiple bucket transforms are not supported."))
+    }
+  }
+
   test("create table - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"

@@ -1940,4 +1940,8 @@ object QueryExecutionErrors {
       s"Format '$format' used for parsing string to number or " +
         "formatting number to string is invalid")
   }
+
+  def MultipleBucketTransformsError(): Throwable = {
+    new UnsupportedOperationException("Multiple bucket transforms are not supported.")
+  }
 }
