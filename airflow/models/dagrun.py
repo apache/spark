@@ -440,7 +440,13 @@ class DagRun(Base, LoggingMixin):
         return tis.all()
 
     @provide_session
-    def get_task_instance(self, task_id: str, session: Session = NEW_SESSION) -> Optional[TI]:
+    def get_task_instance(
+        self,
+        task_id: str,
+        session: Session = NEW_SESSION,
+        *,
+        map_index: int = -1,
+    ) -> Optional[TI]:
         """
         Returns the task instance specified by task_id for this dag run
 
@@ -451,7 +457,7 @@ class DagRun(Base, LoggingMixin):
         """
         return (
             session.query(TI)
-            .filter(TI.dag_id == self.dag_id, TI.run_id == self.run_id, TI.task_id == task_id)
+            .filter_by(dag_id=self.dag_id, run_id=self.run_id, task_id=task_id, map_index=map_index)
             .one_or_none()
         )
 
