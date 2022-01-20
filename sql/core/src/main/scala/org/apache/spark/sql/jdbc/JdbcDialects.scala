@@ -203,16 +203,33 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+        val sql = min.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MIN($sql)")
       case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+        val sql = max.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MAX($sql)")
       case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
+        val sql = count.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(count.column.fieldNames.head)
-        Some(s"COUNT($distinct$column)")
+        Some(s"COUNT($distinct$sql)")
       case sum: Sum =>
         val sql = sum.column match {
           case field: FieldReference =>
@@ -226,10 +243,15 @@ abstract class JdbcDialect extends Serializable with Logging{
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        if (avg.column.fieldNames.length != 1) return None
+        val sql = avg.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(avg.column.fieldNames.head)
-        Some(s"AVG($distinct$column)")
+        Some(s"AVG($distinct$sql)")
       case _ => None
     }
   }

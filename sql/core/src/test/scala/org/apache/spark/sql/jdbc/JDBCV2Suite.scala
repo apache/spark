@@ -806,19 +806,29 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(query, Seq(Row(29000.0)))
   }
 
-  test("scan with aggregate push-down: SUM(CASE WHEN) with group by") {
-    val df =
-      sql("SELECT SUM(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END) FROM h2.test.employee GROUP BY DEPT")
+  test("scan with aggregate push-down: aggregate function with CASE WHEN") {
+    val df = sql(
+      """
+        |SELECT
+        |  SUM(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
+        |  AVG(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
+        |  MAX(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
+        |  MIN(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END)
+        |FROM h2.test.employee GROUP BY DEPT
+      """.stripMargin)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [SUM(CASE WHEN SALARY > 0.00 THEN 1 ELSE 0 END)], " +
+          "PushedAggregates: [SUM(CASE WHEN SALARY > 0.00 THEN 1 ELSE 0 END), " +
+            "COUNT(*), " +
+            "AVG(CASE WHEN SALARY > 0.00 THEN 1 ELS..., " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(1), Row(2), Row(2)))
+    checkAnswer(df, Seq(Row(1, 1, 1.0, 1, 1), Row(2, 2, 1.0, 1, 1), Row(2, 2, 1.0, 1, 1)))
   }
 
   test("scan with aggregate push-down: partition columns with multi group by columns") {

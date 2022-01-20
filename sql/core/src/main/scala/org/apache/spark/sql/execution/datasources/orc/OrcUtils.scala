@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
@@ -487,18 +488,18 @@ object OrcUtils extends Logging {
 
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {
-        case (max: Max, index) =>
-          val columnName = max.column.fieldNames.head
+        case (max: Max, index) if max.column.isInstanceOf[NamedReference] =>
+          val columnName = max.column.asInstanceOf[NamedReference].fieldNames.head
           val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
-        case (min: Min, index) =>
-          val columnName = min.column.fieldNames.head
+        case (min: Min, index) if min.column.isInstanceOf[NamedReference] =>
+          val columnName = min.column.asInstanceOf[NamedReference].fieldNames.head
           val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy.apply(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
-        case (count: Count, _) =>
-          val columnName = count.column.fieldNames.head
+        case (count: Count, _) if count.column.isInstanceOf[NamedReference] =>
+          val columnName = count.column.asInstanceOf[NamedReference].fieldNames.head
           val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
           // NOTE: Count(columnName) doesn't include null values.
           // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values

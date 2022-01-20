@@ -707,14 +707,20 @@ object DataSourceStrategy
       agg.aggregateFunction match {
         case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
           Some(new Min(FieldReference.column(name)))
+        case aggregate.Min(PushableExpression(expr)) =>
+          Some(new Min(expr))
         case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
           Some(new Max(FieldReference.column(name)))
+        case aggregate.Max(PushableExpression(expr)) =>
+          Some(new Max(expr))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // COUNT(any literal) is the same as COUNT(*)
             case Literal(_, _) => Some(new CountStar())
             case PushableColumnWithoutNestedColumn(name) =>
               Some(new Count(FieldReference.column(name), agg.isDistinct))
+            case PushableExpression(expr) =>
+              Some(new Count(expr, agg.isDistinct))
             case _ => None
           }
         case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
@@ -723,6 +729,8 @@ object DataSourceStrategy
           Some(new Sum(expr, agg.isDistinct))
         case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Avg(FieldReference.column(name), agg.isDistinct))
+        case aggregate.Average(PushableExpression(expr), _) =>
+          Some(new Avg(expr, agg.isDistinct))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new GeneralAggregateFunc(
             "VAR_POP", agg.isDistinct, Array(FieldReference.column(name))))

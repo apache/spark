@@ -52,8 +52,10 @@ object AggregatePushDownUtils {
 
     def processMinOrMax(agg: AggregateFunc): Boolean = {
       val (column, aggType) = agg match {
-        case max: Max => (max.column, "max")
-        case min: Min => (min.column, "min")
+        case max: Max if max.column().isInstanceOf[NamedReference] =>
+          (max.column.asInstanceOf[NamedReference], "max")
+        case min: Min if min.column().isInstanceOf[NamedReference] =>
+          (min.column.asInstanceOf[NamedReference], "min")
         case _ =>
           throw new IllegalArgumentException(s"Unexpected type of AggregateFunc ${agg.describe}")
       }
@@ -117,10 +119,11 @@ object AggregatePushDownUtils {
         if (!processMinOrMax(max)) return None
       case min: Min =>
         if (!processMinOrMax(min)) return None
-      case count: Count =>
-        if (count.column.fieldNames.length != 1 || count.isDistinct) return None
+      case count: Count if count.column().isInstanceOf[NamedReference] =>
+        val reference = count.column.asInstanceOf[NamedReference]
+        if (reference.fieldNames.length != 1 || count.isDistinct) return None
         finalSchema =
-          finalSchema.add(StructField(s"count(" + count.column.fieldNames.head + ")", LongType))
+          finalSchema.add(StructField(s"count(" + reference.fieldNames.head + ")", LongType))
       case _: CountStar =>
         finalSchema = finalSchema.add(StructField("count(*)", LongType))
       case _ =>
