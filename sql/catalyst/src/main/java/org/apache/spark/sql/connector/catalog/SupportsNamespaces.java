@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException;
 
 import java.util.Map;
 
@@ -143,9 +144,14 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * {@link UnsupportedOperationException}.
    *
    * @param namespace a multi-part namespace
+   * @param cascade a boolean flag that deletes all namespaces and tables under the namespace
+   * if it is set true
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
+   * @throws NonEmptyNamespaceException If the namespace is non-empty
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
-  boolean dropNamespace(String[] namespace, boolean cascade) throws NoSuchNamespaceException;
+  boolean dropNamespace(
+      String[] namespace,
+      boolean cascade) throws NoSuchNamespaceException, NonEmptyNamespaceException;
 }

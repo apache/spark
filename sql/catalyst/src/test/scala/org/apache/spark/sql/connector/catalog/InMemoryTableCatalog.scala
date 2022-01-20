@@ -22,10 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -219,7 +218,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     try {
       if (!cascade) {
         if (listTables(namespace).nonEmpty || listNamespaces(namespace).nonEmpty) {
-          throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
+          throw new NonEmptyNamespaceException(namespace)
         }
       } else {
         listTables(namespace).foreach(dropTable)

@@ -157,7 +157,7 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   @Override
   public boolean dropNamespace(
       String[] namespace,
-      boolean cascade) throws NoSuchNamespaceException {
+      boolean cascade) throws NoSuchNamespaceException, NonEmptyNamespaceException {
     return asNamespaceCatalog().dropNamespace(namespace, cascade);
   }
 
