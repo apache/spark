@@ -67,7 +67,8 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    dynamicPartitionOverwrite: Boolean = false,
+    staticPartitionInsert: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -138,7 +139,7 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      if (dynamicPartitionOverwrite) {
+      if (!staticPartitionInsert) {
         new Path(new Path(stagingDir, d), filename).toString
       } else {
         new Path(stagingDir, filename).toString
