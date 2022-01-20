@@ -172,7 +172,7 @@ case class Alias(child: Expression, name: String)(
           val builder = new MetadataBuilder().withMetadata(named.metadata)
           nonInheritableMetadataKeys.foreach(builder.remove)
           builder.build()
-
+        case structField: GetStructField => structField.metadata
         case _ => Metadata.empty
       }
     }
