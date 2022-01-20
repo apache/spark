@@ -127,7 +127,7 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("preserve partition info") {
+  test("SPARK-37963: preserve partition info") {
     withNamespaceAndTable("ns", "dst_tbl") { dst =>
       val src = dst.replace("dst", "src")
       sql(s"CREATE TABLE $src (i int, j int) $defaultUsing partitioned by (j)")
