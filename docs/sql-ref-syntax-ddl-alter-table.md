@@ -108,7 +108,7 @@ Note that this statement is only supported with v2 tables.
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier RENAME COLUMN ( col_spec )
+ALTER TABLE table_identifier RENAME COLUMN col_spec to col_spec
 ```
 
 #### Parameters
@@ -397,6 +397,116 @@ DESC StudentInfo;
 |                    age|      int|   NULL|
 +-----------------------+---------+-------+
 
+-- Drop columns of a table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|               LastName|   string|   NULL|
+|                    DOB|timestamp|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo DROP columns (LastName, DOB);
+
+-- After dropping columns of the table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+-- Rename a column of a table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo RENAME COLUMN name TO FirstName;
+
+-- After renaming a column of the table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|              FirstName|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+-- ALTER OR CHANGE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|              FirstName|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo ALTER COLUMN FirstName COMMENT "new comment";
+
+--After ALTER or CHANGE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-----------+
+|               col_name|data_type|    comment|
++-----------------------+---------+-----------+
+|              FirstName|   string|new comment|
+|                 rollno|      int|       NULL|
+|                    age|      int|       NULL|
+|# Partition Information|         |           |
+|             # col_name|data_type|    comment|
+|                    age|      int|       NULL|
++-----------------------+---------+-----------+
+
+-- REPLACE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-----------+
+|               col_name|data_type|    comment|
++-----------------------+---------+-----------+
+|              FirstName|   string|new comment|
+|                 rollno|      int|       NULL|
+|                    age|      int|       NULL|
+|# Partition Information|         |           |
+|             # col_name|data_type|    comment|
+|                    age|      int|       NULL|
++-----------------------+---------+-----------+
+
+ALTER TABLE StudentInfo REPLACE COLUMNS (name string, ID int COMMENT 'new comment');
+
+--After replacing COLUMNS
+DESC StudentInfo;
++--------+---------+-----------+
+|col_name|data_type|    comment|
++--------+---------+-----------+
+|    name|   string|       NULL|
+|      ID|      int|new comment|
++--------+---------+-----------+
+
 -- Add a new partition to a table 
 SHOW PARTITIONS StudentInfo;
 +---------+
@@ -467,38 +577,6 @@ SHOW PARTITIONS StudentInfo;
 |   age=20|
 +---------+
 
--- ALTER OR CHANGE COLUMNS
-DESC StudentInfo;
-+-----------------------+---------+-------+
-|               col_name|data_type|comment|
-+-----------------------+---------+-------+
-|                   name|   string|   NULL|
-|                 rollno|      int|   NULL|
-|               LastName|   string|   NULL|
-|                    DOB|timestamp|   NULL|
-|                    age|      int|   NULL|
-|# Partition Information|         |       |
-|             # col_name|data_type|comment|
-|                    age|      int|   NULL|
-+-----------------------+---------+-------+
-
-ALTER TABLE StudentInfo ALTER COLUMN name COMMENT "new comment";
-
---After ALTER or CHANGE COLUMNS
-DESC StudentInfo;
-+-----------------------+---------+-----------+
-|               col_name|data_type|    comment|
-+-----------------------+---------+-----------+
-|                   name|   string|new comment|
-|                 rollno|      int|       NULL|
-|               LastName|   string|       NULL|
-|                    DOB|timestamp|       NULL|
-|                    age|      int|       NULL|
-|# Partition Information|         |           |
-|             # col_name|data_type|    comment|
-|                    age|      int|       NULL|
-+-----------------------+---------+-----------+
-
 -- Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;
 
@@ -523,6 +601,9 @@ ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'This is a new comment.');
 
 -- DROP TABLE PROPERTIES
 ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner');
+
+-- RECOVER PARTITIONS
+ALTER TABLE dbx.tab1 RECOVER PARTITIONS
 ```
 
 ### Related Statements
