@@ -3525,6 +3525,161 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-33574: sibling stages share merger locations") {
+    afterEach()
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2),
+      tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    val mergerLocs1 = shuffleStage1.shuffleDep.getMergerLocs
+    assert(shuffleStage1.shuffleDep.getMergerLocs.nonEmpty)
+    complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val mergerLocs2 = shuffleStage2.shuffleDep.getMergerLocs
+    assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
+    // Check if same merger locs is reused
+    assert(mergerLocs1.zip(mergerLocs2).forall(x => x._1.host == x._2.host))
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-33574: sibling map stages share merger locations") {
+    afterEach()
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2),
+      tracker = mapOutputTracker)
+
+    // Submit a MapStage job which only executes till the map stage of the shuffle dep
+    submitMapStage(shuffleDep1)
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val mergerLocs1 = shuffleStage1.shuffleDep.getMergerLocs
+    assert(shuffleStage1.shuffleDep.getMergerLocs.nonEmpty)
+
+    submit(reduceRdd, (0 until parts).toArray)
+    complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val mergerLocs2 = shuffleStage2.shuffleDep.getMergerLocs
+    assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
+    // Check if same merger locs is reused
+    assert(mergerLocs1.zip(mergerLocs2).forall(x => x._1.host == x._2.host))
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
+    completeNextResultStageWithSuccess(3, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-33574: sibling stages across jobs share merger locations") {
+    afterEach()
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+    val reduceRdd1 = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2),
+      tracker = mapOutputTracker)
+
+    val shuffleMapRdd3 = new MyRDD(sc, parts, Nil)
+    val shuffleDep3 = new ShuffleDependency(shuffleMapRdd3, new HashPartitioner(parts))
+    val reduceRdd2 = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep3),
+      tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd1, (0 until parts).toArray)
+
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    val mergerLocs1 = shuffleStage1.shuffleDep.getMergerLocs
+    assert(shuffleStage1.shuffleDep.getMergerLocs.nonEmpty)
+    complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, parts))
+    }.toSeq)
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    val mergerLocs2 = shuffleStage2.shuffleDep.getMergerLocs
+    assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
+    // Check if same merger locs is reused
+    assert(mergerLocs1.zip(mergerLocs2).forall(x => x._1.host == x._2.host))
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+
+    // Submit a second reduce job which reuses shuffles from the first job
+    submit(reduceRdd2, (0 until parts).toArray)
+
+    val shuffleStage3 = scheduler.shuffleIdToMapStage(shuffleDep3.shuffleId)
+    completeShuffleMapStageSuccessfully(shuffleStage3.id, 0, parts)
+    val mergerLocs3 = shuffleStage3.shuffleDep.getMergerLocs
+    assert(shuffleStage3.shuffleDep.getMergerLocs.nonEmpty)
+    assert(mergerLocs1.zip(mergerLocs3).forall(x => x._1.host == x._2.host))
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep3.shuffleId) == parts)
+    completeNextResultStageWithSuccess(5, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
   test("SPARK-32920: merger locations reuse from shuffle dependency") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS, 3)
@@ -4367,6 +4522,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
+    assert(scheduler.succeededStages.isEmpty)
   }
 
   // Nothing in this test should break if the task info's fields are null, but
