@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{CaseWhen => CaseWhenV2, FieldReference, LiteralValue, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
+import org.apache.spark.sql.connector.expressions.{CaseWhen => CaseWhenV2, Expression => ExpressionV2, FieldReference, LiteralValue, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -719,25 +719,8 @@ object DataSourceStrategy
           }
         case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Sum(FieldReference.column(name), agg.isDistinct))
-        case aggregate.Sum(CaseWhen(branches, elseValue), _) =>
-          val newBranches = branches.collect {
-            case (predicate: Expression, Literal(value, dataType)) =>
-              val translated =
-                DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
-              (translated, LiteralValue(value, dataType))
-          }
-          if (newBranches.length == branches.length) {
-            val (conditions, values) = newBranches.unzip
-            val elseValueV2 = elseValue.map {
-              case Literal(value, dataType) => LiteralValue(value, dataType)
-              case _ => return None
-            }
-            val caseWhenV2 =
-              new CaseWhenV2(conditions.map(_.get).toArray, values.toArray, elseValueV2.get)
-            Some(new Sum(caseWhenV2, agg.isDistinct))
-          } else {
-            None
-          }
+        case aggregate.Sum(PushableExpression(expr), _) =>
+          Some(new Sum(expr, agg.isDistinct))
         case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Avg(FieldReference.column(name), agg.isDistinct))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
@@ -878,4 +861,26 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
+}
+
+object PushableExpression {
+  def unapply(e: Expression): Option[ExpressionV2] = e match {
+    case CaseWhen(branches, elseValue) =>
+      val newBranches = branches.collect {
+        case (predicate: Expression, Literal(value, dataType)) =>
+          val translated =
+            DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
+          (translated, LiteralValue(value, dataType))
+      }
+      if (newBranches.length == branches.length) {
+        val (conditions, values) = newBranches.unzip
+        val elseValueV2 = elseValue.map {
+          case Literal(value, dataType) => LiteralValue(value, dataType)
+          case _ => return None
+        }
+        Some(new CaseWhenV2(conditions.map(_.get).toArray, values.toArray, elseValueV2.get))
+      } else {
+        None
+      }
+  }
 }
