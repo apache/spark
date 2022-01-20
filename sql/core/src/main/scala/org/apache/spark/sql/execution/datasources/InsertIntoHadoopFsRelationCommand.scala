@@ -111,8 +111,8 @@ case class InsertIntoHadoopFsRelationCommand(
       FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
         .makeQualified(fs.getUri, fs.getWorkingDirectory)
     } else if (staticPartitions.size == partitionColumns.length) {
-      qualifiedOutputPath + "/" +
-        PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+      customPartitionLocations.getOrElse(staticPartitions, qualifiedOutputPath + "/" +
+          PartitioningUtils.getPathFragment(staticPartitions, partitionColumns))
     } else {
       qualifiedOutputPath
     }
