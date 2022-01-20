@@ -111,6 +111,7 @@ object TreePattern extends Enumeration  {
   val PROJECT: Value = Value
   val RELATION_TIME_TRAVEL: Value = Value
   val REPARTITION_OPERATION: Value = Value
+  val REBALANCE_PARTITIONS: Value = Value
   val UNION: Value = Value
   val UNRESOLVED_RELATION: Value = Value
   val UNRESOLVED_WITH: Value = Value

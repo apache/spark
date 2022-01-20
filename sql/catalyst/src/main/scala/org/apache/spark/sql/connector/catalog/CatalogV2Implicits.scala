@@ -164,6 +164,18 @@ private[sql] object CatalogV2Implicits {
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
   }
 
+  implicit class TableIdentifierHelper(identifier: TableIdentifier) {
+    def quoted: String = {
+      identifier.database match {
+        case Some(db) =>
+          Seq(db, identifier.table).map(quoteIfNeeded).mkString(".")
+        case _ =>
+          quoteIfNeeded(identifier.table)
+
+      }
+    }
+  }
+
   def parseColumnPath(name: String): Seq[String] = {
     CatalystSqlParser.parseMultipartIdentifier(name)
   }

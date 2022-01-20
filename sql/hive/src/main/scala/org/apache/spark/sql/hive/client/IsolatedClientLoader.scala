@@ -316,12 +316,12 @@ private[hive] class IsolatedClientLoader(
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
-        if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
-          val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
-          throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
-            cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
-        } else {
-          throw e
+        e.getCause match {
+          case cnf: NoClassDefFoundError =>
+            throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
+              cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
+          case _ =>
+            throw e
         }
     } finally {
       Thread.currentThread.setContextClassLoader(origLoader)

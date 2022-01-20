@@ -37,7 +37,7 @@ from pyspark.serializers import (
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
 
 
-global_func = lambda: "Hi"
+global_func = lambda: "Hi"  # noqa: E731
 
 
 class RDDTests(ReusedPySparkTestCase):
@@ -764,7 +764,7 @@ class RDDTests(ReusedPySparkTestCase):
         # Regression test for SPARK-27000
         global global_func
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
-        global_func = lambda: "Yeah"
+        global_func = lambda: "Yeah"  # noqa: E731
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
     def test_to_local_iterator_failure(self):

@@ -3310,7 +3310,10 @@ class DataFrameNaFunctions:
         self.df = df
 
     def drop(
-        self, how: str = "any", thresh: Optional[int] = None, subset: Optional[List[str]] = None
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> DataFrame:
         return self.df.dropna(how=how, thresh=thresh, subset=subset)
 

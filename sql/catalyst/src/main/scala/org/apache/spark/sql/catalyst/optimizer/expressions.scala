@@ -1023,6 +1023,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: AppendColumnsWithObject => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
+    case _: RebalancePartitions => true
     case _: Sort => true
     case _: TypedFilter => true
     case _ => false

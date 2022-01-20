@@ -1178,6 +1178,30 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR =
+    ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
+      .internal()
+      .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
+        "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
+        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
+        "Set to -1.0 to disable this feature by default.")
+      .version("3.3.0")
+      .doubleConf
+      .createWithDefault(-1.0)
+
+  private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
+    ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
+      .internal()
+      .doc("Max skewed shuffle blocks allowed to be accurately recorded in " +
+        "HighlyCompressedMapStatus if its size is larger than " +
+        "SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR multiplying the median shuffle block size or " +
+        "SHUFFLE_ACCURATE_BLOCK_THRESHOLD.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ > 0, "Allowed max accurate skewed block number must be positive.")
+      .createWithDefault(100)
+
   private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")

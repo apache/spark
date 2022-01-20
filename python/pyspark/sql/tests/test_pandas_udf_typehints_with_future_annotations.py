@@ -264,7 +264,7 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
     def test_group_agg_udf_type_hint(self):
         df = self.spark.range(10).selectExpr("id", "id as v")
 
-        def weighted_mean(v: pd.Series, w: pd.Series) -> float:
+        def weighted_mean(v: pd.Series, w: pd.Series) -> np.float64:
             return np.average(v, weights=w)
 
         weighted_mean = pandas_udf("double")(weighted_mean)

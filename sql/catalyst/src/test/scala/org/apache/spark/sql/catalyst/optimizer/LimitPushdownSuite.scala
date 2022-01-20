@@ -216,9 +216,9 @@ class LimitPushdownSuite extends PlanTest {
   test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
     // Push down when condition is empty
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.join(y, joinType).limit(1)
+      val originalQuery = x.join(y, joinType).limit(5)
       val optimized = Optimize.execute(originalQuery.analyze)
-      val correctAnswer = Limit(1, LocalLimit(1, x).join(y, joinType)).analyze
+      val correctAnswer = Limit(5, LocalLimit(5, x).join(LocalLimit(1, y), joinType)).analyze
       comparePlans(optimized, correctAnswer)
     }
 

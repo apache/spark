@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -50,12 +51,12 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     (1 :: 1000 :: Nil).foreach { n => {
       withTempPath { dir =>
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file.asInstanceOf[String], null)
+        reader.initialize(file, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -80,12 +81,12 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       withTempPath { dir =>
         val data = List.fill(n)(NULL_ROW).toDF
         data.repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file.asInstanceOf[String], null)
+        reader.initialize(file, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -114,7 +115,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         // first page is dictionary encoded and the remaining two are plain encoded.
         val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
         data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).asScala.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
