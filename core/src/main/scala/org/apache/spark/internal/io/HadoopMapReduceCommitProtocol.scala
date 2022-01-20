@@ -138,7 +138,11 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
+      if (dynamicPartitionOverwrite) {
+        new Path(new Path(stagingDir, d), filename).toString
+      } else {
+        new Path(stagingDir, filename).toString
+      }
     }.getOrElse {
       new Path(stagingDir, filename).toString
     }

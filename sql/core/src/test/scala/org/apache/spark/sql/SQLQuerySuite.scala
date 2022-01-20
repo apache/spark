@@ -4243,6 +4243,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df3, df4)
     }
   }
+
+  test("SPARK-37966: Static partition insert should write _SUCCESS under partition location") {
+    withTempDir { dir =>
+      withTable("t") {
+        sql(
+          s"""
+             | CREATE TABLE test_write(id STRING, p STRING)
+             | USING PARQUET
+             | PARTITIONED BY (p)
+             | LOCATION '${dir}'
+        """.stripMargin)
+        sql(
+          """
+            |INSERT OVERWRITE test_write
+            | PARTITION(p=1)
+            | SELECT 1
+            |""".stripMargin)
+        assert(!new File(dir, "/_SUCCESS").exists())
+        assert(new File(dir, "p=1/_SUCCESS").exists())
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
