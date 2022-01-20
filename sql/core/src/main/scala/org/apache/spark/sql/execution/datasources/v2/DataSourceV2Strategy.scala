@@ -353,7 +353,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       SetCatalogAndNamespaceExec(catalogManager, Some(catalog.name()), namespace) :: Nil
 
     case ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
-      ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
+      ShowTablePropertiesExec(output, rt.table, rt.name, propertyKey) :: Nil
 
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
       throw QueryCompilationErrors.analyzeTableNotSupportedForV2TablesError()
@@ -536,6 +536,9 @@ private[sql] object DataSourceV2Strategy {
 
     case expressions.Literal(false, BooleanType) =>
       Some(new V2AlwaysFalse)
+
+    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
+      Some(new V2EqualTo(FieldReference(name), LiteralValue(true, BooleanType)))
 
     case _ => None
   }

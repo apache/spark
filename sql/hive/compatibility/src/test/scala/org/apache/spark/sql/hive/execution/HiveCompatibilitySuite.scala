@@ -143,6 +143,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Hive returns null for minute('2015-03-18')
     "udf_minute",
 
+    // Hive DESC FUNCTION returns a string to indicate undefined function, while Spark triggers a
+    // query error.
+    "udf_index",
+    "udf_stddev_pop",
 
     // Cant run without local map/reduce.
     "index_auto_update",

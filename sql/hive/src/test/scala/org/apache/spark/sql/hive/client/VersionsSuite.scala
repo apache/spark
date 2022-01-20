@@ -183,6 +183,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+
+      try {
+        client.createDatabase(tempDB, ignoreIfExists = false)
+        assert(false, "createDatabase should throw AlreadyExistsException")
+      } catch {
+        case ex: Throwable =>
+          assert(ex.getClass.getName.equals(
+            "org.apache.hadoop.hive.metastore.api.AlreadyExistsException"))
+          assert(ex.getMessage.contains(s"Database ${tempDB.name} already exists"))
+      }
     }
 
     test(s"$version: create/get/alter database should pick right user name as owner") {

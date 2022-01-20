@@ -122,7 +122,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
     assert(table.schema == schema)
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     assert(catalog.tableExists(testIdent))
   }
@@ -140,7 +140,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
     assert(table.schema == schema)
-    assert(table.properties == properties)
+    assert(filterV2TableProperties(table.properties).asJava == properties)
 
     assert(catalog.tableExists(testIdent))
   }
@@ -224,8 +224,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("invalidateTable") {
@@ -254,15 +253,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
-    assert(updated.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1"))
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(loaded.properties) == Map("prop-1" -> "1"))
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
   }
 
   test("alterTable: add property to existing") {
@@ -273,15 +272,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
     val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-2", "2"))
-    assert(updated.properties.asScala == Map("prop-1" -> "1", "prop-2" -> "2"))
+    assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1", "prop-2" -> "2"))
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map("prop-1" -> "1", "prop-2" -> "2"))
+    assert(filterV2TableProperties(loaded.properties) == Map("prop-1" -> "1", "prop-2" -> "2"))
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
   }
 
   test("alterTable: remove existing property") {
@@ -292,15 +291,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
     val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
-    assert(updated.properties.asScala == Map())
+    assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map())
+    assert(filterV2TableProperties(loaded.properties) == Map())
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
   }
 
   test("alterTable: remove missing property") {
@@ -308,15 +307,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
-    assert(updated.properties.asScala == Map())
+    assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map())
+    assert(filterV2TableProperties(loaded.properties) == Map())
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
   }
 
   test("alterTable: add top-level column") {
@@ -740,8 +739,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -782,6 +780,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(exc.message.contains(testIdent.namespace.quoted))
     assert(exc.message.contains(testIdentNewOtherDb.namespace.quoted))
     assert(exc.message.contains("RENAME TABLE source and destination databases do not match"))
+  }
+
+  private def filterV2TableProperties(
+      properties: util.Map[String, String]): Map[String, String] = {
+    properties.asScala.filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX))
+      .filter(_._1 != TableCatalog.PROP_EXTERNAL).toMap
   }
 }
 

@@ -805,6 +805,17 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-37575: null values should be saved as nothing rather than " +
+    "quoted empty Strings \"\" with default settings") {
+    withTempPath { path =>
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .csv(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    }
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -1769,7 +1780,7 @@ abstract class CSVSuite
         (1, "John Doe"),
         (2, "-"),
         (3, "-"),
-        (4, "-")
+        (4, null)
       ).toDF("id", "name")
 
       checkAnswer(computed, expected)
@@ -1986,7 +1997,8 @@ abstract class CSVSuite
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
     }
     assert(testAppender1.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
 
     val testAppender2 = new LogAppender("CSV header matches to schema w/ enforceSchema")
     withLogAppender(testAppender2) {
@@ -2004,7 +2016,8 @@ abstract class CSVSuite
       }
     }
     assert(testAppender2.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
   }
 
   test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {

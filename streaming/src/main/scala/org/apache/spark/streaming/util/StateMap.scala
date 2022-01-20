@@ -296,16 +296,17 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     var parentSessionLoopDone = false
     while(!parentSessionLoopDone) {
       val obj = inputStream.readObject()
-      if (obj.isInstanceOf[LimitMarker]) {
-        parentSessionLoopDone = true
-        val expectedCount = obj.asInstanceOf[LimitMarker].num
-        assert(expectedCount == newParentSessionStore.deltaMap.size)
-      } else {
-        val key = obj.asInstanceOf[K]
-        val state = inputStream.readObject().asInstanceOf[S]
-        val updateTime = inputStream.readLong()
-        newParentSessionStore.deltaMap.update(
-          key, StateInfo(state, updateTime, deleted = false))
+      obj match {
+        case marker: LimitMarker =>
+          parentSessionLoopDone = true
+          val expectedCount = marker.num
+          assert(expectedCount == newParentSessionStore.deltaMap.size)
+        case _ =>
+          val key = obj.asInstanceOf[K]
+          val state = inputStream.readObject().asInstanceOf[S]
+          val updateTime = inputStream.readLong()
+          newParentSessionStore.deltaMap.update(
+            key, StateInfo(state, updateTime, deleted = false))
       }
     }
     parentStateMap = newParentSessionStore

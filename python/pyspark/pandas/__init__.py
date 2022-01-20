@@ -134,10 +134,14 @@ def _auto_patch_pandas() -> None:
     if sys.version_info >= (3, 7):
         # Just in case pandas implements '__class_getitem__' later.
         if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = lambda params: DataFrame.__class_getitem__(params)
+            pd.DataFrame.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+                lambda params: DataFrame.__class_getitem__(params)
+            )
 
         if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = lambda params: Series.__class_getitem__(params)
+            pd.Series.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
+                lambda params: Series.__class_getitem__(params)
+            )
 
 
 _auto_patch_spark()
@@ -145,5 +149,5 @@ _auto_patch_pandas()
 
 # Import after the usage logger is attached.
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
-from pyspark.pandas.namespace import *  # F405
+from pyspark.pandas.namespace import *  # noqa: F403
 from pyspark.pandas.sql_formatter import sql

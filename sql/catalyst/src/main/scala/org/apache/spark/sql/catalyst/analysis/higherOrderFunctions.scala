@@ -21,49 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
-
-/**
- * Resolve a higher order functions from the catalog. This is different from regular function
- * resolution because lambda functions can only be resolved after the function has been resolved;
- * so we need to resolve higher order function when all children are either resolved or a lambda
- * function.
- */
-case class ResolveHigherOrderFunctions(catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with LookupCatalog {
-
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    _.containsPattern(LAMBDA_FUNCTION), ruleId) {
-    case u @ UnresolvedFunction(AsFunctionIdentifier(ident), children, false, filter, ignoreNulls)
-        if hasLambdaAndResolvedArguments(children) =>
-      withPosition(u) {
-        catalogManager.v1SessionCatalog.lookupFunction(ident, children) match {
-          case func: HigherOrderFunction =>
-            filter.foreach(_.failAnalysis("FILTER predicate specified, " +
-              s"but ${func.prettyName} is not an aggregate function"))
-            if (ignoreNulls) {
-              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                func.prettyName, "IGNORE NULLS")
-            }
-            func
-          case other => other.failAnalysis(
-            "A lambda function should only be used in a higher order function. However, " +
-              s"its class is ${other.getClass.getCanonicalName}, which is not a " +
-              s"higher order function.")
-        }
-      }
-  }
-
-  /**
-   * Check if the arguments of a function are either resolved or a lambda function.
-   */
-  private def hasLambdaAndResolvedArguments(expressions: Seq[Expression]): Boolean = {
-    val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
-    lambdas.nonEmpty && others.forall(_.resolved)
-  }
-}
 
 /**
  * Resolve the lambda variables exposed by a higher order functions.

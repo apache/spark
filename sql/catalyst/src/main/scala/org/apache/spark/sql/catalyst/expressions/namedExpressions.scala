@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -293,6 +293,10 @@ case class AttributeReference(
     h
   }
 
+  override lazy val preCanonicalized: Expression = {
+    AttributeReference("none", dataType.asNullable)(exprId)
+  }
+
   override def newInstance(): AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
 
@@ -338,7 +342,7 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
-  override def withDataType(newType: DataType): Attribute = {
+  override def withDataType(newType: DataType): AttributeReference = {
     AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
   }
 
@@ -427,4 +431,23 @@ object VirtualColumn {
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
+}
+
+/**
+ * The internal representation of the hidden metadata struct:
+ * set `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
+ */
+object MetadataAttribute {
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
+      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
+      Some(attr)
+    } else None
+  }
 }

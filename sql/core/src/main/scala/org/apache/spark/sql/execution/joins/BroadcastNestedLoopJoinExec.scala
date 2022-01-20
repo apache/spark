@@ -152,6 +152,7 @@ case class BroadcastNestedLoopJoinExec(
         // the next index of buildRows to try
         private var nextIndex: Int = 0
 
+        @scala.annotation.tailrec
         private def findNextMatch(): Boolean = {
           if (streamRow == null) {
             if (!streamedIter.hasNext) {

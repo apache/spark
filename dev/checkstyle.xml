@@ -189,5 +189,8 @@
             <property name="format" value="Objects\.toStringHelper"/>
             <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
         </module>
+        <module name="IllegalImport">
+            <property name="illegalPkgs" value="org.apache.log4j" />
+        </module>
     </module>
 </module>

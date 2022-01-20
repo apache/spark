@@ -16,17 +16,16 @@
 #
 
 from distutils.version import LooseVersion
-from typing import no_type_check
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 
 
-class CategoricalTest(PandasOnSparkTestCase, TestUtils):
+class CategoricalTest(ComparisonTestBase, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -37,10 +36,6 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
                 ),
             },
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def df_pair(self):
@@ -438,8 +433,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         pdf, psdf = self.df_pair
 
-        @no_type_check
-        def identity(x) -> ps.Series[psdf.b.dtype]:
+        def identity(x) -> ps.Series[psdf.b.dtype]:  # type: ignore[name-defined, no-untyped-def]
             return x
 
         self.assert_eq(
