@@ -27,7 +27,7 @@ import traceback
 from types import TracebackType
 from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple
 
-from py4j.clientserver import ClientServer  # type: ignore[import]
+from py4j.clientserver import ClientServer
 
 __all__: List[str] = []
 

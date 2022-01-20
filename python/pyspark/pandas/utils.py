@@ -927,7 +927,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     >>> spark_column_equals(sdf1["x"] + 1, sdf2["x"] + 1)
     False
     """
-    return left._jc.equals(right._jc)  # type: ignore[operator]
+    return left._jc.equals(right._jc)
 
 
 def compare_null_first(

@@ -74,7 +74,7 @@ from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
 
 T = TypeVar("T")
 M = TypeVar("M", bound=Transformer)
@@ -684,7 +684,7 @@ class LinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("devianceResiduals")
 
-    @property  # type: ignore[misc]
+    @property
     def coefficientStandardErrors(self) -> List[float]:
         """
         Standard error of estimated coefficients and intercept.
@@ -701,7 +701,7 @@ class LinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("coefficientStandardErrors")
 
-    @property  # type: ignore[misc]
+    @property
     def tValues(self) -> List[float]:
         """
         T-statistic of estimated coefficients and intercept.
@@ -718,7 +718,7 @@ class LinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("tValues")
 
-    @property  # type: ignore[misc]
+    @property
     def pValues(self) -> List[float]:
         """
         Two-sided p-value of estimated coefficients and intercept.
@@ -745,7 +745,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
     .. versionadded:: 2.0.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     def objectiveHistory(self) -> List[float]:
         """
         Objective function (scaled loss + regularization) at each
@@ -760,7 +760,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         """
         return self._call_java("objectiveHistory")
 
-    @property  # type: ignore[misc]
+    @property
     def totalIterations(self) -> int:
         """
         Number of training iterations until termination.
@@ -1286,7 +1286,7 @@ class DecisionTreeRegressionModel(
         """
         return self._set(varianceCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     def featureImportances(self) -> Vector:
         """
         Estimate of the importance of each feature.
@@ -1606,7 +1606,7 @@ class RandomForestRegressionModel(
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
-    @property  # type: ignore[misc]
+    @property
     def featureImportances(self) -> Vector:
         """
         Estimate of the importance of each feature.
@@ -1971,7 +1971,7 @@ class GBTRegressionModel(
     .. versionadded:: 1.4.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     def featureImportances(self) -> Vector:
         """
         Estimate of the importance of each feature.
