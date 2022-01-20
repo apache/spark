@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
-import org.apache.commons.collections.map.{AbstractReferenceMap, ReferenceMap}
+import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
+import org.apache.commons.collections4.map.ReferenceMap
 
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonBroadcast
@@ -55,7 +56,7 @@ private[spark] class BroadcastManager(
 
   private[broadcast] val cachedValues =
     Collections.synchronizedMap(
-      new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
+      new ReferenceMap(ReferenceStrength.HARD, ReferenceStrength.WEAK)
         .asInstanceOf[java.util.Map[Any, Any]]
     )
 
