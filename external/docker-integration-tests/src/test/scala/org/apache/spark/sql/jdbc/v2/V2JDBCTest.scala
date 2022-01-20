@@ -252,18 +252,26 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsTableSample: Boolean = false
 
-  private def checkSamplePushed(df: DataFrame): Unit = {
+  private def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val sample = df.queryExecution.optimizedPlan.collect {
       case s: Sample => s
     }
-    assert(sample.isEmpty)
+    if (pushed) {
+      assert(sample.isEmpty)
+    } else {
+      assert(sample.nonEmpty)
+    }
   }
 
-  private def checkFilterPushed(df: DataFrame): Unit = {
+  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val filter = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
-    assert(filter.isEmpty)
+    if (pushed) {
+      assert(filter.isEmpty)
+    } else {
+      assert(filter.nonEmpty)
+    }
   }
 
   private def limitPushed(df: DataFrame, limit: Int): Boolean = {
@@ -332,7 +340,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df6)
-        checkFilterPushed(df6)
+        checkFilterPushed(df6, false)
         assert(!limitPushed(df6, 2))
         checkColumnPruned(df6, "col1")
         assert(df6.collect().length <= 2)
@@ -341,14 +349,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // Push down order is sample -> filter -> limit
         // only limit is pushed down because in this test sample is after limit
         val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
-        checkSamplePushed(df7)
+        checkSamplePushed(df7, false)
         assert(limitPushed(df7, 2))
 
         // sample + filter
         // Push down order is sample -> filter -> limit
         // only filter is pushed down because in this test sample is after filter
         val df8 = spark.read.table(s"$catalogName.new_table").where($"col1" > 1).sample(0.5)
-        checkSamplePushed(df8)
+        checkSamplePushed(df8, false)
         checkFilterPushed(df8)
         assert(df8.collect().length < 10)
       }
