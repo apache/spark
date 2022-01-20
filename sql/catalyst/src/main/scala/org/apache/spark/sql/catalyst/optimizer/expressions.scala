@@ -1050,12 +1050,11 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
   // Returns whether the from DataType can be safely casted to the to DataType without losing
   // any precision or range.
-  private def isWiderCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case _ if from == to => true
+  private def isWiderCast(from: DataType, to: NumericType): Boolean = (from, to) match {
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (from: IntegralType, to: IntegralType) => Cast.canUpCast(from, to)
-    case _ => false
+    case _ => from == to
   }
 }
 
