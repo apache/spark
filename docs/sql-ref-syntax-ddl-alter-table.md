@@ -296,7 +296,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
 ### RECOVER PARTITIONS
 
-`RECOVER PARTITIONS` statement recovers all the partitions in the directory of a table and updates the Hive metastore.
+`ALTER TABLE RECOVER PARTITIONS` statement recovers all the partitions in the directory of a table and updates the Hive metastore.
 Another way to recover partitions is to use `MSCK REPAIR TABLE`.
 
 #### Syntax
