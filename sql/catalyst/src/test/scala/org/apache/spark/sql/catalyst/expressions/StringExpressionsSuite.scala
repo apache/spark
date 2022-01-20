@@ -942,21 +942,20 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       ("454.2", "000.0") -> Decimal(454.2),
-      ("454.2", "000D0") -> Decimal(454.2),
       ("454.23", "000.00") -> Decimal(454.23),
-      ("454.23", "000D00") -> Decimal(454.23),
       ("454.2", "000.00") -> Decimal(454.2),
-      ("454.2", "000D00") -> Decimal(454.2),
       ("454.0", "000.0") -> Decimal(454),
-      ("454.0", "000D0") -> Decimal(454),
       ("454.00", "000.00") -> Decimal(454),
-      ("454.00", "000D00") -> Decimal(454),
       (".4542", ".0000") -> Decimal(0.4542),
-      (".4542", "D0000") -> Decimal(0.4542),
-      ("4542.", "0000.") -> Decimal(4542),
-      ("4542.", "0000D") -> Decimal(4542)
+      ("4542.", "0000.") -> Decimal(4542)
     ).foreach { case ((str, format), expected) =>
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace('.', 'D')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = format.replace('0', '9')
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = format3.replace('.', 'D')
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
     }
 
     Seq("999.9.9", "999D9D9", "999.9D9", "999D9.9").foreach { str =>
@@ -970,26 +969,41 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[IllegalArgumentException](
       ToNumber(Literal("123,456"), Literal("9G9")),
       "The input string '123,456' does not match the given number format: '9G9'")
+    checkExceptionInExpression[IllegalArgumentException](
+      ToNumber(Literal("123,456,789"), Literal("999,999")),
+      "The input string '123,456,789' does not match the given number format: '999,999'")
 
     Seq(
       ("12,454", "99,999") -> Decimal(12454),
-      ("12,454", "00,000") -> Decimal(12454),
+      ("12,454", "99,999,999") -> Decimal(12454),
       ("12,454,367", "99,999,999") -> Decimal(12454367),
-      ("12,454,367", "00,000,000") -> Decimal(12454367),
       ("12,454,", "99,999,") -> Decimal(12454),
-      ("12,454,", "00,000,") -> Decimal(12454),
       (",454,367", ",999,999") -> Decimal(454367),
-      (",454,367", ",000,000") -> Decimal(454367),
-      (",454,367", "999,999") -> Decimal(454367),
-      (",454,367", "000,000") -> Decimal(454367)
+      (",454,367", "999,999") -> Decimal(454367)
     ).foreach { case ((str, format), expected) =>
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
       val format2 = format.replace(',', 'G')
       checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
-      val format3 = s"${format}0"
+      val format3 = format.replace('9', '0')
       checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
-      val format4 = s"0${format}9"
+      val format4 = format3.replace(',', 'G')
       checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
+      val format5 = s"${format}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format5)), expected)
+      val format6 = s"${format}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format6)), expected)
+      val format7 = s"9${format}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format7)), expected)
+      val format8 = s"0${format}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format8)), expected)
+      val format9 = s"${format3}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format9)), expected)
+      val format10 = s"${format3}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format10)), expected)
+      val format11 = s"9${format3}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format11)), expected)
+      val format12 = s"0${format3}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format12)), expected)
     }
 
     // Test '$'
@@ -1014,17 +1028,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test '-' and 'S'
     Seq(
       ("454-", "999-") -> Decimal(-454),
-      ("454-", "999S") -> Decimal(-454),
       ("-454", "-999") -> Decimal(-454),
-      ("-454", "S999") -> Decimal(-454),
-      ("454-", "000-") -> Decimal(-454),
-      ("454-", "000S") -> Decimal(-454),
-      ("-454", "-000") -> Decimal(-454),
-      ("-454", "S000") -> Decimal(-454),
-      ("12,454.8-", "99G999D9S") -> Decimal(-12454.8),
-      ("00,454.8-", "99G999.9S") -> Decimal(-454.8)
+      ("12,454.8-", "99G999D9-") -> Decimal(-12454.8),
+      ("00,454.8-", "99G999.9-") -> Decimal(-454.8)
     ).foreach { case ((str, format), expected) =>
       checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace('9', '0')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = format.replace('-', 'S')
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = format2.replace('-', 'S')
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
     }
 
     ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {

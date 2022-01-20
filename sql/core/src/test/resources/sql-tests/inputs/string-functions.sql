@@ -127,19 +127,11 @@ SELECT endswith('Spark', null);
 SELECT endswith(null, null);
 
 -- to_number
-select to_number('454', '999');
 select to_number('454', '000');
-select to_number('454.2', '999.9');
 select to_number('454.2', '000.0');
-select to_number('454.2', '999D9');
-select to_number('454.2', '000D0');
-select to_number('12,454', '99,999');
 select to_number('12,454', '00,000');
-select to_number('12,454', '99G999');
-select to_number('12,454', '00G000');
-select to_number('$78.12', '$99.99');
 select to_number('$78.12', '$00.00');
-select to_number('-454', '-999');
-select to_number('-454', 'S999');
-select to_number('12,454.8-', '99G999D9S');
-select to_number('00,454.8-', '99G999.9S');
+select to_number('-454', '-000');
+select to_number('-454', 'S000');
+select to_number('12,454.8-', '00,000.9-');
+select to_number('00,454.8-', '00,000.9-');
