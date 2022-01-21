@@ -5253,33 +5253,97 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             where = [where]
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
-        from pyspark.sql.functions import struct, lit, explode, col, row_number
+
+        # e.g where = [10, 20]
+        # In the comments below , will explain how the dataframe will look after transformations.
+        # e.g pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
 
         column_prefix_constant = "col_"
         cond = [
             F.when(
                 index_scol <= SF.lit(index).cast(index_type),
-                struct(
-                    lit(column_prefix_constant + str(index)).alias("identifier"),
-                    self.spark.column.alias("Koalas"),
+                F.struct(
+                    F.lit(column_prefix_constant + str(index) + "_" + str(idx)).alias("identifier"),
+                    self.spark.column.alias("col_value"),
                 ),
-            ).alias(column_prefix_constant + str(index))
-            for index in where
+            ).alias(column_prefix_constant + str(index) + "_" + str(idx))
+            for idx, index in enumerate(where)
         ]
         cond.append(index_scol)
+
+        #
+        # +---------------+---------------+-----------------+
+        # |       col_10_0|       col_20_1|__index_level_0__|
+        # +---------------+---------------+-----------------+
+        # |{col_10_0, 2.0}|{col_20_1, 2.0}|               10|
+        # |           null|{col_20_1, 1.0}|               20|
+        # |           null|           null|               30|
+        # |           null|           null|               40|
+        # +---------------+---------------+-----------------+
+
         sdf = self._internal.spark_frame.select(cond)
         columns = [cols for cols in sdf.columns if cols.startswith("col")]
+
+        # +-----------------+----------------------------------+
+        # |__index_level_0__|combined_cols                     |
+        # +-----------------+----------------------------------+
+        # |10               |[{col_10_0, 2.0}, {col_20_1, 2.0}]|
+        # |20               |[null, {col_20_1, 1.0}]           |
+        # |30               |[null, null]                      |
+        # |40               |[null, null]                      |
+        # +-----------------+----------------------------------+
+
         sdf = sdf.withColumn("combined_cols", F.array(columns)).drop(*columns)
+        print(sdf.schema)
+        # After explode
+        # +-----------------+---------------+
+        # |__index_level_0__|         values|
+        # +-----------------+---------------+
+        # |               10|{col_10_0, 2.0}|
+        # |               10|{col_20_1, 2.0}|
+        # |               20|           null|
+        # |               20|{col_20_1, 1.0}|
+        # |               30|           null|
+        # |               30|           null|
+        # |               40|           null|
+        # |               40|           null|
+        # +-----------------+---------------+
+        #  Final sdf after below transformations
+        # +-----------------+----------+-----+
+        # |__index_level_0__|identifier|value|
+        # +-----------------+----------+-----+
+        # |10               |col_10_0  |2.0  |
+        # |10               |col_20_1  |2.0  |
+        # |20               |col_20_1  |1.0  |
+        # +-----------------+----------+-----+
+
         sdf = (
-            sdf.select(index_scol, explode("combined_cols").alias("values"))
-            .withColumn("identifier", col("values.identifier"))
-            .withColumn("value", col("values.Koalas"))
+            sdf.select(index_scol, F.explode("combined_cols").alias("values"))
+            .withColumn("identifier", F.col("values.identifier"))
+            .withColumn("value", F.col("values.col_value"))
             .drop("values")
             .dropna(subset="value")
         )
         window_specification = Window.partitionBy("identifier").orderBy(index_scol.desc())
+
+        # After row number and window
+        # +-----------------+----------+-----+----------+
+        # |__index_level_0__|identifier|value|row_number|
+        # +-----------------+----------+-----+----------+
+        # |               10|  col_10_0|  2.0|         1|
+        # |               20|  col_20_1|  1.0|         1|
+        # |               10|  col_20_1|  2.0|         2|
+        # +-----------------+----------+-----+----------+
+        #  Final sdf value after below transformation
+        # +----------+-----+
+        # |identifier|value|
+        # +----------+-----+
+        # |col_10_0  |2.0  |
+        # |col_20_1  |1.0  |
+        # +----------+-----+
+
         sdf = (
-            sdf.withColumn("row_number", row_number().over(window_specification))
+            sdf.withColumn("row_number", F.row_number().over(window_specification))
             .filter("row_number == 1")
             .drop(index_scol)
             .drop("row_number")
@@ -5288,7 +5352,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # Number of rows would be less, since only one row per index.  so collect can be done
         calculated_values = sdf.collect()
 
-        if len(calculated_values) == 0:
+        if len(calculated_values) == 0 and not should_return_series:
             return np.nan
 
         if not should_return_series:
@@ -5300,12 +5364,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         calculated_values_map = {data.identifier: data.value for data in calculated_values}
 
         complete_values = []
-        for data in where:
-            key = column_prefix_constant + str(data)
-            if key in calculated_values_map:
-                complete_values.append(calculated_values_map[key])
-            else:
-                complete_values.append(None)
+        if len(calculated_values) == 0:
+            complete_values = [np.nan] * len(where)
+        else:
+            for idx, data in enumerate(where):
+                key = column_prefix_constant + str(data) + "_" + str(idx)
+                if key in calculated_values_map:
+                    complete_values.append(calculated_values_map[key])
+                else:
+                    complete_values.append(None)
 
         df = pd.DataFrame(data=complete_values, columns=[self.name], index=where)
         return df[df.columns[0]]

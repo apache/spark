@@ -2101,7 +2101,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.asof([5, 25]), pser.asof([5, 25]))
+        self.assert_eq(psser.asof([5, 20]), pser.asof([5, 20]))
 
         pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
         psser = ps.from_pandas(pser)
@@ -2110,6 +2110,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
         psser = ps.from_pandas(pser)
         self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([25, 25]), pser.asof([25, 25]))
 
     def test_squeeze(self):
         # Single value
