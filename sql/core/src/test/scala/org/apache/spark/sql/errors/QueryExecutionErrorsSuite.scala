@@ -41,16 +41,17 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     (df1, df2)
   }
 
-  test("INVALID_AES_KEY_LENGTH: invalid key lengths in AES functions") {
+  test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "INVALID_AES_KEY_LENGTH")
-      assert(e.getSqlState === "42000")
+      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+      assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
-        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
+        "Invalid parameter value of 'key' in 'aes_encrypt/aes_decrypt'. " +
+        "Expected: 16, 24 or 32 bytes but got:"))
     }
 
     // Encryption failure - invalid key length

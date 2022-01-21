@@ -1905,12 +1905,16 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new SparkRuntimeException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "key", "aes_encrypt/aes_decrypt", "16, 24 or 32 bytes", actualLength.toString))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    val errorMsg = s"AES-$mode with the padding $padding"
-    new SparkRuntimeException("UNSUPPORTED_MODE", Array(errorMsg))
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_MODE",
+      messageParameters = Array(s"AES-$mode with the padding $padding"))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {

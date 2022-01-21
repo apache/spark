@@ -74,10 +74,6 @@
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
-  "INVALID_AES_KEY_LENGTH" : {
-    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
-    "sqlState" : "42000"
-  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
@@ -98,6 +94,10 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PARAMETER_VALUE" : {
+    "message" : [ "Invalid parameter value of '%s' in '%s'. Expected: %s but got: %s" ],
+    "sqlState" : "22023"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
