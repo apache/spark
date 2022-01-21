@@ -287,7 +287,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       }
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(s"Failed drop name space: $db", dialect) {
-          JdbcUtils.dropNamespace(conn, options, db)
+          JdbcUtils.dropNamespace(conn, options, db, cascade)
           true
         }
       }
