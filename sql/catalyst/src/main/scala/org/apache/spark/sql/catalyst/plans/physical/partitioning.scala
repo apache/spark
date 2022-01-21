@@ -441,7 +441,7 @@ case class HashShuffleSpec(
     distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
       distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
     }
-    partitioning.expressions.map(k => distKeyToPos(k.canonicalized))
+    partitioning.expressions.map(k => distKeyToPos.getOrElse(k.canonicalized, mutable.BitSet.empty))
   }
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {

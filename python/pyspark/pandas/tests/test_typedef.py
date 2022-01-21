@@ -56,6 +56,27 @@ from pyspark import pandas as ps
 
 
 class TypeHintTests(unittest.TestCase):
+    def test_infer_schema_with_no_return(self):
+        def try_infer_return_type():
+            def f():
+                pass
+
+            infer_return_type(f)
+
+        self.assertRaisesRegex(
+            ValueError, "A return value is required for the input function", try_infer_return_type
+        )
+
+        def try_infer_return_type():
+            def f() -> None:
+                pass
+
+            infer_return_type(f)
+
+        self.assertRaisesRegex(
+            TypeError, "Type <class 'NoneType'> was not understood", try_infer_return_type
+        )
+
     def test_infer_schema_from_pandas_instances(self):
         def func() -> pd.Series[int]:
             pass

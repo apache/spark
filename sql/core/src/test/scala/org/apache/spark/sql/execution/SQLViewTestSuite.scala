@@ -611,7 +611,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     Seq(true, false).foreach { serde =>
       withView(viewName) {
         createView(viewName, "SELECT 1 AS a")
-        val expected = "CREATE VIEW `default`.`v1` ( `a`) AS SELECT 1 AS a"
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( `a`) AS SELECT 1 AS a"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
       }
     }
@@ -622,8 +622,8 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     Seq(true, false).foreach { serde =>
       withView(viewName) {
         createView(viewName, "SELECT 1 AS a, 2 AS b", Seq("a", "b COMMENT 'b column'"))
-        val expected = "CREATE VIEW `default`.`v1` ( `a`, `b` COMMENT 'b column')" +
-          " AS SELECT 1 AS a, 2 AS b"
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)}" +
+          s" ( `a`, `b` COMMENT 'b column') AS SELECT 1 AS a, 2 AS b"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
       }
     }
@@ -636,7 +636,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         createView(viewName, "SELECT 1 AS c1, '2' AS c2", Seq("c1 COMMENT 'bla'", "c2"),
           Seq("COMMENT 'table comment'", "TBLPROPERTIES ( 'prop2' = 'value2', 'prop1' = 'value1')"))
 
-        val expected = "CREATE VIEW `default`.`v1` ( `c1` COMMENT 'bla', `c2`)" +
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( `c1` COMMENT 'bla', `c2`)" +
           " COMMENT 'table comment'" +
           " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
           " AS SELECT 1 AS c1, '2' AS c2"

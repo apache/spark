@@ -1935,9 +1935,8 @@ object QueryExecutionErrors {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(format: String): Throwable = {
+  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"Format '$format' used for parsing string to number or " +
-        "formatting number to string is invalid")
+      s"The input string '$input' does not match the given number format: '$format'")
   }
 }

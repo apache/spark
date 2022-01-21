@@ -153,7 +153,7 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       STRUCT<`_c0`: INT, `_c1`: STRING>
+       STRUCT<_c0: INT, _c1: STRING>
   """,
   since = "3.0.0",
   group = "csv_funcs")

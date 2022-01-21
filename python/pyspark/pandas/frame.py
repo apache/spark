@@ -2438,7 +2438,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         axis = validate_axis(axis)
         should_return_series = False
@@ -2691,7 +2694,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         axis = validate_axis(axis)
         if axis != 0:
@@ -5468,9 +5474,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         return psser
 
             else:
-                op = lambda psser: psser._fillna(value=value, method=method, axis=axis, limit=limit)
+
+                def op(psser: ps.Series) -> ps.Series:
+                    return psser._fillna(value=value, method=method, axis=axis, limit=limit)
+
         elif method is not None:
-            op = lambda psser: psser._fillna(value=value, method=method, axis=axis, limit=limit)
+
+            def op(psser: ps.Series) -> ps.Series:
+                return psser._fillna(value=value, method=method, axis=axis, limit=limit)
+
         else:
             raise ValueError("Must specify a fillna 'value' or 'method' parameter.")
 
@@ -5605,7 +5617,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     return psser
 
         else:
-            op = lambda psser: psser.replace(to_replace=to_replace, value=value, regex=regex)
+
+            def op(psser: ps.Series) -> ps.Series:
+                return psser.replace(to_replace=to_replace, value=value, regex=regex)
 
         psdf = self._apply_series_op(op)
         if inplace:
@@ -7700,7 +7714,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         how = validate_how(how)
 
         def resolve(internal: InternalFrame, side: str) -> InternalFrame:
-            rename = lambda col: "__{}_{}".format(side, col)
+            def rename(col: str) -> str:
+                return "__{}_{}".format(side, col)
+
             internal = internal.resolved_copy
             sdf = internal.spark_frame
             sdf = sdf.select(
@@ -7752,12 +7768,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_columns = []
         column_labels = []
 
-        left_scol_for = lambda label: scol_for(
-            left_table, left_internal.spark_column_name_for(label)
-        )
-        right_scol_for = lambda label: scol_for(
-            right_table, right_internal.spark_column_name_for(label)
-        )
+        def left_scol_for(label: Label) -> Column:
+            return scol_for(left_table, left_internal.spark_column_name_for(label))
+
+        def right_scol_for(label: Label) -> Column:
+            return scol_for(right_table, right_internal.spark_column_name_for(label))
 
         for label in left_internal.column_labels:
             col = left_internal.spark_column_name_for(label)

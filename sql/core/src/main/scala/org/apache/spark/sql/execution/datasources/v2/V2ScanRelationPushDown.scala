@@ -19,26 +19,35 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, GeneralAggregateFunc}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(
-      applyLimit(pushDownAggregates(pushDownFilters(pushDownSample(createScanBuilder(plan))))))
+    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
+      createScanBuilder,
+      pushDownSample,
+      pushDownFilters,
+      pushDownAggregates,
+      pushDownLimits,
+      pruneColumns)
+
+    pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
+      pushDownRule(newPlan)
+    }
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -88,25 +97,66 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
-              var ordinal = 0
-              val aggregates = resultExpressions.flatMap { expr =>
-                expr.collect {
-                  // Do not push down duplicated aggregate expressions. For example,
-                  // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
-                  // `max(a)` to the data source.
-                  case agg: AggregateExpression
-                      if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
-                    aggExprToOutputOrdinal(agg.canonicalized) = ordinal
-                    ordinal += 1
-                    agg
-                }
-              }
+              val aggregates = collectAggregates(resultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
                 groupingExpressions, sHolder.relation.output)
-              val pushedAggregates = PushDownUtils.pushAggregates(
-                r, normalizedAggregates, normalizedGroupingExpressions)
+              val translatedAggregates = DataSourceStrategy.translateAggregation(
+                normalizedAggregates, normalizedGroupingExpressions)
+              val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
+                if (translatedAggregates.isEmpty ||
+                  r.supportCompletePushDown(translatedAggregates.get) ||
+                  translatedAggregates.get.aggregateExpressions().forall(!_.isInstanceOf[Avg])) {
+                  (resultExpressions, aggregates, translatedAggregates)
+                } else {
+                  // scalastyle:off
+                  // The data source doesn't support the complete push-down of this aggregation.
+                  // Here we translate `AVG` to `SUM / COUNT`, so that it's more likely to be
+                  // pushed, completely or partially.
+                  // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
+                  // SELECT avg(c1) FROM t GROUP BY c2;
+                  // The original logical plan is
+                  // Aggregate [c2#10],[avg(c1#9) AS avg(c1)#19]
+                  // +- ScanOperation[...]
+                  //
+                  // After convert avg(c1#9) to sum(c1#9)/count(c1#9)
+                  // we have the following
+                  // Aggregate [c2#10],[sum(c1#9)/count(c1#9) AS avg(c1)#19]
+                  // +- ScanOperation[...]
+                  // scalastyle:on
+                  val newResultExpressions = resultExpressions.map { expr =>
+                    expr.transform {
+                      case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
+                        val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
+                        val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
+                        // Closely follow `Average.evaluateExpression`
+                        avg.dataType match {
+                          case _: YearMonthIntervalType =>
+                            If(EqualTo(count, Literal(0L)),
+                              Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
+                          case _: DayTimeIntervalType =>
+                            If(EqualTo(count, Literal(0L)),
+                              Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
+                          case _ =>
+                            // TODO deal with the overflow issue
+                            Divide(addCastIfNeeded(sum, avg.dataType),
+                              addCastIfNeeded(count, avg.dataType), false)
+                        }
+                    }
+                  }.asInstanceOf[Seq[NamedExpression]]
+                  // Because aggregate expressions changed, translate them again.
+                  aggExprToOutputOrdinal.clear()
+                  val newAggregates =
+                    collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
+                  val newNormalizedAggregates = DataSourceStrategy.normalizeExprs(
+                    newAggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+                  (newResultExpressions, newAggregates, DataSourceStrategy.translateAggregation(
+                    newNormalizedAggregates, normalizedGroupingExpressions))
+                }
+              }
+
+              val pushedAggregates = finalTranslatedAggregates.filter(r.pushAggregation)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else if (!supportPartialAggPushDown(pushedAggregates.get) &&
@@ -129,7 +179,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
-                assert(newOutput.length == groupingExpressions.length + aggregates.length)
+                assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
                 val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
@@ -164,7 +214,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   Project(projectExpressions, scanRelation)
                 } else {
                   val plan = Aggregate(
-                    output.take(groupingExpressions.length), resultExpressions, scanRelation)
+                    output.take(groupingExpressions.length), finalResultExpressions, scanRelation)
 
                   // scalastyle:off
                   // Change the optimized logical plan to reflect the pushed down aggregate
@@ -210,19 +260,36 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  private def collectAggregates(resultExpressions: Seq[NamedExpression],
+      aggExprToOutputOrdinal: mutable.HashMap[Expression, Int]): Seq[AggregateExpression] = {
+    var ordinal = 0
+    resultExpressions.flatMap { expr =>
+      expr.collect {
+        // Do not push down duplicated aggregate expressions. For example,
+        // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
+        // `max(a)` to the data source.
+        case agg: AggregateExpression
+          if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+          aggExprToOutputOrdinal(agg.canonicalized) = ordinal
+          ordinal += 1
+          agg
+      }
+    }
+  }
+
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
     agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
   }
 
-  private def addCastIfNeeded(aggAttribute: AttributeReference, aggDataType: DataType) =
-    if (aggAttribute.dataType == aggDataType) {
-      aggAttribute
+  private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) =
+    if (expression.dataType == expectedDataType) {
+      expression
     } else {
-      Cast(aggAttribute, aggDataType)
+      Cast(expression, expectedDataType)
     }
 
-  def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
@@ -308,7 +375,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case other => other
   }
 
-  def applyLimit(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       val newChild = pushDownLimit(child, limitValue)
       val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))

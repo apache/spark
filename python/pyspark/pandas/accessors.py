@@ -335,14 +335,19 @@ class PandasOnSparkFrameMethods:
         if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
         original_func = func
-        func = lambda o: original_func(o, *args, **kwds)
+
+        def new_func(o: Any) -> pd.DataFrame:
+            return original_func(o, *args, **kwds)
 
         self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
@@ -355,7 +360,7 @@ class PandasOnSparkFrameMethods:
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = func(pdf)
+            applied = new_func(pdf)
             if not isinstance(applied, pd.DataFrame):
                 raise ValueError(
                     "The given function should return a frame; however, "
@@ -371,7 +376,7 @@ class PandasOnSparkFrameMethods:
             return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=True
+                self_applied, new_func, return_schema, retain_index=True
             )
             sdf = self_applied._internal.spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -394,7 +399,7 @@ class PandasOnSparkFrameMethods:
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=should_retain_index
+                self_applied, new_func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -570,10 +575,12 @@ class PandasOnSparkFrameMethods:
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
         original_func = func
-        func = lambda o: original_func(o, *args, **kwargs)
+
+        def new_func(o: Any) -> Union[pd.DataFrame, pd.Series]:
+            return original_func(o, *args, **kwargs)
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            return func(pdf).to_frame()
+            return new_func(pdf).to_frame()
 
         def pandas_series_func(
             f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
@@ -595,7 +602,7 @@ class PandasOnSparkFrameMethods:
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
-            transformed = func(pdf)
+            transformed = new_func(pdf)
             if not isinstance(transformed, (pd.DataFrame, pd.Series)):
                 raise ValueError(
                     "The given function should return a frame; however, "
@@ -644,7 +651,10 @@ class PandasOnSparkFrameMethods:
                 self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True  # type: ignore[arg-type]
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=True,
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -709,7 +719,10 @@ class PandasOnSparkFrameMethods:
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, should_retain_index  # type: ignore[arg-type]
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=should_retain_index,
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -892,7 +905,10 @@ class PandasOnSparkSeriesMethods:
 
         if not isinstance(func, FunctionType):
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         if return_type is None:
             # TODO: In this case, it avoids the shortcut for now (but only infers schema)
