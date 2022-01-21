@@ -180,7 +180,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           resp.streamChunkId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onFailure(resp.streamChunkId.chunkIndex, new ChunkFetchFailureException(
+        listener.onFailure(resp.streamChunkId.chunkIndex, new RuntimeException(
           "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
     } else if (message instanceof RpcResponse) {
