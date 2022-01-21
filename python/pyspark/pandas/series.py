@@ -4607,7 +4607,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return_dtype = combined_pser.dtype
             return_spark_type = as_spark_type(return_dtype)
 
-        @pandas_udf(returnType=return_spark_type)  # type: ignore
+        @pandas_udf(returnType=return_spark_type)  # type: ignore[call-overload]
         def wrapped_func(x: pd.Series, y: pd.Series) -> pd.Series:
             return x.combine(y, func)
 
