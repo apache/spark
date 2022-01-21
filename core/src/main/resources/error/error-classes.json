@@ -144,10 +144,6 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_MODE" : {
-    "message" : [ "The mode %s is not supported" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
@@ -158,6 +154,10 @@
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_MODE" : {
+    "message" : [ "The mode %s is not supported" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
