@@ -23,7 +23,7 @@ import java.util.{Date, UUID}
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.hadoop.conf.Configurable
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -74,6 +74,9 @@ class HadoopMapReduceCommitProtocol(
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
+
+  /** Hadoop Configuration of committer. */
+  @transient private var conf: Configuration = _
 
   /**
    * Checks whether there are files to be committed to a valid output location.
@@ -138,7 +141,7 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      if (dynamicPartitionOverwrite) {
+      if (!conf.getBoolean("spark.sql.staticPartitionInsert", false)) {
         new Path(new Path(stagingDir, d), filename).toString
       } else {
         new Path(stagingDir, filename).toString
@@ -189,6 +192,7 @@ class HadoopMapReduceCommitProtocol(
 
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
+    conf = taskAttemptContext.getConfiguration
     committer.setupJob(jobContext)
   }
 
@@ -271,6 +275,7 @@ class HadoopMapReduceCommitProtocol(
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
+    conf = taskContext.getConfiguration
     committer.setupTask(taskContext)
     addedAbsPathFiles = mutable.Map[String, String]()
     partitionPaths = mutable.Set[String]()

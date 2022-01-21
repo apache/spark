@@ -74,6 +74,9 @@ case class InsertIntoHadoopFsRelationCommand(
       staticPartitions.size < partitionColumns.length
   }
 
+  private[sql] lazy val staticPartitionInsert: Boolean =
+    staticPartitions.size == partitionColumns.length && partitionColumns.nonEmpty
+
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
     SchemaUtils.checkColumnNameDuplication(
@@ -110,13 +113,14 @@ case class InsertIntoHadoopFsRelationCommand(
     val committerOutputPath = if (dynamicPartitionOverwrite) {
       FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
         .makeQualified(fs.getUri, fs.getWorkingDirectory)
-    } else if (staticPartitions.size == partitionColumns.length) {
+    } else if (staticPartitionInsert) {
       val defaultLocation = qualifiedOutputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)).toString
       customPartitionLocations.getOrElse(staticPartitions, defaultLocation)
     } else {
       qualifiedOutputPath
     }
+    hadoopConf.setBoolean("spark.sql.staticPartitionInsert", staticPartitionInsert)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
