@@ -155,21 +155,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public VectorizedParquetRecordReader(
-          ZoneId convertTz,
-          String datetimeRebaseMode,
-          String datetimeRebaseTz,
-          String int96RebaseMode,
-          String int96RebaseTz,
-          boolean useOffHeap,
-          int capacity) {
-    this.convertTz = convertTz;
-    this.datetimeRebaseMode = datetimeRebaseMode;
-    this.datetimeRebaseTz = datetimeRebaseTz;
-    this.int96RebaseMode = int96RebaseMode;
-    this.int96RebaseTz = int96RebaseTz;
-    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
-    this.capacity = capacity;
-    this.limit = Integer.MAX_VALUE;
+      ZoneId convertTz,
+      String datetimeRebaseMode,
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz,
+      boolean useOffHeap,
+      int capacity) {
+    this(convertTz, datetimeRebaseMode, datetimeRebaseTz, int96RebaseMode, int96RebaseTz,
+        useOffHeap, capacity, Integer.MAX_VALUE);
   }
 
   // For test only.
@@ -331,7 +325,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     checkEndOfRowGroup();
 
     int num = (int) Math.min((long) capacity,
-            Math.min((long) limit - rowsReturned, totalCountLoadedSoFar - rowsReturned));
+        Math.min((long) limit - rowsReturned, totalCountLoadedSoFar - rowsReturned));
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnVectors[i]);

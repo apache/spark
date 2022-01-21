@@ -42,7 +42,7 @@ class ParquetLimitPushDownSuite extends QueryTest with ParquetTest with SharedSp
         val df = spark.read.parquet(path.getPath).limit(pushedLimit)
         val sparkPlan = df.queryExecution.sparkPlan
         sparkPlan foreachUp  {
-          case r@ BatchScanExec(_, f: ParquetScan, _) =>
+          case r @ BatchScanExec(_, f: ParquetScan, _) =>
             assert(f.pushedLimit.contains(pushedLimit))
             assert(r.executeColumnar().map(_.numRows()).sum() == pushedLimit)
           case CollectLimitExec(limit, _) =>
