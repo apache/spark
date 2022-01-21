@@ -1909,7 +1909,8 @@ object QueryExecutionErrors {
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_AES_MODE", Array(mode, padding))
+    val errorMsg = s"AES-$mode with the padding $padding"
+    new SparkRuntimeException("UNSUPPORTED_MODE", Array(errorMsg))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {

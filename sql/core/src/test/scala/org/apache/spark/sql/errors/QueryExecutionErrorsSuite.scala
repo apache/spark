@@ -71,7 +71,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("UNSUPPORTED_AES_MODE: unsupported combinations of AES modes and padding") {
+  test("UNSUPPORTED_MODE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
@@ -79,9 +79,9 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "UNSUPPORTED_AES_MODE")
+      assert(e.getErrorClass === "UNSUPPORTED_MODE")
       assert(e.getSqlState === "0A000")
-      assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
+      assert(e.getMessage.matches("""The mode AES-\w+ with the padding \w+ is not supported"""))
     }
 
     // Unsupported AES mode and padding in encrypt
