@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -464,5 +464,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       checkEvaluation(Literal.create(duration, dt), result)
     }
+  }
+
+  test("SPARK-37967: Literal.create support ObjectType") {
+    checkEvaluation(
+      Literal.create(UTF8String.fromString("Spark SQL"), ObjectType(classOf[UTF8String])),
+      UTF8String.fromString("Spark SQL"))
   }
 }
