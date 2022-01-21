@@ -740,8 +740,9 @@ object SupportedBinaryExpr {
          _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
-    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(left, right), _, _, _)
-        if clz == classOf[ByteArrayMethods] => Some(s, left, right)
+    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith",
+         Seq(left, right), _, _, _, _) if clz == classOf[ByteArrayMethods] =>
+      Some(s, left, right)
     case _ => None
   }
 }
