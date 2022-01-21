@@ -4243,6 +4243,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df3, df4)
     }
   }
+
+  test("SPARK-27442: Spark support read/write parquet file with invalid char in field name") {
+    withTempDir { dir =>
+      Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10), (2, 4, 6, 8, 10, 12, 14, 16, 18, 20))
+        .toDF("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")
+        .repartition(1)
+        .write.mode(SaveMode.Overwrite).parquet(dir.getAbsolutePath)
+      val df = spark.read.parquet(dir.getAbsolutePath)
+      checkAnswer(df,
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) ::
+          Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
+      assert(df.schema.names.sameElements(
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")))
+      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
+        Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
+      checkAnswer(df.where("`a.b` > 10"),
+        Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
