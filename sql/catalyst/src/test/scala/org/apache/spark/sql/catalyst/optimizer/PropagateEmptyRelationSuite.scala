@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
 
@@ -285,5 +285,28 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val query = LocalRelation(Nil, Nil, isStreaming = true).limit(1).analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-37689: Expand should be supported PropagateEmptyRelation") {
+    val query = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)), Seq('a, 'b, 'c),
+      LocalRelation.fromExternalRows(Seq('a.int, 'b.int, 'c.int), Nil)).analyze
+    val optimized = Optimize.execute(query)
+    val expected = LocalRelation.fromExternalRows(Seq('a.int, 'b.int, 'c.int), Nil)
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-37904: Improve rebalance in PropagateEmptyRelation") {
+    val emptyRelation = LocalRelation($"a".int)
+    val expected = emptyRelation.analyze
+
+    // test root node
+    val plan1 = emptyRelation.rebalance($"a").analyze
+    val optimized1 = Optimize.execute(plan1)
+    comparePlans(optimized1, expected)
+
+    // test non-root node
+    val plan2 = emptyRelation.rebalance($"a").where($"a" > 0).select($"a").analyze
+    val optimized2 = Optimize.execute(plan2)
+    comparePlans(optimized2, expected)
   }
 }

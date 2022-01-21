@@ -25,6 +25,9 @@ testpaths = [
 ]
 
 [tool.black]
+# When changing the version, we have to update
+# GitHub workflow version and dev/reformat-python
+required-version = "21.12b0"
 line-length = 100
 target-version = ['py37']
 include = '\.pyi?$'

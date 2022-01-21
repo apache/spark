@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from pyspark.context import SparkContext
 
 
-class ProfilerCollector(object):
+class ProfilerCollector:
     """
     This class keeps track of different profilers on a per
     stage/UDF basis. Also this is used to create new profilers for
@@ -80,7 +80,7 @@ class ProfilerCollector(object):
                 self.profilers[i][2] = True
 
 
-class Profiler(object):
+class Profiler:
     """
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the

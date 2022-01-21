@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -302,6 +303,11 @@ object QueryParsingErrors {
     new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
   }
 
+  def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
+      "a string literal.", ctx)
+  }
+
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(s"CTE definition can't have duplicate names: $duplicateNames.", ctx)
   }
@@ -324,7 +330,7 @@ object QueryParsingErrors {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -334,13 +340,13 @@ object QueryParsingErrors {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$keyCandidate' is an invalid property key, please " +
       s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$valueCandidate' is an invalid property value, please " +
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
@@ -428,5 +434,10 @@ object QueryParsingErrors {
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Invalid time travel spec: $reason.", ctx)
+  }
+
+  def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
   }
 }

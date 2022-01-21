@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName, UnresolvedFunc}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -73,32 +73,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.SET.getSymbol).trim match {
-      case configKeyValueDef(key, value) =>
-        SetCommand(Some(key -> Option(value.trim)))
-      case configKeyDef(key) =>
-        SetCommand(Some(key -> None))
-      case s if s == "-v" =>
-        SetCommand(Some("-v" -> None))
-      case s if s.isEmpty =>
-        SetCommand(None)
-      case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
-    }
-  }
-
-  override def visitSetQuotedConfiguration(
-      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.configValue() != null && ctx.configKey() != null) {
-      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
-    } else if (ctx.configValue() != null) {
-      val valueStr = ctx.configValue().getText
-      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
-      keyCandidate match {
-        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
-        case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
-          keyCandidate, valueStr, ctx)
-      }
-    } else {
+    if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
       if (ctx.EQ() != null) {
         remainder(ctx.EQ().getSymbol).trim match {
@@ -108,6 +83,34 @@ class SparkSqlAstBuilder extends AstBuilder {
         }
       } else {
         SetCommand(Some(keyStr -> None))
+      }
+    } else {
+      remainder(ctx.SET.getSymbol).trim match {
+        case configKeyValueDef(key, value) =>
+          SetCommand(Some(key -> Option(value.trim)))
+        case configKeyDef(key) =>
+          SetCommand(Some(key -> None))
+        case s if s == "-v" =>
+          SetCommand(Some("-v" -> None))
+        case s if s.isEmpty =>
+          SetCommand(None)
+        case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
+      }
+    }
+  }
+
+  override def visitSetQuotedConfiguration(
+      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    assert(ctx.configValue() != null)
+    if (ctx.configKey() != null) {
+      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+    } else {
+      val valueStr = ctx.configValue().getText
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      keyCandidate match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
+        case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
+          keyCandidate, valueStr, ctx)
       }
     }
   }
@@ -573,6 +576,38 @@ class SparkSqlAstBuilder extends AstBuilder {
         true,
         ctx.EXISTS != null,
         ctx.REPLACE != null)
+    }
+  }
+
+  /**
+   * Create a DROP FUNCTION statement.
+   *
+   * For example:
+   * {{{
+   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
+   * }}}
+   */
+  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val isTemp = ctx.TEMPORARY != null
+    if (isTemp) {
+      if (functionName.length > 1) {
+        throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
+      }
+      DropFunctionCommand(
+        databaseName = None,
+        functionName = functionName.head,
+        ifExists = ctx.EXISTS != null,
+        isTemp = true)
+    } else {
+      val hintStr = "Please use fully qualified identifier to drop the persistent function."
+      DropFunction(
+        UnresolvedFunc(
+          functionName,
+          "DROP FUNCTION",
+          requirePersistent = true,
+          funcTypeMismatchHint = Some(hintStr)),
+        ctx.EXISTS != null)
     }
   }
 

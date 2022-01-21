@@ -158,11 +158,11 @@ private[sql] object ColumnAccessor {
 
   def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
       Unit = {
-    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
-      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
-      nativeAccessor.decompress(columnVector, numRows)
-    } else {
-      throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
+    columnAccessor match {
+      case nativeAccessor: NativeColumnAccessor[_] =>
+        nativeAccessor.decompress(columnVector, numRows)
+      case _ =>
+        throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
     }
   }
 

@@ -131,16 +131,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         for n_col in self.non_numeric_df_cols:
             if n_col == "bool":
-                if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
-                    self.assert_eq(
-                        pdf["float"] // pdf["bool"],
-                        psdf["float"] // psdf["bool"],
-                    )
-                else:
-                    self.assert_eq(
-                        pd.Series([1.0, 2.0, np.inf]),
-                        psdf["float"] // psdf["bool"],
-                    )
+                self.assert_eq(pdf["float"] // pdf["bool"], psdf["float"] // psdf["bool"])
             else:
                 for col in self.numeric_df_cols:
                     psser = psdf[col]
@@ -369,6 +360,25 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             psser = ps.from_pandas(pser)
             self.assert_eq(pser.astype(pd.BooleanDtype()), psser.astype(pd.BooleanDtype()))
 
+    def test_astype_eager_check(self):
+        psser = self.psdf["float_nan"]
+        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+            ValueError, "Cannot convert"
+        ):
+            psser.astype(int)
+        with ps.option_context("compute.eager_check", False):
+            psser.astype(int)
+
+        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            psser = self.psdf["decimal_nan"]
+            with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+                ValueError, "Cannot convert"
+            ):
+                psser.astype(int)
+            with ps.option_context("compute.eager_check", False):
+                psser.astype(int)
+
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
@@ -475,21 +485,26 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert integrals with missing values to bool",
-                lambda: psser.astype(bool),
-            )
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert integrals with missing values to integer",
-                lambda: psser.astype(int),
-            )
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert integrals with missing values to integer",
-                lambda: psser.astype(np.int32),
-            )
+            with ps.option_context("compute.eager_check", True):
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert integrals with missing values to bool",
+                    lambda: psser.astype(bool),
+                )
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert integrals with missing values to integer",
+                    lambda: psser.astype(int),
+                )
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert integrals with missing values to integer",
+                    lambda: psser.astype(np.int32),
+                )
+            with ps.option_context("compute.eager_check", False):
+                psser.astype(bool)
+                psser.astype(int)
+                psser.astype(np.int32)
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
@@ -607,21 +622,26 @@ class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert fractions with missing values to bool",
-                lambda: psser.astype(bool),
-            )
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert fractions with missing values to integer",
-                lambda: psser.astype(int),
-            )
-            self.assertRaisesRegex(
-                ValueError,
-                "Cannot convert fractions with missing values to integer",
-                lambda: psser.astype(np.int32),
-            )
+            with ps.option_context("compute.eager_check", True):
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert fractions with missing values to bool",
+                    lambda: psser.astype(bool),
+                )
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert fractions with missing values to integer",
+                    lambda: psser.astype(int),
+                )
+                self.assertRaisesRegex(
+                    ValueError,
+                    "Cannot convert fractions with missing values to integer",
+                    lambda: psser.astype(np.int32),
+                )
+            with ps.option_context("compute.eager_check", False):
+                psser.astype(bool)
+                psser.astype(int)
+                psser.astype(np.int32)
 
     def test_neg(self):
         # pandas raises "TypeError: bad operand type for unary -: 'FloatingArray'"

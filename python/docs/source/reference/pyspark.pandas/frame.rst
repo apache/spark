@@ -148,6 +148,7 @@ Computations / Descriptive Stats
    DataFrame.clip
    DataFrame.corr
    DataFrame.count
+   DataFrame.cov
    DataFrame.describe
    DataFrame.kurt
    DataFrame.kurtosis

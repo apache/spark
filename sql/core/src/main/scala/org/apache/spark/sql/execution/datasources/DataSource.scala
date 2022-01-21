@@ -128,7 +128,7 @@ case class DataSource(
       .getOrElse(true)
   }
 
-  bucketSpec.map { bucket =>
+  bucketSpec.foreach { bucket =>
     SchemaUtils.checkColumnNameDuplication(
       bucket.bucketColumnNames, "in the bucket definition", equality)
     SchemaUtils.checkColumnNameDuplication(
@@ -353,7 +353,7 @@ case class DataSource(
       case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        if (baseRelation.schema != schema) {
+        if (!DataType.equalsIgnoreCompatibleNullability(baseRelation.schema, schema)) {
           throw QueryCompilationErrors.userSpecifiedSchemaMismatchActualSchemaError(
             schema, baseRelation.schema)
         }

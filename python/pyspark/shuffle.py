@@ -52,7 +52,6 @@ try:
             info = process.get_memory_info()
         return info.rss >> 20
 
-
 except ImportError:
 
     def get_used_memory():
@@ -90,7 +89,7 @@ MemoryBytesSpilled = 0
 DiskBytesSpilled = 0
 
 
-class Aggregator(object):
+class Aggregator:
 
     """
     Aggregator has tree functions to merge values into combiner.
@@ -117,7 +116,7 @@ class SimpleAggregator(Aggregator):
         Aggregator.__init__(self, lambda x: x, combiner, combiner)
 
 
-class Merger(object):
+class Merger:
 
     """
     Merge shuffled data together by aggregator
@@ -438,7 +437,7 @@ class ExternalMerger(Merger):
             shutil.rmtree(d, True)
 
 
-class ExternalSorter(object):
+class ExternalSorter:
     """
     ExternalSorter will divide the elements into chunks, sort them in
     memory and dump them into disks, finally merge them back.
@@ -528,7 +527,7 @@ class ExternalSorter(object):
         return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
-class ExternalList(object):
+class ExternalList:
     """
     ExternalList can have many items which cannot be hold in memory in
     the same time.
@@ -663,7 +662,7 @@ class ExternalListOfList(ExternalList):
                 yield v
 
 
-class GroupByKey(object):
+class GroupByKey:
     """
     Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 

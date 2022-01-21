@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, Percentile}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1829,6 +1829,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a Percentile expression.
+   */
+  override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
+    val percentage = expression(ctx.percentage)
+    val sortOrder = visitSortItem(ctx.sortItem)
+    val percentile = sortOrder.direction match {
+      case Ascending => new Percentile(sortOrder.child, percentage)
+      case Descending => new Percentile(sortOrder.child, Subtract(Literal(1), percentage))
+    }
+    percentile.toAggregateExpression()
+  }
+
+  /**
    * Create a Substring/Substr expression.
    */
   override def visitSubstring(ctx: SubstringContext): Expression = withOrigin(ctx) {
@@ -3410,7 +3423,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a table, returning a [[CreateTableStatement]] logical plan.
+   * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.
    *
    * Expected format:
    * {{{
@@ -3456,6 +3469,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val partitioning = partitionExpressions(partTransforms, partCols, ctx)
+    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+      serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3470,21 +3485,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        CreateTableAsSelectStatement(
-          table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
-          writeOptions = Map.empty, serdeInfo, external = external, ifNotExists = ifNotExists)
+        CreateTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning, query, tableSpec, Map.empty, ifNotExists)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
         val schema = StructType(columns ++ partCols)
-        CreateTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
-          options, location, comment, serdeInfo, external = external, ifNotExists = ifNotExists)
+        CreateTable(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
     }
   }
 
   /**
-   * Replace a table, returning a [[ReplaceTableStatement]] logical plan.
+   * Replace a table, returning a [[ReplaceTable]] or [[ReplaceTableAsSelect]]
+   * logical plan.
    *
    * Expected format:
    * {{{
@@ -3536,6 +3553,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val partitioning = partitionExpressions(partTransforms, partCols, ctx)
+    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+      serdeInfo, false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3550,16 +3569,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx)
 
       case Some(query) =>
-        ReplaceTableAsSelectStatement(table, query, partitioning, bucketSpec, properties,
-          provider, options, location, comment, writeOptions = Map.empty, serdeInfo,
-          orCreate = orCreate)
+        ReplaceTableAsSelect(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          partitioning, query, tableSpec, writeOptions = Map.empty, orCreate = orCreate)
 
       case _ =>
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
         val schema = StructType(columns ++ partCols)
-        ReplaceTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
-          options, location, comment, serdeInfo, orCreate = orCreate)
+        ReplaceTable(
+          UnresolvedDBObjectName(table, isNamespace = false),
+          schema, partitioning, tableSpec, orCreate = orCreate)
     }
   }
 
@@ -4370,7 +4390,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         Seq(describeFuncName.getText)
       }
-    DescribeFunction(UnresolvedFunc(functionName), EXTENDED != null)
+    DescribeFunction(
+      UnresolvedFunc(
+        functionName,
+        "DESCRIBE FUNCTION",
+        requirePersistent = false,
+        funcTypeMismatchHint = None),
+      EXTENDED != null)
   }
 
   /**
@@ -4384,32 +4410,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case Some("user") => (true, false)
         case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
-    val pattern = Option(ctx.pattern).map(string(_))
-    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
-      .map(visitMultipartIdentifier)
-      .map(UnresolvedFunc(_))
-    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
-  }
 
-  /**
-   * Create a DROP FUNCTION statement.
-   *
-   * For example:
-   * {{{
-   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
-   * }}}
-   */
-  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropFunction(
-      UnresolvedFunc(functionName),
-      ctx.EXISTS != null,
-      ctx.TEMPORARY != null)
+    val ns = Option(ctx.ns).map(visitMultipartIdentifier)
+    val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)
+    val nsPlan = if (ns.isDefined) {
+      if (legacy.isDefined) {
+        throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
+      }
+      UnresolvedNamespace(ns.get)
+    } else if (legacy.isDefined) {
+      UnresolvedNamespace(legacy.get.dropRight(1))
+    } else {
+      UnresolvedNamespace(Nil)
+    }
+    val pattern = Option(ctx.pattern).map(string).orElse(legacy.map(_.last))
+    ShowFunctions(nsPlan, userScope, systemScope, pattern)
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(functionIdentifier))
+    RefreshFunction(UnresolvedFunc(
+      functionIdentifier,
+      "REFRESH FUNCTION",
+      requirePersistent = true,
+      funcTypeMismatchHint = None))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {

@@ -79,6 +79,8 @@
       url: sql-ref-datatypes.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html
+    - text: Number Pattern
+      url: sql-ref-number-pattern.html
     - text: Functions
       url: sql-ref-functions.html
     - text: Identifiers

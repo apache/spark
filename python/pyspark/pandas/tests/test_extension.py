@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import assert_produces_warning, PandasOnSparkTestCase
+from pyspark.testing.pandasutils import assert_produces_warning, ComparisonTestBase
 from pyspark.pandas.extensions import (
     register_dataframe_accessor,
     register_series_accessor,
@@ -66,17 +66,13 @@ class CustomAccessor:
                 raise ValueError(str(e))
 
 
-class ExtensionTest(PandasOnSparkTestCase):
+class ExtensionTest(ComparisonTestBase):
     @property
     def pdf(self):
         return pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @property
     def accessor(self):

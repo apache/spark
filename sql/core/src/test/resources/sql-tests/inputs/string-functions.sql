@@ -105,3 +105,33 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- contains
+SELECT CONTAINS(null, 'Spark');
+SELECT CONTAINS('Spark SQL', null);
+SELECT CONTAINS(null, null);
+SELECT CONTAINS('Spark SQL', 'Spark');
+SELECT CONTAINS('Spark SQL', 'SQL');
+SELECT CONTAINS('Spark SQL', 'SPARK');
+
+SELECT startswith('Spark SQL', 'ark');
+SELECT startswith('Spark SQL', 'Spa');
+SELECT startswith(null, 'Spark');
+SELECT startswith('Spark', null);
+SELECT startswith(null, null);
+
+SELECT endswith('Spark SQL', 'QL');
+SELECT endswith('Spark SQL', 'Spa');
+SELECT endswith(null, 'Spark');
+SELECT endswith('Spark', null);
+SELECT endswith(null, null);
+
+-- to_number
+select to_number('454', '000');
+select to_number('454.2', '000.0');
+select to_number('12,454', '00,000');
+select to_number('$78.12', '$00.00');
+select to_number('-454', '-000');
+select to_number('-454', 'S000');
+select to_number('12,454.8-', '00,000.9-');
+select to_number('00,454.8-', '00,000.9-');

@@ -1324,7 +1324,7 @@ select interval (-30) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1333,7 +1333,7 @@ select interval (a + 1) day
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1356,7 +1356,7 @@ select interval (-30) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1365,7 +1365,7 @@ select interval (a + 1) days
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'interval'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 7
+Undefined function: interval. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.interval.; line 1 pos 7
 
 
 -- !query
@@ -1533,7 +1533,8 @@ select str - interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + (- INTERVAL '4 22:12' DAY TO MINUTE)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.; line 1 pos 7
+cannot resolve 'interval_view.str + (- INTERVAL '4 22:12' DAY TO MINUTE)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query
@@ -1542,7 +1543,8 @@ select str + interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + INTERVAL '4 22:12' DAY TO MINUTE' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.; line 1 pos 7
+cannot resolve 'interval_view.str + INTERVAL '4 22:12' DAY TO MINUTE' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
+To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
 
 
 -- !query

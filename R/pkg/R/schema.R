@@ -95,6 +95,7 @@ structType.character <- function(x, ...) {
 #' @param x A StructType object
 #' @param ... further arguments passed to or from other methods
 #' @note print.structType since 1.4.0
+#' @keywords internal
 print.structType <- function(x, ...) {
   cat("StructType\n",
       sapply(x$fields(),
@@ -234,6 +235,7 @@ structField.character <- function(x, type, nullable = TRUE, ...) {
 #' @param x A StructField object
 #' @param ... further arguments passed to or from other methods
 #' @note print.structField since 1.4.0
+#' @keywords internal
 print.structField <- function(x, ...) {
   cat("StructField(name = \"", x$name(),
       "\", type = \"", x$dataType.toString(),

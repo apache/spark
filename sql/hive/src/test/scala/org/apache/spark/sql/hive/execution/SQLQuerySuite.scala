@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -202,7 +202,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(allFunctions.contains(f))
     }
 
-    FunctionsCommand.virtualOperators.foreach { f =>
+    FunctionRegistry.builtinOperators.keys.foreach { f =>
       assert(allFunctions.contains(f))
     }
 
@@ -263,8 +263,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
 
-    checkKeywordsExist(sql("describe functioN abcadf"),
-      "Function: abcadf not found.")
+    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
+    assert(e.message.contains("Undefined function: abcadf"))
 
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
@@ -1319,7 +1319,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql(
           s"""FROM(
             |  FROM test SELECT TRANSFORM(a, b)
-            |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+            |  USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
             |  AS (c STRING, d STRING)
             |) t
             |SELECT c
@@ -1341,7 +1341,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |SELECT TRANSFORM(a, b)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
-          |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
+          |USING 'python3 $scriptFilePath/scripts/test_transform.py "|"'
           |AS (c STRING, d STRING)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -2440,6 +2440,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("test") {
       val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
       try {
@@ -2459,7 +2460,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[SparkException] {
           sql(
             s"""FROM test SELECT TRANSFORM(a)
-               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+               |USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
              """.stripMargin).collect()
         }
         assert(e.getMessage.contains("Failed to produce data."))
@@ -2655,6 +2656,34 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
                |STORED AS PARQUET LOCATION '${dir.getAbsolutePath}'
                |""".stripMargin)
           checkAnswer(sql("SELECT * FROM test_precision"), Row("dummy", null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-37217: Dynamic partitions should fail quickly " +
+    "when writing to external tables to prevent data deletion") {
+    withTable("test") {
+      withTempDir { f =>
+        sql("CREATE EXTERNAL TABLE test(id int) PARTITIONED BY (p1 string, p2 string) " +
+          s"STORED AS PARQUET LOCATION '${f.getAbsolutePath}'")
+
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          val insertSQL = """
+              |INSERT OVERWRITE TABLE test PARTITION(p1='n1', p2)
+              |SELECT * FROM VALUES (1, 'n2'), (2, 'n3'), (3, 'n4') AS t(id, p2)
+              """.stripMargin
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "2") {
+            val e = intercept[SparkException] {
+              sql(insertSQL)
+            }
+            assert(e.getMessage.contains("Number of dynamic partitions created"))
+          }
+
+          withSQLConf("hive.exec.max.dynamic.partitions" -> "3") {
+            sql(insertSQL)
+          }
         }
       }
     }
