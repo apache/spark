@@ -61,8 +61,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import VectorLike
+    from pyspark.mllib._typing import VectorLike, NormType
     from scipy.sparse import spmatrix
+    from numpy.typing import ArrayLike
 
 
 QT = TypeVar("QT")
@@ -397,7 +398,7 @@ class DenseVector(Vector):
         """
         return np.count_nonzero(self.array)
 
-    def norm(self, p: Union[float, str]) -> np.float64:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a DenseVector.
 
@@ -454,7 +455,7 @@ class DenseVector(Vector):
             elif isinstance(other, Vector):
                 return np.dot(self.toArray(), other.toArray())
             else:
-                return np.dot(self.toArray(), other)
+                return np.dot(self.toArray(), cast("ArrayLike", other))
 
     def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
@@ -692,7 +693,7 @@ class SparseVector(Vector):
         """
         return np.count_nonzero(self.values)
 
-    def norm(self, p: Union[float, str]) -> np.float64:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a SparseVector.
 
