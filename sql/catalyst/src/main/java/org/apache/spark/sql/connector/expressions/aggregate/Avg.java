@@ -15,34 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.connector.expressions.aggregate;
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
-class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("try_add") {
-    Seq(
-      (1, 1, 2),
-      (Int.MaxValue, 1, null),
-      (Int.MinValue, -1, null)
-    ).foreach { case (a, b, expected) =>
-      val left = Literal(a)
-      val right = Literal(b)
-      val input = TryEval(Add(left, right, failOnError = true))
-      checkEvaluation(input, expected)
-    }
+/**
+ * An aggregate function that returns the mean of all the values in a group.
+ *
+ * @since 3.3.0
+ */
+@Evolving
+public final class Avg implements AggregateFunc {
+  private final NamedReference column;
+  private final boolean isDistinct;
+
+  public Avg(NamedReference column, boolean isDistinct) {
+    this.column = column;
+    this.isDistinct = isDistinct;
   }
 
-  test("try_divide") {
-    Seq(
-      (3.0, 2.0, 1.5),
-      (1.0, 0.0, null),
-      (-1.0, 0.0, null)
-    ).foreach { case (a, b, expected) =>
-      val left = Literal(a)
-      val right = Literal(b)
-      val input = TryEval(Divide(left, right, failOnError = true))
-      checkEvaluation(input, expected)
+  public NamedReference column() { return column; }
+  public boolean isDistinct() { return isDistinct; }
+
+  @Override
+  public String toString() {
+    if (isDistinct) {
+      return "AVG(DISTINCT " + column.describe() + ")";
+    } else {
+      return "AVG(" + column.describe() + ")";
     }
   }
 }

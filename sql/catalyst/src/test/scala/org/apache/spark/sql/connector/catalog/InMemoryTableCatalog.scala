@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
@@ -213,10 +213,16 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).foreach(dropNamespace)
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
     try {
-      listTables(namespace).foreach(dropTable)
+      if (!cascade) {
+        if (listTables(namespace).nonEmpty || listNamespaces(namespace).nonEmpty) {
+          throw new NonEmptyNamespaceException(namespace)
+        }
+      } else {
+        listNamespaces(namespace).foreach(namespace => dropNamespace(namespace, cascade))
+        listTables(namespace).foreach(dropTable)
+      }
     } catch {
       case _: NoSuchNamespaceException =>
     }

@@ -52,7 +52,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       .exists(_.contains("catalog comment"))
     assert(createCommentWarning === false)
 
-    catalog.dropNamespace(Array("foo"))
+    catalog.dropNamespace(Array("foo"), cascade = false)
     assert(catalog.namespaceExists(Array("foo")) === false)
     assert(catalog.listNamespaces() === builtinNamespaces)
     val msg = intercept[AnalysisException] {

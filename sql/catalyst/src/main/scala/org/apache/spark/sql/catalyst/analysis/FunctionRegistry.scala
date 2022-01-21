@@ -474,6 +474,7 @@ object FunctionRegistry {
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
+    expression[ToNumber]("to_number"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
