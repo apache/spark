@@ -4503,16 +4503,23 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         .. versionadded:: 3.3.0
 
-        .. note:: this API executes the function once to infer the type which is
-             potentially expensive, for instance, when the dataset is created after
-             aggregations or sorting.
+        .. note:: This API executes the function once to infer the type which is
+            potentially expensive, for instance, when the dataset is created after
+            aggregations or sorting.
 
-             To avoid this, specify return type in ``func``, for instance, as below:
+            To avoid this, specify return type in ``func``, for instance, as below:
 
-             >>> def foo(x, y) -> np.int32:
-             ...     return x * y
+            >>> def foo(x, y) -> np.int32:
+            ...     return x * y
 
-             pandas-on-Spark uses return type hint and does not try to infer the type.
+            pandas-on-Spark uses return type hint and does not try to infer the type.
+
+            This API does not support self combine for now.
+
+            >>> psser1 = ps.Series([1, 2, 3, 4])
+            >>> psser1.combine(psser1, max)  # doctest: +SKIP
+            ...
+            ValueError: Unsupported self combine
 
         Parameters
         ----------
@@ -4587,6 +4594,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             assert isinstance(other, Series)
             if same_anchor(self, other):
+                if self._column_label == other._column_label:
+                    raise ValueError("Unsupported self combine")
                 combined = self._psdf[self._column_label, other._column_label]
             elif fill_value is None:
                 combined = combine_frames(self.to_frame(), other.to_frame())

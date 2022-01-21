@@ -3081,6 +3081,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf["s1"].combine(psdf["s2"], true_div),
         )
 
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4]})
+        with self.assertRaisesRegex(ValueError, "Unsupported self combine"):
+            psdf.a.combine(psdf.a, max)
+
+        psser1 = ps.Series([1, 2, 3, 4])
+        with self.assertRaisesRegex(ValueError, "Unsupported self combine"):
+            psser1.combine(psser1, max)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401
