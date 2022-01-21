@@ -6189,8 +6189,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         # SPARK-37930: Fix DataFrame select subset with duplicated columns
         pdf, psdf = self.df_pair
 
+        # select subset with duplicate column names
         self.assert_eq(pdf[["a", "a", "a"]], psdf[["a", "a", "a"]])
         self.assert_eq(pdf.loc[:, ["a", "a", "a"]], psdf.loc[:, ["a", "a", "a"]])
+
+        # select columns from the dataframe has duplicate column name
+        self.assert_eq(pdf[["a", "a", "a"]].a, psdf[["a", "a", "a"]].a)
+        self.assert_eq(pdf[["a", "a", "a"]]["a"], psdf[["a", "a", "a"]]["a"])
+        self.assert_eq(pdf[["a", "a", "a"]][["a", "a"]], psdf[["a", "a", "a"]][["a", "a"]])
 
     def test_iter_dataframe(self):
         pdf, psdf = self.df_pair
