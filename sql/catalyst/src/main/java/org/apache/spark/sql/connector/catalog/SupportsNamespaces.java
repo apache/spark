@@ -144,11 +144,10 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * {@link UnsupportedOperationException}.
    *
    * @param namespace a multi-part namespace
-   * @param cascade a boolean flag that deletes all namespaces and tables under the namespace
-   * if it is set true
+   * @param cascade a boolean flag that deletes all object under the namespace if it is set true
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
-   * @throws NonEmptyNamespaceException If the namespace is non-empty
+   * @throws NonEmptyNamespaceException If the namespace is non-empty and cascade is false
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
   boolean dropNamespace(
