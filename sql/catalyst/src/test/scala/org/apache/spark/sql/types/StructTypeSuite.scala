@@ -51,7 +51,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
-    assert(struct.toDDL == "`a` INT")
+    assert(struct.toDDL == "a INT")
   }
 
   test("SPARK-24849: round trip toDDL - fromDDL") {
@@ -61,7 +61,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-24849: round trip fromDDL - toDDL") {
-    val struct = "`a` MAP<INT, STRING>,`b` INT"
+    val struct = "a MAP<INT, STRING>,b INT"
 
     assert(fromDDL(struct).toDDL === struct)
   }
@@ -70,14 +70,14 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val struct = new StructType()
       .add("metaData", new StructType().add("eventId", StringType))
 
-    assert(struct.toDDL == "`metaData` STRUCT<`eventId`: STRING>")
+    assert(struct.toDDL == "metaData STRUCT<eventId: STRING>")
   }
 
   test("SPARK-24849: toDDL should output field's comment") {
     val struct = StructType(Seq(
       StructField("b", BooleanType).withComment("Field's comment")))
 
-    assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
+    assert(struct.toDDL == """b BOOLEAN COMMENT 'Field\'s comment'""")
   }
 
   private val nestedStruct = new StructType()
@@ -89,7 +89,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     ).withComment("comment"))
 
   test("SPARK-33846: toDDL should output nested field's comment") {
-    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING COMMENT 'Deep Nested comment'> " +
+    val ddl = "a STRUCT<b: STRUCT<c: STRING COMMENT 'Deep Nested comment'> " +
       "COMMENT 'Nested comment'> COMMENT 'comment'"
     assert(nestedStruct.toDDL == ddl)
   }
@@ -153,7 +153,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("interval keyword in schema string") {
-    val interval = "`a` INTERVAL"
+    val interval = "a INTERVAL"
     assert(fromDDL(interval).toDDL === interval)
   }
 
@@ -250,10 +250,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35285: ANSI interval types in schema") {
-    val yearMonthInterval = "`ymi` INTERVAL YEAR TO MONTH"
+    val yearMonthInterval = "ymi INTERVAL YEAR TO MONTH"
     assert(fromDDL(yearMonthInterval).toDDL === yearMonthInterval)
 
-    val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
+    val dayTimeInterval = "dti INTERVAL DAY TO SECOND"
     assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
   }
 
