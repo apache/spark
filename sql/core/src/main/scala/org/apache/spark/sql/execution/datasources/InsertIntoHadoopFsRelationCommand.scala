@@ -108,23 +108,18 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
-    // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
-    // will be renamed from staging path to final output path during commit job
-    val committerOutputPath = if (dynamicPartitionOverwrite) {
-      FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
-        .makeQualified(fs.getUri, fs.getWorkingDirectory)
-    } else if (staticPartitionInsert) {
-      val defaultLocation = qualifiedOutputPath.suffix(
+    val formattedOutputPath = if (staticPartitionInsert) {
+      val defaultLocation = outputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)).toString
       customPartitionLocations.getOrElse(staticPartitions, defaultLocation)
     } else {
-      qualifiedOutputPath
+      outputPath
     }
     hadoopConf.setBoolean(FileCommitProtocol.STATIC_PARTITION_INSERT, staticPartitionInsert)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
-      outputPath = committerOutputPath.toString,
+      outputPath = formattedOutputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
     val doInsertion = if (mode == SaveMode.Append) {
@@ -176,6 +171,15 @@ case class InsertIntoHadoopFsRelationCommand(
             }
           }
         }
+      }
+
+      // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
+      // will be renamed from staging path to final output path during commit job
+      val committerOutputPath = if (dynamicPartitionOverwrite) {
+        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
+          .makeQualified(fs.getUri, fs.getWorkingDirectory)
+      } else {
+        qualifiedOutputPath
       }
 
       val updatedPartitionPaths =
