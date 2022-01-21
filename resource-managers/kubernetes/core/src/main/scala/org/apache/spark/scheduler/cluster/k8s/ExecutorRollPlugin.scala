@@ -61,7 +61,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
     } else if (!sc.conf.get(DECOMMISSION_ENABLED)) {
       logWarning(s"Disabled because ${DECOMMISSION_ENABLED.key} is false.")
     } else {
-      minTasks = sparkContext.conf.get(MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING)
+      minTasks = sc.conf.get(MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING)
       // Scheduler is not created yet
       sparkContext = sc
 

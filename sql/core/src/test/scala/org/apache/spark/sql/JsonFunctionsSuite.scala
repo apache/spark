@@ -417,7 +417,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
-    checkAnswer(df, Seq(Row("STRUCT<`a`: BIGINT>")))
+    checkAnswer(df, Seq(Row("STRUCT<a: BIGINT>")))
   }
 
   test("from_json - array of primitive types") {
@@ -697,14 +697,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
     checkAnswer(
       spark.range(1).select(schema_of_json(input)),
-      Seq(Row("STRUCT<`id`: BIGINT, `price`: DOUBLE>")))
+      Seq(Row("STRUCT<id: BIGINT, price: DOUBLE>")))
   }
 
   test("SPARK-31065: schema_of_json - null and empty strings as strings") {
     Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
       checkAnswer(
         spark.range(1).select(schema_of_json(input)),
-        Seq(Row("STRUCT<`id`: STRING>")))
+        Seq(Row("STRUCT<id: STRING>")))
     }
   }
 
@@ -716,7 +716,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""{"id": "a", "drop": {"drop": null}}"""),
           options.asJava)),
-      Seq(Row("STRUCT<`id`: STRING>")))
+      Seq(Row("STRUCT<id: STRING>")))
 
     // Array of structs
     checkAnswer(
@@ -724,7 +724,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""[{"id": "a", "drop": {"drop": null}}]"""),
           options.asJava)),
-      Seq(Row("ARRAY<STRUCT<`id`: STRING>>")))
+      Seq(Row("ARRAY<STRUCT<id: STRING>>")))
 
     // Other types are not affected.
     checkAnswer(

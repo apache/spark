@@ -15,34 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("try_add") {
-    Seq(
-      (1, 1, 2),
-      (Int.MaxValue, 1, null),
-      (Int.MinValue, -1, null)
-    ).foreach { case (a, b, expected) =>
-      val left = Literal(a)
-      val right = Literal(b)
-      val input = TryEval(Add(left, right, failOnError = true))
-      checkEvaluation(input, expected)
-    }
-  }
 
-  test("try_divide") {
-    Seq(
-      (3.0, 2.0, 1.5),
-      (1.0, 0.0, null),
-      (-1.0, 0.0, null)
-    ).foreach { case (a, b, expected) =>
-      val left = Literal(a)
-      val right = Literal(b)
-      val input = TryEval(Divide(left, right, failOnError = true))
-      checkEvaluation(input, expected)
-    }
+/**
+ * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
+ * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
+ */
+case class NonEmptyNamespaceException(
+    override val message: String,
+    override val cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(namespace: Array[String]) = {
+    this(s"Namespace '${namespace.quoted}' is non empty.")
   }
 }

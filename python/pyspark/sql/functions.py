@@ -4091,10 +4091,10 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     --------
     >>> df = spark.range(1)
     >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
-    [Row(json='STRUCT<`a`: BIGINT>')]
+    [Row(json='STRUCT<a: BIGINT>')]
     >>> schema = schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
     >>> df.select(schema.alias("json")).collect()
-    [Row(json='STRUCT<`a`: BIGINT>')]
+    [Row(json='STRUCT<a: BIGINT>')]
     """
     if isinstance(json, str):
         col = _create_column_from_literal(json)
@@ -4127,9 +4127,9 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     --------
     >>> df = spark.range(1)
     >>> df.select(schema_of_csv(lit('1|a'), {'sep':'|'}).alias("csv")).collect()
-    [Row(csv='STRUCT<`_c0`: INT, `_c1`: STRING>')]
+    [Row(csv='STRUCT<_c0: INT, _c1: STRING>')]
     >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
-    [Row(csv='STRUCT<`_c0`: INT, `_c1`: STRING>')]
+    [Row(csv='STRUCT<_c0: INT, _c1: STRING>')]
     """
     if isinstance(csv, str):
         col = _create_column_from_literal(csv)

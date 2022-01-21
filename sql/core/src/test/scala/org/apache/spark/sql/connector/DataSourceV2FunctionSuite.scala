@@ -20,16 +20,18 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.Collections
 
-import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaLongAdd, JavaStrLen}
-import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddMismatchMagic, JavaLongAddStaticMagic}
+import test.org.apache.spark.sql.connector.catalog.functions._
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
+import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
+import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -425,6 +427,31 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       assert(intercept[AnalysisException](sql("SELECT testcat.ns.avg(*) from values" +
           " (date '2021-06-01' - date '2011-06-01'), (date '2000-01-01' - date '1900-01-01')"))
           .getMessage.contains("due to data type mismatch"))
+    }
+  }
+
+  test("SPARK-37957: pass deterministic flag when creating V2 function expression") {
+    def checkDeterministic(df: DataFrame): Unit = {
+      val result = df.queryExecution.executedPlan.find(_.isInstanceOf[ProjectExec])
+      assert(result.isDefined, s"Expect to find ProjectExec")
+      assert(!result.get.asInstanceOf[ProjectExec].projectList.exists(_.deterministic),
+        "Expect expressions in projectList to be non-deterministic")
+    }
+
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    Seq(new JavaRandomAddDefault, new JavaRandomAddMagic,
+        new JavaRandomAddStaticMagic).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "rand_add"), new JavaRandomAdd(fn))
+      checkDeterministic(sql("SELECT testcat.ns.rand_add(42)"))
+    }
+
+    // A function call is non-deterministic if one of its arguments is non-deterministic
+    Seq(new JavaLongAddDefault(true), new JavaLongAddMagic(true),
+        new JavaLongAddStaticMagic(true)).foreach { fn =>
+      addFunction(Identifier.of(Array("ns"), "add"), new JavaLongAdd(fn))
+      addFunction(Identifier.of(Array("ns"), "rand_add"),
+        new JavaRandomAdd(new JavaRandomAddDefault))
+      checkDeterministic(sql("SELECT testcat.ns.add(10, testcat.ns.rand_add(42))"))
     }
   }
 
