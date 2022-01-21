@@ -51,7 +51,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
         "Invalid parameter value of 'key' in 'aes_encrypt/aes_decrypt'. " +
-        "Expected: 16, 24 or 32 bytes but got:"))
+        "Expected: 16, 24 or 32 but got"))
     }
 
     // Encryption failure - invalid key length
@@ -69,6 +69,23 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         s"aes_decrypt(unbase64($colName), '')"))
       checkInvalidKeyLength(df2.selectExpr(
         s"aes_decrypt(unbase64($colName), binary(''))"))
+    }
+  }
+
+  test("INVALID_PARAMETER_VALUE: AES decrypt failure - key mismatch") {
+    val (_, df2) = getAesInputs()
+    Seq(
+      ("value16", "1234567812345678"),
+      ("value24", "123456781234567812345678"),
+      ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
+      val e = intercept[SparkException] {
+        df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+      }.getCause.asInstanceOf[SparkRuntimeException]
+      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage.contains(
+        "Invalid parameter value of 'expr, key' in 'aes_encrypt/aes_decrypt'. " +
+        "Detail message:"))
     }
   }
 
@@ -93,20 +110,5 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
-  }
-
-  test("AES_CRYPTO_ERROR: AES decrypt failure - key mismatch") {
-    val (_, df2) = getAesInputs()
-    Seq(
-      ("value16", "1234567812345678"),
-      ("value24", "123456781234567812345678"),
-      ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
-      val e = intercept[SparkException] {
-        df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
-      }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "AES_CRYPTO_ERROR")
-      assert(e.getSqlState === null)
-      assert(e.getMessage.contains("AES crypto operation failed"))
-    }
   }
 }

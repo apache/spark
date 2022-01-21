@@ -1,7 +1,4 @@
 {
-  "AES_CRYPTO_ERROR" : {
-    "message" : [ "AES crypto operation failed with: %s" ]
-  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -96,7 +93,7 @@
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "INVALID_PARAMETER_VALUE" : {
-    "message" : [ "Invalid parameter value of '%s' in '%s'. Expected: %s but got: %s" ],
+    "message" : [ "Invalid parameter value of '%s' in '%s'. %s" ],
     "sqlState" : "22023"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {

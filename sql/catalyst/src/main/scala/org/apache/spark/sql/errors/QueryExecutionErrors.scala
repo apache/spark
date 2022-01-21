@@ -1908,7 +1908,9 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
-        "key", "aes_encrypt/aes_decrypt", "16, 24 or 32 bytes", actualLength.toString))
+        "key",
+        "aes_encrypt/aes_decrypt",
+        s"Expected: 16, 24 or 32 but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
@@ -1918,7 +1920,12 @@ object QueryExecutionErrors {
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
-    new SparkRuntimeException("AES_CRYPTO_ERROR", Array(detailMessage))
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "expr, key",
+        "aes_encrypt/aes_decrypt",
+        s"Detail message: $detailMessage"))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
