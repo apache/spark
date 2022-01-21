@@ -21,7 +21,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -93,7 +93,7 @@ case class StructField(
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  private[sql] def sql = s"${quoteIdentifier(name)}: ${dataType.sql}$getDDLComment"
+  private[sql] def sql = s"${quoteIfNeeded(name)}: ${dataType.sql}$getDDLComment"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -103,6 +103,6 @@ case class StructField(
    */
   def toDDL: String = {
     val nullString = if (nullable) "" else " NOT NULL"
-    s"${quoteIdentifier(name)} ${dataType.sql}${nullString}$getDDLComment"
+    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
   }
 }

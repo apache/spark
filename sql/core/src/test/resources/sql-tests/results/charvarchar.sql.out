@@ -52,8 +52,8 @@ show create table char_tbl
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE default.char_tbl (
-  `c` CHAR(5),
-  `v` VARCHAR(6))
+  c CHAR(5),
+  v VARCHAR(6))
 USING parquet
 
 
@@ -71,8 +71,8 @@ show create table char_tbl2
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE default.char_tbl2 (
-  `c` CHAR(5),
-  `v` VARCHAR(6))
+  c CHAR(5),
+  v VARCHAR(6))
 USING parquet
 
 
@@ -162,8 +162,8 @@ show create table char_tbl3
 struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE default.char_tbl3 (
-  `c` CHAR(5),
-  `v` VARCHAR(6))
+  c CHAR(5),
+  v VARCHAR(6))
 USING parquet
 
 
