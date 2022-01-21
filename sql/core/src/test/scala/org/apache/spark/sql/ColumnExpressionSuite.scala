@@ -141,7 +141,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val metadata = new MetadataBuilder
     metadata.putString("key", "value")
     val df = spark.createDataFrame(sparkContext.parallelize(
-      Row("abc") :: Nil),
+      Row("abcd") :: Nil),
       StructType(Seq(
         StructField("parent", StructType(Seq(
           StructField("child", StringType, metadata = metadata.build())
