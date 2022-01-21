@@ -1910,7 +1910,7 @@ object QueryExecutionErrors {
       messageParameters = Array(
         "key",
         "aes_encrypt/aes_decrypt",
-        s"Expected: 16, 24 or 32 but got ${actualLength.toString} bytes."))
+        s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {

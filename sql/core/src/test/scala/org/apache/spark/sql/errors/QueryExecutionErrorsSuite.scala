@@ -50,8 +50,8 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
-        "Invalid parameter value of 'key' in 'aes_encrypt/aes_decrypt'. " +
-        "Expected: 16, 24 or 32 but got"))
+        "The value of parameter(s) 'key' in aes_encrypt/aes_decrypt is invalid: " +
+        "expects a binary value with 16, 24 or 32 bytes, but got"))
     }
 
     // Encryption failure - invalid key length
@@ -84,7 +84,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
-        "Invalid parameter value of 'expr, key' in 'aes_encrypt/aes_decrypt'. " +
+        "The value of parameter(s) 'expr, key' in aes_encrypt/aes_decrypt is invalid: " +
         "Detail message:"))
     }
   }
