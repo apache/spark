@@ -74,8 +74,9 @@ case class InsertIntoHadoopFsRelationCommand(
       staticPartitions.size < partitionColumns.length
   }
 
-  private[sql] lazy val staticPartitionInsert: Boolean =
-    staticPartitions.size == partitionColumns.length && partitionColumns.nonEmpty
+  private[sql] lazy val staticPartitionOverwrite: Boolean =
+    staticPartitions.size == partitionColumns.length && partitionColumns.nonEmpty &&
+      mode == SaveMode.Overwrite
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -108,14 +109,14 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val jobId = java.util.UUID.randomUUID().toString
-    val formattedOutputPath = if (staticPartitionInsert) {
+    val formattedOutputPath = if (staticPartitionOverwrite) {
       val defaultLocation = outputPath.suffix(
         "/" + PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)).toString
       customPartitionLocations.getOrElse(staticPartitions, defaultLocation)
     } else {
       outputPath
     }
-    hadoopConf.setBoolean(FileCommitProtocol.STATIC_PARTITION_INSERT, staticPartitionInsert)
+    hadoopConf.setBoolean(FileCommitProtocol.STATIC_PARTITION_OVERWRITE, staticPartitionOverwrite)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,

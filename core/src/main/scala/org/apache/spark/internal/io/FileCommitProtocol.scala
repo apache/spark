@@ -194,7 +194,7 @@ abstract class FileCommitProtocol extends Logging {
 
 object FileCommitProtocol extends Logging {
 
-  val STATIC_PARTITION_INSERT = "STATIC_PARTITION_INSERT"
+  val STATIC_PARTITION_OVERWRITE = "STATIC_PARTITION_INSERT"
 
   class TaskCommitMessage(val obj: Any) extends Serializable
 
