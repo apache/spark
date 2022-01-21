@@ -570,7 +570,7 @@ class SparkContext:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
-            self._accumulatorServer = None
+            self._accumulatorServer = None  # type: ignore[assignment]
         with SparkContext._lock:
             SparkContext._active_spark_context = None  # type: ignore[assignment]
 
@@ -1213,11 +1213,11 @@ class SparkContext:
         """
         if accum_param is None:
             if isinstance(value, int):
-                accum_param = accumulators.INT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.INT_ACCUMULATOR_PARAM)
             elif isinstance(value, float):
-                accum_param = accumulators.FLOAT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.FLOAT_ACCUMULATOR_PARAM)
             elif isinstance(value, complex):
-                accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.COMPLEX_ACCUMULATOR_PARAM)
             else:
                 raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
