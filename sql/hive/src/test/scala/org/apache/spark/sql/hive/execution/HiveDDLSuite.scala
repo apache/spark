@@ -2933,9 +2933,29 @@ class HiveDDLSuite
         val e = intercept[SparkException] {
           spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
             s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-        }
-        assert(e.getCause.getCause.getMessage.contains(
+        }.getCause.getCause.getMessage
+        assert(e.contains(
           "field ended by ';': expected ';' but got 'IF' at line 2:   optional int32 (IF"))
+      }
+    }
+  }
+
+  test("SPARK-36201: Add check for inner field of parquet/orc schema") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[SparkException] {
+          spark.sql(
+            s"""
+               |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
+               |STORED AS PARQUET
+               |SELECT
+               |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+               |FROM v
+               """.stripMargin)
+        }.getCause.getCause.getMessage
+        assert(e.contains("expected at the position 19 of " +
+          "'struct<ID:bigint,IF(ID=1,ID,0):bigint,B:bigint>' but '(' is found."))
       }
     }
   }
