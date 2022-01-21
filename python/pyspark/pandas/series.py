@@ -4599,7 +4599,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 raise TypeError()
             return_spark_type = sig_return.spark_type
             return_dtype = sig_return.dtype
-        except TypeError:
+        except (ValueError, TypeError):
             limit = ps.get_option("compute.shortcut_limit")
             pdf = combined.head(limit + 1)._to_internal_pandas()
             combined_pser = pdf.iloc[:, 0].combine(pdf.iloc[:, 1], func, fill_value=fill_value)
