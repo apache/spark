@@ -114,7 +114,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         shutil.rmtree(tmp_dir, ignore_errors=True)
-    except:
+    except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
         # this code is invoked from a thread other than the main thread.
@@ -133,7 +133,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                     if not re.match('[0-9]+', decoded_line):
                         print(decoded_line, end='')
                 per_test_output.close()
-        except:
+        except BaseException:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
             print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
@@ -156,7 +156,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                 assert SKIPPED_TESTS is not None
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
-        except:
+        except BaseException:
             import traceback
             print_red("\nGot an exception while trying to store "
                       "skipped test output:\n%s" % traceback.format_exc())
@@ -234,7 +234,7 @@ def _check_coverage(python_exec):
         subprocess_check_output(
             [python_exec, "-c", "import coverage"],
             stderr=open(os.devnull, 'w'))
-    except:
+    except BaseException:
         print_red("Coverage is not installed in Python executable '%s' "
                   "but 'COVERAGE_PROCESS_START' environment variable is set, "
                   "exiting." % python_exec)

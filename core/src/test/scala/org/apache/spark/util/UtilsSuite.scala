@@ -227,15 +227,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       try {
         // Get a handle on the buffered data, to make sure memory gets freed once we read past the
         // end of it. Need to use reflection to get handle on inner structures for this check
-        val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
-          assert(inputLength < limit)
-          mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
-        } else {
-          assert(inputLength >= limit)
-          val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
-          val fieldValue = getFieldValue(sequenceStream, "in")
-          assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
-          fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
+        val byteBufferInputStream = mergedStream match {
+          case stream: ChunkedByteBufferInputStream =>
+            assert(inputLength < limit)
+            stream
+          case _ =>
+            assert(inputLength >= limit)
+            val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
+            val fieldValue = getFieldValue(sequenceStream, "in")
+            assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
+            fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
         }
         (0 until inputLength).foreach { idx =>
           assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])

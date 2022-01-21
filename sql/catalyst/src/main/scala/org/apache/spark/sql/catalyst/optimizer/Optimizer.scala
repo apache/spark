@@ -684,7 +684,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
           left = maybePushLocalLimit(limitExpr, join.left),
           right = maybePushLocalLimit(limitExpr, join.right))
       case LeftSemi | LeftAnti if join.condition.isEmpty =>
-        join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+        join.copy(
+          left = maybePushLocalLimit(limitExpr, join.left),
+          right = maybePushLocalLimit(Literal(1, IntegerType), join.right))
       case _ => join
     }
   }
@@ -1049,11 +1051,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 }
 
 /**
- * Combines adjacent [[RepartitionOperation]] operators
+ * Combines adjacent [[RepartitionOperation]] and [[RebalancePartitions]] operators
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(REPARTITION_OPERATION), ruleId) {
+    _.containsAnyPattern(REPARTITION_OPERATION, REBALANCE_PARTITIONS), ruleId) {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
     // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
     //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
@@ -1066,6 +1068,14 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
     case r @ RepartitionByExpression(_, child @ (Sort(_, true, _) | _: RepartitionOperation), _) =>
+      r.withNewChildren(child.children)
+    // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
+    // RepartitionByExpression we can remove the child.
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation)) =>
+      r.withNewChildren(child.children)
+    // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
+    // child.
+    case r @ RebalancePartitions(_, child: RebalancePartitions) =>
       r.withNewChildren(child.children)
   }
 }
@@ -1363,13 +1373,13 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * 2) if the sort order is empty or the sort order does not have any reference
  * 3) if the Sort operator is a local sort and the child is already sorted
  * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
  * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
- *    is deterministic
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
+ *    and the Join condition is deterministic
  * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
- *    function is order irrelevant
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
+ *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -1409,6 +1419,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
+    case r: RebalancePartitions => r.partitionExpressions.forall(_.deterministic)
     case _: Repartition => true
     case _ => false
   }
@@ -1615,6 +1626,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Pivot => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
+    case _: RebalancePartitions => true
     case _: ScriptTransformation => true
     case _: Sort => true
     case _: BatchEvalPython => true

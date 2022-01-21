@@ -183,7 +183,7 @@ class ContextTests(unittest.TestCase):
     def test_parallelize_eager_cleanup(self):
         with SparkContext() as sc:
             temp_files = os.listdir(sc._temp_dir)
-            rdd = sc.parallelize([0, 1, 2])
+            sc.parallelize([0, 1, 2])
             post_parallelize_temp_files = os.listdir(sc._temp_dir)
             self.assertEqual(temp_files, post_parallelize_temp_files)
 
@@ -202,16 +202,16 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(SparkContext._active_spark_context, None)
 
     def test_with(self):
-        with SparkContext() as sc:
+        with SparkContext():
             self.assertNotEqual(SparkContext._active_spark_context, None)
         self.assertEqual(SparkContext._active_spark_context, None)
 
     def test_with_exception(self):
         try:
-            with SparkContext() as sc:
+            with SparkContext():
                 self.assertNotEqual(SparkContext._active_spark_context, None)
                 raise RuntimeError()
-        except:
+        except BaseException:
             pass
         self.assertEqual(SparkContext._active_spark_context, None)
 

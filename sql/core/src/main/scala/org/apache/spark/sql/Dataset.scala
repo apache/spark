@@ -684,7 +684,7 @@ class Dataset[T] private[sql](
       }
 
       if (eager) {
-        internalRdd.count()
+        internalRdd.doCheckpoint()
       }
 
       // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the

@@ -88,8 +88,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         right_gdf = self.spark.createDataFrame(right).groupby(col("id") % 2 == 0)
 
-        def merge_pandas(l, r):
-            return pd.merge(l[["k", "v"]], r[["k", "v2"]], on=["k"])
+        def merge_pandas(lft, rgt):
+            return pd.merge(lft[["k", "v"]], rgt[["k", "v2"]], on=["k"])
 
         result = (
             left_gdf.cogroup(right_gdf)
@@ -106,8 +106,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
 
-        def merge_pandas(l, r):
-            return pd.merge(l, r, on=["id", "k"])
+        def merge_pandas(lft, rgt):
+            return pd.merge(lft, rgt, on=["id", "k"])
 
         result = (
             left.groupby()
@@ -157,8 +157,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         self._test_with_key(self.data1, right, isLeft=False)
 
     def test_with_key_complex(self):
-        def left_assign_key(key, l, _):
-            return l.assign(key=key[0])
+        def left_assign_key(key, lft, _):
+            return lft.assign(key=key[0])
 
         result = (
             self.data1.groupby(col("id") % 2 == 0)
@@ -231,8 +231,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @staticmethod
     def _test_with_key(left, right, isLeft):
-        def right_assign_key(key, l, r):
-            return l.assign(key=key[0]) if isLeft else r.assign(key=key[0])
+        def right_assign_key(key, lft, rgt):
+            return lft.assign(key=key[0]) if isLeft else rgt.assign(key=key[0])
 
         result = (
             left.groupby("id")
@@ -248,8 +248,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @staticmethod
     def _test_merge(left, right, output_schema="id long, k int, v int, v2 int"):
-        def merge_pandas(l, r):
-            return pd.merge(l, r, on=["id", "k"])
+        def merge_pandas(lft, rgt):
+            return pd.merge(lft, rgt, on=["id", "k"])
 
         result = (
             left.groupby("id")

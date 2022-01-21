@@ -55,10 +55,6 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
 
     @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
-    @property
     def pser(self):
         return pd.Series([1, 2, 3], dtype="category")
 

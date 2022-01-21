@@ -23,8 +23,10 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.tags.SlowHiveTest
 
 // Disable AQE because metric info is different with AQE on/off
+@SlowHiveTest
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   with DisableAdaptiveExecutionSuite {
 

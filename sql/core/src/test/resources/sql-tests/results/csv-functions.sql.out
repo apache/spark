@@ -89,7 +89,7 @@ select schema_of_csv('1|abc', map('delimiter', '|'))
 -- !query schema
 struct<schema_of_csv(1|abc):string>
 -- !query output
-STRUCT<`_c0`: INT, `_c1`: STRING>
+STRUCT<_c0: INT, _c1: STRING>
 
 
 -- !query

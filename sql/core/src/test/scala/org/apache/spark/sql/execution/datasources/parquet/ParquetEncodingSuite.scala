@@ -16,12 +16,20 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.BigDecimal
+import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.TestUtils
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
@@ -43,12 +51,12 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     (1 :: 1000 :: Nil).foreach { n => {
       withTempPath { dir =>
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file.asInstanceOf[String], null)
+        reader.initialize(file, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -73,12 +81,12 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       withTempPath { dir =>
         val data = List.fill(n)(NULL_ROW).toDF
         data.repartition(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
-        reader.initialize(file.asInstanceOf[String], null)
+        reader.initialize(file, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -107,7 +115,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         // first page is dictionary encoded and the remaining two are plain encoded.
         val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
         data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).asScala.head
+        val file = TestUtils.listDirectory(dir).head
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
@@ -122,6 +130,92 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           assert(column.getUTF8String(3 * i + 2).toString == i.toString)
         }
         reader.close()
+      }
+    }
+  }
+
+  test("parquet v2 pages - delta encoding") {
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false"
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/test.parquet"
+
+        val data = (1 to 3).map { i =>
+          ( i, i.toLong, i.toShort, Array[Byte](i.toByte), s"test_${i}",
+            DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + i)),
+            DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + i)),
+            Period.of(1, i, 0), Duration.ofMillis(i * 100),
+            new BigDecimal(java.lang.Long.toUnsignedString(i*100000))
+          )
+        }
+
+        spark.createDataFrame(data)
+          .write.options(extraOptions).mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+        // Verify that indeed delta encoding is used for each column
+        assert(columnChunkMetadataList.length === 10)
+        assert(columnChunkMetadataList(0).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        // Both fixed-length byte array and variable-length byte array (also called BINARY)
+        // are use DELTA_BYTE_ARRAY for encoding
+        assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+        assert(columnChunkMetadataList(4).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+
+        assert(columnChunkMetadataList(5).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(6).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(7).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(8).getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
+        assert(columnChunkMetadataList(9).getEncodings.contains(Encoding.DELTA_BYTE_ARRAY))
+
+        val actual = spark.read.parquet(path).collect()
+        assert(actual.sortBy(_.getInt(0)) === data.map(Row.fromTuple));
+      }
+    }
+  }
+
+  test("parquet v2 pages - rle encoding for boolean value columns") {
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/test.parquet"
+        val size = 10000
+        val data = (1 to size).map { i => (true, false, i % 2 == 1) }
+
+        spark.createDataFrame(data)
+          .write.options(extraOptions).mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+        // Verify that indeed rle encoding is used for each column
+        assert(columnChunkMetadataList.length === 3)
+        assert(columnChunkMetadataList.head.getEncodings.contains(Encoding.RLE))
+        assert(columnChunkMetadataList(1).getEncodings.contains(Encoding.RLE))
+        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.RLE))
+
+        val actual = spark.read.parquet(path).collect()
+        assert(actual.length == size)
+        assert(actual.map(_.getBoolean(0)).forall(_ == true))
+        assert(actual.map(_.getBoolean(1)).forall(_ == false))
+        val excepted = (1 to size).map { i => i % 2 == 1 }
+        assert(actual.map(_.getBoolean(2)).sameElements(excepted))
       }
     }
   }

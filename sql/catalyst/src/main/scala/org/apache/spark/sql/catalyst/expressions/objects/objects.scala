@@ -240,6 +240,8 @@ object SerializerSupport {
  *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
  */
 case class StaticInvoke(
     staticObject: Class[_],
@@ -248,7 +250,8 @@ case class StaticInvoke(
     arguments: Seq[Expression] = Nil,
     inputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
-    returnNullable: Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true,
+    isDeterministic: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -259,6 +262,7 @@ case class StaticInvoke(
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   @transient lazy val method = findMethod(cls, functionName, argClasses)
@@ -340,6 +344,8 @@ case class StaticInvoke(
  *                      without invoking the function.
  * @param returnNullable When false, indicating the invoked method will always return
  *                       non-null value.
+ * @param isDeterministic Whether the method invocation is deterministic or not. If false, Spark
+ *                        will not apply certain optimizations such as constant folding.
  */
 case class Invoke(
     targetObject: Expression,
@@ -348,12 +354,14 @@ case class Invoke(
     arguments: Seq[Expression] = Nil,
     methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable : Boolean = true,
+    isDeterministic: Boolean = true) extends InvokeLike {
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
+  override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
   override def inputTypes: Seq[AbstractDataType] =
     if (methodInputTypes.nonEmpty) {
       Seq(targetObject.dataType) ++ methodInputTypes
