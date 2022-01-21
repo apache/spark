@@ -23,8 +23,44 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.NumberFormatter
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
+
+abstract class NumberFormatterBase
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
+  protected lazy val numberFormatter = new NumberFormatter(numberFormat, isParse)
+  def isParse: Boolean
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      if (right.foldable) {
+        numberFormatter.check()
+      } else {
+        TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
+      }
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val builder =
+      ctx.addReferenceObj("numberFormatter", numberFormatter, classOf[NumberFormatter].getName)
+    val methodName = if (isParse) "parse" else "format"
+    val eval = left.genCode(ctx)
+    ev.copy(code =
+      code"""
+        |${eval.code}
+        |boolean ${ev.isNull} = ${eval.isNull};
+        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        |if (!${ev.isNull}) {
+        |  ${ev.value} = $builder.$methodName(${eval.value});
+        |}
+      """.stripMargin)
+  }
+}
 
 /**
  * A function that converts string to numeric.
@@ -54,28 +90,12 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   since = "3.3.0",
   group = "string_funcs")
-case class ToNumber(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
-  private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new NumberFormatter(numberFormat)
+case class ToNumber(left: Expression, right: Expression) extends NumberFormatterBase {
+  val isParse: Boolean = true
 
   override def dataType: DataType = numberFormatter.parsedDecimalType
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val inputTypeCheck = super.checkInputDataTypes()
-    if (inputTypeCheck.isSuccess) {
-      if (right.foldable) {
-        numberFormatter.check()
-      } else {
-        TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
-      }
-    } else {
-      inputTypeCheck
-    }
-  }
 
   override def prettyName: String = "to_number"
 
@@ -84,22 +104,58 @@ case class ToNumber(left: Expression, right: Expression)
     numberFormatter.parse(input)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val builder =
-      ctx.addReferenceObj("builder", numberFormatter, classOf[NumberFormatter].getName)
-    val eval = left.genCode(ctx)
-    ev.copy(code =
-      code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $builder.parse(${eval.value});
-        |}
-      """.stripMargin)
-  }
-
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ToNumber = copy(left = newLeft, right = newRight)
 }
 
+/**
+ * A function that converts numeric to string.
+ */
+@ExpressionDescription(
+  usage = """
+     _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
+       The format can consist of the following characters:
+         '0' or '9':  digit position. 0 specifies a digit position that will always be printed,
+                      even if it contains a leading/trailing zero. 9 also specifies a digit
+                      position, but if it is a leading 9 then it will be replaced by a space,
+                      while if it is a trailing 9 then it will be printed.
+         '.' or 'D':  decimal point (only allowed once)
+         ',' or 'G':  group (thousands) separator. If you supply a number format with multiple
+                      grouping characters, the interval between the last one and the end of the
+                      integer is the one that is used.
+         '-' or 'S':  sign anchored to number (only allowed once)
+         '$':  value with a leading dollar sign (only allowed once)
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(454, '999');
+       '454'
+      > SELECT _FUNC_(454.00, '000D00');
+       '454.00'
+      > SELECT _FUNC_(12454, '99G999');
+       '12,454'
+      > SELECT _FUNC_(78.12, '$99.99');
+       '$78.12'
+      > SELECT _FUNC_(-12454.8, '99G999D9S');
+       '12,454.8-'
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class ToCharacter(left: Expression, right: Expression) extends NumberFormatterBase {
+  val isParse: Boolean = false
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringType)
+
+  override def prettyName: String = "to_char"
+
+  override def nullSafeEval(decimal: Any, format: Any): Any = {
+    val input = decimal.asInstanceOf[Decimal]
+    numberFormatter.format(input)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ToCharacter =
+    copy(left = newLeft, right = newRight)
+}

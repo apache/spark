@@ -21,7 +21,6 @@ import java.math.BigDecimal
 import java.text.{DecimalFormat, ParsePosition}
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DecimalType}
@@ -65,6 +64,10 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
     val scale = if (formatSplits.length == 2) formatSplits.last.length else 0
     (precision, scale)
   }
+
+  private lazy val digitsNumber = precision + scale
+
+  private lazy val integerDigitsNumber = precision - scale
 
   def parsedDecimalType: DecimalType = DecimalType(precision, scale)
 
@@ -192,8 +195,7 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
   /**
    * Convert numeric to string based on the given number format.
    * The format can consist of the following characters:
-   * '9': digit position (can be dropped if insignificant)
-   * '0': digit position (will not be dropped, even if insignificant)
+   * '0' or '9': digit position
    * '.' or 'D': decimal point (only allowed once)
    * ',' or 'G': group (thousands) separator
    * '-' or 'S': sign anchored to number (only allowed once)
@@ -203,41 +205,47 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
    * @param numberFormat the format string
    * @return The string after formatting input decimal
    */
-  def format(input: Decimal): String = {
+  def format(input: Decimal): UTF8String = {
     val bigDecimal = input.toJavaBigDecimal
     val decimalPlainStr = bigDecimal.toPlainString
     if (decimalPlainStr.length > transformedFormat.length) {
-      transformedFormat.replaceAll("0", POUND_SIGN_STRING)
+      val poundStr = transformedFormat.replaceAll("0", POUND_SIGN_STRING)
+      UTF8String.fromString(poundStr)
     } else {
-      var resultStr = numberDecimalFormat.format(bigDecimal)
-      // Since we trimmed the comma at the beginning or end of number format in function
-      // `normalize`, we restore the comma to the result here.
-      // For example, if the specified number format is "99,999," or ",999,999", function
-      // `normalize` normalize them to "##,###" or "###,###".
-      // new DecimalFormat("##,###").parse(12454) and new DecimalFormat("###,###").parse(124546)
-      // will return "12,454" and "124,546" respectively. So we add ',' at the end and head of
-      // the result, then the final output are "12,454," or ",124,546".
-      if (originNumberFormat.last == COMMA_SIGN || originNumberFormat.last == COMMA_LETTER) {
-        resultStr = resultStr + COMMA_SIGN
-      }
-      if (originNumberFormat.charAt(0) == COMMA_SIGN ||
-        originNumberFormat.charAt(0) == COMMA_LETTER) {
-        resultStr = COMMA_SIGN + resultStr
-      }
+      try {
+        var resultStr = numberDecimalFormat.format(bigDecimal)
+        // Since we trimmed the comma at the beginning or end of number format in function
+        // `normalize`, we restore the comma to the result here.
+        // For example, if the specified number format is "99,999," or ",999,999", function
+        // `normalize` normalize them to "##,###" or "###,###".
+        // new DecimalFormat("##,###").format(12454) and new DecimalFormat("###,###")
+        // .format(124546) will return "12,454" and "124,546" respectively. So we add ',' at the
+        // end and head of the result, then the final output are "12,454," or ",124,546".
+        if (originNumberFormat.last == COMMA_SIGN || originNumberFormat.last == COMMA_LETTER) {
+          resultStr = resultStr + COMMA_SIGN
+        }
+        if (decimalPlainStr.length >= digitsNumber &&
+          (originNumberFormat.charAt(0) == COMMA_SIGN ||
+            originNumberFormat.charAt(0) == COMMA_LETTER)) {
+          resultStr = COMMA_SIGN + resultStr
+        }
 
-      resultStr
-    }
-  }
-}
+        // For example, if the specified number format is "9999" or "99999", function
+        // `normalize` normalize them to "####" or "#####".
+        // new DecimalFormat("####").format(124) and new DecimalFormat("#####").format(124)
+        // will return "124" and "124" respectively. So we add ' ' at the head of
+        // the result, then the final output are " 124" or "  124".
+        val integerDigits = resultStr.split(POINT_SIGN).head.length
+        if (integerDigitsNumber > integerDigits) {
+          val leadingSpace = 0.until(integerDigitsNumber - integerDigits).map(_ => ' ').mkString
+          resultStr = leadingSpace + resultStr
+        }
 
-// Visible for testing
-class TestNumberFormatter(originNumberFormat: String, isParse: Boolean = true)
-  extends NumberFormatter(originNumberFormat, isParse) {
-  def checkWithException(): Unit = {
-    check() match {
-      case TypeCheckResult.TypeCheckFailure(message) =>
-        throw new AnalysisException(message)
-      case _ =>
+        UTF8String.fromString(resultStr)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw QueryExecutionErrors.invalidNumberFormatError(decimalPlainStr, originNumberFormat)
+      }
     }
   }
 }

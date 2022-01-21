@@ -1058,6 +1058,167 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("ToCharacter") {
+    ToCharacter(Decimal(454), Literal("")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Number format cannot be empty"))
+    }
+    ToCharacter(Decimal(454), NonFoldableLiteral.create("999", StringType))
+      .checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Format expression must be foldable"))
+    }
+
+    // Test '0' and '9'
+    Seq(
+      (Decimal(454), "0") -> "#",
+      (Decimal(454), "00") -> "##",
+      (Decimal(454), "000") -> "454"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+      val format2 = format.replace('0', '9')
+      checkEvaluation(ToCharacter(decimal, Literal(format2)), expected)
+    }
+
+    Seq(
+      (Decimal(454), "0000") -> "0454",
+      (Decimal(454), "00000") -> "00454",
+      (Decimal(454), "9999") -> " 454",
+      (Decimal(454), "99999") -> "  454"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    // Test '.' and 'D'
+    Seq(
+      (Decimal(454.2), "000.0") -> "454.2",
+      (Decimal(454), "000.0") -> "454.0",
+      (Decimal(454.2), "000.00") -> "454.20",
+      (Decimal(454), "000.00") -> "454.00",
+      (Decimal(0.4542), ".0000") -> ".####",
+      (Decimal(4542), "0000.") -> "4542.",
+      (Decimal(0.4542), ".00000") -> ".45420"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+      val format2 = format.replace('0', '9')
+      checkEvaluation(ToCharacter(decimal, Literal(format2)), expected)
+      val format3 = format.replace('.', 'D')
+      checkEvaluation(ToCharacter(decimal, Literal(format3)), expected)
+      val format4 = format3.replace('0', '9')
+      checkEvaluation(ToCharacter(decimal, Literal(format4)), expected)
+    }
+
+    Seq(
+      (Decimal(454.2), "0000.00") -> "0454.20",
+      (Decimal(454), "0000.00") -> "0454.00",
+      (Decimal(4542), "00000.") -> "04542.",
+      (Decimal(454.2), "9999.99") -> " 454.20",
+      (Decimal(454), "9999.99") -> " 454.00",
+      (Decimal(4542), "99999.") -> " 4542."
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    Seq("999.9.9", "999D9D9", "999.9D9", "999D9.9").foreach { str =>
+      ToCharacter(Decimal(454.3), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"At most one 'D' or '.' is allowed in the number format: '$str'"))
+      }
+    }
+
+    // Test ',' and 'G'
+    Seq(
+      (Decimal(12454), "00,000") -> "12,454",
+      (Decimal(12454367), "00,000,000") -> "12,454,367",
+      (Decimal(12454), "00,000,") -> "12,454,",
+      (Decimal(454367), ",000,000") -> ",454,367"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+      val format2 = format.replace('0', '9')
+      checkEvaluation(ToCharacter(decimal, Literal(format2)), expected)
+      val format3 = format.replace(',', 'G')
+      checkEvaluation(ToCharacter(decimal, Literal(format3)), expected)
+      val format4 = format3.replace('0', '9')
+      checkEvaluation(ToCharacter(decimal, Literal(format4)), expected)
+    }
+
+    // TODO Make to_char supports variable grouping size.
+    Seq(
+      (Decimal(12454), "000,000") -> "012,454",
+      (Decimal(12454), "00,0000") -> "01,2454",
+      (Decimal(12454367), "000,000,000") -> "012,454,367",
+      (Decimal(12454367), "00,000,0000") -> "0,1245,4367",
+      (Decimal(12454), "000,000,") -> "012,454,",
+      (Decimal(12454), "00,000,0") -> "0,1,2,4,5,4",
+      (Decimal(454367), ",0000,000") -> "0,454,367",
+      (Decimal(454367), ",000,0000") -> "045,4367",
+      (Decimal(12454), "999,999") -> "12,454",
+      (Decimal(12454), "99,9999") -> "1,2454",
+      (Decimal(12454367), "999,999,999") -> "12,454,367",
+      (Decimal(12454367), "99,999,9999") -> "1245,4367",
+      (Decimal(12454), "999,999,") -> "12,454,",
+      (Decimal(12454), "99,999,9") -> "1,2,4,5,4",
+      (Decimal(454367), ",9999,999") -> "454,367",
+      (Decimal(454367), ",999,9999") -> "45,4367"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    // Test '$'
+    Seq(
+      (Decimal(78.12), "$99.99") -> "$78.12",
+      (Decimal(78.12), "$00.00") -> "$78.12",
+      (Decimal(78.12), "99.99$") -> "78.12$",
+      (Decimal(78.12), "00.00$") -> "78.12$"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    ToCharacter(Decimal(78.12), Literal("$99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one '$' is allowed in the number format: '$99$.99'"))
+    }
+    ToCharacter(Decimal(78.12), Literal("99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'$' must be the first or last char in the number format: '99$.99'"))
+    }
+
+    // Test '-' and 'S'
+    Seq(
+      (Decimal(-454), "999-") -> "454-",
+      (Decimal(-454), "-999") -> "-454",
+      (Decimal(-12454.8), "99G999D9-") -> "12,454.8-"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+      val format2 = format.replace('9', '0')
+      checkEvaluation(ToCharacter(decimal, Literal(format2)), expected)
+      val format3 = format.replace('-', 'S')
+      checkEvaluation(ToCharacter(decimal, Literal(format3)), expected)
+      val format4 = format2.replace('-', 'S')
+      checkEvaluation(ToCharacter(decimal, Literal(format4)), expected)
+    }
+
+    Seq(
+      (Decimal(-454.8), "99G999.9-") -> "  454.8-",
+      (Decimal(-454.8), "00G000.0-") -> "00,454.8-"
+    ).foreach { case ((decimal, format), expected) =>
+      checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    ToCharacter(Decimal(454.3), Literal("999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one 'S' or '-' is allowed in the number format: '999D9SS'"))
+    }
+
+    Seq("9S99", "9-99").foreach { str =>
+      ToCharacter(Decimal(-454), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(
+            s"'S' or '-' must be the first or last char in the number format: '$str'"))
+      }
+    }
+  }
+
   test("find in set") {
     checkEvaluation(
       FindInSet(Literal.create(null, StringType), Literal.create(null, StringType)), null)

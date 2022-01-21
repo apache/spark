@@ -167,6 +167,16 @@ select to_number('-454', 'S000');
 select to_number('12,454.8-', '00,000.9-');
 select to_number('00,454.8-', '00,000.9-');
 
+-- to_char
+select to_char(454, '000');
+select to_char(454.2, '000.0');
+select to_char(12454, '00,000');
+select to_char(78.12, '$00.00');
+select to_char(-454, '-000');
+select to_char(-454, 'S000');
+select to_char(-12454.8, '00,000.9-');
+select to_char(-454.8, '00,000.9-');
+
 -- to_binary
 select to_binary('abc');
 select to_binary('abc', 'utf-8');

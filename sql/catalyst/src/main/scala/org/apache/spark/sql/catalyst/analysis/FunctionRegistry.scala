@@ -518,6 +518,7 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
     expression[ToNumber]("to_number"),
+    expression[ToCharacter]("to_char"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),

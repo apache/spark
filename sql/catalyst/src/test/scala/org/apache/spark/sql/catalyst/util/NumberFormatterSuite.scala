@@ -18,22 +18,23 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 class NumberFormatterSuite extends SparkFunSuite {
 
   private def invalidNumberFormat(numberFormat: String, errorMsg: String): Unit = {
-    val testNumberFormatter = new TestNumberFormatter(numberFormat)
-    val e = intercept[AnalysisException](testNumberFormatter.checkWithException())
-    assert(e.getMessage.contains(errorMsg))
+    val numberFormatter = new NumberFormatter(numberFormat)
+    val typeCheckResult = numberFormatter.check()
+    assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
+    assert(typeCheckResult.asInstanceOf[TypeCheckFailure].message.contains(errorMsg))
   }
 
   private def failParseWithInvalidInput(
       input: UTF8String, numberFormat: String, errorMsg: String): Unit = {
-    val testNumberFormatter = new TestNumberFormatter(numberFormat)
-    val e = intercept[IllegalArgumentException](testNumberFormatter.parse(input))
+    val numberFormatter = new NumberFormatter(numberFormat)
+    val e = intercept[IllegalArgumentException](numberFormatter.parse(input))
     assert(e.getMessage.contains(errorMsg))
   }
 
@@ -57,9 +58,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       ("404", "9999") -> Decimal(404),
       ("450", "9999") -> Decimal(450)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     failParseWithInvalidInput(UTF8String.fromString("454"), "0",
@@ -78,9 +79,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       ("404", "0000") -> Decimal(404),
       ("450", "0000") -> Decimal(450)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     // Test '.' and 'D'
@@ -115,9 +116,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       ("4542.", "9999D") -> Decimal(4542),
       ("4542.", "0000D") -> Decimal(4542)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     invalidNumberFormat(
@@ -152,9 +153,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (",454,367", "999G999") -> Decimal(454367),
       (",454,367", "000G000") -> Decimal(454367)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     // Test '$'
@@ -164,9 +165,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       ("78.12$", "99.99$") -> Decimal(78.12),
       ("78.12$", "00.00$") -> Decimal(78.12)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     invalidNumberFormat(
@@ -186,9 +187,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       ("12,454.8-", "99G999D9S") -> Decimal(-12454.8),
       ("00,454.8-", "99G999.9S") -> Decimal(-454.8)
     ).foreach { case ((str, format), expected) =>
-      val builder = new TestNumberFormatter(format)
-      builder.check()
-      assert(builder.parse(UTF8String.fromString(str)) === expected)
+      val numberFormatter = new NumberFormatter(format)
+      numberFormatter.check()
+      assert(numberFormatter.parse(UTF8String.fromString(str)) === expected)
     }
 
     invalidNumberFormat(
@@ -224,9 +225,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(404), "0000") -> "0404",
       (Decimal(450), "0000") -> "0450"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format, false)
-      builder.check()
-      assert(builder.format(decimal) === expected)
+      val numberFormatter = new NumberFormatter(format, false)
+      numberFormatter.check()
+      assert(numberFormatter.format(decimal) === UTF8String.fromString(expected))
     }
 
     // Test '.' and 'D'
@@ -252,9 +253,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(4542), "9999D") -> "4542.",
       (Decimal(4542), "0000D") -> "4542."
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format, false)
-      builder.check()
-      assert(builder.format(decimal) === expected)
+      val numberFormatter = new NumberFormatter(format, false)
+      numberFormatter.check()
+      assert(numberFormatter.format(decimal) === UTF8String.fromString(expected))
     }
 
     // Test ',' and 'G'
@@ -276,9 +277,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(454367), "G999G999") -> ",454,367",
       (Decimal(454367), "G000G000") -> ",454,367"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format, false)
-      builder.check()
-      assert(builder.format(decimal) === expected)
+      val numberFormatter = new NumberFormatter(format, false)
+      numberFormatter.check()
+      assert(numberFormatter.format(decimal) === UTF8String.fromString(expected))
     }
 
     // Test '$'
@@ -288,9 +289,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(78.12), "99.99$") -> "78.12$",
       (Decimal(78.12), "00.00$") -> "78.12$"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format, false)
-      builder.check()
-      assert(builder.format(decimal) === expected)
+      val numberFormatter = new NumberFormatter(format, false)
+      numberFormatter.check()
+      assert(numberFormatter.format(decimal) === UTF8String.fromString(expected))
     }
 
     // Test '-' and 'S'
@@ -306,9 +307,9 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(-12454.8), "99G999D9S") -> "12,454.8-",
       (Decimal(-454.8), "99G999.9S") -> "454.8-"
     ).foreach { case ((decimal, format), expected) =>
-      val builder = new TestNumberFormatter(format, false)
-      builder.check()
-      assert(builder.format(decimal) === expected)
+      val numberFormatter = new NumberFormatter(format, false)
+      numberFormatter.check()
+      assert(numberFormatter.format(decimal) === UTF8String.fromString(expected))
     }
   }
 
