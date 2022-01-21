@@ -32,8 +32,7 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
   with command.TestsV1AndV2Commands {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
-  override protected def namespaceAlias(): String =
-    if (conf.useV1Command) "database" else "namespace"
+  override protected def namespaceAlias(): String = "database"
 
   test("drop default namespace") {
     val message = intercept[AnalysisException] {
