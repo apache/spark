@@ -5294,7 +5294,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # +-----------------+----------------------------------+
 
         sdf = sdf.withColumn("combined_cols", F.array(columns)).drop(*columns)
-        print(sdf.schema)
         # After explode
         # +-----------------+---------------+
         # |__index_level_0__|         values|
