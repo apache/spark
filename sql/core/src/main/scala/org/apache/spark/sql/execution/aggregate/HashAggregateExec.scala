@@ -417,6 +417,8 @@ case class HashAggregateExec(
     }
   }
 
+  protected override def hasAggBuild: Boolean = true
+
   protected override def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     if (conf.enableTwoLevelAggMap) {

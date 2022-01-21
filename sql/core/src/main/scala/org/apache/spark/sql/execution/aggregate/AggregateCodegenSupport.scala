@@ -48,6 +48,12 @@ trait AggregateCodegenSupport
   private var bufVars: Seq[Seq[ExprCode]] = _
 
   /**
+   * Whether this operator has an aggregate build phase.
+   * Only [[HashAggregateExec]] has build phase now.
+   */
+  protected def hasAggBuild: Boolean
+
+  /**
    * The generated code for `doProduce` call when aggregate has grouping keys.
    */
   protected def doProduceWithKeys(ctx: CodegenContext): String
@@ -154,14 +160,23 @@ trait AggregateCodegenSupport
        """.stripMargin)
 
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val aggTime = metricTerm(ctx, "aggTime")
-    val beforeAgg = ctx.freshName("beforeAgg")
+    val doAggWithRecordMetric =
+      if (hasAggBuild) {
+        val aggTime = metricTerm(ctx, "aggTime")
+        val beforeAgg = ctx.freshName("beforeAgg")
+        s"""
+           |long $beforeAgg = System.nanoTime();
+           |$doAggFuncName();
+           |$aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+         """.stripMargin
+      } else {
+        s"$doAggFuncName();"
+      }
+
     s"""
        |while (!$initAgg) {
        |  $initAgg = true;
-       |  long $beforeAgg = System.nanoTime();
-       |  $doAggFuncName();
-       |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+       |  $doAggWithRecordMetric
        |
        |  // output the result
        |  ${genResult.trim}
