@@ -33,7 +33,9 @@ trait CommandSuiteBase extends SharedSparkSession {
   def catalogVersion: String = "V2" // The catalog version is added to test names
   def commandVersion: String = "V2" // The command version is added to test names
   def catalog: String = "test_catalog" // The default V2 catalog for testing
-  def defaultUsing: String = "USING _" // The clause is used in creating v2 tables under testing
+  def defaultProvider: String = "_"
+  // The clause is used in creating v2 tables under testing
+  def defaultUsing: String = s"USING $defaultProvider"
 
   // V2 catalogs created and used especially for testing
   override def sparkConf: SparkConf = super.sparkConf

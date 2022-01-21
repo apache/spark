@@ -593,7 +593,7 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
     if (header) {
       append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
     }
-    schema.foreach { column =>
+    schema.sortBy(_.name).foreach { column =>
       append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }

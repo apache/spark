@@ -60,7 +60,7 @@ case class DescribeTableExec(
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.schema.map{ column =>
+    rows ++= table.schema.sortBy(_.name).map { column =>
       toCatalystRow(
         column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
     }
