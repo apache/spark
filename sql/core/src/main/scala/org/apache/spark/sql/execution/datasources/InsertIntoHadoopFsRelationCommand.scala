@@ -120,7 +120,7 @@ case class InsertIntoHadoopFsRelationCommand(
     } else {
       qualifiedOutputPath
     }
-    hadoopConf.setBoolean("spark.sql.staticPartitionInsert", staticPartitionInsert)
+    hadoopConf.setBoolean(FileCommitProtocol.STATIC_PARTITION_INSERT, staticPartitionInsert)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,

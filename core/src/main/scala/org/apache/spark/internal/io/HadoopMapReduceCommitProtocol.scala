@@ -141,7 +141,7 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      if (!conf.getBoolean("spark.sql.staticPartitionInsert", false)) {
+      if (!conf.getBoolean(STATIC_PARTITION_INSERT, false)) {
         new Path(new Path(stagingDir, d), filename).toString
       } else {
         new Path(stagingDir, filename).toString
