@@ -844,7 +844,7 @@ class HiveDDLSuite
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
       // The table property is case sensitive. Thus, external is allowed
-      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('External' = 'TRUE')")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
