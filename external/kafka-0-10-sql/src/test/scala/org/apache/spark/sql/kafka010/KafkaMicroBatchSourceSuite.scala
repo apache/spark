@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -193,6 +193,45 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       throw q.exception.get
     }
     true
+  }
+
+  test("Trigger.AvailableNow") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    testUtils.sendMessages(topic, (0 until 15).map { case x =>
+      s"foo-$x"
+    }.toArray, Some(0))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("maxOffsetsPerTrigger", 5)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    var index: Int = 0
+    def startTriggerAvailableNowQuery(): StreamingQuery = {
+      reader.writeStream
+        .foreachBatch((_: Dataset[Row], _: Long) => {
+          index += 1
+        })
+        .trigger(Trigger.AvailableNow)
+        .start()
+    }
+
+    val query = startTriggerAvailableNowQuery()
+    try {
+      assert(query.awaitTermination(streamingTimeout.toMillis))
+    } finally {
+      query.stop()
+    }
+
+    // should have 3 batches now i.e. 15 / 5 = 3
+    assert(index == 3)
   }
 
   test("(de)serialization of initial offsets") {
