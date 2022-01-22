@@ -140,7 +140,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void channelInactive() {
-    if (numOutstandingRequests() > 0) {
+    if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
@@ -150,7 +150,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void exceptionCaught(Throwable cause) {
-    if (numOutstandingRequests() > 0) {
+    if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
@@ -273,6 +273,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   public int numOutstandingRequests() {
     return outstandingFetches.size() + outstandingRpcs.size() + streamCallbacks.size() +
       (streamActive ? 1 : 0);
+  }
+
+  /** Check if there are any outstanding requests (fetch requests + rpcs) */
+  public Boolean hasOutstandingRequests() {
+    return streamActive || outstandingFetches.size() > 0 || outstandingRpcs.size() > 0
+        || streamCallbacks.size() > 0;
   }
 
   /** Returns the time in nanoseconds of when the last request was sent out. */
