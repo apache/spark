@@ -89,7 +89,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
     // Drop non empty namespace with cascade
     assert(catalog.namespaceExists(Array("foo")) === true)
-    catalog.dropNamespace(Array("foo"), cascade = false)
+    catalog.dropNamespace(Array("foo"), cascade = true)
     assert(catalog.namespaceExists(Array("foo")) === false)
   }
 }
