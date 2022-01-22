@@ -39,7 +39,6 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     implements VectorizedValuesReader, RequiresPreviousReader {
 
   private final MemoryMode memoryMode;
-  private int valueCount;
   private final VectorizedDeltaBinaryPackedReader prefixLengthReader =
       new VectorizedDeltaBinaryPackedReader();
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
@@ -49,7 +48,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private int currentRow = 0;
 
   //temporary variable used by getBinary
-  Binary binaryVal;
+  private Binary binaryVal;
 
   VectorizedDeltaByteArrayReader(MemoryMode memoryMode){
     this.memoryMode = memoryMode;
@@ -58,7 +57,6 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    this.valueCount = valueCount;
     if (memoryMode == MemoryMode.OFF_HEAP) {
       prefixLengthVector = new OffHeapColumnVector(valueCount, IntegerType);
       suffixVector = new OffHeapColumnVector(valueCount, BinaryType);
