@@ -27,8 +27,9 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
-import java.util.{Locale, Properties, Random, UUID}
+import java.util.{EnumSet, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
@@ -49,6 +50,7 @@ import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
+import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipFile}
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -597,7 +599,7 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
-      FileUtil.unZip(source, dest)
+      unZip(source, dest)
     } else if (
       lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
       FileUtil.unTar(source, dest)
@@ -605,6 +607,66 @@ private[spark] object Utils extends Logging {
       logWarning(s"Cannot unpack $source, just copying it to $dest.")
       copyRecursive(source, dest)
     }
+  }
+
+  def unZip(inFile: File, unzipDir: File): Unit = {
+    val zipFile = new ZipFile(inFile)
+    try {
+      val entries = zipFile.getEntries
+      val targetDirPath = unzipDir.getCanonicalPath + File.separator
+      while ({entries.hasMoreElements}) {
+        val entry: ZipArchiveEntry = entries.nextElement
+        if (!entry.isDirectory) {
+          val in = zipFile.getInputStream(entry)
+          try {
+            val file = new File(unzipDir, entry.getName)
+            if (!file.getCanonicalPath.startsWith(targetDirPath)) {
+              throw new IOException(
+                "expanding " + entry.getName + " would create file outside of " + unzipDir
+              )
+            }
+            if (!file.getParentFile.mkdirs && !file.getParentFile.isDirectory) {
+              throw new IOException("Mkdirs failed to create " + file.getParentFile.toString)
+            }
+
+            val out = Files.newOutputStream(file.toPath)
+            try {
+              val buffer = new Array[Byte](8192)
+              var len = 0
+              while ({len = in.read(buffer); len} != -1) {
+                out.write(buffer, 0, len)
+              }
+            }
+            finally {
+              out.close()
+              if (entry.getPlatform == ZipArchiveEntry.PLATFORM_UNIX) {
+                Files.setPosixFilePermissions(file.toPath, permissionsFromMode(entry.getUnixMode))
+              }
+            }
+          } finally in.close()
+        }
+      }
+    } finally zipFile.close()
+  }
+
+  /** The permission to store each file */
+  def permissionsFromMode(mode: Int): java.util.Set[PosixFilePermission] = {
+    val permissions =
+      EnumSet.noneOf(classOf[PosixFilePermission])
+    addPermissions(permissions, "OTHERS", mode.toLong)
+    addPermissions(permissions, "GROUP", (mode >> 3).toLong)
+    addPermissions(permissions, "OWNER", (mode >> 6).toLong)
+    permissions
+  }
+
+  /** Assign the original permissions to the file */
+  def addPermissions(
+      permissions: java.util.Set[PosixFilePermission],
+      prefix: String,
+      mode: Long): Unit = {
+    if ((mode & 1L) == 1L) permissions.add(PosixFilePermission.valueOf(prefix + "_EXECUTE"))
+    if ((mode & 2L) == 2L) permissions.add(PosixFilePermission.valueOf(prefix + "_WRITE"))
+    if ((mode & 4L) == 4L) permissions.add(PosixFilePermission.valueOf(prefix + "_READ"))
   }
 
   /** Records the duration of running `body`. */

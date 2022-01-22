@@ -31,6 +31,7 @@ import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.io.Files
+import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
@@ -701,6 +702,77 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       // Best effort at undoing changes this test made.
       Utils.setLogLevel(current)
     }
+  }
+
+  test("unZip") {
+    def zipFile(srcFiles: Array[File], zipFile: File): Unit = {
+      assert(!zipFile.exists())
+      zipFile.createNewFile()
+      var fileOutputStream: FileOutputStream = null
+      var zipOutputStream: ZipArchiveOutputStream = null
+      var fileInStream: FileInputStream = null
+
+      try {
+        fileOutputStream = new FileOutputStream(zipFile)
+        zipOutputStream = new ZipArchiveOutputStream(fileOutputStream)
+        var zipEntry: ZipArchiveEntry = null
+        for (i <- 0 until srcFiles.length) {
+          fileInStream = new FileInputStream(srcFiles(i))
+          zipEntry = new ZipArchiveEntry(srcFiles(i).getName)
+          // Assign permissions to files to be decompressed
+          zipEntry.setUnixMode(866)
+          zipOutputStream.putArchiveEntry(zipEntry)
+          var len = 0
+          val buffer = new Array[Byte](1024)
+          while ({len = fileInStream.read(buffer); len} != -1) {
+            zipOutputStream.write(buffer, 0, len)
+          }
+        }
+      } catch {
+        case e: IOException => e.printStackTrace()
+      } finally {
+        zipOutputStream.closeArchiveEntry()
+        zipOutputStream.close()
+        fileInStream.close()
+        fileOutputStream.close()
+      }
+    }
+
+    val tempDir = Utils.createTempDir()
+    assert(tempDir.isDirectory)
+    val sourceDir = new File(tempDir, "source-dir")
+    assert(tempDir.exists())
+    sourceDir.mkdir()
+    val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
+    assert(innerSourceDir.isDirectory)
+    val sourceFile = File.createTempFile("tmp", "tmp", innerSourceDir)
+    Files.write("file", sourceFile, UTF_8)
+    assert(sourceFile.exists())
+    val sourceSecondFile = File.createTempFile("tmp2", "tmp2", innerSourceDir)
+    Files.write("second file", sourceSecondFile, UTF_8)
+    assert(sourceSecondFile.exists())
+    val files = new Array[File](2)
+    files(0) = sourceFile
+    files(1) = sourceSecondFile
+    val targetZip = new File(tempDir, "target-dir.zip")
+    // Compress the file into ZIP format
+    zipFile(files, targetZip)
+    assert(targetZip.exists())
+
+    val targetDir = new File(tempDir, "target-dir")
+    Utils.unZip(targetZip, targetDir)
+    assert(targetDir.exists())
+
+    // The file permissions must be the same as before the decompression
+    val targetFiles = targetDir.listFiles()
+    // The permissions of the two files are the same to avoid contingency
+    assert(targetFiles.length === 2)
+    assert(targetFiles(0).canRead === true)
+    assert(targetFiles(0).canWrite === false)
+    assert(targetFiles(0).canExecute === true)
+    assert(targetFiles(1).canRead === true)
+    assert(targetFiles(1).canWrite === false)
+    assert(targetFiles(1).canExecute === true)
   }
 
   test("deleteRecursively") {
