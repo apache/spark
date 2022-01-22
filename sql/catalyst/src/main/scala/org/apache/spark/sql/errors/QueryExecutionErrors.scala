@@ -2001,6 +2001,6 @@ object QueryExecutionErrors {
 
   def invalidNumberFormatError(input: String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"The input decimal '$input' does not match the given number format: '$format'")
+      s"The input decimal $input does not match the given number format: '$format'")
   }
 }

@@ -1128,8 +1128,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test ',' and 'G'
     Seq(
+      (Decimal(12454), "0,0000") -> "1,2454",
       (Decimal(12454), "00,000") -> "12,454",
+      (Decimal(124543), "000,000") -> "124,543",
+      (Decimal(1245436), "0,000,000") -> "1,245,436",
       (Decimal(12454367), "00,000,000") -> "12,454,367",
+      (Decimal(12454), "0,0000,") -> "1,2454,",
       (Decimal(12454), "00,000,") -> "12,454,",
       (Decimal(454367), ",000,000") -> ",454,367"
     ).foreach { case ((decimal, format), expected) =>
@@ -1142,26 +1146,52 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ToCharacter(decimal, Literal(format4)), expected)
     }
 
-    // TODO Make to_char supports variable grouping size.
     Seq(
       (Decimal(12454), "000,000") -> "012,454",
       (Decimal(12454), "00,0000") -> "01,2454",
+      (Decimal(12454), "000,0000") -> "001,2454",
+      (Decimal(12454), "0000,0000") -> "0001,2454",
+      (Decimal(12454), "00,0000,") -> "01,2454,",
+      (Decimal(12454), "000,0000,") -> "001,2454,",
+      (Decimal(12454), "0000,0000,") -> "0001,2454,",
       (Decimal(12454367), "000,000,000") -> "012,454,367",
-      (Decimal(12454367), "00,000,0000") -> "0,1245,4367",
       (Decimal(12454), "000,000,") -> "012,454,",
-      (Decimal(12454), "00,000,0") -> "0,1,2,4,5,4",
-      (Decimal(454367), ",0000,000") -> "0,454,367",
-      (Decimal(454367), ",000,0000") -> "045,4367",
-      (Decimal(12454), "999,999") -> "12,454",
-      (Decimal(12454), "99,9999") -> "1,2454",
-      (Decimal(12454367), "999,999,999") -> "12,454,367",
-      (Decimal(12454367), "99,999,9999") -> "1245,4367",
-      (Decimal(12454), "999,999,") -> "12,454,",
-      (Decimal(12454), "99,999,9") -> "1,2,4,5,4",
-      (Decimal(454367), ",9999,999") -> "454,367",
-      (Decimal(454367), ",999,9999") -> "45,4367"
+      (Decimal(12454), "999,999") -> " 12,454",
+      (Decimal(12454), "9,9999") -> "1,2454",
+      (Decimal(12454), "99,9999") -> " 1,2454",
+      (Decimal(12454), "999,9999") -> "  1,2454",
+      (Decimal(12454), "9999,9999") -> "   1,2454",
+      (Decimal(12454367), "999,999,999") -> " 12,454,367",
+      (Decimal(12454), "999,999,") -> " 12,454,"
     ).foreach { case ((decimal, format), expected) =>
       checkEvaluation(ToCharacter(decimal, Literal(format)), expected)
+    }
+
+    Seq(
+      (Decimal(12454367), "00,000,0000"),
+      (Decimal(12454), "00,000,0"),
+      (Decimal(12454), "0000,0"),
+      (Decimal(12454), "0000,00"),
+      (Decimal(12454), "0000,000"),
+      (Decimal(12454), "0000,0,"),
+      (Decimal(12454), "0000,00,"),
+      (Decimal(12454), "0000,000,"),
+      (Decimal(454367), ",0000,0"),
+      (Decimal(454367), ",0000,00"),
+      (Decimal(454367), ",0000,000"),
+      (Decimal(454367), ",0,0000"),
+      (Decimal(454367), ",00,0000"),
+      (Decimal(454367), ",000,0000")
+    ).foreach { case (decimal, format) =>
+      ToCharacter(decimal, Literal(format)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"Variable group size in the number format: '$format'"))
+      }
+      val format2 = format.replace('0', '9')
+      ToCharacter(decimal, Literal(format2)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"Variable group size in the number format: '$format2'"))
+      }
     }
 
     // Test '$'

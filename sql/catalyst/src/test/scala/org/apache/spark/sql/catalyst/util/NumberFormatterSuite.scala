@@ -201,19 +201,18 @@ class NumberFormatterSuite extends SparkFunSuite {
   }
 
   test("format") {
-
     // Test '9' and '0'
     Seq(
       (Decimal(454), "9") -> "#",
       (Decimal(454), "99") -> "##",
       (Decimal(454), "999") -> "454",
-      (Decimal(54), "999") -> "54",
+      (Decimal(54), "999") -> " 54",
       (Decimal(404), "999") -> "404",
       (Decimal(450), "999") -> "450",
-      (Decimal(454), "9999") -> "454",
-      (Decimal(54), "9999") -> "54",
-      (Decimal(404), "9999") -> "404",
-      (Decimal(450), "9999") -> "450",
+      (Decimal(454), "9999") -> " 454",
+      (Decimal(54), "9999") -> "  54",
+      (Decimal(404), "9999") -> " 404",
+      (Decimal(450), "9999") -> " 450",
       (Decimal(454), "0") -> "#",
       (Decimal(454), "00") -> "##",
       (Decimal(454), "000") -> "454",
@@ -305,7 +304,8 @@ class NumberFormatterSuite extends SparkFunSuite {
       (Decimal(-454), "-000") -> "-454",
       (Decimal(-454), "S000") -> "-454",
       (Decimal(-12454.8), "99G999D9S") -> "12,454.8-",
-      (Decimal(-454.8), "99G999.9S") -> "454.8-"
+      (Decimal(-454.8), "00G000.0S") -> "00,454.8-",
+      (Decimal(-454.8), "99G999.9S") -> "  454.8-"
     ).foreach { case ((decimal, format), expected) =>
       val numberFormatter = new NumberFormatter(format, false)
       numberFormatter.check()

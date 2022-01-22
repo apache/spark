@@ -37,6 +37,7 @@ object NumberFormatter {
   final val NINE_DIGIT = '9'
   final val ZERO_DIGIT = '0'
   final val POUND_SIGN = '#'
+  final val SPACE_LETTER = ' '
 
   final val COMMA_SIGN_STRING = COMMA_SIGN.toString
   final val POUND_SIGN_STRING = POUND_SIGN.toString
@@ -66,8 +67,6 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
   }
 
   private lazy val digitsNumber = precision + scale
-
-  private lazy val integerDigitsNumber = precision - scale
 
   def parsedDecimalType: DecimalType = DecimalType(precision, scale)
 
@@ -101,26 +100,27 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
       case MINUS_LETTER => MINUS_SIGN
       case other => other
     }
+    normalizedFormat
+  }
+
+  private def isSign(c: Char): Boolean = SIGN_SET.contains(c)
+
+  private def transform(format: String): String = {
     // If the comma is at the beginning or end of number format, then DecimalFormat will be
     // invalid. For example, "##,###," or ",###,###" for DecimalFormat is invalid, so we must use
     // "##,###" or "###,###".
-    normalizedFormat.stripPrefix(COMMA_SIGN_STRING).stripSuffix(COMMA_SIGN_STRING)
-  }
-
-  private def isSign(c: Char): Boolean = {
-    SIGN_SET.contains(c)
-  }
-
-  private def transform(format: String): String = {
-    if (format.contains(MINUS_SIGN)) {
+    val stripedString = format.stripPrefix(COMMA_SIGN_STRING).stripSuffix(COMMA_SIGN_STRING)
+    if (stripedString.contains(MINUS_SIGN)) {
       // For example: '#.######' represents a positive number,
       // but '#.######;#.######-' represents a negative number.
-      val positiveFormatString = format.replaceAll("-", "")
-      s"$positiveFormatString;$format"
+      val positiveFormatString = stripedString.replaceAll("-", "")
+      s"$positiveFormatString;$stripedString"
     } else {
-      format
+      stripedString
     }
   }
+
+  private def isDigitPosition(c: Char): Boolean = c == ZERO_DIGIT || c == POUND_SIGN
 
   def check(): TypeCheckResult = {
     def invalidSignPosition(c: Char): Boolean = {
@@ -134,6 +134,10 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
 
     def nonFistOrLastCharInNumberFormatError(message: String): String = {
       s"$message must be the first or last char in the number format: '$originNumberFormat'"
+    }
+
+    def variableGroupSizeUnsupportedError(): String = {
+      s"Variable group size in the number format: '$originNumberFormat'"
     }
 
     if (normalizedNumberFormat.length == 0) {
@@ -152,6 +156,22 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
     } else if (invalidSignPosition(DOLLAR_SIGN)) {
       TypeCheckResult.TypeCheckFailure(
         nonFistOrLastCharInNumberFormatError(s"'$DOLLAR_SIGN'"))
+    } else if (!isParse && normalizedNumberFormat.exists(_ == COMMA_SIGN)) {
+      // TODO Make to_char supports variable grouping size.
+      val groupSizes = normalizedNumberFormat.split(COMMA_SIGN)
+        .flatMap(_.split(POINT_SIGN)).map(_.count(isDigitPosition))
+      // DecimalFormat selects the last as group size.
+      if (groupSizes.size >= 2) {
+        val selectedGroupSize = groupSizes.last
+        if (groupSizes.head > selectedGroupSize ||
+          groupSizes.slice(1, groupSizes.size - 1).exists(size => size != selectedGroupSize)) {
+          TypeCheckResult.TypeCheckFailure(variableGroupSizeUnsupportedError())
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      } else {
+        TypeCheckResult.TypeCheckSuccess
+      }
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -235,10 +255,11 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
         // new DecimalFormat("####").format(124) and new DecimalFormat("#####").format(124)
         // will return "124" and "124" respectively. So we add ' ' at the head of
         // the result, then the final output are " 124" or "  124".
-        val integerDigits = resultStr.split(POINT_SIGN).head.length
-        if (integerDigitsNumber > integerDigits) {
-          val leadingSpace = 0.until(integerDigitsNumber - integerDigits).map(_ => ' ').mkString
-          resultStr = leadingSpace + resultStr
+        if (normalizedNumberFormat.length > resultStr.length) {
+          val leadingStr =
+            transformedFormat.substring(0, normalizedNumberFormat.length - resultStr.length)
+              .filter(_ == POUND_SIGN).map(_ => SPACE_LETTER)
+          resultStr = leadingStr + resultStr
         }
 
         UTF8String.fromString(resultStr)
