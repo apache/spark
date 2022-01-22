@@ -197,8 +197,6 @@ case class InsertIntoHadoopFsRelationCommand(
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)
-      updatedPartitionPaths.foreach(println)
-
 
       // update metastore partition metadata
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
