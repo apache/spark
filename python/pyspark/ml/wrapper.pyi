@@ -17,12 +17,13 @@
 # under the License.
 
 import abc
-from typing import Any, Optional
+from typing import Any, Optional, Generic
 from pyspark.ml._typing import P, T, JM, ParamMap
 
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
 from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Param, Params
+from pyspark.sql.dataframe import DataFrame
 
 class JavaWrapper:
     def __init__(self, java_obj: Optional[Any] = ...) -> None: ...
@@ -32,8 +33,11 @@ class JavaParams(JavaWrapper, Params, metaclass=abc.ABCMeta):
     def copy(self: P, extra: Optional[ParamMap] = ...) -> P: ...
     def clear(self, param: Param) -> None: ...
 
-class JavaEstimator(JavaParams, Estimator[JM], metaclass=abc.ABCMeta): ...
-class JavaTransformer(JavaParams, Transformer, metaclass=abc.ABCMeta): ...
+class JavaEstimator(Generic[JM], JavaParams, Estimator[JM], metaclass=abc.ABCMeta):
+    def _fit(self, dataset: DataFrame) -> JM: ...
+
+class JavaTransformer(JavaParams, Transformer, metaclass=abc.ABCMeta):
+    def _transform(self, dataset: DataFrame) -> DataFrame: ...
 
 class JavaModel(JavaTransformer, Model, metaclass=abc.ABCMeta):
     def __init__(self, java_model: Optional[Any] = ...) -> None: ...
