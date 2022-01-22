@@ -369,5 +369,25 @@ class SetOperationSuite extends PlanTest {
         Seq('a, 'b),
         Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
           optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Other cases
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a % 2).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a % 2).analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a + 'b).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a + 'b).analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a).analyze)
+
   }
 }
