@@ -141,7 +141,7 @@ class HadoopMapReduceCommitProtocol(
     }
 
     dir.map { d =>
-      if (conf.getBoolean(STATIC_PARTITION_OVERWRITE, false)) {
+      if (conf.getBoolean(STATIC_PARTITION_INSERT, false)) {
         new Path(stagingDir, filename).toString
       } else {
         new Path(new Path(stagingDir, d), filename).toString
