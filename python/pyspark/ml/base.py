@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 
 import copy
 import threading
@@ -360,7 +360,8 @@ class PredictionModel(Model, _PredictorParams, metaclass=ABCMeta):
         """
         return self._set(predictionCol=value)
 
-    @abstractproperty
+    @property
+    @abstractmethod
     @since("2.1.0")
     def numFeatures(self):
         """
