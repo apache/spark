@@ -1715,9 +1715,8 @@ class SessionCatalog(
     }
   }
 
-  // Test only. The actual function lookup logic looks up temp/built-in function first, then
-  // persistent function from either v1 or v2 catalog. This method only look up v1 catalog and is
-  // no longer valid.
+  // The actual function lookup logic looks up temp/built-in function first, then persistent
+  // function from either v1 or v2 catalog. This method only look up v1 catalog.
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     if (name.database.isEmpty) {
       resolveBuiltinOrTempFunction(name.funcName, children)
