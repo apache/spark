@@ -2813,9 +2813,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
 
       case g @ Generate(GeneratorOuter(generator), _, _, _, _, _) =>
-        g.copy(generator = generator,
-          outer = true
-        )
+        g.copy(generator = generator, outer = true)
 
       case g: Generate => g
 

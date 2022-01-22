@@ -363,6 +363,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       sql("select * from values 1, 2 lateral view explode_outer(array()) a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
 
+    checkAnswer(
+      sql("select * from values 1, 2 lateral view outer explode_outer(array()) a as b"),
+      Row(1, null) :: Row(2, null) :: Nil)
+
     withTempView("t1") {
       sql(
         """select * from values
