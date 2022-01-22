@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggr
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Strategy, PushedDownOperators}
+import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
