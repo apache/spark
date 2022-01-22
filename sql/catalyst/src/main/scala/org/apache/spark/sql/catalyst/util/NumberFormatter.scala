@@ -158,20 +158,19 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
         nonFistOrLastCharInNumberFormatError(s"'$DOLLAR_SIGN'"))
     } else if (!isParse && normalizedNumberFormat.exists(_ == COMMA_SIGN)) {
       // TODO Make to_char supports variable grouping size.
-      val groupSizes = normalizedNumberFormat.split(COMMA_SIGN)
-        .flatMap(_.split(POINT_SIGN)).map(_.count(isDigitPosition))
+      val splits = normalizedNumberFormat.split(POINT_SIGN)
+        .map(_.split(COMMA_SIGN).map(_.count(isDigitPosition)))
       // DecimalFormat selects the last as group size.
-      if (groupSizes.size >= 2) {
-        val selectedGroupSize = groupSizes.last
-        if (groupSizes.head > selectedGroupSize ||
-          groupSizes.slice(1, groupSizes.size - 1).exists(size => size != selectedGroupSize)) {
-          TypeCheckResult.TypeCheckFailure(variableGroupSizeUnsupportedError())
-        } else {
-          TypeCheckResult.TypeCheckSuccess
+      splits.foreach { groupSizes =>
+        if (groupSizes.size >= 2) {
+          val selectedGroupSize = groupSizes.last
+          if (groupSizes.head > selectedGroupSize ||
+            groupSizes.slice(1, groupSizes.size - 1).exists(size => size != selectedGroupSize)) {
+            TypeCheckResult.TypeCheckFailure(variableGroupSizeUnsupportedError())
+          }
         }
-      } else {
-        TypeCheckResult.TypeCheckSuccess
       }
+      TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -235,9 +234,10 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
       try {
         var resultStr = numberDecimalFormat.format(bigDecimal)
         // Since we trimmed the comma at the beginning or end of number format in function
-        // `normalize`, we restore the comma to the result here.
+        // `transform`, we restore the comma to the result here.
         // For example, if the specified number format is "99,999," or ",999,999", function
-        // `normalize` normalize them to "##,###" or "###,###".
+        // `normalize` normalize them to "##,###," or ",###,###" and function `transform`
+        // transform them to "##,###" or "###,###".
         // new DecimalFormat("##,###").format(12454) and new DecimalFormat("###,###")
         // .format(124546) will return "12,454" and "124,546" respectively. So we add ',' at the
         // end and head of the result, then the final output are "12,454," or ",124,546".
@@ -250,6 +250,8 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
           resultStr = COMMA_SIGN + resultStr
         }
 
+        // Since we normalized '9' to '#' in function `normalize`, we need replace the leading '#'
+        // to ' ' so as to implement replace leading '9' to ' '.
         // For example, if the specified number format is "9999" or "99999", function
         // `normalize` normalize them to "####" or "#####".
         // new DecimalFormat("####").format(124) and new DecimalFormat("#####").format(124)

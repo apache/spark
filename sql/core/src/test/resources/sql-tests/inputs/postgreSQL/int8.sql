@@ -6,15 +6,15 @@
 -- Test int8 64-bit integers.
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/int8.sql
 --
-CREATE TABLE INT8_TBL(q1 bigint, q2 bigint) USING parquet;
+CREATE TABLE INT8_TBL(id int, q1 bigint, q2 bigint) USING parquet;
 
 -- PostgreSQL implicitly casts string literals to data with integral types, but
 -- Spark does not support that kind of implicit casts.
-INSERT INTO INT8_TBL VALUES(bigint(trim('  123   ')),bigint(trim('  456')));
-INSERT INTO INT8_TBL VALUES(bigint(trim('123   ')),bigint('4567890123456789'));
-INSERT INTO INT8_TBL VALUES(bigint('4567890123456789'),bigint('123'));
-INSERT INTO INT8_TBL VALUES(+4567890123456789,bigint('4567890123456789'));
-INSERT INTO INT8_TBL VALUES(bigint('+4567890123456789'),bigint('-4567890123456789'));
+INSERT INTO INT8_TBL VALUES(1, bigint(trim('  123   ')),bigint(trim('  456')));
+INSERT INTO INT8_TBL VALUES(2, bigint(trim('123   ')),bigint('4567890123456789'));
+INSERT INTO INT8_TBL VALUES(3, bigint('4567890123456789'),bigint('123'));
+INSERT INTO INT8_TBL VALUES(4, +4567890123456789,bigint('4567890123456789'));
+INSERT INTO INT8_TBL VALUES(5, bigint('+4567890123456789'),bigint('-4567890123456789'));
 
 -- [SPARK-27923] Spark SQL insert there bad inputs to NULL
 -- bad inputs
@@ -105,30 +105,30 @@ SELECT max(q1), max(q2) FROM INT8_TBL;
 -- TO_CHAR()
 --
 SELECT '' AS to_char_1, to_char(q1, '9G999G999G999G999G999'), to_char(q2, '9,999,999,999,999,999')
- FROM INT8_TBL;
+ FROM INT8_TBL ORDER BY id;
 
 SELECT '' AS to_char_2, to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
- FROM INT8_TBL;
+ FROM INT8_TBL ORDER BY id;
 
 -- SELECT '' AS to_char_3, to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
 -- 	FROM INT8_TBL;
 
 SELECT '' AS to_char_4, to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
- FROM INT8_TBL;
+ FROM INT8_TBL ORDER BY id;
 
 -- SELECT '' AS to_char_5,  to_char(q2, 'MI9999999999999999')     FROM INT8_TBL;
 -- SELECT '' AS to_char_6,  to_char(q2, 'FMS9999999999999999')    FROM INT8_TBL;
 -- SELECT '' AS to_char_7,  to_char(q2, 'FM9999999999999999THPR') FROM INT8_TBL;
 -- SELECT '' AS to_char_8,  to_char(q2, 'SG9999999999999999th')   FROM INT8_TBL;
-SELECT '' AS to_char_9,  to_char(q2, '0999999999999999')       FROM INT8_TBL;
-SELECT '' AS to_char_10, to_char(q2, 'S0999999999999999')      FROM INT8_TBL;
+SELECT '' AS to_char_9,  to_char(q2, '0999999999999999')       FROM INT8_TBL ORDER BY id;
+SELECT '' AS to_char_10, to_char(q2, 'S0999999999999999')      FROM INT8_TBL ORDER BY id;
 -- SELECT '' AS to_char_11, to_char(q2, 'FM0999999999999999')     FROM INT8_TBL;
 -- SELECT '' AS to_char_12, to_char(q2, 'FM9999999999999999.000') FROM INT8_TBL;
 -- SELECT '' AS to_char_13, to_char(q2, 'L9999999999999999.000')  FROM INT8_TBL;
 -- SELECT '' AS to_char_14, to_char(q2, 'FM9999999999999999.999') FROM INT8_TBL;
 -- SELECT '' AS to_char_15, to_char(q2, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9') FROM INT8_TBL;
 -- SELECT '' AS to_char_16, to_char(q2, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM INT8_TBL;
-SELECT '' AS to_char_17, to_char(q2, '999999SG9999999999')     FROM INT8_TBL;
+SELECT '' AS to_char_17, to_char(q2, '999999SG9999999999')     FROM INT8_TBL ORDER BY id;
 
 -- [SPARK-26218] Throw exception on overflow for integers
 -- check min/max values and overflow behavior
