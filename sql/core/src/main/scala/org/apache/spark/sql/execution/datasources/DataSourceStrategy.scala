@@ -38,9 +38,10 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, LiteralValue, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue, SQLExpression}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -875,25 +876,6 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
  * Get the SQL string of an expression that can be pushed down.
  */
 object PushableExpression {
-  def unapply(e: Expression): Option[SQLExpression] = e match {
-    case CaseWhen(branches, elseValue) =>
-      val newBranches = branches.collect {
-        case (predicate: Expression, Literal(value, dataType)) =>
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
-          (translated, LiteralValue(value, dataType))
-      }.filter(_._1.isDefined)
-      if (newBranches.length == branches.length) {
-        val branchSQL = newBranches.map { case (c, v) => s" WHEN ${c.get} THEN $v" }.mkString
-        val elseSQL = elseValue.map {
-          case Literal(value, dataType) => LiteralValue(value, dataType)
-          case _ => return None
-        }.map(l => s" ELSE $l").getOrElse("")
-        val sql = s"CASE$branchSQL$elseSQL END"
-        Some(new GeneralSQLExpression(sql))
-      } else {
-        None
-      }
-    case _ => None
-  }
+  def unapply(e: Expression): Option[GeneralSQLExpression] =
+    new ExpressionSQLBuilder(e).build()
 }

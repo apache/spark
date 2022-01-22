@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 
 /**
- * The general implementation of {@link SQLExpression}, which contains the SQL string
- * corresponding to expression.
+ * The general SQL string corresponding to expression.
  * <p>
  * The currently supported SQL expressions:
  * <ol>
@@ -31,7 +32,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public class GeneralSQLExpression implements SQLExpression {
+public class GeneralSQLExpression implements Expression, Serializable {
     private String sql;
 
     public GeneralSQLExpression(String sql) {
