@@ -17,16 +17,18 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.charset.{MalformedInputException, StandardCharsets}
 
 import scala.collection.JavaConverters._
-
 import com.google.common.io.Files
-import io.fabric8.kubernetes.api.model._
 
+import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+
+import scala.collection.mutable
+import scala.io.{Codec, Source}
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
@@ -106,9 +108,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
-      val fileMap = confFiles.map { file =>
-        (file.getName(), Files.toString(file, StandardCharsets.UTF_8))
-      }.toMap.asJava
+      val fileMap = loadSparkConfDirFiles(confFiles).asJava
 
       Seq(new ConfigMapBuilder()
         .withNewMetadata()
@@ -122,4 +122,39 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
+  private[submit] def loadSparkConfDirFiles(confFiles: Seq[File]): Map[String, String] = {
+    val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
+    var truncatedMapSize: Long = 0
+    val truncatedMap = mutable.HashMap[String, String]()
+    val skippedFiles = mutable.HashSet[String]()
+    var source: Source = Source.fromString("") // init with empty source.
+    for (file <- confFiles) {
+      try {
+        source = Source.fromFile(file)(Codec.UTF8)
+        val (fileName, fileContent) = file.getName -> source.mkString
+        if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
+          truncatedMap.put(fileName, fileContent)
+          truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
+        } else {
+          skippedFiles.add(fileName)
+        }
+      } catch {
+        case e: MalformedInputException =>
+          logWarning(
+            s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
+          None
+      } finally {
+        source.close()
+      }
+    }
+    if (truncatedMap.nonEmpty) {
+      logInfo(s"Hadoop configuration files loaded from $confDir :" +
+        s" ${truncatedMap.keys.mkString(",")}")
+    }
+    if (skippedFiles.nonEmpty) {
+      logWarning(s"Skipped hadoop conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
+        s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
+    }
+    truncatedMap.toMap
+  }
 }
