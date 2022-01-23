@@ -4614,7 +4614,7 @@ struct<to_char_1:string,to_char(val, 9G999G999G999G999G999):string>
 
 -- !query
 SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
- FROM num_data ORDER BY id
+ FROM num_data WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
@@ -4641,7 +4641,7 @@ struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string>
 
 
 -- !query
-SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data ORDER BY id
+SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
@@ -4650,16 +4650,16 @@ The input decimal 0.0000000000 does not match the given number format: '09999999
 
 
 -- !query
-SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data ORDER BY id
+SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input decimal 16397.0384910000 does not match the given number format: 'S0999999999999999.999999999999999'
+The input decimal 0.0000000000 does not match the given number format: 'S0999999999999999.999999999999999'
 
 
 -- !query
-SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data ORDER BY id
+SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data WHERE id = 1
 -- !query schema
 struct<>
 -- !query output

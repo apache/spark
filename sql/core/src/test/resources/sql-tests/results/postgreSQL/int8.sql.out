@@ -584,12 +584,12 @@ struct<to_char_1:string,to_char(q1, 9G999G999G999G999G999):string,to_char(q2, 9,
 
 -- !query
 SELECT '' AS to_char_2, to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
- FROM INT8_TBL ORDER BY id
+ FROM INT8_TBL WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input decimal 4567890123456789 does not match the given number format: '9G999G999G999G999G999D999G999'
+The input decimal 123 does not match the given number format: '9G999G999G999G999G999D999G999'
 
 
 -- !query
@@ -606,25 +606,25 @@ struct<to_char_4:string,to_char((q1 * -1), 9999999999999999S):string,to_char((q2
 
 
 -- !query
-SELECT '' AS to_char_9,  to_char(q2, '0999999999999999')       FROM INT8_TBL ORDER BY id
+SELECT '' AS to_char_9,  to_char(q2, '0999999999999999')       FROM INT8_TBL WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input decimal 4567890123456789 does not match the given number format: '0999999999999999'
+The input decimal 456 does not match the given number format: '0999999999999999'
 
 
 -- !query
-SELECT '' AS to_char_10, to_char(q2, 'S0999999999999999')      FROM INT8_TBL ORDER BY id
+SELECT '' AS to_char_10, to_char(q2, 'S0999999999999999')      FROM INT8_TBL WHERE id = 1
 -- !query schema
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input decimal 123 does not match the given number format: 'S0999999999999999'
+The input decimal 456 does not match the given number format: 'S0999999999999999'
 
 
 -- !query
-SELECT '' AS to_char_17, to_char(q2, '999999SG9999999999')     FROM INT8_TBL ORDER BY id
+SELECT '' AS to_char_17, to_char(q2, '999999SG9999999999')     FROM INT8_TBL WHERE id = 1
 -- !query schema
 struct<>
 -- !query output

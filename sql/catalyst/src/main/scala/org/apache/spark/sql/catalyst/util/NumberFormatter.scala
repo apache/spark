@@ -166,7 +166,7 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
           val selectedGroupSize = groupSizes.last
           if (groupSizes.head > selectedGroupSize ||
             groupSizes.slice(1, groupSizes.size - 1).exists(size => size != selectedGroupSize)) {
-            TypeCheckResult.TypeCheckFailure(variableGroupSizeUnsupportedError())
+            return TypeCheckResult.TypeCheckFailure(variableGroupSizeUnsupportedError())
           }
         }
       }
