@@ -341,11 +341,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   // --------------------------------------------------------------------------
 
   test("basic create and list partitions") {
-    val catalog = newEmptyCatalog()
-    catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    catalog.createTable(newTable("tbl", "mydb"), ignoreIfExists = false)
-    catalog.createPartitions("mydb", "tbl", Seq(part1, part2), ignoreIfExists = false)
-    assert(catalogPartitionsEqual(catalog, "mydb", "tbl", Seq(part1, part2)))
+    val catalog = newBasicCatalog()
+    assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
   }
 
   test("create partitions when database/table does not exist") {
