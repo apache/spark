@@ -77,6 +77,4 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
         assert(e.getMessage.contains(
             "Cannot mix year-month and day-time fields"))
     }
-
-
 }
