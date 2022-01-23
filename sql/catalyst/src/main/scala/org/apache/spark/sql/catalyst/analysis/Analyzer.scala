@@ -1342,6 +1342,14 @@ class Analyzer(
           }
         }
         u.copy(children = newChildren)
+      case u @ Union(children)
+          // the first child of union has duplicate attributes
+          if children.head.output.distinct.length < children.head.output.length =>
+        val projectList = children.head.output.map { attr =>
+          Alias(attr, attr.name)()
+        }
+        val newChildren = Project(projectList, children.head) +: children.tail
+        u.copy(children = newChildren)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
