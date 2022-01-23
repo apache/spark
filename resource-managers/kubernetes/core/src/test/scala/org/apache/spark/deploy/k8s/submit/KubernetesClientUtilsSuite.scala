@@ -83,19 +83,19 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("verify that configmap built as expected") {
     val configMapName = s"configmap-name-${UUID.randomUUID.toString}"
-    val configMapNameSpace = s"configmap-namespace-${UUID.randomUUID.toString}"
+    val configMapNamespace = s"configmap-namespace-${UUID.randomUUID.toString}"
     val properties = Map("file" -> "content")
     val sparkConf =
       testSetup(properties.map(f => f._1 -> f._2.getBytes(StandardCharsets.UTF_8)))
     val confFileMap =
       KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName, sparkConf, properties)
     val outputConfigMap = KubernetesClientUtils
-      .buildConfigMap(configMapName, confFileMap, configMapNameSpace, properties)
+      .buildConfigMap(configMapName, confFileMap, configMapNamespace, properties)
     val expectedConfigMap =
       new ConfigMapBuilder()
         .withNewMetadata()
           .withName(configMapName)
-          .withNamespace(configMapNameSpace)
+          .withNamespace(configMapNamespace)
           .withLabels(properties.asJava)
         .endMetadata()
         .withImmutable(true)

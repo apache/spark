@@ -88,12 +88,12 @@ private[spark] object KubernetesClientUtils extends Logging {
    * on remote pods.
    */
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
-                     configMapNameSpace: String,
+                     configMapNamespace: String,
                      withLabels: Map[String, String] = Map()): ConfigMap = {
     new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
-        .withNamespace(configMapNameSpace)
+        .withNamespace(configMapNamespace)
         .withLabels(withLabels.asJava)
         .endMetadata()
       .withImmutable(true)
