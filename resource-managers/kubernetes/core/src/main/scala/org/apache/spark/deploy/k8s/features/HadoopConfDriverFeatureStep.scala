@@ -20,15 +20,15 @@ import java.io.File
 import java.nio.charset.{MalformedInputException, StandardCharsets}
 
 import scala.collection.JavaConverters._
-import com.google.common.io.Files
+import scala.collection.mutable
+import scala.io.{Codec, Source}
 
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
+
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-
-import scala.collection.mutable
-import scala.io.{Codec, Source}
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
