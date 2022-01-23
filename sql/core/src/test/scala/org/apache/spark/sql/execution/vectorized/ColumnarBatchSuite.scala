@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.vectorized
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDateTime
 import java.util
 import java.util.NoSuchElementException
 
@@ -1591,10 +1592,21 @@ class ColumnarBatchSuite extends SparkFunSuite {
         )) ::
         StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
         StructField("binary", BinaryType) ::
+        StructField("ts_ntz", TimestampNTZType) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
     mapBuilder.put(20, null)
+
+    val tsString1 = "2015-01-01 23:50:59.123"
+    val ts1 = DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(tsString1))
+    val tsNTZ1 =
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(tsString1.replace(" ", "T")))
+    val tsString2 = "1880-01-05 12:45:21.321"
+    val ts2 = DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(tsString2))
+    val tsNTZ2 =
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(tsString2.replace(" ", "T")))
+
     val row1 = new GenericInternalRow(Array[Any](
       UTF8String.fromString("a string"),
       true,
@@ -1606,12 +1618,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       0.75D,
       Decimal("1234.23456"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
-      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
+      ts1,
       new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
       mapBuilder.build(),
-      "Spark SQL".getBytes()
+      "Spark SQL".getBytes(),
+      tsNTZ1
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1628,15 +1641,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Double.PositiveInfinity,
       Decimal("0.01000"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")),
-      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")),
+      ts2,
       new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
       mapBuilder.build(),
-      "Parquet".getBytes()
+      "Parquet".getBytes(),
+      tsNTZ2
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
       null,
       null,
       null,
@@ -1716,10 +1731,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(9).isNullAt(2))
 
       assert(columns(10).dataType() == TimestampType)
-      assert(columns(10).getLong(0) ==
-        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
-      assert(columns(10).getLong(1) ==
-        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")))
+      assert(columns(10).getLong(0) == ts1)
+      assert(columns(10).getLong(1) == ts2)
       assert(columns(10).isNullAt(2))
 
       assert(columns(11).dataType() == CalendarIntervalType)
@@ -1777,6 +1790,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(new String(columns(15).getBinary(0)) == "Spark SQL")
       assert(new String(columns(15).getBinary(1)) == "Parquet")
       assert(columns(15).isNullAt(2))
+
+      assert(columns(16).dataType() == TimestampNTZType)
+      assert(columns(16).getLong(0) == tsNTZ1)
+      assert(columns(16).getLong(1) == tsNTZ2)
+      assert(columns(16).isNullAt(2))
     } finally {
       batch.close()
     }
