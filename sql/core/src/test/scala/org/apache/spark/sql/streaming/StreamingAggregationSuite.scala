@@ -778,7 +778,10 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         AddData(inputData, 21),
         ExpectFailure[SparkException] { e =>
           val stateSchemaExc = findStateSchemaNotCompatible(e)
-          assert(stateSchemaExc.isDefined)
+          assert(
+            stateSchemaExc.isDefined,
+            s"${classOf[StateSchemaNotCompatible].getSimpleName} " +
+              s"was not found in:\n${Utils.exceptionString(e)}")
           val msg = stateSchemaExc.get.getMessage
           assert(msg.contains("Provided schema doesn't match to the schema for existing state"))
           // other verifications are presented in StateStoreSuite
