@@ -277,8 +277,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   /** Check if there are any outstanding requests (fetch requests + rpcs) */
   public Boolean hasOutstandingRequests() {
-    return streamActive || outstandingFetches.size() > 0 || outstandingRpcs.size() > 0
-        || streamCallbacks.size() > 0;
+    return streamActive || !outstandingFetches.isEmpty() || !outstandingRpcs.isEmpty() ||
+        !streamCallbacks.isEmpty();
   }
 
   /** Returns the time in nanoseconds of when the last request was sent out. */
