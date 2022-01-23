@@ -167,5 +167,23 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL" : {
+    "message" : [ "Can only have a single from-to unit in the interval literal syntax" ]
+  },
+  "INVALID_INTERVAL_LITERAL" : {
+    "message" : ["at least one time unit should be given for interval literal"]
+  },
+  "INVALID_INTERVAL_FORM" : {
+    "message" : ["Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s. %s"]
+  },
+  "INVALID_FROM_TO_UNIT_VALUE" : {
+    "message" : ["The value of from-to unit must be a string"]
+  },
+  "UNSUPPORTED_FROM_TO_INTERVAL" : {
+    "message" : ["Intervals FROM %s TO %s are not supported. %s"]
+  },
+  "MIXED_INTERVAL_UNITS" : {
+    "message" : ["Cannot mix year-month and day-time fields: %s"]
   }
 }
