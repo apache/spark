@@ -28,4 +28,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+RUNNING_BLACK_VERSION=$(python -c "import black;print(black.__version__)")
+if [ "$BLACK_VERSION" != "$RUNNING_BLACK_VERSION" ]; then
+    echo "The required version '$BLACK_VERSION' does not match the running version '$RUNNING_BLACK_VERSION', Please re-install Black, for example, via 'pip install black==$BLACK_VERSION'."
+    exit 1
+fi
+
 $BLACK_BUILD --config dev/pyproject.toml python/pyspark dev
