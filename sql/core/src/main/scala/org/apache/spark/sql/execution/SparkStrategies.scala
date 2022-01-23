@@ -571,6 +571,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // If cannot match the two cases above, then it's an error
         throw QueryCompilationErrors.cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError()
 
+      case PartialDistinct(distinct) =>
+        Aggregate(distinct.output, distinct.output, distinct) match {
+          case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+              if aggExpressions.forall(_.isInstanceOf[AggregateExpression]) =>
+            Seq(AggUtils.planPartialAggregations(
+              groupingExpressions,
+              aggExpressions.map(_.asInstanceOf[AggregateExpression]),
+              resultExpressions,
+              planLater(child)))
+          case _ =>
+            throw QueryCompilationErrors.failedToPlanPartialDistinct()
+        }
+
       case _ => Nil
     }
   }

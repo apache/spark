@@ -1337,6 +1337,11 @@ object QueryCompilationErrors {
       "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
   }
 
+  def failedToPlanPartialDistinct(): Throwable = {
+    new AnalysisException(
+      "Failed to plan PartialDistinct. Please report your query to Spark user mailing list")
+  }
+
   def ambiguousAttributesInSelfJoinError(
       ambiguousAttrs: Seq[AttributeReference]): Throwable = {
     new AnalysisException(

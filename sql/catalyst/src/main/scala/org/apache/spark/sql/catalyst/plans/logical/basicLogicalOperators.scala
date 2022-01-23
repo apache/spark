@@ -1363,6 +1363,17 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * Returns a new logical plan that partially dedups input rows.
+ */
+case class PartialDistinct(child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
+  override protected def withNewChildInternal(newChild: LogicalPlan): PartialDistinct =
+    copy(child = newChild)
+}
+
+/**
  * A base interface for [[RepartitionByExpression]] and [[Repartition]]
  */
 abstract class RepartitionOperation extends UnaryNode {

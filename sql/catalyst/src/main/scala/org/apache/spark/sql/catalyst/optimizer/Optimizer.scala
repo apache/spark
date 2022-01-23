@@ -724,6 +724,16 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+    // Only push down when the limit number is less than or equal to 5000,
+    // which is the default_limit value of Hue.
+    case Limit(le @ IntegerLiteral(limit), a @ Aggregate(_, _, child))
+      if a.groupOnly && child.maxRowsPerPartition.forall(_ > limit) &&
+        limit <= math.min(conf.topKSortFallbackThreshold, 5000) =>
+      Limit(le, a.copy(child = LocalLimit(le, PartialDistinct(child))))
+    case Limit(le @ IntegerLiteral(limit), p @ Project(_, a @ Aggregate(_, _, child)))
+      if a.groupOnly && child.maxRowsPerPartition.forall(_ > limit) &&
+        limit <= math.min(conf.topKSortFallbackThreshold, 5000) =>
+      Limit(le, p.copy(child = a.copy(child = LocalLimit(le, PartialDistinct(child)))))
   }
 }
 

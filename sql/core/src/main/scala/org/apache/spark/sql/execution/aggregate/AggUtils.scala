@@ -92,6 +92,30 @@ object AggUtils {
     }
   }
 
+  def planPartialAggregations(
+      groupingExpressions: Seq[NamedExpression],
+      aggregateExpressions: Seq[AggregateExpression],
+      resultExpressions: Seq[NamedExpression],
+      child: SparkPlan): SparkPlan = {
+
+    val groupingAttributes = groupingExpressions.map(_.toAttribute)
+    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
+    val partialAggregateAttributes =
+      partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+    val partialResultExpressions =
+      groupingAttributes ++
+        partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
+    createAggregate(
+      requiredChildDistributionExpressions = None,
+      groupingExpressions = groupingExpressions,
+      aggregateExpressions = partialAggregateExpressions,
+      aggregateAttributes = partialAggregateAttributes,
+      initialInputBufferOffset = 0,
+      resultExpressions = partialResultExpressions,
+      child = child)
+  }
+
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
@@ -102,21 +126,8 @@ object AggUtils {
     // 1. Create an Aggregate Operator for partial aggregations.
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
-    val partialAggregateAttributes =
-      partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-    val partialResultExpressions =
-      groupingAttributes ++
-        partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-
-    val partialAggregate = createAggregate(
-        requiredChildDistributionExpressions = None,
-        groupingExpressions = groupingExpressions,
-        aggregateExpressions = partialAggregateExpressions,
-        aggregateAttributes = partialAggregateAttributes,
-        initialInputBufferOffset = 0,
-        resultExpressions = partialResultExpressions,
-        child = child)
+    val partialAggregate =
+      planPartialAggregations(groupingExpressions, aggregateExpressions, resultExpressions, child)
 
     // If we have session window expression in aggregation, we add MergingSessionExec to
     // merge sessions with calculating aggregation values.

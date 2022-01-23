@@ -270,4 +270,22 @@ class LimitPushdownSuite extends PlanTest {
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
   }
+
+  test("SPARK-37989: Push down limit through Aggregate if it is group only") {
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(10).analyze),
+      GlobalLimit(10, LocalLimit(10, PartialDistinct(x)).select("x.a".attr)).analyze)
+
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(10).analyze),
+      GlobalLimit(10,
+        LocalLimit(10, PartialDistinct(x)).select("x.a".attr).select("x.a".attr)).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.union(y)
+          .groupBy("x.a".attr)("x.a".attr, "x.a".attr).limit(10).analyze),
+      GlobalLimit(10,
+        LocalLimit(10, PartialDistinct(x.union(y))).select("x.a".attr, "x.a".attr)).analyze)
+  }
 }
