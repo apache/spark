@@ -122,7 +122,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
-  private[submit] def loadSparkConfDirFiles(confFiles: Seq[File]): Map[String, String] = {
+  private def loadSparkConfDirFiles(confFiles: Seq[File]): Map[String, String] = {
     val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
     var truncatedMapSize: Long = 0
     val truncatedMap = mutable.HashMap[String, String]()
