@@ -18,6 +18,8 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.util.UUID
 
 import scala.collection.mutable.HashMap
@@ -95,7 +97,11 @@ private[spark] class DiskBlockManager(
         if (!newDir.exists()) {
           // SPARK-37618: Create dir as group writable so files within can be deleted by the
           // shuffle service
-          createDirWithPermission770(newDir)
+          val path = newDir.toPath
+          Files.createDirectory(path)
+          val currentPerms = Files.getPosixFilePermissions(path)
+          currentPerms.add(PosixFilePermission.GROUP_WRITE)
+          Files.setPosixFilePermissions(path, currentPerms)
         }
         subDirs(dirId)(subDirId) = newDir
         newDir
@@ -167,13 +173,31 @@ private[spark] class DiskBlockManager(
     }
   }
 
+  /**
+   * SPARK-37618: Makes sure that the file is created as world readable. This is to get
+   * around the fact that making the block manager sub dirs group writable removes
+   * the setgid bit in secure Yarn environments, which prevents the shuffle service
+   * from being able ot read shuffle files. The outer directories will still not be
+   * world executable, so this doesn't allow access to these files except for the
+   * running user and shuffle service.
+   */
+  def createWorldReadableFile(file: File): Unit = {
+    val path = file.toPath
+    Files.createFile(path)
+    val currentPerms = Files.getPosixFilePermissions(path)
+    currentPerms.add(PosixFilePermission.OTHERS_READ)
+    Files.setPosixFilePermissions(path, currentPerms)
+  }
+
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
       blockId = new TempLocalBlockId(UUID.randomUUID())
     }
-    (blockId, getFile(blockId))
+    val file = getFile(blockId)
+    createWorldReadableFile(file)
+    (blockId, file)
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
@@ -182,7 +206,9 @@ private[spark] class DiskBlockManager(
     while (getFile(blockId).exists()) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, getFile(blockId))
+    val file = getFile(blockId)
+    createWorldReadableFile(file)
+    (blockId, file)
   }
 
   /**
