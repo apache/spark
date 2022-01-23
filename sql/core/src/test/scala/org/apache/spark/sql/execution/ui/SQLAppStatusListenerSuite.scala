@@ -906,14 +906,11 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsCount()
 
-      val numPartitions = 2
-      var finishedTask = 0
       val bytesWritten = new ArrayBuffer[Long]()
       val recordsWritten = new ArrayBuffer[Long]()
 
       val bytesWrittenListener = new SparkListener() {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-          finishedTask += 1
           bytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
           recordsWritten += taskEnd.taskMetrics.outputMetrics.recordsWritten
         }
@@ -922,8 +919,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
       try {
         val cls = classOf[CustomMetricsDataSource].getName
-        spark.range(0, 10, 1, numPartitions)
-          .select('id as 'i, -'id as 'j).write.format(cls)
+        spark.range(0, 10, 1, 2).select('id as 'i, -'id as 'j).write.format(cls)
           .option("path", dir.getCanonicalPath).mode("append").save()
 
         // Wait until the new execution is started and being tracked.
@@ -935,11 +931,6 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
         eventually(timeout(10.seconds), interval(10.milliseconds)) {
           assert(statusStore.executionsList().nonEmpty &&
             statusStore.executionsList().last.metricValues != null)
-        }
-
-        // Wait for bytesWrittenListener receive all TaskEnd event log.
-        eventually(timeout(10.seconds), interval(10.milliseconds)) {
-          assert(finishedTask == numPartitions)
         }
 
         assert(bytesWritten.sum == 246)
