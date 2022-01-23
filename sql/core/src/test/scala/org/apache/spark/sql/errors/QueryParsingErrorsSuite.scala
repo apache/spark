@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
-    import testImplicits._
 
     test("MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL: from-to unit in the interval literal") {
         val e = intercept[ParseException] {
