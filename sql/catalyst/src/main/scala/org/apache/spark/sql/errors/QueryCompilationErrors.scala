@@ -158,16 +158,21 @@ object QueryCompilationErrors {
   def upCastFailureError(
       fromStr: String, from: Expression, to: DataType, walkedTypePath: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
-        s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
+      errorClass = "UP_CAST_FAILURE",
+      messageParameters = Array(
+        fromStr,
+        from.dataType.catalogString,
+        to.catalogString,
+        walkedTypePath.mkString("", "\n", "\n")
+      )
+    )
   }
 
   def unsupportedAbstractDataTypeForUpCastError(gotType: AbstractDataType): Throwable = {
     new AnalysisException(
-      s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
+      errorClass = "UP_CAST_UNSUPPORTED_ABSTRACT_DATA_TYPE",
+      messageParameters = Array(gotType.toString)
+    )
   }
 
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
@@ -417,9 +422,13 @@ object QueryCompilationErrors {
 
   def cannotUpCastAsAttributeError(
       fromAttr: Attribute, toAttr: Attribute): Throwable = {
-    new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
-      s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
-      "as it may truncate")
+    new AnalysisException(
+      errorClass = "UP_CAST_AS_ATTRIBUTE_UNSUPPORTED",
+      messageParameters = Array(
+        fromAttr.sql,
+        fromAttr.dataType.catalogString,
+        toAttr.dataType.catalogString)
+    )
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {

@@ -137,6 +137,15 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "UP_CAST_FAILURE": {
+    "message" : [ "Cannot up cast %s from %s to %s.\nThe type path of the target object is: %s.\nYou can either add an explicit cast to the input data or choose a higher precision type of the field in the target object" ]
+  },
+  "UP_CAST_UNSUPPORTED_ABSTRACT_DATA_TYPE": {
+    "message" : [ "UpCast only support DecimalType as AbstractDataType yet, but got: %s" ]
+  },
+  "UP_CAST_AS_ATTRIBUTE_UNSUPPORTED": {
+    "message" : [ "Cannot up cast %s from %s to %s as it may truncate" ]
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
