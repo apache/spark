@@ -254,8 +254,7 @@ object QueryExecutionErrors {
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"literal for '${v.toString}' of ${v.getClass.toString}."))
+      messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
