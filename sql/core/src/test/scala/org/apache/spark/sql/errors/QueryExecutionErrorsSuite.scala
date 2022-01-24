@@ -97,9 +97,9 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "UNSUPPORTED_MODE")
+      assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
-      assert(e.getMessage.matches("""The mode AES-\w+ with the padding \w+ is not supported"""))
+      assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+"""))
     }
 
     // Unsupported AES mode and padding in encrypt
