@@ -175,7 +175,7 @@
     "message" : [ "at least one time unit should be given for interval literal" ]
   },
   "INVALID_INTERVAL_FORM" : {
-    "message" : [ "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s. %s" ]
+    "message" : [ "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s. " ]
   },
   "INVALID_FROM_TO_UNIT_VALUE" : {
     "message" : [ "The value of from-to unit must be a string" ]
