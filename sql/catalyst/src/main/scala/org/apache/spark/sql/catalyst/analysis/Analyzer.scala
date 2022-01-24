@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
@@ -2006,21 +2006,33 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
-      plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
-          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
+      def lookupFunction[T <: TreeNode[_]](
+          f: T,
+          nameParts: Seq[String],
+          lookupBuiltinOrTempFunc: Seq[String] => Option[ExpressionInfo]): T = {
+        if (lookupBuiltinOrTempFunc(nameParts).isDefined) {
+          f
+        } else {
+          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+          val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
+          if (externalFunctionNameSet.contains(fullName)) {
+            f
+          } else if (catalog.asFunctionCatalog.functionExists(ident)) {
+            externalFunctionNameSet.add(fullName)
             f
           } else {
-            val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
-            val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
-            if (externalFunctionNameSet.contains(fullName)) {
-              f
-            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
-              externalFunctionNameSet.add(fullName)
-              f
-            } else {
-              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
-            }
+            throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+          }
+        }
+      }
+
+      plan.resolveOperators {
+        case f @ UnresolvedTableValuedFunction(name, _, _) =>
+          lookupFunction(f, name.asMultipart, ResolveFunctions.lookupBuiltinOrTempTableFunction)
+        case p: LogicalPlan =>
+          p.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
+            case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+              lookupFunction(f, nameParts, ResolveFunctions.lookupBuiltinOrTempFunction)
           }
       }
     }
@@ -2109,6 +2121,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
       if (name.length == 1) {
         v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+      } else {
+        None
+      }
+    }
+
+    def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
+      if (name.length == 1) {
+        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
       } else {
         None
       }
