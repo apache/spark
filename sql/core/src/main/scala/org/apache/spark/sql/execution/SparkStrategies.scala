@@ -577,6 +577,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               if aggExpressions.forall(_.isInstanceOf[AggregateExpression]) =>
             Seq(AggUtils.planPartialAggregations(
               groupingExpressions,
+              groupingExpressions.map(_.toAttribute),
               aggExpressions.map(_.asInstanceOf[AggregateExpression]),
               resultExpressions,
               planLater(child)))

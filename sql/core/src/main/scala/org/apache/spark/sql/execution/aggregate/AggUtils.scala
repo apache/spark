@@ -94,11 +94,11 @@ object AggUtils {
 
   def planPartialAggregations(
       groupingExpressions: Seq[NamedExpression],
+      groupingAttributes: Seq[Attribute],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): SparkPlan = {
 
-    val groupingAttributes = groupingExpressions.map(_.toAttribute)
     val partialAggregateExpressions = aggregateExpressions.map(_.copy(mode = Partial))
     val partialAggregateAttributes =
       partialAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -108,7 +108,7 @@ object AggUtils {
 
     createAggregate(
       requiredChildDistributionExpressions = None,
-      groupingExpressions = groupingExpressions,
+      groupingExpressions = groupingAttributes,
       aggregateExpressions = partialAggregateExpressions,
       aggregateAttributes = partialAggregateAttributes,
       initialInputBufferOffset = 0,
@@ -126,8 +126,8 @@ object AggUtils {
     // 1. Create an Aggregate Operator for partial aggregations.
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
-    val partialAggregate =
-      planPartialAggregations(groupingExpressions, aggregateExpressions, resultExpressions, child)
+    val partialAggregate = planPartialAggregations(groupingExpressions, groupingAttributes,
+      aggregateExpressions, resultExpressions, child)
 
     // If we have session window expression in aggregation, we add MergingSessionExec to
     // merge sessions with calculating aggregation values.

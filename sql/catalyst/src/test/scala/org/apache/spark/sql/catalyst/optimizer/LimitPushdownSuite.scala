@@ -22,9 +22,10 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class LimitPushdownSuite extends PlanTest {
 
@@ -263,29 +264,39 @@ class LimitPushdownSuite extends PlanTest {
 
     // No push down
     comparePlans(
-      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze),
-      x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze)
-
-    comparePlans(
       Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
       x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
   }
 
   test("SPARK-37989: Push down limit through Aggregate if it is group only") {
     comparePlans(
-      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(10).analyze),
-      GlobalLimit(10, LocalLimit(10, PartialDistinct(x)).select("x.a".attr)).analyze)
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(3).analyze),
+      LocalLimit(3, PartialDistinct(x)).groupBy("x.a".attr)("x.a".attr).limit(3).analyze)
 
     comparePlans(
-      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(10).analyze),
-      GlobalLimit(10,
-        LocalLimit(10, PartialDistinct(x)).select("x.a".attr).select("x.a".attr)).analyze)
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, "x.a".attr)
+        .select("x.a".attr, "x.a".attr).limit(3).analyze),
+      LocalLimit(3,
+        PartialDistinct(x)).groupBy("x.a".attr)("x.a".attr, "x.a".attr)
+        .select("x.a".attr, "x.a".attr).limit(3).analyze)
 
     comparePlans(
       Optimize.execute(
         x.union(y)
-          .groupBy("x.a".attr)("x.a".attr, "x.a".attr).limit(10).analyze),
-      GlobalLimit(10,
-        LocalLimit(10, PartialDistinct(x.union(y))).select("x.a".attr, "x.a".attr)).analyze)
+          .groupBy("x.a".attr)("x.a".attr, "x.a".attr).limit(3).analyze),
+      LocalLimit(3, PartialDistinct(x.union(y)))
+        .groupBy("x.a".attr)("x.a".attr, "x.a".attr).limit(3).analyze)
+
+    // Limit number larger than maxRowsPerPartition
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(30).analyze),
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(30).analyze))
+
+    // Limit number larger than topKSortFallbackThreshold
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "2") {
+      comparePlans(
+        Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(3).analyze),
+        Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(3).analyze))
+    }
   }
 }
