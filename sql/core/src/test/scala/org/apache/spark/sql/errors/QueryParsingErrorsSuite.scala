@@ -30,7 +30,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
     assert(e.getMessage.contains(
       "Can only have a single from-to unit in the interval literal syntax"))
   }
-  
+
   test("INVALID_INTERVAL_LITERAL: invalid interval literal") {
     val e = intercept[ParseException] {
       spark.sql("SELECT INTERVAL DAY").collect()
@@ -40,39 +40,39 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
       "at least one time unit should be given for interval literal"))
   }
 
-    test("INVALID_INTERVAL_FORM: invalid interval form") {
-      val e = intercept[ParseException] {
-        spark.sql("SELECT INTERVAL '1 DAY 2' HOUR").collect()
-      }.getCause.asInstanceOf[ParseException]
-      assert(e.getErrorClass === "INVALID_INTERVAL_FORM")
-      assert(e.getMessage.contains(
-        "numbers in the interval value part for multiple unit value pairs interval form"))
-    }
+  test("INVALID_FROM_TO_UNIT_VALUE: value of from-to unit must be a string") {
+    val e = intercept[ParseException] {
+      spark.sql("SELECT INTERVAL -2021 YEAR TO MONTH").collect()
+    }.getCause.asInstanceOf[ParseException]
+    assert(e.getErrorClass === "INVALID_FROM_TO_UNIT_VALUE")
+    assert(e.getMessage.contains(
+      "The value of from-to unit must be a string"))
+  }
 
-    test("INVALID_FROM_TO_UNIT_VALUE: value of from-to unit must be a string") {
-      val e = intercept[ParseException] {
-        spark.sql("SELECT INTERVAL -2021 YEAR TO MONTH").collect()
-      }.getCause.asInstanceOf[ParseException]
-      assert(e.getErrorClass === "INVALID_FROM_TO_UNIT_VALUE")
-      assert(e.getMessage.contains(
-        "The value of from-to unit must be a string"))
-    }
+  test("UNSUPPORTED_FROM_TO_INTERVAL: Unsupported from-to interval") {
+    val e = intercept[ParseException] {
+      spark.sql("SELECT extract(MONTH FROM INTERVAL '2021-11' YEAR TO DAY)").collect()
+    }.getCause.asInstanceOf[ParseException]
+    assert(e.getErrorClass === "UNSUPPORTED_FROM_TO_INTERVAL")
+    assert(e.getMessage.contains(
+      "Intervals FROM YEAR TO DAY are not supported."))
+  }
 
-    test("UNSUPPORTED_FROM_TO_INTERVAL: Unsupported from-to interval") {
-      val e = intercept[ParseException] {
-        spark.sql("SELECT extract(MONTH FROM INTERVAL '2021-11' YEAR TO DAY)").collect()
-      }.getCause.asInstanceOf[ParseException]
-      assert(e.getErrorClass === "UNSUPPORTED_FROM_TO_INTERVAL")
-      assert(e.getMessage.contains(
-        "Intervals FROM YEAR TO DAY are not supported."))
-    }
+  test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
+    val e = intercept[ParseException] {
+      spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR").collect()
+    }.getCause.asInstanceOf[ParseException]
+    assert(e.getErrorClass === "MIXED_INTERVAL_UNITS")
+    assert(e.getMessage.contains(
+      "Cannot mix year-month and day-time fields"))
+  }
 
-    test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
-      val e = intercept[ParseException] {
-        spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR").collect()
-      }.getCause.asInstanceOf[ParseException]
-      assert(e.getErrorClass === "MIXED_INTERVAL_UNITS")
-      assert(e.getMessage.contains(
-        "Cannot mix year-month and day-time fields"))
-    }
+  test("INVALID_INTERVAL_FORM: invalid interval form") {
+    val e = intercept[ParseException] {
+      spark.sql("SELECT INTERVAL '1 DAY 2' HOUR").collect()
+    }.getCause.asInstanceOf[ParseException]
+    assert(e.getErrorClass === "INVALID_INTERVAL_FORM")
+    assert(e.getMessage.contains(
+      "numbers in the interval value part for multiple unit value pairs interval form"))
+  }
 }
