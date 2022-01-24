@@ -198,4 +198,18 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
   }
+
+  test("SPARK-30062") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    df.write.mode(SaveMode.Overwrite)
+      .jdbc(jdbcUrl, "tbl", new Properties).option("truncate", true)
+    val df1 = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    assert(df1.collect.toSet === expectedResult)
+  }
 }
