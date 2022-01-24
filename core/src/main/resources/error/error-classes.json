@@ -1,7 +1,4 @@
 {
-  "AES_CRYPTO_ERROR" : {
-    "message" : [ "AES crypto operation failed with: %s" ]
-  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -74,10 +71,6 @@
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
-  "INVALID_AES_KEY_LENGTH" : {
-    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
-    "sqlState" : "42000"
-  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
@@ -98,6 +91,10 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PARAMETER_VALUE" : {
+    "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
+    "sqlState" : "22023"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
@@ -144,16 +141,16 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_AES_MODE" : {
-    "message" : [ "The AES mode %s with the padding %s is not supported" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_FEATURE" : {
+    "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
