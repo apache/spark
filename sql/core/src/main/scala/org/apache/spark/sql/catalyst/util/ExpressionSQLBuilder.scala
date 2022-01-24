@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Expression, Literal}
-import org.apache.spark.sql.connector.expressions.{GeneralSQLExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, LiteralValue}
+import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 
 /**
@@ -33,11 +34,16 @@ class ExpressionSQLBuilder(e: Expression) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
           (translated, LiteralValue(value, dataType))
+        case (predicate: Expression, PushableColumnWithoutNestedColumn(name)) =>
+          val translated =
+            DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
+          (translated, FieldReference.column(name))
       }.filter(_._1.isDefined)
       if (newBranches.length == branches.length) {
         val branchSQL = newBranches.map { case (c, v) => s" WHEN ${c.get} THEN $v" }.mkString
         val elseSQL = elseValue.map {
           case Literal(value, dataType) => LiteralValue(value, dataType)
+          case PushableColumnWithoutNestedColumn(name) => FieldReference.column(name)
           case _ => return None
         }.map(l => s" ELSE $l").getOrElse("")
         val sql = s"CASE$branchSQL$elseSQL END"

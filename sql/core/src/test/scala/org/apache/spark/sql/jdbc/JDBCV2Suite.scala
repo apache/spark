@@ -810,25 +810,48 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql(
       """
         |SELECT
-        |  SUM(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
-        |  COUNT(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
-        |  AVG(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
-        |  MAX(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END),
-        |  MIN(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END)
+        |  SUM(CASE WHEN SALARY is null THEN 0 ELSE SALARY END),
+        |  COUNT(CASE WHEN SALARY is null THEN 0 ELSE SALARY END),
+        |  AVG(CASE WHEN SALARY is null THEN 0 ELSE SALARY END),
+        |  MAX(CASE WHEN SALARY is null THEN 0 ELSE SALARY END),
+        |  MIN(CASE WHEN SALARY is null THEN 0 ELSE SALARY END)
         |FROM h2.test.employee GROUP BY DEPT
       """.stripMargin)
     checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [SUM(CASE WHEN SALARY > 0.00 THEN 1 ELSE 0 END), " +
-            "COUNT(*), " +
-            "AVG(CASE WHEN SALARY > 0.00 THEN 1 ELS..., " +
+          "PushedAggregates: [SUM(CASE WHEN SALARY IS NULL THEN 0.00 ELSE SALARY END), " +
+            "COUNT(CASE WHEN SALARY IS NULL THEN 0.0..., " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(1, 1, 1.0, 1, 1), Row(2, 2, 1.0, 1, 1), Row(2, 2, 1.0, 1, 1)))
+    checkAnswer(df, Seq(Row(12000d, 1, 12000d, 12000d, 12000d),
+      Row(19000d, 2, 9500d, 10000d, 9000d), Row(22000d, 2, 11000d, 12000d, 10000d)))
+
+    val df2 = sql(
+      """
+        |SELECT
+        |  SUM(CASE WHEN SALARY is not null THEN SALARY ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY is not null THEN SALARY ELSE 0 END),
+        |  AVG(CASE WHEN SALARY is not null THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN SALARY is not null THEN SALARY ELSE 0 END),
+        |  MIN(CASE WHEN SALARY is not null THEN SALARY ELSE 0 END)
+        |FROM h2.test.employee GROUP BY DEPT
+      """.stripMargin)
+    checkAggregateRemoved(df2)
+    df2.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(CASE WHEN SALARY IS NOT NULL THEN SALARY ELSE 0.00 END), " +
+            "COUNT(CASE WHEN SALARY IS NOT NULL ..., " +
+            "PushedFilters: [], " +
+            "PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+    }
+    checkAnswer(df2, Seq(Row(12000d, 1, 12000d, 12000d, 12000d),
+      Row(19000d, 2, 9500d, 10000d, 9000d), Row(22000d, 2, 11000d, 12000d, 10000d)))
   }
 
   test("scan with aggregate push-down: partition columns with multi group by columns") {
