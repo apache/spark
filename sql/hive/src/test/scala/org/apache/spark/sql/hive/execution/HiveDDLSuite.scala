@@ -812,7 +812,7 @@ class HiveDDLSuite
       s"$tableName is a table. '$cmdName' expects a view. Please use ALTER TABLE instead.")
   }
 
-  test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+  ignore("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
       assertAnalysisError(
@@ -821,7 +821,7 @@ class HiveDDLSuite
     }
   }
 
-  test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+  ignore("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
       val catalog = spark.sessionState.catalog

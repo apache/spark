@@ -139,11 +139,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         s"as table property keys may not start with '$SPARK_SQL_PREFIX': " +
         invalidKeys.mkString("[", ", ", "]"))
     }
-    // External users are not allowed to set/switch the table type. In Hive metastore, the table
-    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
-    if (table.properties.contains("EXTERNAL")) {
-      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
-    }
+    // To keep the parity with Hive, the check for external table properties has been removed.
   }
 
   /**

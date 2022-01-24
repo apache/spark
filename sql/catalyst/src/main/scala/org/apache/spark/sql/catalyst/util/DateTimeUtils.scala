@@ -1028,7 +1028,7 @@ object DateTimeUtils {
         case "DAY" | "DD" => TRUNC_TO_DAY
         case "WEEK" => TRUNC_TO_WEEK
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
-        case "QUARTER" => TRUNC_TO_QUARTER
+        case "QUARTER" | "QTR" | "Q" => TRUNC_TO_QUARTER
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case _ => TRUNC_INVALID
       }
