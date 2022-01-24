@@ -25,7 +25,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL: from-to unit in the interval literal") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT INTERVAL 1 to 3 year to month AS col").collect
+            spark.sql("SELECT INTERVAL 1 to 3 year to month AS col").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL")
         assert(e.getMessage.contains(
@@ -34,7 +34,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("INVALID_INTERVAL_LITERAL: invalid interval literal") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT INTERVAL  DAY").collect
+            spark.sql("SELECT INTERVAL DAY").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "INVALID_INTERVAL_LITERAL")
         assert(e.getMessage.contains(
@@ -43,7 +43,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("INVALID_INTERVAL_FORM: invalid interval form") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT INTERVAL '1 DAY 2' HOUR").collect
+            spark.sql("SELECT INTERVAL '1 DAY 2' HOUR").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "INVALID_INTERVAL_FORM")
         assert(e.getMessage.contains(
@@ -52,7 +52,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("INVALID_FROM_TO_UNIT_VALUE: value of from-to unit must be a string") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT INTERVAL -2021 YEAR TO MONTH").collect
+            spark.sql("SELECT INTERVAL -2021 YEAR TO MONTH").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "INVALID_FROM_TO_UNIT_VALUE")
         assert(e.getMessage.contains(
@@ -61,7 +61,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("UNSUPPORTED_FROM_TO_INTERVAL: Unsupported from-to interval") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT extract(MONTH FROM INTERVAL '2021-11' YEAR TO DAY)").collect
+            spark.sql("SELECT extract(MONTH FROM INTERVAL '2021-11' YEAR TO DAY)").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "UNSUPPORTED_FROM_TO_INTERVAL")
         assert(e.getMessage.contains(
@@ -70,7 +70,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession{
 
     test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
         val e = intercept[ParseException] {
-            spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR").collect
+            spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR").collect()
         }.getCause.asInstanceOf[ParseException]
         assert(e.getErrorClass === "MIXED_INTERVAL_UNITS")
         assert(e.getMessage.contains(
