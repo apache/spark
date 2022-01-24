@@ -154,7 +154,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         val data = (1 to 8197).map { i =>
           ( i,
             i.toLong, i.toShort, Array[Byte](i.toByte),
-            if (i % 2 == 1) s"test_${i}" else null,
+            if (i % 2 == 1) s"test_$i" else null,
             DateTimeUtils.fromJavaDate(Date.valueOf(s"2021-11-0" + ((i % 9) + 1))),
             DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(s"2020-11-01 12:00:0" + (i % 10))),
             Period.of(1, (i % 11 ) + 1, 0),

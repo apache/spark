@@ -48,11 +48,16 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private int currentRow = 0;
 
   //temporary variable used by getBinary
-  private Binary binaryVal;
+  private final WritableColumnVector binaryValVector;
 
   VectorizedDeltaByteArrayReader(MemoryMode memoryMode){
     this.memoryMode = memoryMode;
     this.suffixReader = new VectorizedDeltaLengthByteArrayReader(memoryMode);
+    if (memoryMode == MemoryMode.OFF_HEAP) {
+      binaryValVector = new OffHeapColumnVector(1, BinaryType);
+    } else {
+      binaryValVector = new OnHeapColumnVector(1, BinaryType);
+    }
   }
 
   @Override
@@ -73,10 +78,8 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   @Override
   public Binary readBinary(int len) {
-    readValues(1, null, 0,
-        (w, r, v, l) ->
-            binaryVal = Binary.fromConstantByteArray(v.array(), v.arrayOffset() + v.position(), l));
-    return binaryVal;
+    readValues(1, binaryValVector, 0, ByteBufferOutputWriter::writeArrayByteBuffer);
+    return Binary.fromConstantByteArray(binaryValVector.getBinary(0));
   }
 
   public void readValues(int total, WritableColumnVector c, int rowId,
