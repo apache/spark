@@ -2213,8 +2213,9 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-32889: ORC table column name supports special characters") {
-    // " " "," is not allowed.
-    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+    // "," is not allowed since cannot create a table having a column whose name
+    // contains commas in Hive metastore.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=", " ", "a b").foreach { name =>
       val source = "ORC"
       Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
           s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
