@@ -137,11 +137,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(newCol.expr.asInstanceOf[NamedExpression].metadata.getString("key") === "value")
   }
 
-  test("as propagates metadata from nested column") {
+  test("SPARK-34805: as propagates metadata from nested column") {
     val metadata = new MetadataBuilder
     metadata.putString("key", "value")
-    val df = spark.createDataFrame(sparkContext.parallelize(
-      Row("abcd") :: Nil),
+    val df = spark.createDataFrame(sparkContext.emptyRDD[Row],
       StructType(Seq(
         StructField("parent", StructType(Seq(
           StructField("child", StringType, metadata = metadata.build())
