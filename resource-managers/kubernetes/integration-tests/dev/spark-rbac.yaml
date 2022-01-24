@@ -26,7 +26,7 @@ metadata:
   name: spark-sa
   namespace: spark
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: spark-role
@@ -38,7 +38,7 @@ rules:
   verbs:
   - "*"
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: spark-role-binding
