@@ -889,6 +889,7 @@ class Frame(object, metaclass=ABCMeta):
         lines: bool = True,
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
+        ignoreNullFields: bool = False,
         **options: Any,
     ) -> Optional[str]:
         """
@@ -948,6 +949,7 @@ class Frame(object, metaclass=ABCMeta):
             the options in PySpark's API documentation for `spark.write.json(...)`.
             It has a higher priority and overwrites all other options.
             This parameter only works when `path` is specified.
+        ignoreNullFields: if set to True and path is provided, writer omits columns with all NaN or Null values.
 
         Returns
         --------
@@ -980,6 +982,8 @@ class Frame(object, metaclass=ABCMeta):
         0         a
         1         c
         """
+        options["ignoreNullFields"] = ignoreNullFields
+        
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
 
