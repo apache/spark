@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
@@ -89,7 +90,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("UNSUPPORTED_MODE: unsupported combinations of AES modes and padding") {
+  test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
@@ -111,5 +112,15 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
+  }
+
+  test("UNSUPPORTED_FEATURE: creating a literal of unsupported type") {
+    val e = intercept[SparkRuntimeException] {
+      spark.range(1).select($"value" + Literal(java.time.Year.of(1000)))
+    }
+    assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
+    assert(e.getSqlState === "0A000")
+    assert(e.getMessage.contains("The feature is not supported: " +
+      "literal for '1000' of class java.time.Year."))
   }
 }

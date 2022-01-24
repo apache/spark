@@ -68,11 +68,6 @@ import org.apache.spark.util.CircularBuffer
  */
 object QueryExecutionErrors {
 
-  def columnChangeUnsupportedError(): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_CHANGE_COLUMN",
-      messageParameters = Array.empty)
-  }
-
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
@@ -257,8 +252,10 @@ object QueryExecutionErrors {
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
-      Array(v.getClass.toString, v.toString))
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
