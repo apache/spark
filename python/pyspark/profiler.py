@@ -148,11 +148,11 @@ class Profiler:
             stats.dump_stats(p)
 
 
-class PStatsParam(AccumulatorParam):
+class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
 
     @staticmethod
-    def zero(value: pstats.Stats) -> None:
+    def zero(value: Optional[pstats.Stats]) -> None:
         return None
 
     @staticmethod
