@@ -207,8 +207,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       Row(Integer.valueOf(x), String.valueOf(y))
     }
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
-    df.write.mode(SaveMode.Overwrite)
-      .jdbc(jdbcUrl, "tbl", new Properties).option("truncate", true)
+    df.write.mode(SaveMode.Overwrite).option("truncate", true)
+      .jdbc(jdbcUrl, "tbl", new Properties)
     val df1 = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
     assert(df1.collect.toSet === expectedResult)
   }
