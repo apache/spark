@@ -50,7 +50,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
-        "The value of parameter(s) 'key' in aes_encrypt/aes_decrypt is invalid: " +
+        "The value of parameter(s) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
         "expects a binary value with 16, 24 or 32 bytes, but got"))
     }
 
@@ -84,8 +84,8 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.contains(
-        "The value of parameter(s) 'expr, key' in aes_encrypt/aes_decrypt is invalid: " +
-        "Detail message:"))
+        "The value of parameter(s) 'expr, key' in the aes_encrypt/aes_decrypt function " +
+        "is invalid: Detail message:"))
     }
   }
 
@@ -99,7 +99,8 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       }.getCause.asInstanceOf[SparkRuntimeException]
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
-      assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+"""))
+      assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
+        " by the aes_encrypt/aes_decrypt function."))
     }
 
     // Unsupported AES mode and padding in encrypt

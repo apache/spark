@@ -1909,14 +1909,15 @@ object QueryExecutionErrors {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "key",
-        "aes_encrypt/aes_decrypt",
+        "the aes_encrypt/aes_decrypt function",
         s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"AES-$mode with the padding $padding"))
+      messageParameters = Array(
+        s"AES-$mode with the padding $padding by the aes_encrypt/aes_decrypt function."))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
@@ -1924,7 +1925,7 @@ object QueryExecutionErrors {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "expr, key",
-        "aes_encrypt/aes_decrypt",
+        "the aes_encrypt/aes_decrypt function",
         s"Detail message: $detailMessage"))
   }
 
