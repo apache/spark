@@ -129,15 +129,15 @@ case class ToNumber(left: Expression, right: Expression) extends NumberFormatter
   examples = """
     Examples:
       > SELECT _FUNC_(454, '999');
-       '454'
+       454
       > SELECT _FUNC_(454.00, '000D00');
-       '454.00'
+       454.00
       > SELECT _FUNC_(12454, '99G999');
-       '12,454'
+       12,454
       > SELECT _FUNC_(78.12, '$99.99');
-       '$78.12'
+       $78.12
       > SELECT _FUNC_(-12454.8, '99G999D9S');
-       '12,454.8-'
+       12,454.8-
   """,
   since = "3.3.0",
   group = "string_funcs")
