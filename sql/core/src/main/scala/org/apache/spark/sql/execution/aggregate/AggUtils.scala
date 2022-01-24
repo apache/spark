@@ -108,7 +108,7 @@ object AggUtils {
 
     createAggregate(
       requiredChildDistributionExpressions = None,
-      groupingExpressions = groupingAttributes,
+      groupingExpressions = groupingExpressions,
       aggregateExpressions = partialAggregateExpressions,
       aggregateAttributes = partialAggregateAttributes,
       initialInputBufferOffset = 0,
