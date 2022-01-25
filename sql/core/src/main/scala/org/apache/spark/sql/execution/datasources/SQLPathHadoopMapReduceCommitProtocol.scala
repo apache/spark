@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileNameSpec, HadoopMapReduceCommitProtocol}
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec, HadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
@@ -30,12 +32,16 @@ import org.apache.spark.internal.io.{FileNameSpec, HadoopMapReduceCommitProtocol
 class SQLPathHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, stagingDir, dynamicPartitionOverwrite)
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  def sqlPathOutputCommitter(): SQLPathOutputCommitter =
+  override val stagingDir: Path =
+    FileCommitProtocol.externalTempPath(new Path(path), SparkHadoopUtil.get.conf,
+      SQLConf.get.stagingDir, "spark", jobId)
+
+  // This variable only can be used after setupCommitter.
+  private lazy val sqlPathOutputCommitter: SQLPathOutputCommitter =
     committer.asInstanceOf[SQLPathOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
@@ -48,7 +54,7 @@ class SQLPathHadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext,
       dir: Option[String],
       spec: FileNameSpec): String = {
-    val filename = getFilename(taskContext, spec)
+    val filename = getFilename(taskContext, spce)
     dir.map { d =>
       new Path(
         new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), d), filename).toString
