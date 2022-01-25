@@ -254,7 +254,7 @@ object InterpretedUnsafeProjection {
         (_, _) => {}
 
       case _ =>
-        throw QueryExecutionErrors.dataTypeUnsupportedError(dt)
+        throw QueryExecutionErrors.dataTypeUnsupportedForWriterFuncError(dt)
     }
 
     // Always wrap the writer with a null safe version.
