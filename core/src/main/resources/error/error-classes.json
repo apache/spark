@@ -1,4 +1,7 @@
 {
+  "AES_CRYPTO_ERROR" : {
+    "message" : [ "AES crypto operation failed with: %s" ]
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -71,6 +74,10 @@
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },
+  "INVALID_AES_KEY_LENGTH" : {
+    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
   },
@@ -85,9 +92,18 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set %s to false to bypass this error. " ],
     "sqlState" : "22023"
   },
+  "INVALID_FROM_TO_UNIT_VALUE" : {
+    "message" : [ "The value of from-to unit must be a string" ]
+  },
   "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
     "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "42000"
+  },
+  "INVALID_INTERVAL_FORM" : {
+    "message" : [ "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s. " ]
+  },
+  "INVALID_INTERVAL_LITERAL" : {
+    "message" : [ "at least one time unit should be given for interval literal" ]
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
@@ -109,6 +125,12 @@
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
+  },
+  "MIXED_INTERVAL_UNITS" : {
+    "message" : [ "Cannot mix year-month and day-time fields: %s" ]
+  },
+  "MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL" : {
+    "message" : [ "Can only have a single from-to unit in the interval literal syntax" ]
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
@@ -141,6 +163,10 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_AES_MODE" : {
+    "message" : [ "The AES mode %s with the padding %s is not supported" ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_CHANGE_COLUMN" : {
     "message" : [ "Please add an implementation for a column change here" ],
     "sqlState" : "0A000"
@@ -152,6 +178,9 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_FROM_TO_INTERVAL" : {
+    "message" : [ "Intervals FROM %s TO %s are not supported. " ]
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
@@ -167,23 +196,5 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
-  },
-  "MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL" : {
-    "message" : [ "Can only have a single from-to unit in the interval literal syntax" ]
-  },
-  "INVALID_INTERVAL_LITERAL" : {
-    "message" : [ "at least one time unit should be given for interval literal" ]
-  },
-  "INVALID_INTERVAL_FORM" : {
-    "message" : [ "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s. " ]
-  },
-  "INVALID_FROM_TO_UNIT_VALUE" : {
-    "message" : [ "The value of from-to unit must be a string" ]
-  },
-  "UNSUPPORTED_FROM_TO_INTERVAL" : {
-    "message" : [ "Intervals FROM %s TO %s are not supported. " ]
-  },
-  "MIXED_INTERVAL_UNITS" : {
-    "message" : [ "Cannot mix year-month and day-time fields: %s" ]
   }
 }
