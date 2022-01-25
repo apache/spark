@@ -130,7 +130,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * The memory mode of the columnarBatch
    */
-  private final MemoryMode MEMORY_MODE;
+  private final MemoryMode memoryMode;
 
   public VectorizedParquetRecordReader(
       ZoneId convertTz,
@@ -145,7 +145,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     this.datetimeRebaseTz = datetimeRebaseTz;
     this.int96RebaseMode = int96RebaseMode;
     this.int96RebaseTz = int96RebaseTz;
-    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+    memoryMode = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
   }
 
@@ -270,11 +270,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void initBatch() {
-    initBatch(MEMORY_MODE, null, null);
+    initBatch(memoryMode, null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(MEMORY_MODE, partitionColumns, partitionValues);
+    initBatch(memoryMode, partitionColumns, partitionValues);
   }
 
   /**
