@@ -99,12 +99,6 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       sizes.sum / sizes.length
   }
 
-  private def optimize(plan: SparkPlan): SparkPlan = {
-    plan transformDown {
-      case join: ShuffledJoin if !join.isSkewJoin => optimizeShuffledJoin(join)
-    }
-  }
-
   /*
    * This method aim to optimize the skewed join with the following steps:
    * 1. Collect all ShuffledJoins/ShuffleQueryStages, and check valid operators;
@@ -261,7 +255,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       val medSize = Utils.median(sizes)
       val threshold = getSkewThreshold(medSize)
       val target = targetSize(sizes, threshold)
-      logDebug(s"$logPrefix: Optimizing ShuffleQueryStage #$stageId in " +
+      logDebug(s"$logPrefix: Analyzing ShuffleQueryStage #$stageId in " +
         s"skew join, size info: ${getSizeInfo(medSize, sizes)}")
       stageId -> (threshold, target)
     }.toMap
@@ -364,6 +358,12 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
       case stage: ShuffleQueryStageExec =>
         SkewJoinChildWrapper(AQEShuffleReadExec(stage, newSpecs(stage.id)))
+    }
+  }
+
+  private def optimize(plan: SparkPlan): SparkPlan = {
+    plan transformDown {
+      case join: ShuffledJoin if !join.isSkewJoin => optimizeShuffledJoin(join)
     }
   }
 
