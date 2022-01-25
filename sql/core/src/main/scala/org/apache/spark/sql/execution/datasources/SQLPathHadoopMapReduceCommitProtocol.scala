@@ -54,10 +54,10 @@ class SQLPathHadoopMapReduceCommitProtocol(
       taskContext: TaskAttemptContext,
       dir: Option[String],
       spec: FileNameSpec): String = {
-    val filename = getFilename(taskContext, spce)
+    val filename = getFilename(taskContext, spec)
     dir.map { d =>
-      new Path(
-        new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), d), filename).toString
+      new Path(new Path(
+        sqlPathOutputCommitter.getTaskAttemptPath(taskContext), d), filename).toString
     }.getOrElse {
       new Path(sqlPathOutputCommitter.getTaskAttemptPath(taskContext), filename).toString
     }
