@@ -889,7 +889,6 @@ class Frame(object, metaclass=ABCMeta):
         lines: bool = True,
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
-        ignoreNullFields: bool = False,
         **options: Any,
     ) -> Optional[str]:
         """
