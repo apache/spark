@@ -3203,6 +3203,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
+      case (PROP_EXTERNAL, _) if !legacyOn =>
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
+      case (PROP_EXTERNAL, _) => false
       case _ => true
     }
   }

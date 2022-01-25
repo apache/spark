@@ -2078,10 +2078,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
           case u @ UnresolvedGenerator(name, arguments) => withPosition(u) {
-            resolveBuiltinOrTempFunction(name.asMultipart, arguments, None).getOrElse {
-              // For generator function, the parser only accepts v1 function name and creates
-              // `FunctionIdentifier`.
-              v1SessionCatalog.resolvePersistentFunction(name, arguments)
+            // For generator function, the parser only accepts v1 function name and creates
+            // `FunctionIdentifier`.
+            v1SessionCatalog.lookupFunction(name, arguments) match {
+              case generator: Generator => generator
+              case other => throw QueryCompilationErrors.generatorNotExpectedError(
+                name, other.getClass.getCanonicalName)
             }
           }
 

@@ -4262,6 +4262,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
     }
   }
+
+  test("SPARK-37965: Spark support read/write orc file with invalid char in field name") {
+    withTempDir { dir =>
+      Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), (2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22))
+        .toDF("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")
+        .repartition(1)
+        .write.mode(SaveMode.Overwrite).orc(dir.getAbsolutePath)
+      val df = spark.read.orc(dir.getAbsolutePath)
+      checkAnswer(df,
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) ::
+          Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
+      assert(df.schema.names.sameElements(
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")))
+      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
+        Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
+      checkAnswer(df.where("`a.b` > 10"),
+        Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
