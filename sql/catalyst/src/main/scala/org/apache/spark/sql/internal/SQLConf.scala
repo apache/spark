@@ -1282,6 +1282,17 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
+  val EXEC_STAGING_DIR = buildConf("spark.sql.exec.stagingDir")
+    .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
+      "absolute output path, or writing data into partitioned directory " +
+      "when dynamic partition overwrite mode is on. " +
+      "Default value means staging directory is under table path.")
+    .version("3.3.0")
+    .internal()
+    .stringConf
+    .checkValue(!_.isEmpty, "Should not pass an empty string as staging diretory.")
+    .createWithDefault(".spark-staging")
+
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
       .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
@@ -3965,6 +3976,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
+
+  def stagingDir: String = getConf(SQLConf.EXEC_STAGING_DIR)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)

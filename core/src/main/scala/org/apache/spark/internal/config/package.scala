@@ -2310,16 +2310,6 @@ package object config {
       .stringConf
       .createOptional
 
-  val EXEC_STAGING_DIR =
-    ConfigBuilder("spark.exec.stagingDir")
-      .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
-        "absolute output path, or writing data into partitioned directory when " +
-        "dynamic partition overwrite mode.")
-      .version("3.3.0")
-      .internal()
-      .stringConf
-      .createWithDefault(".spark-staging")
-
   private[spark] val EXECUTOR_STATE_SYNC_MAX_ATTEMPTS =
     ConfigBuilder("spark.worker.executorStateSync.maxAttempts")
       .internal()
