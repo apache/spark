@@ -1303,19 +1303,16 @@ object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
   import PushProjectionThroughUnion.pushProjectionThroughUnion
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val alwaysInline = conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
-    plan.transformDownWithPruning(
-      _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
-      case u: Union => flattenUnion(u, false, alwaysInline)
-      case Distinct(u: Union) => Distinct(flattenUnion(u, true, alwaysInline))
-      // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
-        Deduplicate(keys, flattenUnion(u, true, alwaysInline))
-    }
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+    _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
+    case u: Union => flattenUnion(u, false)
+    case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+    // Only handle distinct-like 'Deduplicate', where the keys == output
+    case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+      Deduplicate(keys, flattenUnion(u, true))
   }
 
-  private def flattenUnion(union: Union, flattenDistinct: Boolean, alwaysInline: Boolean): Union = {
+  private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
     val topByName = union.byName
     val topAllowMissingCol = union.allowMissingCol
 
@@ -1328,7 +1325,7 @@ object CombineUnions extends Rule[LogicalPlan] {
     while (stack.nonEmpty) {
       stack.pop() match {
         case p1 @ Project(_, p2: Project)
-            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
           val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
           stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
