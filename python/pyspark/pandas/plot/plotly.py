@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
 from typing import TYPE_CHECKING, Union
 
 import pandas as pd
@@ -109,7 +110,11 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             )
         )
 
-    fig = go.Figure(data=bars, layout=go.Layout(barmode="stack"))
+    layout_keys = inspect.signature(go.Layout).parameters.keys()
+    layout_kwargs = {k: v for k, v in kwargs.items() if k in layout_keys}
+
+    fig = go.Figure(data=bars, layout=go.Layout(**layout_kwargs))
+    fig["layout"]["barmode"] = "stack"
     fig["layout"]["xaxis"]["title"] = "value"
     fig["layout"]["yaxis"]["title"] = "count"
     return fig
