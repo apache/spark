@@ -275,6 +275,8 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
 
 function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTable) {
   var executorMetricsTable = "#summary-executor-metrics-table";
+  $(executorMetricsTable).hide();
+  $('#executorSummaryMetricsTitle').hide();
   if ($.fn.dataTable.isDataTable(executorMetricsTable)) {
     executorSummaryMetricsDataTable.clear().draw();
     executorSummaryMetricsDataTable.rows.add(executorSummaryMetricsTable).draw();
@@ -332,6 +334,10 @@ function createDataTableForExecutorSummaryMetricsTable(executorSummaryMetricsTab
       }
     };
     executorSummaryMetricsDataTable = $(executorMetricsTable).DataTable(executorSummaryConf);
+  }
+  if (executorSummaryMetricsTable.length > 0) {
+    $(executorMetricsTable).show();
+    $('#executorSummaryMetricsTitle').show();
   }
   executorSummaryMetricsTableCurrentStateArray = executorSummaryMetricsTable.slice();
 }
