@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
@@ -802,7 +804,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     val union = df1.unionByName(df2, allowMissingColumns = true)
-    assert(union.schema.toDDL == "`topLevelCol` STRUCT<`b`: STRING, `a`: STRING>")
+    assert(union.schema.toDDL == "topLevelCol STRUCT<b: STRING, a: STRING>")
     checkAnswer(union, Row(Row("b", null)) :: Row(Row("b", "a")) :: Nil)
   }
 
@@ -834,15 +836,15 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     var unionDf = df1.unionByName(df2, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: STRUCT<`ba`: STRING, `bb`: STRING>, `a`: STRUCT<`aa`: STRING>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: STRUCT<ba: STRING, bb: STRING>, a: STRUCT<aa: STRING>>")
     checkAnswer(unionDf,
       Row(Row(Row("ba", null), null)) ::
       Row(Row(Row(null, "bb"), Row("aa"))) :: Nil)
 
     unionDf = df2.unionByName(df1, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<`a`: STRUCT<`aa`: STRING>, " +
-      "`b`: STRUCT<`bb`: STRING, `ba`: STRING>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<a: STRUCT<aa: STRING>, " +
+      "b: STRUCT<bb: STRING, ba: STRING>>")
     checkAnswer(unionDf,
       Row(Row(null, Row(null, "ba"))) ::
       Row(Row(Row("aa"), Row("bb", null))) :: Nil)
@@ -1110,13 +1112,13 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("arr", arrayType2))))
 
     var unionDf = df1.unionByName(df2)
-    assert(unionDf.schema.toDDL == "`arr` ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>")
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<ba: STRING, bb: STRING>>")
     checkAnswer(unionDf,
       Row(Seq(Row("ba", "bb"))) ::
       Row(Seq(Row("ba", "bb"))) :: Nil)
 
     unionDf = df2.unionByName(df1)
-    assert(unionDf.schema.toDDL == "`arr` ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>")
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<bb: STRING, ba: STRING>>")
     checkAnswer(unionDf,
       Row(Seq(Row("bb", "ba"))) ::
       Row(Seq(Row("bb", "ba"))) :: Nil)
@@ -1148,7 +1150,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df3.unionByName(df4, true)
-    assert(unionDf.schema.toDDL == "`arr` ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>")
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<ba: STRING, bb: STRING>>")
     checkAnswer(unionDf,
       Row(Seq(Row("ba", null))) ::
       Row(Seq(Row(null, "bb"))) :: Nil)
@@ -1158,7 +1160,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df4.unionByName(df3, true)
-    assert(unionDf.schema.toDDL == "`arr` ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>")
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<bb: STRING, ba: STRING>>")
     checkAnswer(unionDf,
       Row(Seq(Row("bb", null))) ::
       Row(Seq(Row(null, "ba"))) :: Nil)
@@ -1194,15 +1196,15 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     var unionDf = df1.unionByName(df2)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<STRUCT<ba: STRING, bb: STRING>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Row("ba", "bb")))) ::
       Row(Row(Seq(Row("ba", "bb")))) :: Nil)
 
     unionDf = df2.unionByName(df1)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<" +
-      "`b`: ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<STRUCT<bb: STRING, ba: STRING>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Row("bb", "ba")))) ::
       Row(Row(Seq(Row("bb", "ba")))) :: Nil)
@@ -1238,8 +1240,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df3.unionByName(df4, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<STRUCT<ba: STRING, bb: STRING>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Row("ba", null)))) ::
       Row(Row(Seq(Row(null, "bb")))) :: Nil)
@@ -1249,8 +1251,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df4.unionByName(df3, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<" +
-      "`b`: ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<STRUCT<bb: STRING, ba: STRING>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Row("bb", null)))) ::
       Row(Row(Seq(Row(null, "ba")))) :: Nil)
@@ -1290,15 +1292,15 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     var unionDf = df1.unionByName(df2)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: ARRAY<ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<ARRAY<STRUCT<ba: STRING, bb: STRING>>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Seq(Row("ba", "bb"))))) ::
       Row(Row(Seq(Seq(Row("ba", "bb"))))) :: Nil)
 
     unionDf = df2.unionByName(df1)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<" +
-      "`b`: ARRAY<ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<ARRAY<STRUCT<bb: STRING, ba: STRING>>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Seq(Row("bb", "ba"))))) ::
       Row(Row(Seq(Seq(Row("bb", "ba"))))) :: Nil)
@@ -1338,8 +1340,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df3.unionByName(df4, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: ARRAY<ARRAY<STRUCT<`ba`: STRING, `bb`: STRING>>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<ARRAY<STRUCT<ba: STRING, bb: STRING>>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Seq(Row("ba", null))))) ::
       Row(Row(Seq(Seq(Row(null, "bb"))))) :: Nil)
@@ -1349,11 +1351,45 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     }
 
     unionDf = df4.unionByName(df3, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<" +
-      "`b`: ARRAY<ARRAY<STRUCT<`bb`: STRING, `ba`: STRING>>>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<ARRAY<STRUCT<bb: STRING, ba: STRING>>>>")
     checkAnswer(unionDf,
       Row(Row(Seq(Seq(Row("bb", null))))) ::
       Row(Row(Seq(Seq(Row(null, "ba"))))) :: Nil)
+  }
+
+  test("SPARK-37371: UnionExec should support columnar if all children support columnar") {
+    def checkIfColumnar(
+        plan: SparkPlan,
+        targetPlan: (SparkPlan) => Boolean,
+        isColumnar: Boolean): Unit = {
+      val target = plan.collect {
+        case p if targetPlan(p) => p
+      }
+      assert(target.nonEmpty)
+      assert(target.forall(_.supportsColumnar == isColumnar))
+    }
+
+    Seq(true, false).foreach { supported =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> supported.toString) {
+        val df1 = Seq(1, 2, 3).toDF("i").cache()
+        val df2 = Seq(4, 5, 6).toDF("j").cache()
+
+        val union = df1.union(df2)
+        checkIfColumnar(union.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+        checkIfColumnar(union.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported)
+        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported)
+        checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
+
+        val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
+        checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
+          _.isInstanceOf[UnionExec], false)
+        checkAnswer(nonColumnarUnion,
+          Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
+      }
+    }
   }
 }
 

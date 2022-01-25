@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{NumberConverter, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -654,10 +654,17 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
     Examples:
       > SELECT _FUNC_(40);
        1.0
+      > SELECT _FUNC_(INTERVAL -'100' YEAR);
+       -1.0
   """,
   since = "1.4.0",
   group = "math_funcs")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM") {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType))
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Number].doubleValue())
+  }
   override protected def withNewChildInternal(newChild: Expression): Signum = copy(child = newChild)
 }
 
@@ -1540,14 +1547,27 @@ case class BRound(child: Expression, scale: Expression)
 }
 
 object WidthBucket {
-
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
-    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
-        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
-        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
-      return null
+    if (isNull(value, min, max, numBucket)) {
+      null
+    } else {
+      computeBucketNumberNotNull(value, min, max, numBucket)
     }
+  }
 
+  /** This function is called by generated Java code, so it needs to be public. */
+  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+    numBucket <= 0 ||
+      numBucket == Long.MaxValue ||
+      jl.Double.isNaN(value) ||
+      min == max ||
+      jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+      jl.Double.isNaN(max) || jl.Double.isInfinite(max)
+  }
+
+  /** This function is called by generated Java code, so it needs to be public. */
+  def computeBucketNumberNotNull(
+      value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
 
@@ -1606,6 +1626,14 @@ object WidthBucket {
        5
       > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
        3
+      > SELECT _FUNC_(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       2
+      > SELECT _FUNC_(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       2
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -1616,23 +1644,49 @@ case class WidthBucket(
     numBucket: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    LongType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        (value.dataType, minValue.dataType, maxValue.dataType) match {
+          case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
+            TypeCheckSuccess
+          case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
+            TypeCheckSuccess
+          case _ =>
+            val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
+            TypeUtils.checkForSameTypeInputExpr(types, s"function $prettyName")
+        }
+      case f => f
+    }
+  }
+
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
   override def prettyName: String = "width_bucket"
 
   override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
     WidthBucket.computeBucketNumber(
-      input.asInstanceOf[Double],
-      min.asInstanceOf[Double],
-      max.asInstanceOf[Double],
+      input.asInstanceOf[Number].doubleValue(),
+      min.asInstanceOf[Number].doubleValue(),
+      max.asInstanceOf[Number].doubleValue(),
       numBucket.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
-      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
-        s".computeBucketNumber($input, $min, $max, $numBucket)")
+    nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
+      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .isNull($input, $min, $max, $numBucket);
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |}""".stripMargin
+    })
   }
 
   override def first: Expression = value

@@ -192,7 +192,7 @@ SCALA_2_12_PROFILES="-Pscala-2.12"
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Phive-2.3 -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
@@ -322,18 +322,18 @@ if [[ "$1" == "package" ]]; then
   #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
   #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
-  BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
+  BINARY_PKGS_ARGS["hadoop3"]="-Phadoop-3 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
+    BINARY_PKGS_ARGS["hadoop2"]="-Phadoop-2 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr"
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
-    key="hadoop3.2-scala2.13"
-    args="-Phadoop-3.2 $HIVE_PROFILES"
+    key="hadoop3-scala2.13"
+    args="-Phadoop-3 $HIVE_PROFILES"
     extra=""
     if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
       error "Failed to build $key package. Check logs for details."

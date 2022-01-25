@@ -72,7 +72,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   val id: Int = SparkPlan.newPlanId()
 
   /**
-   * Return true if this stage of the plan supports columnar execution.
+   * Return true if this stage of the plan supports row-based execution. A plan
+   * can also support columnar execution (see `supportsColumnar`). Spark will decide
+   * which execution to be called during query planning.
+   */
+  def supportsRowBased: Boolean = !supportsColumnar
+
+  /**
+   * Return true if this stage of the plan supports columnar execution. A plan
+   * can also support row-based execution (see `supportsRowBased`). Spark will decide
+   * which execution to be called during query planning.
    */
   def supportsColumnar: Boolean = false
 
@@ -311,6 +320,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
       s" mismatch:\n${this}")
   }
+
+  /**
+   * Converts the output of this plan to row-based if it is columnar plan.
+   */
+  def toRowBased: SparkPlan = if (supportsColumnar) ColumnarToRowExec(this) else this
 
   /**
    * Packing the UnsafeRows into byte array for faster serialization.

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -38,7 +38,10 @@ class OptimizerLoggingSuite extends PlanTest {
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new LogAppender("optimizer rules")
-    withLogAppender(logAppender, level = Some(Level.TRACE)) {
+    logAppender.setThreshold(expectedLevel)
+    withLogAppender(logAppender,
+      loggerNames = Seq("org.apache.spark.sql.catalyst.rules.PlanChangeLogger"),
+      level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
       val query = input.select('a, 'b).select('a).where('a > 1).analyze
       val expected = input.where('a > 1).select('a).analyze
@@ -49,9 +52,9 @@ class OptimizerLoggingSuite extends PlanTest {
         "Applying Rule",
         "Result of Batch",
         "has no effect",
-        "Metrics of Executed Rules").exists(event.getRenderedMessage().contains)
+        "Metrics of Executed Rules").exists(event.getMessage().getFormattedMessage.contains)
     }
-    val logMessages = events.map(_.getRenderedMessage)
+    val logMessages = events.map(_.getMessage.getFormattedMessage)
     assert(expectedRulesOrBatches.forall
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))

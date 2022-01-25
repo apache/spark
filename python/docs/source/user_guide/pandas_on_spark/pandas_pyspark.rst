@@ -31,7 +31,7 @@ get familiar with pandas API on Spark in this case. This page aims to describe i
 pandas
 ------
 
-pandas users can access to full pandas API by calling :func:`DataFrame.to_pandas`.
+pandas users can access the full pandas API by calling :func:`DataFrame.to_pandas`.
 pandas-on-Spark DataFrame and pandas DataFrame are similar. However, the former is distributed
 and the latter is in a single machine. When converting to each other, the data is
 transferred between multiple machines and the single client machine.
@@ -81,7 +81,7 @@ if possible, it is recommended to use pandas API on Spark or PySpark APIs instea
 PySpark
 -------
 
-PySpark users can access to full PySpark APIs by calling :func:`DataFrame.to_spark`.
+PySpark users can access the full PySpark APIs by calling :func:`DataFrame.to_spark`.
 pandas-on-Spark DataFrame and Spark DataFrame are virtually interchangeable.
 
 For example, if you need to call ``spark_df.filter(...)`` of Spark DataFrame, you can do
@@ -107,14 +107,14 @@ Spark DataFrame can be a pandas-on-Spark DataFrame easily as below:
 
 .. code-block:: python
 
-   >>> sdf.to_pandas_on_spark()
+   >>> sdf.pandas_api()
       id
    0   6
    1   7
    2   8
    3   9
 
-However, note that it requires to create new default index in case pandas-on-Spark DataFrame is created from
+However, note that a new default index is created when pandas-on-Spark DataFrame is created from
 Spark DataFrame. See `Default Index Type <options.rst#default-index-type>`_. In order to avoid this overhead, specify the column
 to use as an index when possible.
 
@@ -127,7 +127,7 @@ to use as an index when possible.
    >>> # Call Spark APIs
    ... sdf = sdf.filter("id > 5")
    >>> # Uses the explicit index to avoid to create default index.
-   ... sdf.to_pandas_on_spark(index_col='index')
+   ... sdf.pandas_api(index_col='index')
           id
    index
    6       6

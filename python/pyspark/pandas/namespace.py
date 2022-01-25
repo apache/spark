@@ -18,7 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
-from typing import (  # noqa: F401 (SPARK-34943)
+from typing import (
     Any,
     Callable,
     Dict,
@@ -31,12 +31,9 @@ from typing import (  # noqa: F401 (SPARK-34943)
     Union,
     cast,
     no_type_check,
-    overload,
 )
-from collections import OrderedDict
 from collections.abc import Iterable
 from datetime import tzinfo
-from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
@@ -44,7 +41,11 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_datetime64_dtype,
+    is_datetime64tz_dtype,
+    is_list_like,
+)
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -67,7 +68,7 @@ from pyspark.sql.types import (
     DataType,
 )
 
-from pyspark import pandas as ps  # noqa: F401
+from pyspark import pandas as ps
 from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
@@ -79,6 +80,7 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     validate_axis,
+    log_advice,
 )
 from pyspark.pandas.frame import DataFrame, _reduce_spark_multi
 from pyspark.pandas.internal import (
@@ -90,7 +92,7 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.indexes import Index, DatetimeIndex
+from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
 
@@ -107,6 +109,8 @@ __all__ = [
     "read_html",
     "to_datetime",
     "date_range",
+    "to_timedelta",
+    "timedelta_range",
     "get_dummies",
     "concat",
     "melt",
@@ -224,7 +228,8 @@ def read_csv(
     quotechar: Optional[str] = None,
     escapechar: Optional[str] = None,
     comment: Optional[str] = None,
-    **options: Any
+    encoding: Optional[str] = None,
+    **options: Any,
 ) -> Union[DataFrame, Series]:
     """Read CSV (comma-separated) file into DataFrame or Series.
 
@@ -276,6 +281,8 @@ def read_csv(
         One-character string used to escape delimiter
     comment: str, optional
         Indicates the line should not be parsed.
+    encoding: str, optional
+        Indicates the encoding to read file
     options : dict
         All other options passed directly into Spark's data source.
 
@@ -291,6 +298,9 @@ def read_csv(
     --------
     >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
+    # For latin-1 encoding is same as iso-8859-1, that's why its mapped to iso-8859-1.
+    encoding_mapping = {"latin-1": "iso-8859-1"}
+
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -328,10 +338,13 @@ def read_csv(
 
         reader.options(**options)
 
+        if encoding is not None:
+            reader.option("encoding", encoding_mapping.get(encoding, encoding))
+
         column_labels: Dict[Any, str]
         if isinstance(names, str):
             sdf = reader.schema(names).csv(path)
-            column_labels = OrderedDict((col, col) for col in sdf.columns)
+            column_labels = {col: col for col in sdf.columns}
         else:
             sdf = reader.csv(path)
             if is_list_like(names):
@@ -344,26 +357,26 @@ def read_csv(
                         "of columns [%d]. Try names by a Spark SQL DDL-formatted "
                         "string." % (len(sdf.schema), len(names))
                     )
-                column_labels = OrderedDict(zip(names, sdf.columns))
+                column_labels = dict(zip(names, sdf.columns))
             elif header is None:
-                column_labels = OrderedDict(enumerate(sdf.columns))
+                column_labels = dict(enumerate(sdf.columns))
             else:
-                column_labels = OrderedDict((col, col) for col in sdf.columns)
+                column_labels = {col: col for col in sdf.columns}
 
         if usecols is not None:
             missing: List[Union[int, str]]
             if callable(usecols):
-                column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if usecols(label)
-                )
+                column_labels = {
+                    label: col for label, col in column_labels.items() if usecols(label)
+                }
                 missing = []
             elif all(isinstance(col, int) for col in usecols):
                 usecols_ints = cast(List[int], usecols)
-                new_column_labels = OrderedDict(
-                    (label, col)
+                new_column_labels = {
+                    label: col
                     for i, (label, col) in enumerate(column_labels.items())
                     if i in usecols_ints
-                )
+                }
                 missing = [
                     col
                     for col in usecols_ints
@@ -374,9 +387,9 @@ def read_csv(
                 ]
                 column_labels = new_column_labels
             elif all(isinstance(col, str) for col in usecols):
-                new_column_labels = OrderedDict(
-                    (label, col) for label, col in column_labels.items() if label in usecols
-                )
+                new_column_labels = {
+                    label: col for label, col in column_labels.items() if label in usecols
+                }
                 missing = [col for col in usecols if col not in new_column_labels]
                 column_labels = new_column_labels
             else:
@@ -395,7 +408,7 @@ def read_csv(
                 sdf = default_session().createDataFrame([], schema=StructType())
     else:
         sdf = default_session().createDataFrame([], schema=StructType())
-        column_labels = OrderedDict()
+        column_labels = {}
 
     if nrows is not None:
         sdf = sdf.limit(nrows)
@@ -410,10 +423,14 @@ def read_csv(
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
         index_names = [(col,) for col in index_col]
-        column_labels = OrderedDict(
-            (label, col) for label, col in column_labels.items() if label not in index_col
-        )
+        column_labels = {
+            label: col for label, col in column_labels.items() if label not in index_col
+        }
     else:
+        log_advice(
+            "If `index_col` is not specified for `read_csv`, "
+            "the default index is attached which can cause additional overhead."
+        )
         index_spark_column_names = []
         index_names = []
 
@@ -492,6 +509,11 @@ def read_json(
     0         a     b
     1         c     d
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_json`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -506,7 +528,7 @@ def read_delta(
     version: Optional[str] = None,
     timestamp: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read a Delta Lake table on some file system and return a DataFrame.
@@ -520,12 +542,12 @@ def read_delta(
     version : string, optional
         Specifies the table version (based on Delta's internal transaction version) to read from,
         using Delta's time travel feature. This sets Delta's 'versionAsOf' option. Note that
-        this paramter and `timestamp` paramter cannot be used together, otherwise it will raise a
+        this parameter and `timestamp` parameter cannot be used together, otherwise it will raise a
         `ValueError`.
     timestamp : string, optional
         Specifies the table version (based on timestamp) to read from,
         using Delta's time travel feature. This must be a valid date or timestamp string in Spark,
-        and sets Delta's 'timestampAsOf' option. Note that this paramter and `version` paramter
+        and sets Delta's 'timestampAsOf' option. Note that this parameter and `version` parameter
         cannot be used together, otherwise it will raise a `ValueError`.
     index_col : str or list of str, optional, default: None
         Index column of table in Spark.
@@ -577,6 +599,11 @@ def read_delta(
     3      13
     4      14
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_delta`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if version is not None and timestamp is not None:
         raise ValueError("version and timestamp cannot be used together.")
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
@@ -625,6 +652,11 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_table`, "
+            "the default index is attached which can cause additional overhead."
+        )
     sdf = default_session().read.table(name)
     index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
@@ -640,7 +672,7 @@ def read_spark_io(
     format: Optional[str] = None,
     schema: Union[str, "StructType"] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a DataFrame from a Spark data source.
 
@@ -724,7 +756,7 @@ def read_parquet(
     columns: Optional[List[str]] = None,
     index_col: Optional[List[str]] = None,
     pandas_metadata: bool = False,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """Load a parquet object from the file path, returning a DataFrame.
 
@@ -768,6 +800,11 @@ def read_parquet(
     index
     0       0
     """
+    if index_col is None:
+        log_advice(
+            "If `index_col` is not specified for `read_parquet`, "
+            "the default index is attached which can cause additional overhead."
+        )
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")
 
@@ -779,8 +816,9 @@ def read_parquet(
     if index_col is None and pandas_metadata:
         # Try to read pandas metadata
 
-        @no_type_check
-        @pandas_udf("index_col array<string>, index_names array<string>")
+        @pandas_udf(  # type: ignore[call-overload]
+            "index_col array<string>, index_names array<string>"
+        )
         def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
@@ -880,8 +918,8 @@ def read_excel(
     skipfooter: int = 0,
     convert_float: bool = True,
     mangle_dupe_cols: bool = True,
-    **kwds: Any
-) -> Union[DataFrame, Series, OrderedDict]:
+    **kwds: Any,
+) -> Union[DataFrame, Series, Dict[str, Union[DataFrame, Series]]]:
     """
     Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
@@ -1103,14 +1141,14 @@ def read_excel(
             na_values=na_values,
             keep_default_na=keep_default_na,
             verbose=verbose,
-            parse_dates=parse_dates,
+            parse_dates=parse_dates,  # type: ignore[arg-type]
             date_parser=date_parser,
             thousands=thousands,
             comment=comment,
             skipfooter=skipfooter,
             convert_float=convert_float,
             mangle_dupe_cols=mangle_dupe_cols,
-            **kwds
+            **kwds,
         )
 
     if isinstance(io, str):
@@ -1126,9 +1164,10 @@ def read_excel(
 
     if single_file:
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [(sn, from_pandas(pdf_or_pser)) for sn, pdf_or_pser in pdf_or_psers.items()]
-            )
+            return {
+                sn: cast(Union[DataFrame, Series], from_pandas(pdf_or_pser))
+                for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return cast(Union[DataFrame, Series], from_pandas(pdf_or_psers))
     else:
@@ -1178,12 +1217,9 @@ def read_excel(
                 return psdf
 
         if isinstance(pdf_or_psers, dict):
-            return OrderedDict(
-                [
-                    (sn, read_excel_on_spark(pdf_or_pser, sn))
-                    for sn, pdf_or_pser in pdf_or_psers.items()
-                ]
-            )
+            return {
+                sn: read_excel_on_spark(pdf_or_pser, sn) for sn, pdf_or_pser in pdf_or_psers.items()
+            }
         else:
             return read_excel_on_spark(pdf_or_psers, sheet_name)
 
@@ -1331,7 +1367,7 @@ def read_sql_table(
     schema: Optional[str] = None,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL database table into a DataFrame.
@@ -1456,7 +1492,7 @@ def read_sql(
     con: str,
     index_col: Optional[Union[str, List[str]]] = None,
     columns: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> DataFrame:
     """
     Read SQL query or database table into a DataFrame.
@@ -1643,21 +1679,25 @@ def to_datetime(
         "months": "month",
         "day": "day",
         "days": "day",
+        "hour": "h",
+        "hours": "h",
+        "minute": "m",
+        "minutes": "m",
+        "second": "s",
+        "seconds": "s",
+        "ms": "ms",
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "us": "us",
+        "microsecond": "us",
+        "microseconds": "us",
     }
 
-    # replace passed unit with _unit_map
-    def f(value):
-        if value in _unit_map:
-            return _unit_map[value]
-
-        if value.lower() in _unit_map:
-            return _unit_map[value.lower()]
-
-        return value
-
-    def pandas_to_datetime(pser_or_pdf: Union[pd.DataFrame, pd.Series]) -> Series[np.datetime64]:
+    def pandas_to_datetime(
+        pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
+    ) -> Series[np.datetime64]:
         if isinstance(pser_or_pdf, pd.DataFrame):
-            pser_or_pdf = pser_or_pdf[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
+            pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(
             pser_or_pdf,
             errors=errors,
@@ -1670,10 +1710,16 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: f(k) for k in arg.keys()}
+        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
-        psdf = arg[[unit_rev["year"], unit_rev["month"], unit_rev["day"]]]
-        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime)
+        list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
+        for u in ["h", "m", "s", "ms", "us"]:
+            value = unit_rev.get(u)
+            if value is not None and value in arg:
+                list_cols.append(value)
+
+        psdf = arg[list_cols]
+        return psdf.pandas_on_spark.transform_batch(pandas_to_datetime, list_cols)
     return pd.to_datetime(
         arg,
         errors=errors,
@@ -1693,7 +1739,7 @@ def date_range(
     normalize: bool = False,
     name: Optional[str] = None,
     closed: Optional[str] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> DatetimeIndex:
     """
     Return a fixed frequency DatetimeIndex.
@@ -1841,7 +1887,184 @@ def date_range(
                 normalize=normalize,
                 name=name,
                 closed=closed,
-                **kwargs
+                **kwargs,
+            )
+        ),
+    )
+
+
+@no_type_check
+def to_timedelta(
+    arg,
+    unit: Optional[str] = None,
+    errors: str = "raise",
+):
+    """
+    Convert argument to timedelta.
+
+    Parameters
+    ----------
+    arg : str, timedelta, list-like or Series
+        The data to be converted to timedelta.
+    unit : str, optional
+        Denotes the unit of the arg for numeric `arg`. Defaults to ``"ns"``.
+
+        Possible values:
+        * 'W'
+        * 'D' / 'days' / 'day'
+        * 'hours' / 'hour' / 'hr' / 'h'
+        * 'm' / 'minute' / 'min' / 'minutes' / 'T'
+        * 'S' / 'seconds' / 'sec' / 'second'
+        * 'ms' / 'milliseconds' / 'millisecond' / 'milli' / 'millis' / 'L'
+        * 'us' / 'microseconds' / 'microsecond' / 'micro' / 'micros' / 'U'
+        * 'ns' / 'nanoseconds' / 'nano' / 'nanos' / 'nanosecond' / 'N'
+
+        Must not be specified when `arg` context strings and ``errors="raise"``.
+    errors : {'ignore', 'raise', 'coerce'}, default 'raise'
+        - If 'raise', then invalid parsing will raise an exception.
+        - If 'coerce', then invalid parsing will be set as NaT.
+        - If 'ignore', then invalid parsing will return the input.
+
+    Returns
+    -------
+    ret : timedelta64, TimedeltaIndex or Series of timedelta64 if parsing succeeded.
+
+    See Also
+    --------
+    DataFrame.astype : Cast argument to a specified dtype.
+    to_datetime : Convert argument to datetime.
+
+    Notes
+    -----
+    If the precision is higher than nanoseconds, the precision of the duration is
+    truncated to nanoseconds for string inputs.
+
+    Examples
+    --------
+    Parsing a single string to a Timedelta:
+
+    >>> ps.to_timedelta('1 days 06:05:01.00003')
+    Timedelta('1 days 06:05:01.000030')
+    >>> ps.to_timedelta('15.5us')  # doctest: +SKIP
+    Timedelta('0 days 00:00:00.000015500')
+
+    Parsing a list or array of strings:
+
+    >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +SKIP
+    TimedeltaIndex(['1 days 06:05:01.000030', '0 days 00:00:00.000015500', NaT],
+                   dtype='timedelta64[ns]', freq=None)
+
+    Converting numbers by specifying the `unit` keyword argument:
+
+    >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +SKIP
+    TimedeltaIndex(['0 days 00:00:00', '0 days 00:00:01', '0 days 00:00:02',
+                    '0 days 00:00:03', '0 days 00:00:04'],
+                   dtype='timedelta64[ns]', freq=None)
+    >>> ps.to_timedelta(np.arange(5), unit='d')  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['0 days', '1 days', '2 days', '3 days', '4 days'],
+                   dtype='timedelta64[ns]', freq=None)
+    """
+
+    def pandas_to_timedelta(pser: pd.Series) -> np.timedelta64:
+        return pd.to_timedelta(
+            arg=pser,
+            unit=unit,
+            errors=errors,
+        )
+
+    if isinstance(arg, Series):
+        return arg.transform(pandas_to_timedelta)
+
+    else:
+        return pd.to_timedelta(
+            arg=arg,
+            unit=unit,
+            errors=errors,
+        )
+
+
+def timedelta_range(
+    start: Union[str, Any] = None,
+    end: Union[str, Any] = None,
+    periods: Optional[int] = None,
+    freq: Optional[Union[str, DateOffset]] = None,
+    name: Optional[str] = None,
+    closed: Optional[str] = None,
+) -> TimedeltaIndex:
+    """
+    Return a fixed frequency TimedeltaIndex, with day as the default frequency.
+
+    Parameters
+    ----------
+    start : str or timedelta-like, optional
+        Left bound for generating timedeltas.
+    end : str or timedelta-like, optional
+        Right bound for generating timedeltas.
+    periods : int, optional
+        Number of periods to generate.
+    freq : str or DateOffset, default 'D'
+        Frequency strings can have multiples, e.g. '5H'.
+    name : str, default None
+        Name of the resulting TimedeltaIndex.
+    closed : {None, 'left', 'right'}, optional
+        Make the interval closed with respect to the given frequency to
+        the 'left', 'right', or both sides (None, the default).
+
+    Returns
+    -------
+    TimedeltaIndex
+
+    Notes
+    -----
+    Of the four parameters ``start``, ``end``, ``periods``, and ``freq``,
+    exactly three must be specified. If ``freq`` is omitted, the resulting
+    ``TimedeltaIndex`` will have ``periods`` linearly spaced elements between
+    ``start`` and ``end`` (closed on both sides).
+
+    To learn more about the frequency strings, please see `this link
+    <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases>`__.
+
+    Examples
+    --------
+    >>> ps.timedelta_range(start='1 day', periods=4)  # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days', '2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+
+    The closed parameter specifies which endpoint is included.
+    The default behavior is to include both endpoints.
+
+    >>> ps.timedelta_range(start='1 day', periods=4, closed='right')
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+
+    The freq parameter specifies the frequency of the TimedeltaIndex.
+    Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
+
+    >>> ps.timedelta_range(start='1 day', end='2 days', freq='6H')
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
+                    '1 days 18:00:00', '2 days 00:00:00'],
+                   dtype='timedelta64[ns]', freq=None)
+
+    Specify start, end, and periods; the frequency is generated automatically (linearly spaced).
+
+    >>> ps.timedelta_range(start='1 day', end='5 days', periods=4)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '2 days 08:00:00', '3 days 16:00:00',
+                    '5 days 00:00:00'],
+                   dtype='timedelta64[ns]', freq=None)
+    """
+    assert freq not in ["N", "ns"], "nanoseconds is not supported"
+
+    return cast(
+        TimedeltaIndex,
+        ps.from_pandas(
+            pd.timedelta_range(
+                start=start,
+                end=end,
+                periods=periods,
+                freq=freq,
+                name=name,
+                closed=closed,
             )
         ),
     )
@@ -2318,7 +2541,9 @@ def concat(
             concat_psdf = concat_psdf[column_labels]
 
         if ignore_index:
-            concat_psdf.columns = list(map(str, _range(len(concat_psdf.columns))))
+            concat_psdf.columns = list(  # type: ignore[assignment]
+                map(str, _range(len(concat_psdf.columns)))
+            )
 
         if sort:
             concat_psdf = concat_psdf.sort_index()
@@ -2397,13 +2622,9 @@ def concat(
 
             assert len(merged_columns) > 0
 
-            if LooseVersion(pd.__version__) < LooseVersion("0.24"):
-                # Always sort when multi-index columns, and if there are Series, never sort.
-                sort = len(merged_columns[0]) > 1 or (num_series == 0 and sort)
-            else:
-                # Always sort when multi-index columns or there are more than two Series,
-                # and if there is only one Series, never sort.
-                sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
+            # Always sort when multi-index columns or there are more than two Series,
+            # and if there is only one Series, never sort.
+            sort = len(merged_columns[0]) > 1 or num_series > 1 or (num_series != 1 and sort)
 
             if sort:
                 # FIXME: better ordering
@@ -3143,7 +3364,9 @@ def merge_asof(
     right_as_of_name = right_as_of_names[0]
 
     def resolve(internal: InternalFrame, side: str) -> InternalFrame:
-        rename = lambda col: "__{}_{}".format(side, col)
+        def rename(col: str) -> str:
+            return "__{}_{}".format(side, col)
+
         internal = internal.resolved_copy
         sdf = internal.spark_frame
         sdf = sdf.select(
@@ -3152,7 +3375,7 @@ def merge_asof(
                 for col in sdf.columns
                 if col not in HIDDEN_COLUMNS
             ],
-            *HIDDEN_COLUMNS
+            *HIDDEN_COLUMNS,
         )
         return internal.copy(
             spark_frame=sdf,
@@ -3179,8 +3402,8 @@ def merge_asof(
         left_join_on_columns = [scol_for(left_table, label) for label in left_join_on_names]
         right_join_on_columns = [scol_for(right_table, label) for label in right_join_on_names]
         on = reduce(
-            lambda l, r: l & r,
-            [l == r for l, r in zip(left_join_on_columns, right_join_on_columns)],
+            lambda lft, rgt: lft & rgt,
+            [lft == rgt for lft, rgt in zip(left_join_on_columns, right_join_on_columns)],
         )
     else:
         on = None
@@ -3210,12 +3433,11 @@ def merge_asof(
     data_columns = []
     column_labels = []
 
-    left_scol_for = lambda label: scol_for(
-        as_of_joined_table, left_internal.spark_column_name_for(label)
-    )
-    right_scol_for = lambda label: scol_for(
-        as_of_joined_table, right_internal.spark_column_name_for(label)
-    )
+    def left_scol_for(label: Label) -> Column:
+        return scol_for(as_of_joined_table, left_internal.spark_column_name_for(label))
+
+    def right_scol_for(label: Label) -> Column:
+        return scol_for(as_of_joined_table, right_internal.spark_column_name_for(label))
 
     for label in left_internal.column_labels:
         col = left_internal.spark_column_name_for(label)
@@ -3424,7 +3646,7 @@ def read_orc(
     path: str,
     columns: Optional[List[str]] = None,
     index_col: Optional[Union[str, List[str]]] = None,
-    **options: Any
+    **options: Any,
 ) -> "DataFrame":
     """
     Load an ORC object from the file path, returning a DataFrame.

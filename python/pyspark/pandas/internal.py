@@ -29,7 +29,6 @@ from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, Win
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
-    IntegralType,
     LongType,
     StructField,
     StructType,
@@ -43,7 +42,7 @@ from pyspark.pandas._typing import Label
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -212,7 +211,7 @@ class InternalField:
         )
 
 
-class InternalFrame(object):
+class InternalFrame:
     """
     The internal immutable DataFrame which manages Spark DataFrame and column names and index
     information.
@@ -1525,6 +1524,17 @@ class InternalFrame(object):
         >>> data_fields
         [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
          InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
+
+        >>> pdf = pd.DataFrame({
+        ...     "td": [datetime.timedelta(0)], "td_obj": [datetime.timedelta(0)]
+        ... })
+        >>> pdf.td_obj = pdf.td_obj.astype("object")
+        >>> _, _, _, _, data_fields = (
+        ...     InternalFrame.prepare_pandas_frame(pdf)
+        ... )
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=timedelta64[ns],struct_field=StructField(td,DayTimeIntervalType(0,3),false)),
+         InternalField(dtype=object,struct_field=StructField(td_obj,DayTimeIntervalType(0,3),false))]
         """
         pdf = pdf.copy()
 
@@ -1552,7 +1562,7 @@ class InternalFrame(object):
             InternalField(
                 dtype=dtype,
                 struct_field=StructField(
-                    name=name,
+                    name=str(name),
                     dataType=infer_pd_series_spark_type(col, dtype, prefer_timestamp_ntz),
                     nullable=bool(col.isnull().any()),
                 ),

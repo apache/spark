@@ -139,7 +139,7 @@ object FunctionRegistryBase {
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params)
+            validParametersCount, name, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -408,8 +408,11 @@ object FunctionRegistry {
     expression[Divide]("/"),
     expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
+
+    // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TryElementAt]("try_element_at"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -433,6 +436,7 @@ object FunctionRegistry {
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
     expression[ApproximatePercentile]("approx_percentile", true),
+    expression[HistogramNumeric]("histogram_numeric"),
     expression[StddevSamp]("std", true),
     expression[StddevSamp]("stddev", true),
     expression[StddevPop]("stddev_pop"),
@@ -442,6 +446,7 @@ object FunctionRegistry {
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
+    expression[CollectList]("array_agg", true),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
     expression[BoolAnd]("every", true),
@@ -449,11 +454,15 @@ object FunctionRegistry {
     expression[BoolOr]("any", true),
     expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
+    expression[RegrCount]("regr_count"),
 
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expression[Contains]("contains"),
+    expression[StartsWith]("startswith"),
+    expression[EndsWith]("endswith"),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true),
@@ -465,6 +474,7 @@ object FunctionRegistry {
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
+    expression[ToNumber]("to_number"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),
@@ -476,7 +486,7 @@ object FunctionRegistry {
     expression[Lower]("lower"),
     expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
-    expression[StringLPad]("lpad"),
+    expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
@@ -491,7 +501,7 @@ object FunctionRegistry {
     expression[RLike]("rlike"),
     expression[RLike]("regexp_like", true, Some("3.2.0")),
     expression[RLike]("regexp", true, Some("3.2.0")),
-    expression[StringRPad]("rpad"),
+    expressionBuilder("rpad", RPadExpressionBuilder),
     expression[StringTrimRight]("rtrim"),
     expression[Sentences]("sentences"),
     expression[SoundEx]("soundex"),
@@ -575,6 +585,7 @@ object FunctionRegistry {
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
+    expression[ConvertTimezone]("convert_timezone"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -589,6 +600,7 @@ object FunctionRegistry {
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),
+    expression[MapContainsKey]("map_contains_key"),
     expression[MapFromArrays]("map_from_arrays"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
@@ -634,6 +646,8 @@ object FunctionRegistry {
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
+    expression[AesEncrypt]("aes_encrypt"),
+    expression[AesDecrypt]("aes_decrypt"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -730,6 +744,37 @@ object FunctionRegistry {
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
+  private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
+    new ExpressionInfo(
+      null,
+      null,
+      name,
+      usage,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "built-in")
+  }
+
+  val builtinOperators: Map[String, ExpressionInfo] = Map(
+    "<>" -> makeExprInfoForVirtualOperator("<>",
+      "expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`."),
+    "!=" -> makeExprInfoForVirtualOperator("!=",
+      "expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`."),
+    "between" -> makeExprInfoForVirtualOperator("between",
+      "expr1 [NOT] BETWEEN expr2 AND expr3 - " +
+        "evaluate if `expr1` is [not] in between `expr2` and `expr3`."),
+    "case" -> makeExprInfoForVirtualOperator("case",
+      "CASE expr1 WHEN expr2 THEN expr3 [WHEN expr4 THEN expr5]* [ELSE expr6] END " +
+        "- When `expr1` = `expr2`, returns `expr3`; when `expr1` = `expr4`, return `expr5`; " +
+        "else return `expr6`."),
+    "||" -> makeExprInfoForVirtualOperator("||",
+      "expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.")
+  )
+
   /**
    * Create a SQL function builder and corresponding `ExpressionInfo`.
    * @param name The function name.
@@ -749,6 +794,16 @@ object FunctionRegistry {
       expr
     }
     (name, (expressionInfo, newBuilder))
+  }
+
+  private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
+      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info = FunctionRegistryBase.expressionInfo[T](name, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      builder.build(expressions)
+    }
+    (name, (info, funcBuilder))
   }
 
   /**
@@ -845,4 +900,8 @@ object TableFunctionRegistry {
   }
 
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
+}
+
+trait ExpressionBuilder {
+  def build(expressions: Seq[Expression]): Expression
 }

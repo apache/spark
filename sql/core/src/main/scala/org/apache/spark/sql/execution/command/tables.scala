@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -116,7 +117,8 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
-    val newTableSchema = CharVarcharUtils.getRawSchema(sourceTableDesc.schema)
+    val newTableSchema = CharVarcharUtils.getRawSchema(
+      sourceTableDesc.schema, sparkSession.sessionState.conf)
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
@@ -895,7 +897,7 @@ case class ShowTablePropertiesCommand(
           }
         case None =>
           catalogTable.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
-            .map(p => Row(p._1, p._2)).toSeq
+            .toSeq.sortBy(_._1).map(p => Row(p._1, p._2)).toSeq
       }
     }
   }
@@ -1004,7 +1006,7 @@ trait ShowCreateTableCommandBase {
 
   protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
-      val props = metadata.properties.map { case (key, value) =>
+      val props = metadata.properties.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
@@ -1042,7 +1044,7 @@ trait ShowCreateTableCommandBase {
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val viewProps = metadata.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
     if (viewProps.nonEmpty) {
-      val props = viewProps.map { case (key, value) =>
+      val props = viewProps.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
@@ -1103,12 +1105,12 @@ case class ShowCreateTableCommand(
       val builder = StringBuilder.newBuilder
 
       val stmt = if (tableMetadata.tableType == VIEW) {
-        builder ++= s"CREATE VIEW ${table.quotedString} "
+        builder ++= s"CREATE VIEW ${table.quoted} "
         showCreateView(metadata, builder)
 
         builder.toString()
       } else {
-        builder ++= s"CREATE TABLE ${table.quotedString} "
+        builder ++= s"CREATE TABLE ${table.quoted} "
 
         showCreateDataSourceTable(metadata, builder)
         builder.toString()
@@ -1157,8 +1159,9 @@ case class ShowCreateTableCommand(
     // If it is a Hive table, we already convert its metadata and fill in a provider.
     builder ++= s"USING ${metadata.provider.get}\n"
 
-    val dataSourceOptions = conf.redactOptions(metadata.storage.properties).map {
-      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
+    val dataSourceOptions = conf.redactOptions(metadata.storage.properties).toSeq.sortBy(_._1).map {
+      case (key, value) =>
+        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
     }
 
     if (dataSourceOptions.nonEmpty) {
@@ -1245,7 +1248,7 @@ case class ShowCreateTableAsSerdeCommand(
           s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
-    builder ++= s"CREATE$tableTypeString ${table.quotedString}"
+    builder ++= s"CREATE$tableTypeString ${table.quoted} "
 
     if (metadata.tableType == VIEW) {
       showCreateView(metadata, builder)

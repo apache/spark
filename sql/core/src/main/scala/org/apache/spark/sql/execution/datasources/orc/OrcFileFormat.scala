@@ -42,24 +42,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-private[sql] object OrcFileFormat {
-
-  def getQuotedSchemaString(dataType: DataType): String = dataType match {
-    case _: DayTimeIntervalType => LongType.catalogString
-    case _: YearMonthIntervalType => IntegerType.catalogString
-    case _: AtomicType => dataType.catalogString
-    case StructType(fields) =>
-      fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
-        .mkString("struct<", ",", ">")
-    case ArrayType(elementType, _) =>
-      s"array<${getQuotedSchemaString(elementType)}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
-    case _ => // UDT and others
-      dataType.catalogString
-  }
-}
-
 /**
  * New ORC File Format based on Apache ORC.
  */
@@ -245,14 +227,5 @@ class OrcFileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
-  }
-
-  override def supportFieldName(name: String): Boolean = {
-    try {
-      TypeDescription.fromString(s"struct<`$name`:int>")
-      true
-    } catch {
-      case _: IllegalArgumentException => false
-    }
   }
 }

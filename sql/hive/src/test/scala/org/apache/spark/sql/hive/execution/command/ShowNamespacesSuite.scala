@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands to check
@@ -26,22 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
-
-  test("case sensitivity") {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
-          sql(s"CREATE NAMESPACE $catalog.AAA")
-          sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(
-            s"SHOW NAMESPACES IN $catalog",
-            Seq("aaa", "bbb") ++ builtinTopNamespaces)
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("aaa"))
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("aaa"))
-        }
-      }
-    }
-  }
+  // Hive Catalog is not case preserving and always lower-case the namespace name when storing it.
+  override def isCasePreserving: Boolean = false
 
   test("hive client calls") {
     withNamespace(s"$catalog.ns1", s"$catalog.ns2") {

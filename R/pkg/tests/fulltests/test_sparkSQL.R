@@ -1690,9 +1690,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
-  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
+  expect_equal(c[[1]], "STRUCT<_c0: STRING, _c1: INT>")
   c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
-  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
+  expect_equal(c[[1]], "STRUCT<_c0: STRING, _c1: INT>")
 
   # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
@@ -1725,9 +1725,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
+  expect_equal(c[[1]], "STRUCT<name: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
+  expect_equal(c[[1]], "STRUCT<name: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -2048,6 +2048,20 @@ test_that("date functions on a DataFrame", {
   result32 <- collect(select(df3, from_unixtime(df3$a, "yyyy")))
   expect_equal(grep("\\d{4}", result32[, 1]), c(1, 2))
   Sys.setenv(TZ = .originalTimeZone)
+})
+
+test_that("SPARK-37108: expose make_date expression in R", {
+  df <- createDataFrame(
+    list(list(2021, 10, 22), list(2021, 13, 1),
+         list(2021, 2, 29), list(2020, 2, 29)),
+    list("year", "month", "day")
+  )
+  expect <- createDataFrame(
+    list(list(as.Date("2021-10-22")), NA, NA, list(as.Date("2020-02-29"))),
+    list("make_date(year, month, day)")
+  )
+  actual <- select(df, make_date(df$year, df$month, df$day))
+  expect_equal(collect(expect), collect(actual))
 })
 
 test_that("greatest() and least() on a DataFrame", {

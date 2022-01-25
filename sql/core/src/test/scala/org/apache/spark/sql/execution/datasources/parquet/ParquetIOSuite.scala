@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.{Duration, Period}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -38,7 +38,7 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -117,6 +117,68 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     // as we store Spark SQL schema in the extra metadata.
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
+  }
+
+  test("SPARK-36182: TimestampNTZ") {
+    val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
+      .map(ts => Tuple1(LocalDateTime.parse(ts)))
+    withAllParquetReaders {
+      checkParquetFile(data)
+    }
+  }
+
+  test("Read TimestampNTZ and TimestampLTZ for various logical TIMESTAMP types") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 timestamp_ltz_millis_depr(TIMESTAMP_MILLIS);
+        |  required int64 timestamp_ltz_micros_depr(TIMESTAMP_MICROS);
+        |  required int64 timestamp_ltz_millis(TIMESTAMP(MILLIS,true));
+        |  required int64 timestamp_ltz_micros(TIMESTAMP(MICROS,true));
+        |  required int64 timestamp_ntz_millis(TIMESTAMP(MILLIS,false));
+        |  required int64 timestamp_ntz_micros(TIMESTAMP(MICROS,false));
+        |}
+      """.stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/timestamps.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          for (group <- Seq(0, 2, 4)) {
+            record.add(group, 1000L) // millis
+            record.add(group + 1, 1000000L) // micros
+          }
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            StructType(
+              StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
+              StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
+              StructField("timestamp_ntz_millis", TimestampNTZType, nullable = true) ::
+              StructField("timestamp_ntz_micros", TimestampNTZType, nullable = true) ::
+              Nil
+            )
+          }
+
+          val exp = (0 until numRecords).map { _ =>
+            val ltz_value = new java.sql.Timestamp(1000L)
+            val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
+            (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
+          }.toDF()
+
+          checkAnswer(df, exp)
+        }
+      }
+    }
   }
 
   testStandardAndLegacyModes("fixed-length decimals") {
@@ -866,7 +928,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
+      val file = TestUtils.listDirectory(dir).head;
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
@@ -970,7 +1032,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val vectorizedReader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
-        val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+        val file = TestUtils.listDirectory(dir).head
 
         try {
           vectorizedReader.initialize(file, null)
@@ -1058,29 +1120,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
             .zip(last10Df).forall(d =>
             d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
-      }
-    }
-  }
-
-  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
-    Seq(false, true).foreach { offHeapEnabled =>
-      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
-        Seq(
-          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
-          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
-        ).foreach { case (it, f) =>
-          val data = (1 to 10).map(i => Row(i, f(i)))
-          val schema = StructType(Array(StructField("d", IntegerType, false),
-            StructField("i", it, false)))
-          withTempPath { file =>
-            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-            df.write.parquet(file.getCanonicalPath)
-            withAllParquetReaders {
-              val df2 = spark.read.parquet(file.getCanonicalPath)
-              checkAnswer(df2, df.collect().toSeq)
-            }
-          }
-        }
       }
     }
   }

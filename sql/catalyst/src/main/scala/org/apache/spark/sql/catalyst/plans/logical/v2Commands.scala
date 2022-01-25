@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -193,13 +193,24 @@ trait V2CreateTablePlan extends LogicalPlan {
 /**
  * Create a new table with a v2 catalog.
  */
-case class CreateV2Table(
-    catalog: TableCatalog,
-    tableName: Identifier,
+case class CreateTable(
+    name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    properties: Map[String, String],
-    ignoreIfExists: Boolean) extends LeafCommand with V2CreateTablePlan {
+    tableSpec: TableSpec,
+    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+  override def child: LogicalPlan = name
+
+  override def tableName: Identifier = {
+    assert(child.resolved)
+    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
+    copy(name = newChild)
+
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
@@ -209,16 +220,22 @@ case class CreateV2Table(
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
-    catalog: TableCatalog,
-    tableName: Identifier,
+    name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    properties: Map[String, String],
+    tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    ignoreIfExists: Boolean) extends BinaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def tableSchema: StructType = query.schema
-  override def child: LogicalPlan = query
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = query
+
+  override def tableName: Identifier = {
+    assert(left.resolved)
+    left.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
 
   override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
@@ -231,8 +248,11 @@ case class CreateTableAsSelect(
     this.copy(partitioning = rewritten)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelect =
-    copy(query = newChild)
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan,
+    newRight: LogicalPlan
+  ): CreateTableAsSelect =
+    copy(name = newLeft, query = newRight)
 }
 
 /**
@@ -244,12 +264,23 @@ case class CreateTableAsSelect(
  * The persisted table will have no contents as a result of this operation.
  */
 case class ReplaceTable(
-    catalog: TableCatalog,
-    tableName: Identifier,
+    name: LogicalPlan,
     tableSchema: StructType,
     partitioning: Seq[Transform],
-    properties: Map[String, String],
-    orCreate: Boolean) extends LeafCommand with V2CreateTablePlan {
+    tableSpec: TableSpec,
+    orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
+  override def child: LogicalPlan = name
+
+  override def tableName: Identifier = {
+    assert(child.resolved)
+    child.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
+    copy(name = newChild)
+
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
@@ -262,16 +293,17 @@ case class ReplaceTable(
  * If the table does not exist, and orCreate is false, then an exception will be thrown.
  */
 case class ReplaceTableAsSelect(
-    catalog: TableCatalog,
-    tableName: Identifier,
+    name: LogicalPlan,
     partitioning: Seq[Transform],
     query: LogicalPlan,
-    properties: Map[String, String],
+    tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    orCreate: Boolean) extends BinaryCommand with V2CreateTablePlan {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def tableSchema: StructType = query.schema
-  override def child: LogicalPlan = query
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = query
 
   override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
@@ -280,12 +312,19 @@ case class ReplaceTableAsSelect(
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
   }
 
+  override def tableName: Identifier = {
+    assert(name.resolved)
+    name.asInstanceOf[ResolvedDBObjectName].nameParts.asIdentifier
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, query = newRight)
+
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceTableAsSelect =
-    copy(query = newChild)
 }
 
 /**
@@ -705,8 +744,7 @@ case class CreateFunction(
  */
 case class DropFunction(
     child: LogicalPlan,
-    ifExists: Boolean,
-    isTemp: Boolean) extends UnaryCommand {
+    ifExists: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DropFunction =
     copy(child = newChild)
 }
@@ -715,15 +753,14 @@ case class DropFunction(
  * The logical plan of the SHOW FUNCTIONS command.
  */
 case class ShowFunctions(
-    child: Option[LogicalPlan],
+    namespace: LogicalPlan,
     userScope: Boolean,
     systemScope: Boolean,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends Command {
-  override def children: Seq[LogicalPlan] = child.toSeq
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): ShowFunctions =
-    copy(child = if (child.isDefined) Some(newChildren.head) else None)
+    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowFunctions =
+    copy(namespace = newChild)
 }
 
 object ShowFunctions {
@@ -1015,7 +1052,7 @@ case class CacheTable(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }
 
 /**
@@ -1027,7 +1064,8 @@ case class CacheTableAsSelect(
     originalText: String,
     isLazy: Boolean,
     options: Map[String, String],
-    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1036,7 +1074,12 @@ case class CacheTableAsSelect(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
+    copy(
+      isAnalyzed = true,
+      // Collect the referred temporary functions from AnalysisContext
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+  }
 }
 
 /**
@@ -1054,5 +1097,43 @@ case class UncacheTable(
 
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
-  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 }
+
+/**
+ * The logical plan of the CREATE INDEX command.
+ */
+case class CreateIndex(
+    table: LogicalPlan,
+    indexName: String,
+    indexType: String,
+    ignoreIfExists: Boolean,
+    columns: Seq[(FieldName, Map[String, String])],
+    properties: Map[String, String]) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override lazy val resolved: Boolean = table.resolved && columns.forall(_._1.resolved)
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateIndex =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the DROP INDEX command.
+ */
+case class DropIndex(
+    table: LogicalPlan,
+    indexName: String,
+    ignoreIfNotExists: Boolean) extends UnaryCommand {
+  override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): DropIndex =
+    copy(table = newChild)
+}
+
+case class TableSpec(
+    bucketSpec: Option[BucketSpec],
+    properties: Map[String, String],
+    provider: Option[String],
+    options: Map[String, String],
+    location: Option[String],
+    comment: Option[String],
+    serde: Option[SerdeInfo],
+    external: Boolean)

@@ -840,6 +840,29 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-32940: aggregate: push filters through first, last and collect") {
+    Seq(
+      first(_: Expression),
+      last(_: Expression),
+      collectList(_: Expression),
+      collectSet(_: Expression)
+    ).foreach { agg =>
+      val originalQuery = testRelation
+        .groupBy('a)(agg('b))
+        .where('a > 42)
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testRelation
+        .where('a > 42)
+        .groupBy('a)(agg('b))
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
   test("union") {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
@@ -1382,6 +1405,14 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = z.join(left.join(right,
       condition = Some("x.b".attr === "y.b".attr && simpleDisjunctivePredicate)),
       condition = Some("x.a".attr === "z.a".attr)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-37828: Push down filters through RebalancePartitions") {
+    val originalQuery = RebalancePartitions(Seq.empty, testRelation).where('a > 3)
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = RebalancePartitions(Seq.empty, testRelation.where('a > 3)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

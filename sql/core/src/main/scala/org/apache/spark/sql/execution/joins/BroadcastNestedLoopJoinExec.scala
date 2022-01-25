@@ -152,6 +152,7 @@ case class BroadcastNestedLoopJoinExec(
         // the next index of buildRows to try
         private var nextIndex: Int = 0
 
+        @scala.annotation.tailrec
         private def findNextMatch(): Boolean = {
           if (streamRow == null) {
             if (!streamedIter.hasNext) {
@@ -463,7 +464,7 @@ case class BroadcastNestedLoopJoinExec(
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
-    val buildVars = genBuildSideVars(ctx, buildRow, broadcast)
+    val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input

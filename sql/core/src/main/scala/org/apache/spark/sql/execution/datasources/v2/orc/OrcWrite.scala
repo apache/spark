@@ -23,7 +23,7 @@ import org.apache.orc.mapred.OrcStruct
 
 import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.execution.datasources.orc.{OrcFileFormat, OrcOptions, OrcOutputWriter, OrcUtils}
+import org.apache.spark.sql.execution.datasources.orc.{OrcOptions, OrcOutputWriter, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2.FileWrite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -43,7 +43,7 @@ case class OrcWrite(
 
     val conf = job.getConfiguration
 
-    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcFileFormat.getQuotedSchemaString(dataSchema))
+    conf.set(MAPRED_OUTPUT_SCHEMA.getAttribute, OrcUtils.orcTypeDescriptionString(dataSchema))
 
     conf.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
 

@@ -24,6 +24,10 @@ license: |
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
+  - Since Spark 3.3, `DayTimeIntervalType` in Spark SQL is mapped to Arrow's `Duration` type in `ArrowWriter` and `ArrowColumnVector` developer APIs. Previously, `DayTimeIntervalType` was mapped to Arrow's `Interval` type which does not match with the types of other languages Spark SQL maps. For example, `DayTimeIntervalType` is mapped to `java.time.Duration` in Java.
+
+  - Since Spark 3.3, the functions `lpad` and `rpad` have been overloaded to support byte sequences. When the first argument is a byte sequence, the optional padding pattern must also be a byte sequence and the result is a BINARY value. The default padding pattern in this case is the zero byte.
+
   - Since Spark 3.3, Spark turns a non-nullable schema into nullable for API `DataFrameReader.schema(schema: StructType).json(jsonDataset: Dataset[String])` and `DataFrameReader.schema(schema: StructType).csv(csvDataset: Dataset[String])` when the schema is specified by the user and contains non-nullable fields.
 
   - Since Spark 3.3, when the date or timestamp pattern is not specified, Spark converts an input string to a date/timestamp using the `CAST` expression approach. The changes affect CSV/JSON datasources and parsing of partition values. In Spark 3.2 or earlier, when the date or timestamp pattern is not set, Spark uses the default patterns: `yyyy-MM-dd` for dates and `yyyy-MM-dd HH:mm:ss` for timestamps. After the changes, Spark still recognizes the pattern together with
@@ -45,6 +49,14 @@ license: |
       * `[+-]yyyy*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
       * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
       * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+
+  - Since Spark 3.3, the `strfmt` in `format_string(strfmt, obj, ...)` and `printf(strfmt, obj, ...)` will no longer support to use "0$" to specify the first argument, the first argument should always reference by "1$" when use argument index to indicating the position of the argument in the argument list.
+
+  - Since Spark 3.3, nulls are written as empty strings in CSV data source by default. In Spark 3.2 or earlier, nulls were written as empty strings as quoted empty strings, `""`. To restore the previous behavior, set `nullValue` to `""`.
+
+  - Since Spark 3.3, DESCRIBE FUNCTION fails if the function does not exist. In Spark 3.2 or earlier, DESCRIBE FUNCTION can still run and print "Function: func_name not found".
+
+  - Since Spark 3.3, the table property `external` becomes reserved. Certain commands will fail if you specify the `external` property, such as `CREATE TABLE ... TBLPROPERTIES` and `ALTER TABLE ... SET TBLPROPERTIES`. In Spark 3.2 and earlier, the table property `external` is silently ignored. You can set `spark.sql.legacy.notReserveProperties` to `true` to restore the old behavior.
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 
@@ -109,7 +121,7 @@ license: |
 
   - In Spark 3.2, the unit-to-unit interval literals like `INTERVAL '1-1' YEAR TO MONTH` and the unit list interval literals like `INTERVAL '3' DAYS '1' HOUR` are converted to ANSI interval types: `YearMonthIntervalType` or `DayTimeIntervalType`. In Spark 3.1 and earlier, such interval literals are converted to `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
 
-  - In Spark 3.2, the unit list interval literals can not mix year-month fields (YEAR and MONTH) and day-time fields (WEEK, DAY, ..., MICROSECOND). For example, `INTERVAL 1 day 1 hour` is invalid in Spark 3.2. In Spark 3.1 and earlier, there is no such limitation and the literal returns value of `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
+  - In Spark 3.2, the unit list interval literals can not mix year-month fields (YEAR and MONTH) and day-time fields (WEEK, DAY, ..., MICROSECOND). For example, `INTERVAL 1 month 1 hour` is invalid in Spark 3.2. In Spark 3.1 and earlier, there is no such limitation and the literal returns value of `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
 
   - In Spark 3.2, Spark supports `DayTimeIntervalType` and `YearMonthIntervalType` as inputs and outputs of `TRANSFORM` clause in Hive `SERDE` mode, the behavior is different between Hive `SERDE` mode and `ROW FORMAT DELIMITED` mode when these two types are used as inputs. In Hive `SERDE` mode, `DayTimeIntervalType` column is converted to `HiveIntervalDayTime`, its string format is `[-]?d h:m:s.n`, but in `ROW FORMAT DELIMITED` mode the format is `INTERVAL '[-]?d h:m:s.n' DAY TO TIME`. In Hive `SERDE` mode, `YearMonthIntervalType` column is converted to `HiveIntervalYearMonth`, its string format is `[-]?y-m`, but in `ROW FORMAT DELIMITED` mode the format is `INTERVAL '[-]?y-m' YEAR TO MONTH`.
 
@@ -126,6 +138,8 @@ license: |
   - In Spark 3.2, `Dataset.unionByName` with `allowMissingColumns` set to true will add missing nested fields to the end of structs. In Spark 3.1, nested struct fields are sorted alphabetically.
 
   - In Spark 3.2, create/alter view will fail if the input query output columns contain auto-generated alias. This is necessary to make sure the query output column names are stable across different spark versions. To restore the behavior before Spark 3.2, set `spark.sql.legacy.allowAutoGeneratedAliasForView` to `true`.
+
+  - In Spark 3.2, date +/- interval with only day-time fields such as `date '2011-11-11' + interval 12 hours` returns timestamp. In Spark 3.1 and earlier, the same expression returns date. To restore the behavior before Spark 3.2, you can use `cast` to convert timestamp as date.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
@@ -266,7 +280,7 @@ license: |
     | CAST('+inf' AS FLOAT) | NULL | Float.PositiveInfinity |
     | CAST('-infinity' AS FLOAT) | NULL | Float.NegativeInfinity |
     | CAST('-inf' AS FLOAT) | NULL | Float.NegativeInfinity |
-    | CAST('nan' AS DOUBLE) | NULL | Double.Nan |
+    | CAST('nan' AS DOUBLE) | NULL | Double.NaN |
     | CAST('nan' AS FLOAT) | NULL | Float.NaN |
 
   - In Spark 3.0, when casting interval values to string type, there is no "interval" prefix, for example, `1 days 2 hours`. In Spark version 2.4 and below, the string contains the "interval" prefix like `interval 1 days 2 hours`.

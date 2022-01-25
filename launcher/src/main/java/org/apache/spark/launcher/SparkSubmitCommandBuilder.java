@@ -294,6 +294,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
+    // SPARK-36796: Always add default `--add-opens` to submit command
+    addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;

@@ -47,7 +47,11 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable, CategoricalDtype
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_list_like,
+    is_hashable,
+    CategoricalDtype,
+)
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -98,6 +102,7 @@ from pyspark.pandas.utils import (
     validate_bool_kwarg,
     verify_temp_column_name,
     SPARK_CONF_ARROW_ENABLED,
+    log_advice,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.spark import functions as SF
@@ -112,10 +117,11 @@ from pyspark.pandas.typedef import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+    from pyspark.sql._typing import ColumnOrName
 
-    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -343,21 +349,6 @@ dtype: float64
 str_type = str
 
 
-if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
-    from typing import GenericMeta  # type: ignore[attr-defined]
-
-    old_getitem = GenericMeta.__getitem__
-
-    @no_type_check
-    def new_getitem(self, params):
-        if hasattr(self, "is_series"):
-            return old_getitem(self, create_type_for_series_type(params))
-        else:
-            return old_getitem(self, params)
-
-    GenericMeta.__getitem__ = new_getitem
-
-
 class Series(Frame, IndexOpsMixin, Generic[T]):
     """
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
@@ -372,8 +363,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ----------
     data : array-like, dict, or scalar value, pandas Series
         Contains data stored in Series
-        If data is a dict, argument order is maintained for Python 3.6
-        and later.
         Note that if `data` is a pandas Series, other arguments should not be used.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
@@ -459,7 +448,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark = CachedAccessor("spark", SparkSeriesMethods)
+    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
+        "spark", SparkSeriesMethods
+    )
 
     @property
     def dtypes(self) -> Dtype:
@@ -965,9 +956,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):
+        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):
+        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
 
         min_periods = 1 if min_periods is None else min_periods
@@ -1580,6 +1571,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    0.2
         Name: dogs, dtype: float64
         """
+        log_advice(
+            "`to_pandas` loads all data into the driver's memory. "
+            "It should only be used if the resulting pandas Series is expected to be small."
+        )
+        return self._to_pandas()
+
+    def _to_pandas(self) -> pd.Series:
+        """
+        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        """
         return self._to_internal_pandas().copy()
 
     def to_list(self) -> List:
@@ -1594,6 +1595,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             to be small, as all the data is loaded into the driver's memory.
 
         """
+        log_advice(
+            "`to_list` loads all data into the driver's memory. "
+            "It should only be used if the resulting list is expected to be small."
+        )
         return self._to_internal_pandas().tolist()
 
     tolist = to_list
@@ -3205,7 +3210,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = lambda s: s.apply(func, args=args, **kwds)
+        def apply_each(s: Any) -> pd.Series:
+            return s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3477,7 +3483,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if isinstance(q, Iterable):
             return first_series(
-                self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy)
+                cast(
+                    "ps.DataFrame",
+                    self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy),
+                )
             ).rename(self.name)
         else:
             if not isinstance(accuracy, int):
@@ -3593,7 +3602,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         *,
-        part_cols: Sequence["ColumnOrName"] = ()
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
             msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
@@ -3603,9 +3612,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
-            asc_func = lambda scol: scol.asc()
+            asc_func = Column.asc
         else:
-            asc_func = lambda scol: scol.desc()
+            asc_func = Column.desc
 
         if method == "first":
             window = (
@@ -3636,9 +3645,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
-            window2 = Window.partitionBy([self.spark.column] + list(part_cols)).rowsBetween(
-                Window.unboundedPreceding, Window.unboundedFollowing
-            )
+
+            window2 = Window.partitionBy(
+                cast("List[ColumnOrName]", [self.spark.column]) + list(part_cols)
+            ).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
             scol = stat_func(F.row_number().over(window1)).over(window2)
         return self._with_new_scol(scol.cast(DoubleType()))
 
@@ -3653,7 +3663,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
         return first_series(
-            self.to_frame().filter(items=items, like=like, regex=regex, axis=axis)
+            cast(
+                "ps.DataFrame",
+                self.to_frame().filter(items=items, like=like, regex=regex, axis=axis),
+            )
         ).rename(self.name)
 
     filter.__doc__ = DataFrame.filter.__doc__
@@ -4960,9 +4973,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         It can also be called using `self @ other` in Python >= 3.5.
 
         .. note:: This API is slightly different from pandas when indexes from both Series
-            are not aligned. To match with pandas', it requires to read the whole data for,
-            for example, counting. pandas raises an exception; however, pandas-on-Spark
-            just proceeds and performs by ignoring mismatches with NaN permissively.
+            are not aligned and config 'compute.eager_check' is False. pandas raises an exception;
+            however, pandas-on-Spark just proceeds and performs by ignoring mismatches with NaN
+            permissively.
 
             >>> pdf1 = pd.Series([1, 2, 3], index=[0, 1, 2])
             >>> pdf2 = pd.Series([1, 2, 3], index=[0, 1, 3])
@@ -4972,7 +4985,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             >>> psdf1 = ps.Series([1, 2, 3], index=[0, 1, 2])
             >>> psdf2 = ps.Series([1, 2, 3], index=[0, 1, 3])
-            >>> psdf1.dot(psdf2)  # doctest: +SKIP
+            >>> with ps.option_context("compute.eager_check", False):
+            ...     psdf1.dot(psdf2)  # doctest: +SKIP
+            ...
             5
 
         Parameters
@@ -5017,11 +5032,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y   -14
         dtype: int64
         """
-        if isinstance(other, DataFrame):
-            if not same_anchor(self, other):
-                if not self.index.sort_values().equals(other.index.sort_values()):
-                    raise ValueError("matrices are not aligned")
+        if not same_anchor(self, other):
+            if get_option("compute.eager_check") and not self.index.sort_values().equals(
+                other.index.sort_values()
+            ):
+                raise ValueError("matrices are not aligned")
+            elif len(self.index) != len(other.index):
+                raise ValueError("matrices are not aligned")
 
+        if isinstance(other, DataFrame):
             other_copy: DataFrame = other.copy()
             column_labels = other_copy._internal.column_labels
 
@@ -5041,9 +5060,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         else:
             assert isinstance(other, Series)
-            if not same_anchor(self, other):
-                if len(self.index) != len(other.index):
-                    raise ValueError("matrices are not aligned")
             return (self * other).sum()
 
     def __matmul__(self, other: Union["Series", DataFrame]) -> Union[Scalar, "Series"]:
@@ -5130,7 +5146,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if repeats == 0:
                 return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
             else:
-                return first_series(ps.concat([psdf] * repeats))
+                return first_series(cast("ps.DataFrame", ps.concat([psdf] * repeats)))
 
     def asof(self, where: Union[Any, List]) -> Union[Scalar, "Series"]:
         """
@@ -5142,7 +5158,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If there is no good value, NaN is returned.
 
         .. note:: This API is dependent on :meth:`Index.is_monotonic_increasing`
-            which can be expensive.
+            which is expensive.
 
         Parameters
         ----------
@@ -5161,7 +5177,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Notes
         -----
-        Indices are assumed to be sorted. Raises if this is not the case.
+        Indices are assumed to be sorted. Raises if this is not the case and config
+        'compute.eager_check' is True. If 'compute.eager_check' is False pandas-on-Spark just
+        proceeds and performs by ignoring the indeces's order
 
         Examples
         --------
@@ -5192,13 +5210,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> s.asof(30)
         2.0
+
+        >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40])
+        >>> with ps.option_context("compute.eager_check", False):
+        ...     s.asof(20)
+        ...
+        1.0
         """
         should_return_series = True
         if isinstance(self.index, ps.MultiIndex):
             raise ValueError("asof is not supported for a MultiIndex")
         if isinstance(where, (ps.Index, ps.Series, DataFrame)):
             raise ValueError("where cannot be an Index, Series or a DataFrame")
-        if not self.index.is_monotonic_increasing:
+        if get_option("compute.eager_check") and not self.index.is_monotonic_increasing:
             raise ValueError("asof requires a sorted index")
         if not is_list_like(where):
             should_return_series = False
@@ -5755,6 +5779,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare to another Series and show the differences.
 
+        .. note:: This API is slightly different from pandas when indexes from both Series
+            are not identical and config 'compute.eager_check' is False. pandas raises an exception;
+            however, pandas-on-Spark just proceeds and performs by ignoring mismatches.
+
+            >>> psser1 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 3, 4, 5]))
+            >>> psser2 = ps.Series([1, 2, 3, 4, 5], index=pd.Index([1, 2, 4, 3, 6]))
+            >>> psser1.compare(psser2)  # doctest: +SKIP
+            ...
+            ValueError: Can only compare identically-labeled Series objects
+
+            >>> with ps.option_context("compute.eager_check", False):
+            ...     psser1.compare(psser2)  # doctest: +SKIP
+            ...
+               self  other
+            3   3.0    4.0
+            4   4.0    3.0
+            5   5.0    NaN
+            6   NaN    5.0
+
         Parameters
         ----------
         other : Series
@@ -5821,7 +5864,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
             )
         else:
-            if not self.index.equals(other.index):
+            if get_option("compute.eager_check") and not self.index.equals(other.index):
                 raise ValueError("Can only compare identically-labeled Series objects")
 
             combined = combine_frames(self.to_frame(), other.to_frame())
@@ -6248,7 +6291,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Scalar:
         """
         Applies sfun to the column and returns a scalar
@@ -6333,7 +6376,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __repr__(self) -> str_type:
         max_display_count = get_option("display.max_rows")
         if max_display_count is None:
-            return self._to_internal_pandas().to_string(name=self.name, dtype=self.dtype)
+            return self._to_internal_pandas().to_string(
+                name=bool(self.name), dtype=bool(self.dtype)
+            )
 
         pser = self._psdf._get_or_create_repr_pandas_cache(max_display_count)[self.name]
         pser_length = len(pser)
@@ -6385,12 +6430,12 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
     Takes a dataframe that is supposed to contain a single row with a single scalar value,
     and returns this value.
     """
-    l = cast(pd.DataFrame, sdf.limit(2).toPandas())
-    assert len(l) == 1, (sdf, l)
-    row = l.iloc[0]
-    l2 = list(row)
-    assert len(l2) == 1, (row, l2)
-    return l2[0]
+    lst = cast(pd.DataFrame, sdf.limit(2).toPandas())
+    assert len(lst) == 1, (sdf, lst)
+    row = lst.iloc[0]
+    lst2 = list(row)
+    assert len(lst2) == 1, (row, lst2)
+    return lst2[0]
 
 
 @overload

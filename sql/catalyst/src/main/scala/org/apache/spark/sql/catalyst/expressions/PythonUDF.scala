@@ -62,7 +62,7 @@ case class PythonUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
 
@@ -71,12 +71,30 @@ case class PythonUDF(
 
   override def nullable: Boolean = true
 
-  override lazy val canonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.canonicalized)
+  override lazy val preCanonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.preCanonicalized)
     // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
     this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
     copy(children = newChildren)
+}
+
+/**
+ * A place holder used when printing expressions without debugging information such as the
+ * result id.
+ */
+case class PrettyPythonUDF(
+    name: String,
+    dataType: DataType,
+    children: Seq[Expression])
+  extends Expression with Unevaluable with NonSQLExpression {
+
+  override def toString: String = s"$name(${children.mkString(", ")})"
+
+  override def nullable: Boolean = true
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): PrettyPythonUDF = copy(children = newChildren)
 }

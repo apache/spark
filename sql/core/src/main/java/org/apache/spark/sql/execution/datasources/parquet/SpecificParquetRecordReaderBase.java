@@ -19,10 +19,8 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -88,7 +86,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = split.getPath();
 
     ParquetReadOptions options = HadoopReadOptions
-      .builder(configuration)
+      .builder(configuration, file)
       .withRange(split.getStart(), split.getStart() + split.getLength())
       .build();
     ParquetFileReader fileReader = new ParquetFileReader(
@@ -122,25 +120,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   }
 
   /**
-   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
-   * by MapReduce.
-   */
-  public static List<String> listDirectory(File path) {
-    List<String> result = new ArrayList<>();
-    if (path.isDirectory()) {
-      for (File f: path.listFiles()) {
-        result.addAll(listDirectory(f));
-      }
-    } else {
-      char c = path.getName().charAt(0);
-      if (c != '.' && c != '_') {
-        result.add(path.getAbsolutePath());
-      }
-    }
-    return result;
-  }
-
-  /**
    * Initializes the reader to read the file at `path` with `columns` projected. If columns is
    * null, all the columns are projected.
    *
@@ -152,12 +131,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
 
     ParquetReadOptions options = HadoopReadOptions
-      .builder(config)
+      .builder(config, file)
       .withRange(0, length)
       .build();
     ParquetFileReader fileReader = ParquetFileReader.open(
@@ -199,6 +179,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.totalRowCount = totalRowCount;
   }

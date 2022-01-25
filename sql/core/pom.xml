@@ -38,7 +38,6 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.20.3</version>
     </dependency>
     <dependency>
       <groupId>com.univocity</groupId>
@@ -154,7 +153,7 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>1.4.195</version>
+      <version>2.0.204</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -233,7 +232,7 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
-          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+          <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
       <plugin>
@@ -271,7 +270,7 @@
   
   <profiles>
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
       <dependencies>
         <dependency>
           <groupId>org.codehaus.jackson</groupId>

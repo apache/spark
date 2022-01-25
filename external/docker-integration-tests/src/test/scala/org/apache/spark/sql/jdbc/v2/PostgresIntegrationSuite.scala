@@ -27,9 +27,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:13.0):
+ * To run this test suite for a specific version (e.g., postgres:14.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:14.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
@@ -37,7 +37,7 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:13.0-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:14.0-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -49,6 +49,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
+    .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
+
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -75,4 +78,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
+
+  override def supportsTableSample: Boolean = true
+
+  override def supportsIndex: Boolean = true
+
+  override def indexOptions: String = "FILLFACTOR=70"
 }

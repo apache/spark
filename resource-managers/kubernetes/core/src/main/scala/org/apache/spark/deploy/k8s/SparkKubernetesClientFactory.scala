@@ -88,7 +88,6 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     val config = new ConfigBuilder(autoConfigure(kubeContext.getOrElse(null)))
       .withApiVersion("v1")
       .withMasterUrl(master)
-      .withWebsocketPingInterval(0)
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
       .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
       .withTrustCerts(sparkConf.get(KUBERNETES_TRUST_CERTIFICATES))

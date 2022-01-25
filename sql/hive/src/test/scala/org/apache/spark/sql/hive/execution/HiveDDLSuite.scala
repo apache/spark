@@ -844,7 +844,7 @@ class HiveDDLSuite
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
       // The table property is case sensitive. Thus, external is allowed
-      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('External' = 'TRUE')")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
@@ -1235,7 +1235,7 @@ class HiveDDLSuite
     if (tableExists && !cascade) {
       assertAnalysisError(
         sqlDropDatabase,
-        s"Database $dbName is not empty. One or more tables exist.")
+        s"Cannot drop a non-empty database: $dbName.")
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
@@ -2930,12 +2930,12 @@ class HiveDDLSuite
     withView("v") {
       spark.range(1).createTempView("v")
       withTempPath { path =>
-        val e = intercept[AnalysisException] {
+        val e = intercept[SparkException] {
           spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
             s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-        }.getMessage
-        assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains invalid character(s). " +
-          "Please use alias to rename it."))
+        }.getCause.getCause.getMessage
+        assert(e.contains(
+          "field ended by ';': expected ';' but got 'IF' at line 2:   optional int32 (IF"))
       }
     }
   }
@@ -2944,7 +2944,7 @@ class HiveDDLSuite
     withView("v") {
       spark.range(1).createTempView("v")
       withTempPath { path =>
-        val e = intercept[AnalysisException] {
+        val e = intercept[SparkException] {
           spark.sql(
             s"""
                |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
@@ -2953,27 +2953,9 @@ class HiveDDLSuite
                |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
                |FROM v
                """.stripMargin)
-        }.getMessage
-        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
-          " invalid character(s). Please use alias to rename it."))
-      }
-    }
-  }
-
-  test("SPARK-36312: ParquetWriteSupport should check inner field") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        val e = intercept[AnalysisException] {
-          spark.sql(
-            """
-              |SELECT
-              |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-              |FROM v
-              |""".stripMargin).write.mode(SaveMode.Overwrite).parquet(path.toString)
-        }.getMessage
-        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
-          " invalid character(s). Please use alias to rename it."))
+        }.getCause.getCause.getMessage
+        assert(e.contains("expected at the position 19 of " +
+          "'struct<ID:bigint,IF(ID=1,ID,0):bigint,B:bigint>' but '(' is found."))
       }
     }
   }
@@ -3018,11 +3000,45 @@ class HiveDDLSuite
         }.getMessage
         assert(errMsg.contains(s"Hive table `default`.`$tbl` with ANSI intervals is not supported"))
       }
-      sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT 1")
-      val errMsg2 = intercept[ParseException] {
-        sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
-      }.getMessage
-      assert(errMsg2.contains("Cannot use interval type in the table schema"))
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with view definition change") {
+    withView("v") {
+      // Changing view definition should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      spark.sql("ALTER VIEW v AS SELECT 1 AS C, 1 AS D")
+      val df1 = spark.table("v")
+      assert(df1.schema.names.toSeq == Seq("C", "D"))
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with view name change") {
+    withView("v") {
+      // Renaming view should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      sql("ALTER VIEW v RENAME TO vRenamed")
+      val df1 = spark.table("vRenamed")
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
+    }
+  }
+
+  test("SPARK-37046: Alter view should preserve column case with tbl properties change") {
+    withView("v") {
+      // Setting table properties should preserve column case
+      spark.sql("CREATE VIEW v AS SELECT 1 AS A, 1 AS B")
+      val df = spark.table("v")
+      assert(df.schema.names.toSeq == Seq("A", "B"))
+
+      sql("ALTER VIEW v SET TBLPROPERTIES('testkey' = 'testval')")
+      val df1 = spark.table("v")
+      assert(df1.schema.names.toSeq == Seq("A", "B"))
     }
   }
 }

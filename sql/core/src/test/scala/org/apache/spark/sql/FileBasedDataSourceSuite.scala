@@ -697,7 +697,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
       withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "350") {
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "457") {
         withTempPath { workDir =>
           // the file size is 504 bytes
           val workDirPath = workDir.getAbsolutePath
@@ -989,28 +989,6 @@ class FileBasedDataSourceSuite extends QueryTest
       val df = spark.read.option("header", true).csv(pathStr)
         .where($"a / b".isNotNull and $"`a``b`".isNotNull)
       checkAnswer(df, Row("v1", "v2"))
-    }
-  }
-
-  test("SPARK-36271: V1 insert should check schema field name too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
-            .format("parquet").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
-      }
-
-      withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
-            .write.mode(SaveMode.Overwrite)
-            .format("parquet").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
-      }
     }
   }
 }

@@ -20,9 +20,8 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import sys
 import inspect
-from collections import OrderedDict, namedtuple
+from collections import defaultdict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
@@ -45,20 +44,17 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table
+    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
 else:
     from pandas.core.base import SelectionMixin
 
-    _builtin_table = SelectionMixin._builtin_table
+    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
-from pyspark.sql.types import (  # noqa: F401
-    DataType,
-    FloatType,
-    DoubleType,
+from pyspark.sql.types import (
     NumericType,
     StructField,
     StructType,
@@ -93,12 +89,13 @@ from pyspark.pandas.utils import (
     same_anchor,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 
 
 # to keep it the same as pandas
@@ -158,7 +155,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self,
         func_or_funcs: Optional[Union[str, List[str], Dict[Name, Union[str, List[str]]]]] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> DataFrame:
         """Aggregate using one or more operations over the specified axis.
 
@@ -291,7 +288,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         else:
             agg_cols = [col.name for col in self._agg_columns]
-            func_or_funcs = OrderedDict([(col, func_or_funcs) for col in agg_cols])
+            func_or_funcs = {col: func_or_funcs for col in agg_cols}
 
         psdf: DataFrame = DataFrame(
             GroupBy._spark_groupby(self._psdf, func_or_funcs, self._groupkeys)
@@ -317,7 +314,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if relabeling:
             psdf = psdf[order]
-            psdf.columns = columns
+            psdf.columns = columns  # type: ignore[assignment]
         return psdf
 
     agg = aggregate
@@ -1202,6 +1199,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
+            log_advice(
+                "If the type hints is not specified for `grouby.apply`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             groupkeys = [
@@ -1278,32 +1279,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
 
-            if not is_series_groupby and LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                # `groupby.apply` in pandas<0.25 runs the functions twice for the first group.
-                # https://github.com/pandas-dev/pandas/pull/24748
-
-                should_skip_first_call = True
-
-                def wrapped_func(
-                    df: Union[pd.DataFrame, pd.Series], *a: Any, **k: Any
-                ) -> Union[pd.DataFrame, pd.Series]:
-                    nonlocal should_skip_first_call
-                    if should_skip_first_call:
-                        should_skip_first_call = False
-                        if should_return_series:
-                            return pd.Series()
-                        else:
-                            return pd.DataFrame()
-                    else:
-                        return pandas_apply(df, *a, **k)
-
-            else:
-                wrapped_func = pandas_apply
-
             if is_series_groupby:
-                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(wrapped_func, *args, **kwargs)
+                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pdf_or_ser = pdf.groupby(groupkey_names).apply(wrapped_func, *args, **kwargs)
+                pdf_or_ser = pdf.groupby(groupkey_names).apply(pandas_apply, *args, **kwargs)
                 if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
                     pdf_or_ser = pdf_or_ser.stack()
 
@@ -2267,6 +2246,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `grouby.transform`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = get_option("compute.shortcut_limit")
             pdf = psdf.head(limit + 1)._to_internal_pandas()
             pdf = pdf.groupby(groupkey_names).transform(func, *args, **kwargs)
@@ -2373,12 +2356,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Name: value1, dtype: int64
         """
         if dropna:
-            stat_function = lambda col: F.countDistinct(col)
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col)
+
         else:
-            stat_function = lambda col: (
-                F.countDistinct(col)
-                + F.when(F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1).otherwise(0)
-            )
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col) + F.when(
+                    F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
+                ).otherwise(0)
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
@@ -2580,7 +2567,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        stat_function = lambda col: F.percentile_approx(col, 0.5, accuracy)
+        def stat_function(col: Column) -> Column:
+            return F.percentile_approx(col, 0.5, accuracy)
+
         return self._reduce_for_stat_function(stat_function, only_numeric=numeric_only)
 
     def _reduce_for_stat_function(
@@ -3011,8 +3000,8 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return psser.copy()
 
-    def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:
-        return first_series(pdf).rename().rename(self._psser.name)
+    def _cleanup_and_return(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename().rename(self._psser.name)
 
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
@@ -3028,10 +3017,7 @@ class SeriesGroupBy(GroupBy[Series]):
     # TODO: add keep parameter
     def nsmallest(self, n: int = 5) -> Series:
         """
-        Return the first n rows ordered by columns in ascending order in group.
-
-        Return the first n rows with the smallest values in columns, in ascending order.
-        The columns that are not specified are returned as well, but not used for ordering.
+        Return the smallest `n` elements.
 
         Parameters
         ----------
@@ -3325,7 +3311,7 @@ def normalize_keyword_aggregation(
     Normalize user-provided kwargs.
 
     Transforms from the new ``Dict[str, NamedAgg]`` style kwargs
-    to the old OrderedDict[str, List[scalar]]].
+    to the old defaultdict[str, List[scalar]].
 
     Parameters
     ----------
@@ -3343,15 +3329,9 @@ def normalize_keyword_aggregation(
     Examples
     --------
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
-    (OrderedDict([('input', ['sum'])]), ['output'], [('input', 'sum')])
+    (defaultdict(<class 'list'>, {'input': ['sum']}), ['output'], [('input', 'sum')])
     """
-    # this is due to python version issue, not sure the impact on pandas-on-Spark
-    PY36 = sys.version_info >= (3, 6)
-    if not PY36:
-        kwargs = OrderedDict(sorted(kwargs.items()))
-
-    # TODO(Py35): When we drop python 3.5, change this to defaultdict(list)
-    aggspec: Dict[Union[Any, Tuple], List[str]] = OrderedDict()
+    aggspec: Dict[Union[Any, Tuple], List[str]] = defaultdict(list)
     order: List[Tuple] = []
     columns, pairs = zip(*kwargs.items())
 

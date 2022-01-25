@@ -24,9 +24,9 @@ from functools import reduce
 from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import BooleanType, LongType
+from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
@@ -53,12 +53,12 @@ from pyspark.pandas.utils import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.generic import Frame
+    from pyspark.pandas.series import Series
 
 
-class IndexerLike(object):
+class IndexerLike:
     def __init__(self, psdf_or_psser: "Frame"):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
@@ -553,14 +553,14 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
         psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
-            psdf_or_psser = first_series(psdf)
+            psdf_or_psser = cast(Series, first_series(psdf))
             if series_name is not None and series_name != psdf_or_psser.name:
                 psdf_or_psser = psdf_or_psser.rename(series_name)
         else:
             psdf_or_psser = psdf
 
         if remaining_index is not None and remaining_index == 0:
-            pdf_or_pser = psdf_or_psser.head(2).to_pandas()
+            pdf_or_pser = psdf_or_psser.head(2)._to_pandas()
             length = len(pdf_or_pser)
             if length == 0:
                 raise KeyError(name_like_string(key))
@@ -1077,8 +1077,12 @@ class LocIndexer(LocIndexerLike):
 
             return reduce(lambda x, y: x & y, conds), None, None
         else:
+            from pyspark.sql.types import StructType
+
             index = self._psdf_or_psser.index
-            index_data_type = [f.dataType for f in index.to_series().spark.data_type]
+            index_data_type = [  # type: ignore[assignment]
+                f.dataType for f in cast(StructType, index.to_series().spark.data_type)
+            ]
 
             start = rows_sel.start
             if start is not None:
@@ -1110,7 +1114,11 @@ class LocIndexer(LocIndexerLike):
             if start is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, start, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], start),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1120,7 +1128,11 @@ class LocIndexer(LocIndexerLike):
             if stop is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, stop, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], stop),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(

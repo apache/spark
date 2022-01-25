@@ -1178,6 +1178,30 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR =
+    ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
+      .internal()
+      .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
+        "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
+        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
+        "Set to -1.0 to disable this feature by default.")
+      .version("3.3.0")
+      .doubleConf
+      .createWithDefault(-1.0)
+
+  private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
+    ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
+      .internal()
+      .doc("Max skewed shuffle blocks allowed to be accurately recorded in " +
+        "HighlyCompressedMapStatus if its size is larger than " +
+        "SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR multiplying the median shuffle block size or " +
+        "SHUFFLE_ACCURATE_BLOCK_THRESHOLD.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ > 0, "Allowed max accurate skewed block number must be positive.")
+      .createWithDefault(100)
+
   private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")
@@ -2193,6 +2217,33 @@ package object config {
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
 
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS =
+    ConfigBuilder("spark.shuffle.push.merge.finalizeThreads")
+      .doc("Number of threads used by driver to finalize shuffle merge. Since it could" +
+        " potentially take seconds for a large shuffle to finalize, having multiple threads helps" +
+        " driver to handle concurrent shuffle merge finalize requests when push-based" +
+        " shuffle is enabled.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(3)
+
+  private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
+    ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
+      .doc("Driver will wait for merge finalization to complete only if total shuffle size is" +
+        " more than this threshold. If total shuffle size is less, driver will immediately" +
+        " finalize the shuffle output")
+      .version("3.3.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("500m")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
+    ConfigBuilder("spark.shuffle.push.minCompletedPushRatio")
+      .doc("Fraction of map partitions that should be push complete before driver starts" +
+        " shuffle merge finalization during push based shuffle")
+      .version("3.3.0")
+      .doubleConf
+      .createWithDefault(1.0)
+
   private[spark] val JAR_IVY_REPO_PATH =
     ConfigBuilder("spark.jars.ivy")
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
@@ -2268,4 +2319,13 @@ package object config {
       .internal()
       .stringConf
       .createWithDefault(".spark-staging")
+
+  private[spark] val EXECUTOR_STATE_SYNC_MAX_ATTEMPTS =
+    ConfigBuilder("spark.worker.executorStateSync.maxAttempts")
+      .internal()
+      .doc("The max attempts the worker will try to sync the ExecutorState to the Master, if " +
+        "the failed attempts reach the max attempts limit, the worker will give up and exit.")
+      .version("3.3.0")
+      .intConf
+      .createWithDefault(5)
 }

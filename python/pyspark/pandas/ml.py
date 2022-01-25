@@ -28,7 +28,7 @@ from pyspark.pandas._typing import Label
 from pyspark.pandas.utils import column_labels_level
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 CORRELATION_OUTPUT_COLUMN = "__correlation_output__"
