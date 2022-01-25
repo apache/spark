@@ -331,7 +331,9 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(exception.getMessage.contains("Unsupported literal type"))
+    assert(exception.getMessage.contains("The feature is not supported: " +
+      "literal for '[dotnet,Dummies]' of class " +
+      "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema"))
   }
 
   test("SPARK-26403: pivoting by array column") {
