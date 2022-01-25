@@ -958,17 +958,18 @@ abstract class CatalogTestUtils {
                db: String,
                tableType: CatalogTableType,
                storage: CatalogStorageFormat): CatalogTable =
-    newTable(name, Some(db), tableType, Some(storage))
+    newTable(name, Some(db), Some(tableType), Some(storage))
 
   def newTable(name: String,
                database: Option[String] = None,
-               tableType: CatalogTableType = CatalogTableType.EXTERNAL,
+               tableType: Option[CatalogTableType] = None,
                storage : Option[CatalogStorageFormat] = None): CatalogTable = {
+    val _tableType = tableType.getOrElse(CatalogTableType.EXTERNAL)
     val tableStorage = storage.getOrElse(
       storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)))
     CatalogTable(
       identifier = TableIdentifier(name, database),
-      tableType = tableType,
+      tableType = _tableType,
       storage = tableStorage,
       schema = new StructType()
         .add("col1", "int")
