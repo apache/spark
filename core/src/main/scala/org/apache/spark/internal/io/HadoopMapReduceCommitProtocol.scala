@@ -30,7 +30,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol.getStagingDir
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
@@ -41,9 +40,6 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
- * @param stagingDir The staging directory of this write job. Spark uses it to deal with
- *                   files with absolute output path, or writing data into partitioned directory
- *                   with dynamicPartitionOverwrite=true
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
  *                                  dynamically. Suppose final path is /path/to/outputPath, output
  *                                  path of [[FileOutputCommitter]] is an intermediate path, e.g.
