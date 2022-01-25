@@ -71,15 +71,8 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    stagingDir: Path,
     dynamicPartitionOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
-
-  def this(jobId: String, path: String) =
-    this(jobId, path, getStagingDir(path, jobId))
-
-  def this(jobId: String, path: String, dynamicPartitionOverwrite: Boolean) =
-    this(jobId, path, getStagingDir(path, jobId), dynamicPartitionOverwrite)
 
   import FileCommitProtocol._
 
@@ -110,6 +103,22 @@ class HadoopMapReduceCommitProtocol(
    * destination directory at the end, if `dynamicPartitionOverwrite` is true.
    */
   @transient private var partitionPaths: mutable.Set[String] = null
+
+  /**
+   * The staging directory of this write job. Spark uses it to deal with files with absolute output
+   * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
+   */
+  protected def stagingDir = getStagingDir(path, jobId)
+
+  override def getOutputPath: Path = {
+    if (dynamicPartitionOverwrite) {
+      stagingDir
+    } else {
+      new Path(path)
+    }
+  }
+
+  override def getWorkPath: Path = getOutputPath
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
