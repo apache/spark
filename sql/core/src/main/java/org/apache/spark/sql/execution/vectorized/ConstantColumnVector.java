@@ -79,8 +79,8 @@ public class ConstantColumnVector extends ColumnVector {
           childData[i] = null;
         }
       }
+      childData = null;
     }
-    childData = null;
     arrayData = null;
     mapData = null;
   }
