@@ -134,7 +134,7 @@ private[spark] class ExecutorMonitor(
         .toSeq
       updateNextTimeout(newNextTimeout)
     }
-    timedOutExecs
+    timedOutExecs.sortBy(_._1)
   }
 
   /**
