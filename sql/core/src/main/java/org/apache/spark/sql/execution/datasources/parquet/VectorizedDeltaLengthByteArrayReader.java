@@ -36,7 +36,6 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     VectorizedValuesReader {
 
   private final MemoryMode memoryMode;
-  private int valueCount;
   private final VectorizedDeltaBinaryPackedReader lengthReader =
       new VectorizedDeltaBinaryPackedReader();
   private ByteBufferInputStream in;
@@ -49,7 +48,6 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    this.valueCount = valueCount;
     if (memoryMode == MemoryMode.OFF_HEAP) {
       lengthsVector = new OffHeapColumnVector(valueCount, IntegerType);
     } else {
