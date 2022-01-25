@@ -493,7 +493,7 @@ class StreamingTests(ReusedSQLTestCase):
         try:
             tester.run_streaming_query_on_writer(ForeachWriter(), 1)
             self.fail("bad writer did not fail the query")  # this is not expected
-        except StreamingQueryException as e:
+        except StreamingQueryException:
             # TODO: Verify whether original error message is inside the exception
             pass
 

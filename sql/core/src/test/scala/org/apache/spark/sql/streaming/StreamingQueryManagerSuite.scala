@@ -447,9 +447,9 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   /** Stop a random active query either with `stop()` or with an error */
   private def stopRandomQueryAsync(stopAfter: Span, withError: Boolean): StreamingQuery = {
-
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
-
+    // scalastyle:on executioncontextglobal
     val activeQueries = spark.streams.active
     val queryToStop = activeQueries(Random.nextInt(activeQueries.length))
     Future {

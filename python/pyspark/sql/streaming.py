@@ -1069,16 +1069,14 @@ class DataStreamWriter:
                     "Value for processingTime must be a non empty string. Got: %s" % processingTime
                 )
             interval = processingTime.strip()
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(  # type: ignore[attr-defined]
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
                 interval
             )
 
         elif once is not None:
             if once is not True:
                 raise ValueError("Value for once must be True. Got: %s" % once)
-            jTrigger = (
-                self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()  # type: ignore[attr-defined]
-            )
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
@@ -1086,15 +1084,13 @@ class DataStreamWriter:
                     "Value for continuous must be a non empty string. Got: %s" % continuous
                 )
             interval = continuous.strip()
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(  # type: ignore[attr-defined]
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(
                 interval
             )
         else:
             if availableNow is not True:
                 raise ValueError("Value for availableNow must be True. Got: %s" % availableNow)
-            jTrigger = (
-                self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.AvailableNow()  # type: ignore[attr-defined]
-            )
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.AvailableNow()
 
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self

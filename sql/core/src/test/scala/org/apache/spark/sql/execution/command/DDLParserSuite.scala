@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName, UnresolvedFunc}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -354,9 +354,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       LocalTempView)
     comparePlans(parsed2, expected2)
 
-    // TODO(SPARK-37367): Reenable exception test in DDLParserSuite.create view -- basic
-    // val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
-    // intercept(v3, "It is not allowed to add database prefix")
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    intercept(v3, "It is not allowed to add database prefix")
   }
 
   test("create temp view - full") {
@@ -461,6 +460,33 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("DROP FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
+      UnresolvedFunc(name, "DROP FUNCTION", true,
+        Some("Please use fully qualified identifier to drop the persistent function."))
+    }
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a"),
+      DropFunction(createFuncPlan(Seq("a")), false))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION a"),
+      DropFunctionCommand(None, "a", false, true))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
+      DropFunctionCommand(None, "a", true, true))
+
+    intercept("DROP TEMPORARY FUNCTION a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
+    intercept("DROP TEMPORARY FUNCTION IF EXISTS a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {

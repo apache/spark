@@ -210,6 +210,7 @@ object NestedColumnAliasing {
     case _: Repartition => true
     case _: Sample => true
     case _: RepartitionByExpression => true
+    case _: RebalancePartitions => true
     case _: Join => true
     case _: Window => true
     case _: Sort => true
@@ -245,11 +246,13 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
-        case ev: ExtractValue =>
+        // we can not alias the attr from lambda variable whose expr id is not available
+        case ev: ExtractValue if ev.find(_.isInstanceOf[NamedLambdaVariable]).isEmpty =>
           if (ev.references.size == 1) {
             nestedFieldReferences.append(ev)
           }
         case ar: AttributeReference => otherRootReferences.append(ar)
+        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)

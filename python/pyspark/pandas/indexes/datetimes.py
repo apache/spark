@@ -682,8 +682,7 @@ class DatetimeIndex(Index):
         Int64Index([2], dtype='int64')
         """
 
-        @no_type_check
-        def pandas_between_time(pdf) -> ps.DataFrame[int]:
+        def pandas_between_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
             return pdf.between_time(start_time, end_time, include_start, include_end)
 
         psdf = self.to_frame()[[]]
@@ -728,8 +727,7 @@ class DatetimeIndex(Index):
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
 
-        @no_type_check
-        def pandas_at_time(pdf) -> ps.DataFrame[int]:
+        def pandas_at_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
             return pdf.at_time(time, asof)
 
         psdf = self.to_frame()[[]]

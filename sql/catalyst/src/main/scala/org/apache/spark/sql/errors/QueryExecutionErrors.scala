@@ -164,18 +164,36 @@ object QueryExecutionErrors {
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key)
+  }
+
+  def invalidInputIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
+  }
+
+  private def invalidArrayIndexErrorInternal(
+      index: Int,
+      numElements: Int,
+      key: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
+      messageParameters = Array(index.toString, numElements.toString, key))
+  }
+
+  def invalidElementAtIndexError(
+       index: Int,
+       numElements: Int): ArrayIndexOutOfBoundsException = {
+    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
-  def invalidInputIndexError(index: Int, stringLength: Int): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_INPUT_INDEX",
-      messageParameters = Array(index.toString, stringLength.toString, SQLConf.ANSI_ENABLED.key))
-  }
-
-  def mapKeyNotExistError(key: Any): NoSuchElementException = {
-    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-      messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+  def mapKeyNotExistError(key: Any, isElementAtFunction: Boolean): NoSuchElementException = {
+    if (isElementAtFunction) {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
+        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+    } else {
+      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
+        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key))
+    }
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {
@@ -1887,13 +1905,28 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
-      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "key",
+        "the aes_encrypt/aes_decrypt function",
+        s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new UnsupportedOperationException(
-      s"The AES mode $mode with the padding $padding is not supported")
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"AES-$mode with the padding $padding by the aes_encrypt/aes_decrypt function."))
+  }
+
+  def aesCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "expr, key",
+        "the aes_encrypt/aes_decrypt function",
+        s"Detail message: $detailMessage"))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
@@ -1915,9 +1948,8 @@ object QueryExecutionErrors {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(format: String): Throwable = {
+  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"Format '$format' used for parsing string to number or " +
-        "formatting number to string is invalid")
+      s"The input string '$input' does not match the given number format: '$format'")
   }
 }

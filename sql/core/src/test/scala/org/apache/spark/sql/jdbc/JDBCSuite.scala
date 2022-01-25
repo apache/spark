@@ -24,7 +24,6 @@ import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
 
-import org.h2.jdbc.JdbcSQLException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -54,7 +53,8 @@ class JDBCSuite extends QueryTest
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
-  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
+  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
+    Array.fill(15)(0.toByte)
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
@@ -87,7 +87,6 @@ class JDBCSuite extends QueryTest
     val properties = new Properties()
     properties.setProperty("user", "testUser")
     properties.setProperty("password", "testPass")
-    properties.setProperty("rowId", "false")
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
@@ -162,7 +161,7 @@ class JDBCSuite extends QueryTest
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP)"
+    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
@@ -177,12 +176,12 @@ class JDBCSuite extends QueryTest
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
-      "AS SELECT '1999-01-08 04:05:06.543543543 GMT-08:00'")
+      "AS SELECT '1999-01-08 04:05:06.543543543-08:00'")
       .executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE test.array (ar ARRAY) " +
-      "AS SELECT '(1, 2, 3)'")
+    conn.prepareStatement("CREATE TABLE test.array_table (ar Integer ARRAY) " +
+      "AS SELECT ARRAY[1, 2, 3]")
       .executeUpdate()
     conn.commit()
 
@@ -638,7 +637,7 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[Array[Byte]](0).sameElements(testBytes))
     assert(rows(0).getString(1).equals("Sensitive"))
     assert(rows(0).getString(2).equals("Insensitive"))
-    assert(rows(0).getString(3).equals("Twenty-byte CHAR"))
+    assert(rows(0).getString(3).equals("Twenty-byte CHAR    "))
     assert(rows(0).getAs[Array[Byte]](4).sameElements(testBytes))
     assert(rows(0).getString(5).equals("I am a clob!"))
   }
@@ -727,20 +726,6 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getDouble(0) === 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
-  }
-
-  test("Pass extra properties via OPTIONS") {
-    // We set rowId to false during setup, which means that _ROWID_ column should be absent from
-    // all tables. If rowId is true (default), the query below doesn't throw an exception.
-    intercept[JdbcSQLException] {
-      sql(
-        s"""
-          |CREATE OR REPLACE TEMPORARY VIEW abc
-          |USING org.apache.spark.sql.jdbc
-          |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
-          |         user 'testUser', password 'testPass')
-         """.stripMargin.replaceAll("\n", " "))
-    }
   }
 
   test("Remap types via JdbcDialects") {
@@ -1375,7 +1360,7 @@ class JDBCSuite extends QueryTest
     }.getMessage
     assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
     e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
+      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
     }.getMessage
     assert(e.contains("Unsupported type ARRAY"))
   }
