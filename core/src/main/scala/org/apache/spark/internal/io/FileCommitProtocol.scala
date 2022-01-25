@@ -21,8 +21,6 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
-import scala.util.Try
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
@@ -227,8 +225,7 @@ object FileCommitProtocol extends Logging {
       className: String,
       jobId: String,
       outputPath: String,
-      dynamicPartitionOverwrite: Boolean = false,
-      stagingDir: Option[Path] = None): FileCommitProtocol = {
+      dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
 
     logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
       s" dynamic=$dynamicPartitionOverwrite")
