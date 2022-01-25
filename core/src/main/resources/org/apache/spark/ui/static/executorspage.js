@@ -173,76 +173,32 @@ function reselectCheckboxesBasedOnTaskTableState() {
   }
 }
 
-function getColumnNameForExecutorMetricSummary(columnKey) {
-  switch(columnKey) {
-    case "JVMHeapMemory":
-      return "Peak JVM Heap Memory";
-
-    case "JVMOffHeapMemory":
-      return "Peak JVM Off Heap Memory";
-
-    case "OnHeapExecutionMemory":
-      return "Peak On Heap Execution Memory";
-
-    case "OffHeapExecutionMemory":
-      return "Peak Off Heap Execution Memory";
-
-    case "OnHeapStorageMemory":
-      return "Peak On Heap Storage Memory";
-
-    case "OffHeapStorageMemory":
-      return "Peak Off Heap Storage Memory";
-
-    case "OnHeapUnifiedMemory":
-      return "Peak On Heap Unified Memory";
-
-    case "OffHeapUnifiedMemory":
-      return "Peak Off Heap Unified Memory";
-
-    case "DirectPoolMemory":
-      return "Peak Direct Pool Memory";
-
-    case "MappedPoolMemory":
-      return "Peak Mapped Pool Memory";
-
-    case "ProcessTreeJVMVMemory":
-      return "Process Tree JVM VMemory";
-
-    case "ProcessTreeJVMRSSMemory":
-      return "Process Tree JVM RSS Memory";
-
-    case "ProcessTreePythonVMemory":
-      return "Process Tree Python VMemory";
-
-    case "ProcessTreePythonRSSMemory":
-      return "Process Tree Python RSS Memory";
-
-    case "ProcessTreeOtherVMemory":
-      return "Process Tree Other VMemory";
-
-    case "ProcessTreeOtherRSSMemory":
-      return "Process Tree Other RSS Memory";
-
-    case "MinorGCCount":
-      return "Peak Minor GC Count";
-
-    case "MinorGCTime":
-      return "Peak Minor GC Time";
-
-    case "MajorGCCount":
-      return "Peak Major GC Count";
-
-    case "MajorGCTime":
-      return "Peak Major GC Time";
-
-    default:
-      return "NA";
-  }
+var executorMetricsColumnName = {
+  "JVMHeapMemory": "Peak JVM Heap Memory",
+  "JVMOffHeapMemory": "Peak JVM Off Heap Memory",
+  "OnHeapExecutionMemory": "Peak On Heap Execution Memory",
+  "OffHeapExecutionMemory": "Peak Off Heap Execution Memory",
+  "OnHeapStorageMemory": "Peak On Heap Storage Memory",
+  "OffHeapStorageMemory": "Peak Off Heap Storage Memory",
+  "OnHeapUnifiedMemory": "Peak On Heap Unified Memory",
+  "OffHeapUnifiedMemory": "Peak Off Heap Unified Memory",
+  "DirectPoolMemory": "Peak Direct Pool Memory",
+  "MappedPoolMemory": "Peak Mapped Pool Memory",
+  "ProcessTreeJVMVMemory": "Process Tree JVM VMemory",
+  "ProcessTreeJVMRSSMemory": "Process Tree JVM RSS Memory",
+  "ProcessTreePythonVMemory": "Process Tree Python VMemory",
+  "ProcessTreePythonRSSMemory": "Process Tree Python RSS Memory",
+  "ProcessTreeOtherVMemory": "Process Tree Other VMemory",
+  "ProcessTreeOtherRSSMemory": "Process Tree Other RSS Memory",
+  "MinorGCCount": "Peak Minor GC Count",
+  "MinorGCTime": "Peak Minor GC Time",
+  "MajorGCCount": "Peak Major GC Count",
+  "MajorGCTime": "Peak Major GC Time"
 }
 
 function createRowMetadataForColumn(colKey, data, executorSumCheckBoxId) {
   var row = {
-    "metric": getColumnNameForExecutorMetricSummary(colKey),
+    "metric": executorMetricsColumnName[colKey],
     "data": data,
     "executorSumCheckBoxId": executorSumCheckBoxId,
     "columnKey": colKey
@@ -931,11 +887,6 @@ $(document).ready(function () {
                 break;
 
               default:
-                if (getColumnNameForExecutorMetricSummary(columnKey) != "NA") {
-                  row = createRowMetadataForColumn(
-                    columnKey, executorMetricsResponse[columnKey], 0);
-                  executorSummaryMetricsTableArray.push(row);
-                }
                 break;
             }
           });
