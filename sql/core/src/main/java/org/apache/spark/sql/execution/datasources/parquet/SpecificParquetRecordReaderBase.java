@@ -120,7 +120,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
 
-
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
     // will be updated to the accumulator. So we can check if the row groups are filtered or not
