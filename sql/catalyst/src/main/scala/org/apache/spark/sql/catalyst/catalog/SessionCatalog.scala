@@ -1557,17 +1557,18 @@ class SessionCatalog(
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      synchronized(
-        lookupTempFuncWithViewContext(name, isBuiltinFunction, functionRegistry.lookupFunction))
+      synchronized(lookupTempFuncWithViewContext(
+        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction))
     }
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given table function by name if it's a
-   * built-in or temp function.
+   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or
+   * temp table function.
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
-    lookupTempFuncWithViewContext(name, isBuiltinFunction, tableFunctionRegistry.lookupFunction)
+    lookupTempFuncWithViewContext(
+      name, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry.lookupFunction)
   }
 
   /**
