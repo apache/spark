@@ -101,8 +101,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       partitionColumns = partitionAttributes,
       bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = options,
-      isHiveInsert = true)
+      options = options)
   }
 
   protected def getExternalTmpPath(

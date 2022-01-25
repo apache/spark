@@ -92,7 +92,6 @@ object FileFormatWriter extends Logging {
    *    processing statistics.
    * @return The set of all partition paths that were updated during this write job.
    */
-  // scalastyle:off argcount
   def write(
       sparkSession: SparkSession,
       plan: SparkPlan,
@@ -103,8 +102,7 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      options: Map[String, String],
-      isHiveInsert: Boolean = false)
+      options: Map[String, String])
     : Set[String] = {
 
     val job = Job.getInstance(hadoopConf)
@@ -164,15 +162,6 @@ object FileFormatWriter extends Logging {
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
-    if (isHiveInsert) {
-      try {
-        outputWriterFactory.newInstance(outputSpec.outputPath, dataColumns.toStructType, null)
-      } catch {
-        case e: Exception =>
-          logError("Hive Serde Insert failed to initialize OutputWriter.", e)
-          throw e
-      }
-    }
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID.toString,
@@ -285,7 +274,6 @@ object FileFormatWriter extends Logging {
       throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
-  // scalastyle:on argcount
 
   /** Writes data out in a single Spark task. */
   private def executeTask(
