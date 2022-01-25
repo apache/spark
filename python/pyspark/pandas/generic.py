@@ -980,7 +980,8 @@ class Frame(object, metaclass=ABCMeta):
         0         a
         1         c
         """
-        options["ignoreNullFields"] = ignoreNullFields
+        default_options: Dict[str, Any] = {"ignoreNullFields": False}
+        options = {**default_options, **options}
         
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
