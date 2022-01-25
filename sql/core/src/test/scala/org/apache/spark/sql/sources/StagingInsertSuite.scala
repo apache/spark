@@ -17,106 +17,98 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.EXEC_STAGING_DIR
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.SQLPathHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{SQLHadoopMapReduceCommitProtocol, SQLPathHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 class StagingInsertSuite extends QueryTest with SharedSparkSession {
+
   import testImplicits._
 
-  val stagingDir = Utils.createTempDir()
+  val stagingParentDir = Utils.createTempDir()
 
-  override def sparkConf: SparkConf =
-    super.sparkConf.set(EXEC_STAGING_DIR, stagingDir.getAbsolutePath)
+  val stagingDir = stagingParentDir.getCanonicalPath + "/.spark-stagingDir"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    stagingDir.delete()
+    stagingParentDir.delete()
   }
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(stagingDir)
+      Utils.deleteRecursively(stagingParentDir)
     } finally {
       super.afterAll()
     }
   }
 
+  test("SPDI-25701: Assert staging dir work") {
+    withSQLConf(SQLConf.EXEC_STAGING_DIR.key -> stagingDir) {
+      val commitProtocol = new SQLHadoopMapReduceCommitProtocol("job-id", "dummy-path", true)
+      assert(commitProtocol.stagingDir.toString.contains(stagingDir))
+    }
+  }
+
   test("SPARK-36579: dynamic partition overwrite can use user defined staging dir") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
-      SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
-      withTempDir { d =>
-        withTable("t") {
-          sql(
-            s"""
-               |CREATE TABLE t(c1 int, p1 int) USING PARQUET PARTITIONED BY(p1)
-               |LOCATION '${d.getAbsolutePath}'
+    // Partition Insert
+    Seq("static", "dynamic").foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode,
+        SQLConf.EXEC_STAGING_DIR.key -> stagingDir) {
+        withTempDir { d =>
+          withTable("t") {
+            sql(
+              s"""
+                 |CREATE TABLE t(c1 int, p1 int) USING PARQUET PARTITIONED BY(p1)
+                 |LOCATION '${d.getAbsolutePath}'
              """.stripMargin)
 
-          val df = Seq((1, 2), (3, 4)).toDF("c1", "p1")
-          df.write
-            .partitionBy("p1")
-            .mode("overwrite")
-            .saveAsTable("t")
-          checkAnswer(sql("SELECT * FROM t"), df)
-          checkAnswer(sql("SELECT * FROM t WHERE p1 = 2"), Row(1, 2) :: Nil)
-          checkAnswer(sql("SELECT * FROM t WHERE p1 = 4"), Row(3, 4) :: Nil)
+            val df = Seq((1, 2), (3, 4), (5, 6)).toDF("c1", "p1")
+            df.write
+              .partitionBy("p1")
+              .mode("overwrite")
+              .saveAsTable("t")
+            checkAnswer(sql("SELECT * FROM t"), df)
+            checkAnswer(sql("SELECT * FROM t WHERE p1 = 2"), Row(1, 2) :: Nil)
+            checkAnswer(sql("SELECT * FROM t WHERE p1 = 4"), Row(3, 4) :: Nil)
+          }
         }
       }
     }
   }
 
-  test("SPARK-36571: Add a new commit protocol that support writing data to staging " +
-    "then mv to output path") {
-    withTempDir { stagingDir =>
-      withSQLConf(
-        "spark.exec.stagingDir" -> s"${stagingDir.getAbsolutePath}/.spark-stagingDir",
-        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> "2",
+  test("SPARK-36571: Add a new commit protocol - None-partitioned insert") {
+    Seq("1", "2").foreach { version =>
+      withSQLConf(SQLConf.EXEC_STAGING_DIR.key -> stagingDir,
+        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> version,
         SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
           classOf[SQLPathHadoopMapReduceCommitProtocol].getName) {
-        withTempDir { d =>
-          withTable("t") {
-            sql(
-              s"""
-                 | CREATE TABLE t(c1 int, p1 int) using ORC
-                 | LOCATION '${d.getAbsolutePath}'
+        withTable("t") {
+          sql(
+            s"""
+               | CREATE TABLE t(c1 int, p1 int) using PARQUET
             """.stripMargin)
 
-            val df =
-              Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
-                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
-                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
-                .toDF("c1", "p1").repartition(1)
-            df.write
-              .mode("overwrite")
-              .format("orc")
-              .saveAsTable("t")
-            checkAnswer(sql("select * from t"), df)
-          }
+          val df =
+            Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
+              .toDF("c1", "p1").repartition(1)
+          df.write
+            .mode("overwrite")
+            .format("parquet")
+            .saveAsTable("t")
+          checkAnswer(sql("SELECT * FROM t"), df)
         }
-        withTempDir { d =>
-          withTable("t") {
-            sql(
-              s"""
-                 | CREATE TABLE t(c1 int, p1 int) USING ORC PARTITIONED BY(p1)
-                 | LOCATION '${d.getAbsolutePath}'
-            """.stripMargin)
+      }
+    }
+  }
 
-            val df =
-              Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
-                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
-                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
-                .toDF("c1", "p1").repartition(1)
-
-            df.createOrReplaceTempView("view1")
-            sql("INSERT OVERWRITE t PARTITION(p1=2) SELECT c1 FROM view1 ")
-            checkAnswer(sql("SELECT * FROM t WHERE p1=2"), df)
-          }
-        }
+  test("SPARK-36571: Add a new commit protocol - Static partition insert") {
+    Seq("1", "2").foreach { version =>
+      withSQLConf(SQLConf.EXEC_STAGING_DIR.key -> stagingDir,
+        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> version,
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[SQLPathHadoopMapReduceCommitProtocol].getName) {
         withTempDir { d =>
           withTable("t") {
             sql(
@@ -125,13 +117,38 @@ class StagingInsertSuite extends QueryTest with SharedSparkSession {
                  | LOCATION '${d.getAbsolutePath}'
             """.stripMargin)
 
-            val df = Seq((1, 2)).toDF("c1", "p1")
-            df.write
-              .partitionBy("p1")
-              .mode("overwrite")
-              .saveAsTable("t")
-            checkAnswer(sql("select * from t"), df)
+            val df =
+              Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
+                .toDF("c1", "p1").repartition(1)
+            df.createOrReplaceTempView("view1")
+            sql("INSERT OVERWRITE t PARTITION(p1=2) SELECT c1 FROM view1")
+            checkAnswer(sql("SELECT * FROM t WHERE p1=2"), df)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-36571: Add a new commit protocol - Dynamic partition insert") {
+    Seq("1", "2").foreach { version =>
+      withSQLConf(SQLConf.EXEC_STAGING_DIR.key -> stagingDir,
+        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> version,
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[SQLPathHadoopMapReduceCommitProtocol].getName) {
+        withTable("t") {
+          sql(
+            s"""
+               | CREATE TABLE t(c1 int, p1 int) USING PARQUET PARTITIONED BY(p1)
+            """.stripMargin)
+
+          val df = Seq((1, 2), (3, 4), (5, 6), (7, 8)).toDF("c1", "p1")
+          df.write
+            .partitionBy("p1")
+            .mode("overwrite")
+            .saveAsTable("t")
+          checkAnswer(sql("SELECT * FROM t"), df)
+          checkAnswer(sql("SELECT * FROM t WHERE p1 > 5"), Row(5, 6) :: Row(7, 8) :: Nil)
+          checkAnswer(sql("SELECT * FROM t WHERE p1 = 4"), Row(3, 4) :: Nil)
         }
       }
     }
