@@ -58,6 +58,22 @@ abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
+   * Get the final directory where the result data will be placed once the job
+   * is committed. This may be null, in which case, there is no output
+   * path to write data to and won't write any data.
+   */
+  def getOutputPath: Path = null
+
+  /**
+   * Get the directory that the task should write results into.
+   * Warning: there's no guarantee that this work path is on the same
+   * FS as the final output, or that it's visible across machines.
+   * May be null, in which case, there is no output path to write data to
+   * and won't write any data.
+   */
+  def getWorkPath: Path = null
+
+  /**
    * Setups up a job. Must be called on the driver before any other methods can be invoked.
    */
   def setupJob(jobContext: JobContext): Unit
@@ -221,34 +237,22 @@ object FileCommitProtocol extends Logging {
     // dynamicPartitionOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
-      val ctor = clazz.getDeclaredConstructor(
-        classOf[String], classOf[String], classOf[Path], classOf[Boolean])
-      logDebug("Using (String, String, Path,  Boolean) constructor")
-      ctor.newInstance(jobId, outputPath,
-        stagingDir.getOrElse(getStagingDir(outputPath, jobId)),
-        dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
+      logDebug("Using (String, String, Boolean) constructor")
+      ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
-        try {
-          logDebug("Falling back to (String, String, Boolean) constructor")
-          val ctor = clazz.getDeclaredConstructor(
-            classOf[String], classOf[String], classOf[Boolean])
-          ctor.newInstance(jobId, outputPath,
-            dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
-        } catch {
-          case _: NoSuchMethodException =>
-            logDebug("Falling back to (String, String) constructor")
-            require(!dynamicPartitionOverwrite,
-              "Dynamic Partition Overwrite is enabled but" +
-                s" the committer ${className} does not have the appropriate constructor")
-            val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-            ctor.newInstance(jobId, outputPath)
-        }
+        logDebug("Falling back to (String, String) constructor")
+        require(!dynamicPartitionOverwrite,
+          "Dynamic Partition Overwrite is enabled but" +
+            s" the committer ${className} does not have the appropriate constructor")
+        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+        ctor.newInstance(jobId, outputPath)
     }
   }
 
   def getStagingDir(path: String, jobId: String): Path = {
-    Try { new Path(path, ".spark-staging-" + jobId) }.getOrElse(null)
+    new Path(path, ".spark-staging-" + jobId)
   }
 
   def externalTempPath(
