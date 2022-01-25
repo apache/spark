@@ -215,6 +215,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
           case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case "2BP01" => throw new NamespaceNotEmptyException(message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
