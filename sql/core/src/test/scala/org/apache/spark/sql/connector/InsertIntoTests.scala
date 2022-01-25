@@ -292,9 +292,11 @@ trait InsertIntoSQLOnlyTests
         }
 
         verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains("Cannot write, IF NOT EXISTS is not supported for table"))
+        assert(exc.getMessage.contains("The feature is not supported: " +
+          "IF NOT EXISTS for the table"))
         assert(exc.getMessage.contains(t1))
-        assert(exc.getErrorClass == "IF_PARTITION_NOT_EXISTS_UNSUPPORTED")
+        assert(exc.getErrorClass === "UNSUPPORTED_FEATURE")
+        assert(exc.getSqlState === "0A000")
       }
     }
 

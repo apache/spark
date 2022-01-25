@@ -51,9 +51,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
-  "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
-    "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
-  },
   "ILLEGAL_SUBSTRING" : {
     "message" : [ "%s cannot contain %s." ]
   },
