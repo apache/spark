@@ -56,11 +56,10 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
 
     formats.foreach { format =>
       if (format.equals("Parquet")) {
-        ParquetProperties.WriterVersion.values()
-          .zip(Seq("V1", "V2")).foreach {
-          case (version, extra) =>
-            withSQLConf(ParquetOutputFormat.WRITER_VERSION -> version.toString) {
-              runDataSourceBenchmark("Parquet", Some(extra))
+        ParquetProperties.WriterVersion.values().zip(Seq("V1", "V2")).foreach {
+          case (writeVersion, versionString) =>
+            withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
+              runDataSourceBenchmark("Parquet", Some(versionString))
             }
         }
       } else {
