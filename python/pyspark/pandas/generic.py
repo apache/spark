@@ -906,8 +906,8 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: output JSON format is different from pandas'. It always use `orient='records'`
             for its output. This behaviour might have to change in the near future.
          
-        .. note:: Set ignoreNullFields keyword argument to `True` and path is provided, 
-            writer omits columns with all NaN or Null values. 
+        .. note:: Set `ignoreNullFields` keyword argument to `True` to omit `None` or `NaN` values
+            when writing JSON objects. It works only when `path` is provided.
 
         Note NaN's and None will be converted to null and datetime objects
         will be converted to UNIX timestamps.
