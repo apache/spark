@@ -114,13 +114,16 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
-  test("UNSUPPORTED_FEATURE: creating a literal of unsupported type") {
-    val e = intercept[SparkRuntimeException] {
-      spark.range(1).select($"value" + Literal(java.time.Year.of(1000)))
+  test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in Literal.apply") {
+    def checkUnsupportedTypeInLiteral(v: Any): Unit = {
+      val e = intercept[SparkRuntimeException] {
+        Literal(v)
+      }
+      assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
+      assert(e.getSqlState === "0A000")
+      assert(e.getMessage.contains("The feature is not supported: literal for "))
     }
-    assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e.getSqlState === "0A000")
-    assert(e.getMessage.contains("The feature is not supported: " +
-      "literal for '1000' of class java.time.Year."))
+    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
+    checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
   }
 }
