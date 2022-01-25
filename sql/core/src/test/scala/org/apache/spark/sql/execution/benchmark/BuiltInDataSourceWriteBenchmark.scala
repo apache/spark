@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.internal.SQLConf
 
 /**
