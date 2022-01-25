@@ -781,8 +781,10 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
-      Array.empty)
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("the target JDBC server does not support transaction and " +
+        "can only support ALTER TABLE with a single action."))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {

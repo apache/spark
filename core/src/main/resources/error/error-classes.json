@@ -149,10 +149,6 @@
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
-    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
-    "sqlState" : "0A000"
-  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
