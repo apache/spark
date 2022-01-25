@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
@@ -2006,33 +2006,21 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
-      def lookupFunction[T <: TreeNode[_]](
-          f: T,
-          nameParts: Seq[String],
-          lookupBuiltinOrTempFunc: Seq[String] => Option[ExpressionInfo]): T = {
-        if (lookupBuiltinOrTempFunc(nameParts).isDefined) {
-          f
-        } else {
-          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
-          val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
-          if (externalFunctionNameSet.contains(fullName)) {
-            f
-          } else if (catalog.asFunctionCatalog.functionExists(ident)) {
-            externalFunctionNameSet.add(fullName)
+      plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
+        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
           } else {
-            throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
-          }
-        }
-      }
-
-      plan.resolveOperators {
-        case f @ UnresolvedTableValuedFunction(name, _, _) =>
-          lookupFunction(f, name.asMultipart, ResolveFunctions.lookupBuiltinOrTempTableFunction)
-        case p: LogicalPlan =>
-          p.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-            case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
-              lookupFunction(f, nameParts, ResolveFunctions.lookupBuiltinOrTempFunction)
+            val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+            val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
+            if (externalFunctionNameSet.contains(fullName)) {
+              f
+            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
+              externalFunctionNameSet.add(fullName)
+              f
+            } else {
+              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
+            }
           }
       }
     }
@@ -2057,7 +2045,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
-        lookupBuiltinOrTempFunction(nameParts).map { info =>
+        lookupBuiltinOrTempFunction(nameParts)
+          .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
