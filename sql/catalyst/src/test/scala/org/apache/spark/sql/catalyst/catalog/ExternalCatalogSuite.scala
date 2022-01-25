@@ -981,7 +981,6 @@ abstract class CatalogTestUtils {
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
-
   def newView(
       db: String,
       name: String,
