@@ -218,11 +218,6 @@ public class VectorizedColumnReader {
             dictionaryIds, dictionary);
         }
       } else {
-        if (column.hasDictionary() && readState.offset != 0) {
-          // This batch already has dictionary encoded values but this new page is not. The batch
-          // does not support a mix of dictionary and not so we will decode the dictionary.
-          updater.decodeDictionaryIds(readState.offset, 0, column, dictionaryIds, dictionary);
-        }
         column.setDictionary(null);
         VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
         defColumn.readBatch(readState, column, valuesReader, updater);
