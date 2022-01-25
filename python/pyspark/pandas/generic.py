@@ -981,11 +981,12 @@ class Frame(object, metaclass=ABCMeta):
         0         a
         1         c
         """
-        default_options: Dict[str, Any] = {"ignoreNullFields": False}
-        options = {**default_options, **options}
         
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
+        
+        default_options: Dict[str, Any] = {"ignoreNullFields": False}
+        options = {**default_options, **options}
 
         if not lines:
             raise NotImplementedError("lines=False is not implemented yet.")
