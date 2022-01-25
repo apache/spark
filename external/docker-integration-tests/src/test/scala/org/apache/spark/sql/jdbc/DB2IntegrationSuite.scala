@@ -206,13 +206,10 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     ).map { case (x, y) =>
       Row(Integer.valueOf(x), String.valueOf(y))
     }
-    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties).cache
-    df.write.mode(SaveMode.Append)
-      .jdbc(jdbcUrl, "tblcopy", new Properties)
-    df.write.mode(SaveMode.Append)
-      .jdbc(jdbcUrl, "tblcopy", new Properties)
-    df.write.mode(SaveMode.Append)
-      .jdbc(jdbcUrl, "tblcopy", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
+    for (_ <- 0 to 2) {
+      df.write.mode(SaveMode.Append).jdbc(jdbcUrl, "tblcopy", new Properties)
+    }
     assert(sqlContext.read.jdbc(jdbcUrl, "tblcopy", new Properties).count === 6)
     df.write.mode(SaveMode.Overwrite).option("truncate", true)
       .jdbc(jdbcUrl, "tblcopy", new Properties)
