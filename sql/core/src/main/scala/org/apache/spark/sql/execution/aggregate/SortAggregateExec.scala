@@ -93,7 +93,7 @@ case class SortAggregateExec(
       groupingExpressions.isEmpty
   }
 
-  protected override def hasAggBuild: Boolean = false
+  protected override def needHashTable: Boolean = false
 
   protected override def doProduceWithKeys(ctx: CodegenContext): String = {
     throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")

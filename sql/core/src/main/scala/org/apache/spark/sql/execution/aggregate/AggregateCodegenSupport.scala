@@ -48,10 +48,9 @@ trait AggregateCodegenSupport
   private var bufVars: Seq[Seq[ExprCode]] = _
 
   /**
-   * Whether this operator has an aggregate build phase.
-   * Only [[HashAggregateExec]] has build phase now.
+   * Whether this operator needs to build hash table.
    */
-  protected def hasAggBuild: Boolean
+  protected def needHashTable: Boolean
 
   /**
    * The generated code for `doProduce` call when aggregate has grouping keys.
@@ -161,7 +160,7 @@ trait AggregateCodegenSupport
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val doAggWithRecordMetric =
-      if (hasAggBuild) {
+      if (needHashTable) {
         val aggTime = metricTerm(ctx, "aggTime")
         val beforeAgg = ctx.freshName("beforeAgg")
         s"""
