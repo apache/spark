@@ -55,15 +55,15 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
     spark.conf.set(SQLConf.ORC_COMPRESSION.key, "snappy")
 
     formats.foreach { format =>
-      if (format.equals("Parquet")) {
-        ParquetProperties.WriterVersion.values().zip(Seq("V1", "V2")).foreach {
-          case (writeVersion, versionString) =>
-            withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
-              runDataSourceBenchmark("Parquet", Some(versionString))
-            }
-        }
-      } else {
-        runBenchmark(s"$format writer benchmark") {
+      runBenchmark(s"$format writer benchmark") {
+        if (format.equals("Parquet")) {
+          ParquetProperties.WriterVersion.values().zip(Seq("V1", "V2")).foreach {
+            case (writeVersion, versionString) =>
+              withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
+                runDataSourceBenchmark("Parquet", Some(versionString))
+              }
+          }
+        } else {
           runDataSourceBenchmark(format)
         }
       }
