@@ -981,7 +981,6 @@ class Frame(object, metaclass=ABCMeta):
         0         a
         1         c
         """
-        
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
         
