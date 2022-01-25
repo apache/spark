@@ -189,6 +189,16 @@ private[spark] class DiskBlockManager(
     Files.setPosixFilePermissions(path, currentPerms)
   }
 
+  /**
+   * Creates a temporary version of the given file with world readable permissions.
+   * Used to create block files that will be renamed to the final version of the file.
+   */
+  def createTempFileWith(file: File): File = {
+    val tmpFile = Utils.tempFileWith(file)
+    createWorldReadableFile(tmpFile)
+    tmpFile
+  }
+
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())

@@ -49,7 +49,7 @@ public class LocalDiskSingleSpillMapOutputWriter
     // The map spill file already has the proper format, and it contains all of the partition data.
     // So just transfer it directly to the destination without any merging.
     File outputFile = blockResolver.getDataFile(shuffleId, mapId);
-    File tempFile = Utils.tempFileWith(outputFile);
+    File tempFile = blockResolver.createTempFile(outputFile);
     Files.move(mapSpillFile.toPath(), tempFile.toPath());
     blockResolver
       .writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, checksums, tempFile);

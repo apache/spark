@@ -87,7 +87,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     lastPartitionId = reducePartitionId;
     if (outputTempFile == null) {
-      outputTempFile = Utils.tempFileWith(outputFile);
+      outputTempFile = blockResolver.createTempFile(outputFile);
     }
     if (outputFileChannel != null) {
       currChannelPosition = outputFileChannel.position();
