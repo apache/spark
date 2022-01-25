@@ -25,7 +25,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -55,7 +55,7 @@ import org.apache.spark.tags.DockerTest
  * This procedure has been validated with Oracle 18.4.0 Express Edition.
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new DatabaseOnDocker {
@@ -79,20 +79,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
 
   override val connectionTimeout = timeout(7.minutes)
 
-  override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement(
+  override def tablePreparation(connection: Connection): Unit = {
+    connection.prepareStatement(
       "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
-    conn.prepareStatement("INSERT INTO employee VALUES (1, 'amy', 10000, 1000)")
-      .executeUpdate()
-    conn.prepareStatement("INSERT INTO employee VALUES (2, 'alex', 12000, 1200)")
-      .executeUpdate()
-    conn.prepareStatement("INSERT INTO employee VALUES (1, 'cathy', 9000, 1200)")
-      .executeUpdate()
-    conn.prepareStatement("INSERT INTO employee VALUES (2, 'david', 10000, 1300)")
-      .executeUpdate()
-    conn.prepareStatement("INSERT INTO employee VALUES (6, 'jen', 12000, 1200)")
-      .executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {

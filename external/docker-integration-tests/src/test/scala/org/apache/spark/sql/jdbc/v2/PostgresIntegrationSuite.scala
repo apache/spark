@@ -22,7 +22,7 @@ import java.sql.Connection
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -34,7 +34,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:14.0-alpine")
@@ -53,16 +53,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
     .set("spark.sql.catalog.postgresql.pushDownAggregate", "true")
 
-  override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement(
+  override def tablePreparation(connection: Connection): Unit = {
+    connection.prepareStatement(
       "CREATE TABLE employee (dept INTEGER, name VARCHAR(32), salary NUMERIC(20, 2)," +
         " bonus double precision)").executeUpdate()
-    conn.prepareStatement(
-      """
-        |INSERT INTO employee VALUES
-        | (1, 'amy', 10000, 1000), (2, 'alex', 12000, 1200), (1, 'cathy', 9000, 1200),
-        | (2, 'david', 10000, 1300), (6, 'jen', 12000, 1200)
-        |""".stripMargin).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
