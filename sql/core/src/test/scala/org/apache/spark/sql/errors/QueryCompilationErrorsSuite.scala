@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
-import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InMemoryTableSessionCatalog, InMemoryTableWithV1Fallback, InMemoryV1Provider, TestV2SessionCatalogBase, V1FallbackTableCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryTable, Table}
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SessionCatalogTestBase}
+import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InMemoryTableSessionCatalog, InMemoryTableWithV1Fallback, InMemoryV1Provider, V1FallbackTableCatalog}
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class QueryCompilationErrorsSuiteBase extends QueryTest with SharedSparkSession {
@@ -72,27 +68,6 @@ class QueryCompilationErrorsDSv2Suite
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(spark.table(tableName), expected)
-  }
-}
-
-trait SessionCatalogTestBase[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
-  extends QueryTest
-  with SharedSparkSession
-  with BeforeAndAfter {
-
-  protected def catalog(name: String): CatalogPlugin =
-    spark.sessionState.catalogManager.catalog(name)
-  protected val v2Format: String = classOf[FakeV2Provider].getName
-  protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
-
-  before {
-    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, catalogClassName)
-  }
-
-  override def afterEach(): Unit = {
-    super.afterEach()
-    catalog(SESSION_CATALOG_NAME).asInstanceOf[Catalog].clearTables()
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
   }
 }
 
