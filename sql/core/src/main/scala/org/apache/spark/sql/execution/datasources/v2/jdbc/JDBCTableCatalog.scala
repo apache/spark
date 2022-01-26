@@ -282,12 +282,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       namespace: Array[String],
       cascade: Boolean): Boolean = namespace match {
     case Array(db) if namespaceExists(namespace) =>
-      if (listTables(Array(db)).nonEmpty) {
-        throw QueryExecutionErrors.namespaceNotEmptyError(namespace)
-      }
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(s"Failed drop name space: $db", dialect) {
-          JdbcUtils.dropNamespace(conn, options, db)
+          JdbcUtils.dropNamespace(conn, options, db, cascade)
           true
         }
       }
