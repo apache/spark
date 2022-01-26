@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.types._
 
@@ -100,5 +102,29 @@ private object DB2Dialect extends JdbcDialect {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
+          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
+  }
+
+  override def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
+    }
   }
 }

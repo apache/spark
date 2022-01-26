@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Date, SQLException, Timestamp, Types}
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.internal.SQLConf
@@ -170,5 +171,19 @@ private case object OracleDialect extends JdbcDialect {
     isNullable: Boolean): String = {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          case o =>
+            // scalastyle:off println
+            println(s"sqlException.getErrorCode:$o")
+            // scalastyle:on println
+            super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
   }
 }

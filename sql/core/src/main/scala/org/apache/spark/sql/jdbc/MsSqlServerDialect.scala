@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -146,5 +149,20 @@ private object MsSqlServerDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case o =>
+            // scalastyle:off println
+            println(s"sqlException.getErrorCode:$o")
+            // scalastyle:on println
+            super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
   }
 }

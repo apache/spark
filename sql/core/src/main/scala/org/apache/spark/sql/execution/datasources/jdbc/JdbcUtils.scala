@@ -1017,12 +1017,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   def dropNamespace(
       conn: Connection, options: JDBCOptions, namespace: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    val dropCmd = if (cascade) {
-      s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)} CASCADE"
-    } else {
-      s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}"
-    }
-    executeStatement(conn, options, dropCmd)
+    executeStatement(conn, options, dialect.dropSchema(namespace, cascade))
   }
 
   /**
@@ -1167,7 +1162,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
     try {
       f
     } catch {
-      case e: Throwable => throw dialect.classifyException(message, e)
+      case e: Throwable =>
+        // scalastyle:off println
+        println(s"++++++$e")
+        // scalastyle:on println
+        throw dialect.classifyException(message, e)
     }
   }
 

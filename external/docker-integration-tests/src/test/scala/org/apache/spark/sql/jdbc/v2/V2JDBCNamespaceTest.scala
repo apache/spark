@@ -44,52 +44,91 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
   def builtinNamespaces: Array[Array[String]]
 
+  def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    Array(namespace) ++ builtinNamespaces
+  }
+
+  def supportsSchemaComment: Boolean = true
+
+  def supportsDropSchemaCascade: Boolean = true
+
+  // supports get namespaces with conn.getMetaData.getSchemas
+  def supportsGetNamespacesFromMetadata: Boolean = true
+
   test("listNamespaces: basic behavior") {
-    catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
-    assert(catalog.listNamespaces() === Array(Array("foo")) ++ builtinNamespaces)
-    assert(catalog.listNamespaces(Array("foo")) === Array())
-    assert(catalog.namespaceExists(Array("foo")) === true)
+    if (supportsGetNamespacesFromMetadata) {
+      val commentMap = if (supportsSchemaComment) {
+        Map("comment" -> "test comment")
+      } else {
+        Map.empty[String, String]
+      }
+      catalog.createNamespace(Array("foo"), commentMap.asJava)
+      assert(catalog.listNamespaces() === listNamespaces(Array("foo")))
+      assert(catalog.listNamespaces(Array("foo")) === Array())
+      assert(catalog.namespaceExists(Array("foo")) === true)
 
-    val logAppender = new LogAppender("catalog comment")
-    withLogAppender(logAppender) {
-      catalog.alterNamespace(Array("foo"), NamespaceChange
-        .setProperty("comment", "comment for foo"))
-      catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
+      if (supportsSchemaComment) {
+        val logAppender = new LogAppender("catalog comment")
+        withLogAppender(logAppender) {
+          catalog.alterNamespace(Array("foo"), NamespaceChange
+            .setProperty("comment", "comment for foo"))
+          catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
+        }
+        val createCommentWarning = logAppender.loggingEvents
+          .filter(_.getLevel == Level.WARN)
+          .map(_.getMessage.getFormattedMessage)
+          .exists(_.contains("catalog comment"))
+        assert(createCommentWarning === false)
+      }
+
+      catalog.dropNamespace(Array("foo"), cascade = false)
+      assert(catalog.namespaceExists(Array("foo")) === false)
+      assert(catalog.listNamespaces() === builtinNamespaces)
+      val msg = intercept[AnalysisException] {
+        catalog.listNamespaces(Array("foo"))
+      }.getMessage
+      assert(msg.contains("Namespace 'foo' not found"))
     }
-    val createCommentWarning = logAppender.loggingEvents
-      .filter(_.getLevel == Level.WARN)
-      .map(_.getMessage.getFormattedMessage)
-      .exists(_.contains("catalog comment"))
-    assert(createCommentWarning === false)
-
-    catalog.dropNamespace(Array("foo"), cascade = false)
-    assert(catalog.namespaceExists(Array("foo")) === false)
-    assert(catalog.listNamespaces() === builtinNamespaces)
-    val msg = intercept[AnalysisException] {
-      catalog.listNamespaces(Array("foo"))
-    }.getMessage
-    assert(msg.contains("Namespace 'foo' not found"))
   }
 
   test("Drop namespace") {
-    val ident1 = Identifier.of(Array("foo"), "tab")
-    // Drop empty namespace without cascade
-    catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
-    assert(catalog.namespaceExists(Array("foo")) === true)
-    catalog.dropNamespace(Array("foo"), cascade = false)
-    assert(catalog.namespaceExists(Array("foo")) === false)
-
-    // Drop non empty namespace without cascade
-    catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
-    assert(catalog.namespaceExists(Array("foo")) === true)
-    catalog.createTable(ident1, schema, Array.empty, emptyProps)
-    intercept[NonEmptyNamespaceException] {
+    if (supportsGetNamespacesFromMetadata) {
+      val ident1 = Identifier.of(Array("foo"), "tab")
+      // Drop empty namespace without cascade
+      val commentMap = if (supportsSchemaComment) {
+        Map("comment" -> "test comment")
+      } else {
+        Map.empty[String, String]
+      }
+      catalog.createNamespace(Array("foo"), commentMap.asJava)
+      if (supportsGetNamespacesFromMetadata) {
+        assert(catalog.namespaceExists(Array("foo")) === true)
+      }
       catalog.dropNamespace(Array("foo"), cascade = false)
-    }
+      if (supportsGetNamespacesFromMetadata) {
+        assert(catalog.namespaceExists(Array("foo")) === false)
+      }
 
-    // Drop non empty namespace with cascade
-    assert(catalog.namespaceExists(Array("foo")) === true)
-    catalog.dropNamespace(Array("foo"), cascade = true)
-    assert(catalog.namespaceExists(Array("foo")) === false)
+      // Drop non empty namespace without cascade
+      catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
+      if (supportsGetNamespacesFromMetadata) {
+        assert(catalog.namespaceExists(Array("foo")) === true)
+      }
+      catalog.createTable(ident1, schema, Array.empty, emptyProps)
+      intercept[NonEmptyNamespaceException] {
+        catalog.dropNamespace(Array("foo"), cascade = false)
+      }
+
+      // Drop non empty namespace with cascade
+      if (supportsDropSchemaCascade) {
+        if (supportsGetNamespacesFromMetadata) {
+          assert(catalog.namespaceExists(Array("foo")) === true)
+        }
+        catalog.dropNamespace(Array("foo"), cascade = true)
+        if (supportsGetNamespacesFromMetadata) {
+          assert(catalog.namespaceExists(Array("foo")) === false)
+        }
+      }
+    }
   }
 }
