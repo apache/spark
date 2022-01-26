@@ -190,11 +190,11 @@ object QueryParsingErrors {
   }
 
   def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL", ctx)
+    new ParseException("MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(s"INVALID_INTERVAL_LITERAL", ctx)
+    new ParseException("INVALID_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
@@ -202,7 +202,7 @@ object QueryParsingErrors {
   }
 
   def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
-    new ParseException(s"INVALID_FROM_TO_UNIT_VALUE", ctx)
+    new ParseException("INVALID_FROM_TO_UNIT_VALUE", Array.empty, ctx)
   }
 
   def fromToIntervalUnsupportedError(
