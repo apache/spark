@@ -282,24 +282,6 @@ trait InsertIntoSQLOnlyTests
       }
     }
 
-    test("InsertInto: IF PARTITION NOT EXISTS not supported") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-
-        val exc = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 1) IF NOT EXISTS SELECT * FROM $view")
-        }
-
-        verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains("The feature is not supported: " +
-          "IF NOT EXISTS for the table"))
-        assert(exc.getMessage.contains(t1))
-        assert(exc.getErrorClass === "UNSUPPORTED_FEATURE")
-        assert(exc.getSqlState === "0A000")
-      }
-    }
-
     test("InsertInto: overwrite - dynamic clause - static mode") {
       withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
         val t1 = s"${catalogAndNamespace}tbl"

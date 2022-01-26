@@ -231,7 +231,7 @@ class V1FallbackTableCatalog extends TestV2SessionCatalogBase[InMemoryTableWithV
   }
 }
 
-private object InMemoryV1Provider {
+private[sql] object InMemoryV1Provider {
   val tables: mutable.Map[String, InMemoryTableWithV1Fallback] = mutable.Map.empty
 
   def getTableData(spark: SparkSession, name: String): DataFrame = {
