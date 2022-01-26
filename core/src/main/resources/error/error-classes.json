@@ -102,11 +102,11 @@
   },
   "LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED" : {
     "message" : [ "LATERAL join with NATURAL join is not supported." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED" : {
     "message" : [ "LATERAL join with USING join is not supported." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
@@ -167,7 +167,7 @@
   },
   "UNSUPPORTED_LATERAL_JOIN_TYPE" : {
     "message" : [ "Unsupported LATERAL join type %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],

@@ -39,7 +39,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     validateParsingError(
       sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
       errorClass = "LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED",
-      sqlState = "42000",
+      sqlState = "0A000",
       message = "LATERAL join with NATURAL join is not supported.")
   }
 
@@ -47,7 +47,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     validateParsingError(
       sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
       errorClass = "LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED",
-      sqlState = "42000",
+      sqlState = "0A000",
       message = "LATERAL join with USING join is not supported.")
   }
 
@@ -59,7 +59,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       validateParsingError(
         sqlText = s"SELECT * FROM t1 ${pair._1} JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
         errorClass = "UNSUPPORTED_LATERAL_JOIN_TYPE",
-        sqlState = "42000",
+        sqlState = "0A000",
         message = s"Unsupported LATERAL join type ${pair._2}")
     }
   }
