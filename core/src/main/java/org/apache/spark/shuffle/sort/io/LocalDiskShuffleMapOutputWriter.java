@@ -36,7 +36,6 @@ import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
-import org.apache.spark.util.Utils;
 
 /**
  * Implementation of {@link ShuffleMapOutputWriter} that replicates the functionality of shuffle

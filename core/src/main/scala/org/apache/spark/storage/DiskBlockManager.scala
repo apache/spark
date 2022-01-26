@@ -281,13 +281,9 @@ private[spark] class DiskBlockManager(
    * Create a directory that is writable by the group.
    * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
    * create subdirs/files within the merge folder.
-   * We can't use java.nio.files.Files.setPosixPermissions because Java doesn't support
-   * maintaining or adding the setgid bit when assigning permissions. The Hadoop
-   * RawLocalFileSystem also doesn't support this. Yarn uses this
-   * mechanism to make sure all subdirectories and files are assigned the group of
-   * the container executor.
-   *
-   * See https://bugs.openjdk.java.net/browse/JDK-8137404
+   * TODO: Find out why can't we create a dir using java api with permission 770
+   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
+   *  PosixFilePermissions.fromString("rwxrwx---")))
    */
   def createDirWithPermission770(dirToCreate: File): Unit = {
     var attempts = 0
