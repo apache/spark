@@ -1375,12 +1375,16 @@ private[spark] class DAGScheduler(
       getAndSetShufflePushMergerLocations(stage)
     }
 
-    if (stage.shuffleDep.shuffleMergeEnabled) {
-      logInfo(("Shuffle merge enabled before starting the stage for %s (%s) with %d" +
-        " merger locations").format(stage, stage.name, stage.shuffleDep.getMergerLocs.size))
+    val shuffleId = stage.shuffleDep.shuffleId
+    val shuffleMergeId = stage.shuffleDep.shuffleMergeId
+    if (stage.shuffleDep.mergerLocs.nonEmpty) {
+      logInfo(s"Shuffle merge enabled before starting the stage for $stage with shuffle" +
+        s" $shuffleId and shuffle merge $shuffleMergeId with" +
+        s" ${stage.shuffleDep.getMergerLocs.size} merger locations")
     } else {
-      logInfo(("Shuffle merge disabled for %s (%s), but can get enabled later" +
-        " adaptively once enough mergers are available").format(stage, stage.name))
+      logInfo(s"Shuffle merge disabled for $stage with shuffle $shuffleId" +
+        s" and shuffle merge $shuffleMergeId, but can get enabled later adaptively" +
+        s" once enough mergers are available")
     }
   }
 
@@ -1389,12 +1393,11 @@ private[spark] class DAGScheduler(
       stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
-      stage.shuffleDep.setShuffleMergeEnabled(true)
-    } else {
-      stage.shuffleDep.setShuffleMergeEnabled(false)
     }
-    logDebug(s"Shuffle merge locations: " +
-      s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+
+    logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
+      s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
+      s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     mergerLocs
   }
 
@@ -2506,8 +2509,10 @@ private[spark] class DAGScheduler(
           runningStages.contains(stage)
       }.foreach { case(_, stage: ShuffleMapStage) =>
           if (getAndSetShufflePushMergerLocations(stage).nonEmpty) {
-            logInfo(s"Shuffle merge enabled adaptively for the stage $stage (${stage.name})" +
-              s" with ${stage.shuffleDep.getMergerLocs.size} merger locations")
+            logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
+              s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
+              s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
+              s" merger locations")
             mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId,
               stage.shuffleDep.getMergerLocs)
           }

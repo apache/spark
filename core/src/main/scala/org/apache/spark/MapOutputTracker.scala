@@ -1273,10 +1273,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       useMergeResult: Boolean): MapSizesByExecutorId = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
-      // EnableBatchFetch can be set to false during stage retry when the
-      // shuffleDependency.shuffleMergeEnabled is set to false, and Driver
+      // enableBatchFetch can be set to false during stage retry when the
+      // shuffleDependency.shuffleMergeFinalized is set to false, and Driver
       // has already collected the mergedStatus for its shuffle dependency.
-      // In this case, boolean check helps to insure that the unnecessary
+      // In this case, boolean check helps to ensure that the unnecessary
       // mergeStatus won't be fetched, thus mergedOutputStatuses won't be
       // passed to convertMapStatuses. See details in [SPARK-37023].
       if (useMergeResult) fetchMergeResult else false)
@@ -1349,14 +1349,19 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     val mergers = shufflePushMergerLocations.get(shuffleId).orNull
     if (mergers == null) {
       fetchingLock.withLock(shuffleId) {
-        val fetchedMergers =
-          askTracker[Seq[BlockManagerId]](GetShufflePushMergerLocations(shuffleId))
-        if (fetchedMergers.nonEmpty) {
-          shufflePushMergerLocations(shuffleId) = fetchedMergers
-          fetchedMergers
+        var fetchedMergers = shufflePushMergerLocations.get(shuffleId).orNull
+        if (null == fetchedMergers) {
+          fetchedMergers =
+            askTracker[Seq[BlockManagerId]](GetShufflePushMergerLocations(shuffleId))
+          if (fetchedMergers.nonEmpty) {
+            shufflePushMergerLocations(shuffleId) = fetchedMergers
+          } else {
+            fetchedMergers = Seq.empty[BlockManagerId]
+          }
         } else {
           Seq.empty[BlockManagerId]
         }
+        fetchedMergers
       }
     } else {
       mergers

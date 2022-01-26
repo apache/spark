@@ -114,15 +114,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
 
-  // By default, shuffle merge is enabled for ShuffleDependency if shuffleMergeAllowed
-  private[this] var _shuffleMergeEnabled = shuffleMergeAllowed
-
-  private[spark] def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
-    _shuffleMergeEnabled = shuffleMergeEnabled
-  }
-
-  def shuffleMergeEnabled : Boolean = _shuffleMergeEnabled
-
   /**
    * Stores the location of the list of chosen external shuffle services for handling the
    * shuffle merge requests from mappers in this shuffle map stage.
@@ -144,7 +135,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
-    assert(shuffleMergeEnabled || shuffleMergeAllowed)
+    assert(shuffleMergeAllowed)
     this.mergerLocs = mergerLocs
   }
 
@@ -167,7 +158,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * this shuffle is finalized.
    */
   def isShuffleMergeFinalizedIfEnabled: Boolean = {
-    if (shuffleMergeEnabled) {
+    if (mergerLocs.nonEmpty) {
       shuffleMergeFinalized
     } else {
       true

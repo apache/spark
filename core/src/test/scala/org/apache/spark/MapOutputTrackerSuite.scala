@@ -855,7 +855,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
-  test("SPARK-37023: Avoid fetching merge status when shuffleMergeEnabled is false") {
+  test("SPARK-37023: Avoid fetching merge status when shuffleMergeFinalized is false") {
     val newConf = new SparkConf
     newConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     newConf.set(IS_TESTING, true)
