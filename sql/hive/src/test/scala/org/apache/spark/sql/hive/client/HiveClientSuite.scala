@@ -39,8 +39,8 @@ import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-class HiveClientSuite(version: String, versionsWithoutPurgeTable: Seq[String],
-    versionsWithoutPurgePartition: Seq[String]) extends HiveVersionSuite(version) {
+class HiveClientSuite(version: String, allVersions: Seq[String])
+  extends HiveVersionSuite(version) {
 
   private var versionSpark: TestHiveVersion = null
 
@@ -335,15 +335,17 @@ class HiveClientSuite(version: String, versionsWithoutPurgeTable: Seq[String],
   }
 
   test("dropTable") {
+    val versionsWithoutPurge =
+      if (allVersions.contains("0.14")) allVersions.takeWhile(_ != "0.14") else Nil
     // First try with the purge option set. This should fail if the version is < 0.14, in which
     // case we check the version and try without it.
     try {
       client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
         purge = true)
-      assert(!versionsWithoutPurgeTable.contains(version))
+      assert(!versionsWithoutPurge.contains(version))
     } catch {
       case _: UnsupportedOperationException =>
-        assert(versionsWithoutPurgeTable.contains(version))
+        assert(versionsWithoutPurge.contains(version))
         client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
           purge = false)
     }
@@ -351,7 +353,7 @@ class HiveClientSuite(version: String, versionsWithoutPurgeTable: Seq[String],
     try {
       client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
         purge = true)
-      assert(!versionsWithoutPurgeTable.contains(version))
+      assert(!versionsWithoutPurge.contains(version))
     } catch {
       case _: UnsupportedOperationException =>
         client.dropTable("default", tableName = "view1", ignoreIfNotExists = false,
@@ -499,15 +501,17 @@ class HiveClientSuite(version: String, versionsWithoutPurgeTable: Seq[String],
 
   test("dropPartitions") {
     val spec = Map("key1" -> "1", "key2" -> "3")
+    val versionsWithoutPurge =
+      if (allVersions.contains("1.2")) allVersions.takeWhile(_ != "1.2") else Nil
     // Similar to dropTable; try with purge set, and if it fails, make sure we're running
     // with a version that is older than the minimum (1.2 in this case).
     try {
       client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
         purge = true, retainData = false)
-      assert(!versionsWithoutPurgePartition.contains(version))
+      assert(!versionsWithoutPurge.contains(version))
     } catch {
       case _: UnsupportedOperationException =>
-        assert(versionsWithoutPurgePartition.contains(version))
+        assert(versionsWithoutPurge.contains(version))
         client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
           purge = false, retainData = false)
     }
