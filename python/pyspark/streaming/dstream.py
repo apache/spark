@@ -82,7 +82,7 @@ class DStream(Generic[T_co]):
         self,
         jdstream: JavaObject,
         ssc: "StreamingContext",
-        jrdd_deserializer: Serializer,
+        jrdd_deserializer: "Serializer",
     ) -> None:
         self._jdstream = jdstream
         self._ssc = ssc
