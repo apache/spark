@@ -111,9 +111,20 @@ case class AnalyzePartitionCommand(
       partitions.map(_.storage.locationUri))
     val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
       val newRowCount = rowCounts.get(p.spec)
+      val newSize = sizesAndNumFiles(idx)._1
+      val newNumFiles = sizesAndNumFiles(idx)._2
       val newStats =
-        CommandUtils.compareAndGetNewStats(p.stats, sizesAndNumFiles(idx)._1, newRowCount)
-      newStats.map(_ => p.copy(stats = newStats))
+        CommandUtils.compareAndGetNewStats(p.stats, newSize, newRowCount)
+      val newStatParameters =
+        Map("numFiles" -> newNumFiles.toString,
+          "rawDataSize" -> newSize.toString,
+          "totalSize" -> newSize.toString) ++
+          newRowCount.map { rowCount =>
+            Map("numRows" -> rowCount.toString)
+          }.getOrElse(Map.empty[String, String])
+      val newParameters = p.parameters ++ newStatParameters
+      println(newParameters)
+      newStats.map(_ => p.copy(stats = newStats, parameters = newParameters))
     }
 
     if (newPartitions.nonEmpty) {

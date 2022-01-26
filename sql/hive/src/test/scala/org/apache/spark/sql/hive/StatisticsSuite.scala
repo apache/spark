@@ -201,9 +201,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .getTableMetadata(TableIdentifier(checkSizeTable))
           HiveCatalogMetrics.reset()
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-          val size = CommandUtils.calculateTotalSizeAndNumFile(spark, tableMeta)
+          val (size, numFiles) = CommandUtils.calculateTotalSizeAndNumFile(spark, tableMeta)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
           assert(size === BigInt(17436))
+          assert(numFiles === 3)
       }
     }
   }
@@ -1526,6 +1527,31 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(partStats.rowCount.get == 1)
         }
       }
+    }
+  }
+
+  test("SPARK-33326 - Analyze partition should update parameter too") {
+    val tableName = "hive_stats_part_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
+      var partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount.isEmpty)
+      assert(partition.parameters("numFiles") == "1")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
+      hiveClient
+        .runSqlHive(s"ANALYZE TABLE $tableName PARTITION (ds='2017-01-01') COMPUTE STATISTICS")
+      partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 11624)
+      assert(partition.stats.get.rowCount == Some(1000))
+      assert(partition.parameters("numFiles") == "2")
     }
   }
 }
