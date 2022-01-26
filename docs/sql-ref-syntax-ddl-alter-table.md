@@ -77,14 +77,14 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 
 ### DROP COLUMNS
 
-`ALTER TABLE DROP COLUMNS` statement drops mentioned columns of an existing table.
+`ALTER TABLE DROP COLUMNS` statement drops mentioned columns from an existing table.
 Note that this statement is only supported with v2 tables.
 
 
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier DROP COLUMNS ( col_spec [ , ... ] )
+ALTER TABLE table_identifier DROP COLUMNS ( col_name1, ... )
 ```
 
 #### Parameters
@@ -94,10 +94,6 @@ ALTER TABLE table_identifier DROP COLUMNS ( col_spec [ , ... ] )
   Specifies a table name, which may be optionally qualified with a database name.
 
   **Syntax:** `[ database_name. ] table_name`
-
-* **COLUMNS ( col_spec )**
-
-  Specifies the columns to be dropped.
 
 ### RENAME COLUMN
 
