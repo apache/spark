@@ -143,6 +143,11 @@ class HiveSessionResourceLoader(
       super.addJar(p)
     }
   }
+
+  override def addOrUpdateJars(resources: Seq[String]): Unit = {
+    client.addOrUpdateJars(resources)
+    super.addOrUpdateJars(resources)
+  }
 }
 
 object HiveUDFExpressionBuilder extends SparkUDFExpressionBuilder {

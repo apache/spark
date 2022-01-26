@@ -667,7 +667,7 @@ private[spark] object Utils extends Logging {
    * @param removeSourceFile Whether to remove `sourceFile` after / as part of moving/copying it to
    *                         `destFile`.
    */
-  private def copyFile(
+  def copyFile(
       url: String,
       sourceFile: File,
       destFile: File,
@@ -760,7 +760,7 @@ private[spark] object Utils extends Logging {
       hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
-    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = true)
     Option(uri.getScheme).getOrElse("file") match {
       case "spark" =>
         if (SparkEnv.get == null) {

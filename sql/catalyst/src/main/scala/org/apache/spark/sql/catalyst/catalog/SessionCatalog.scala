@@ -1455,6 +1455,13 @@ class SessionCatalog(
   }
 
   /**
+   * Loads new resources and updates existing resources such as JARs and Files for a function.
+  */
+  def loadOrUpdateFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    functionResourceLoader.loadOrUpdateResources(resources)
+  }
+
+  /**
    * Registers a temporary or permanent scalar function into a session-specific [[FunctionRegistry]]
    */
   def registerFunction(

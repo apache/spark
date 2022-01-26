@@ -54,10 +54,15 @@ case class FunctionResource(resourceType: FunctionResourceType, uri: String)
  */
 trait FunctionResourceLoader {
   def loadResource(resource: FunctionResource): Unit
+  def loadOrUpdateResources(resources: Seq[FunctionResource]): Unit
 }
 
 object DummyFunctionResourceLoader extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def loadOrUpdateResources(resources: Seq[FunctionResource]): Unit = {
     throw new UnsupportedOperationException
   }
 }

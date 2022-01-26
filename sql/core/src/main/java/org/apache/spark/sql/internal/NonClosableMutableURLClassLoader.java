@@ -30,8 +30,8 @@ public class NonClosableMutableURLClassLoader extends MutableURLClassLoader {
     ClassLoader.registerAsParallelCapable();
   }
 
-  public NonClosableMutableURLClassLoader(ClassLoader parent) {
-    super(new URL[]{}, parent);
+  public NonClosableMutableURLClassLoader(URL[] urls, ClassLoader parent) {
+    super(urls, parent);
   }
 
   @Override

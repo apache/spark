@@ -38,7 +38,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{MutableURLClassLoader, Utils, VersionUtils}
+import org.apache.spark.util.{Utils, VersionUtils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -223,13 +223,7 @@ private[hive] class IsolatedClientLoader(
   protected def classToPath(name: String): String =
     name.replaceAll("\\.", "/") + ".class"
 
-  /**
-   * The classloader that is used to load an isolated version of Hive.
-   * This classloader is a special URLClassLoader that exposes the addURL method.
-   * So, when we add jar, we can add this new jar directly through the addURL method
-   * instead of stacking a new URLClassLoader on top of it.
-   */
-  private[hive] val classLoader: MutableURLClassLoader = {
+  private[hive] val parentClassLoader: ClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
         if (allJars.isEmpty) {
@@ -284,16 +278,34 @@ private[hive] class IsolatedClientLoader(
       } else {
         baseClassLoader
       }
-    // Right now, we create a URLClassLoader that gives preference to isolatedClassLoader
-    // over its own URLs when it loads classes and resources.
-    // We may want to use ChildFirstURLClassLoader based on
-    // the configuration of spark.executor.userClassPathFirst, which gives preference
-    // to its own URLs over the parent class loader (see Executor's createClassLoader method).
-    new NonClosableMutableURLClassLoader(isolatedClassLoader)
+    isolatedClassLoader
+  }
+
+  // Right now, we create a URLClassLoader that gives preference to isolatedClassLoader
+  // over its own URLs when it loads classes and resources.
+  // We may want to use ChildFirstURLClassLoader based on
+  // the configuration of spark.executor.userClassPathFirst, which gives preference
+  // to its own URLs over the parent class loader (see Executor's createClassLoader method).
+  private var hiveClassLoader = new NonClosableMutableURLClassLoader(Array(), parentClassLoader)
+
+  /**
+   * The classloader that is used to load an isolated version of Hive.
+   * This classloader is a special URLClassLoader that exposes the addURL method.
+   * So, when we add jar, we can add this new jar directly through the addURL method
+   * instead of stacking a new URLClassLoader on top of it.
+   */
+  private[hive] def classLoader: NonClosableMutableURLClassLoader = {
+    hiveClassLoader
   }
 
   private[hive] def addJar(path: URL): Unit = synchronized {
     classLoader.addURL(path)
+  }
+
+
+  private[hive] def updateHiveClassLoader(): Unit = {
+    hiveClassLoader =
+      new NonClosableMutableURLClassLoader(hiveClassLoader.getURLs, parentClassLoader)
   }
 
   /** The isolated client interface to Hive. */

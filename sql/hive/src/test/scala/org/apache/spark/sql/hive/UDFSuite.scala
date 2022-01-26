@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 case class FunctionResult(f1: String, f2: String)
 
@@ -217,6 +221,55 @@ class UDFSuite
       val info = spark.sessionState.catalog.lookupFunctionInfo(
         FunctionIdentifier(functionName, Some("default")))
       assert(info.getSource == "hive")
+    }
+  }
+
+  test("Dynamic UDF: Test loading updated UDF jar with same classname and jarname") {
+    Seq(true, false).foreach { dynamicUpdate =>
+      Seq(true, false).foreach { isTemporary =>
+        withSQLConf(SQLConf.UPDATE_UDF_RESOURCES_ENABLED.key -> s"$dynamicUpdate") {
+          Utils.withContextClassLoader(Utils.getSparkClassLoader) {
+            val incrementFunc = "increment_func"
+            withUserDefinedFunction(incrementFunc -> isTemporary) {
+              withTempDir { actualJarPath =>
+                val hiveUDFJar = new File("src/test/noclasspath/HiveIncrementUDF.jar")
+                val udfJar = new File(actualJarPath, "udfTest.jar")
+                Utils.copyFile(hiveUDFJar.toString, hiveUDFJar, udfJar, fileOverwrite = true)
+                Thread.sleep(2000)
+                val resourceURI = udfJar.toURI.toString
+                val className = "com.test.Increment"
+                val withTemp = if (isTemporary) "TEMPORARY" else ""
+                sql(s"CREATE OR REPLACE $withTemp FUNCTION $incrementFunc AS '$className'  " +
+                  s"USING JAR '$resourceURI'")
+                // 'com.test.Increment' increments a given value by 100 in 'HiveIncrementUDF.jar'
+                checkAnswer(sql(s"SELECT $incrementFunc(100)"), Row(200) :: Nil)
+
+                val updatedHiveUDFJar =
+                  new File("src/test/noclasspath/UpdatedHiveIncrementUDF.jar")
+                Utils.copyFile(
+                  updatedHiveUDFJar.toString, updatedHiveUDFJar, udfJar, fileOverwrite = true)
+
+                val sql_string = s"CREATE OR REPLACE $withTemp FUNCTION $incrementFunc AS " +
+                  s"'$className' USING JAR '$resourceURI'"
+
+                if (dynamicUpdate) {
+                  sql(sql_string)
+                  // 'com.test.Increment' increments a given value by 200 in
+                  // 'UpdatedHiveIncrementUDF.jar'
+                  checkAnswer(sql(s"SELECT $incrementFunc(100)"), Row(300) :: Nil)
+                } else {
+                  sql(sql_string)
+                  // since dynamic update is off, jar won't be updated and thus result won't change
+                  checkAnswer(sql(s"SELECT $incrementFunc(100)"), Row(200) :: Nil)
+                }
+                udfJar.delete()
+                spark.sharedState.removeJarsFromClassLoader(Seq(udfJar.toURI.toURL))
+                sparkContext.removeJars(Seq(udfJar))
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

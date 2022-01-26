@@ -176,6 +176,19 @@ private[spark] trait RpcEnvFileServer {
   def addJar(file: File): String
 
   /**
+   * Updates a existing jar file with latest one.
+   *
+   * @param file Local file to serve.
+   * @return A URI for the location of the file.
+   */
+  def updateJar(file: File): String
+
+  /**
+   * Removes given jar from this rpc env.
+   */
+  def removeJar(file: File): String
+
+  /**
    * Adds a local directory to be served via this file server.
    *
    * @param baseUri Leading URI path (files can be retrieved by appending their relative

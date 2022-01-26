@@ -1928,6 +1928,10 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
+  private[spark] def updateJars(jarPaths: Seq[String]): Unit = {
+    jarPaths.foreach(addJar(_, addedOnSubmit = false, update = true))
+  }
+
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
    *
@@ -1942,8 +1946,8 @@ class SparkContext(config: SparkConf) extends Logging {
     addJar(path, false)
   }
 
-  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    def addLocalJarFile(file: File): Seq[String] = {
+  private def addJar(path: String, addedOnSubmit: Boolean, update: Boolean = false): Unit = {
+    def addLocalJarFile(file: File, update: Boolean = false): Seq[String] = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1952,7 +1956,11 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
-        Seq(env.rpcEnv.fileServer.addJar(file))
+        if (update) {
+          Seq(env.rpcEnv.fileServer.updateJar(file))
+        } else {
+          Seq(env.rpcEnv.fileServer.addJar(file))
+        }
       } catch {
         case NonFatal(e) =>
           logError(s"Failed to add $path to Spark environment", e)
@@ -1989,7 +1997,7 @@ class SparkContext(config: SparkConf) extends Logging {
     } else {
       val (keys, scheme) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        (addLocalJarFile(new File(path)), "local")
+        (addLocalJarFile(new File(path), update = update), "local")
       } else {
         val uri = Utils.resolveURI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -1999,16 +2007,16 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
-            addLocalJarFile(new File(uri.getPath))
+            addLocalJarFile(new File(uri.getPath), update = update)
           // A JAR file which exists only on the driver node
-          case "file" => addLocalJarFile(new File(uri.getPath))
+          case "file" => addLocalJarFile(new File(uri.getPath), update = update)
           // A JAR file which exists locally on every worker node
           case "local" => Seq("file:" + uri.getPath)
           case "ivy" =>
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
             DependencyUtils.resolveMavenDependencies(URI.create(path))
-              .flatMap(jar => addLocalJarFile(new File(jar)))
+              .flatMap(jar => addLocalJarFile(new File(jar), update = update))
           case _ => checkRemoteJarFile(path)
         }
         (jarPaths, uriScheme)
@@ -2022,11 +2030,25 @@ class SparkContext(config: SparkConf) extends Logging {
           postEnvironmentUpdate()
         }
         if (existed.nonEmpty) {
-          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
-            " Overwriting of added jar is not supported in the current version.")
+          if (update) {
+            val timestamp = System.currentTimeMillis()
+            existed.foreach(addedJars.replace(_, timestamp))
+            postEnvironmentUpdate()
+          } else {
+            val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
+            logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
+              " Overwriting of added jar is not supported in the current version.")
+          }
         }
       }
+    }
+  }
+
+  /** Removes jars from addedJars and rpcEnv. Used only for testing. */
+  private[spark] def removeJars(jars: Seq[File]): Unit = {
+    jars.foreach { jar =>
+      val key = env.rpcEnv.fileServer.removeJar(jar)
+      addedJars.remove(key)
     }
   }
 

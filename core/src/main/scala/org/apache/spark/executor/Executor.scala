@@ -156,8 +156,9 @@ private[spark] class Executor(
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
-  private val urlClassLoader = createClassLoader()
-  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  private val parentClassLoader = Utils.getContextOrSparkClassLoader
+  private var urlClassLoader = createClassLoader()
+  private var replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
@@ -447,6 +448,7 @@ private[spark] class Executor(
       val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
         threadMXBean.getCurrentThreadCpuTime
       } else 0L
+      checkAndUpdateUrlClassLoader(taskDescription.addedJars)
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName")
@@ -883,8 +885,6 @@ private[spark] class Executor(
       currentJars(url.getPath().split("/").last) = now
     }
 
-    val currentLoader = Utils.getContextOrSparkClassLoader
-
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
     val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
@@ -893,9 +893,9 @@ private[spark] class Executor(
     logInfo(s"Starting executor with user classpath (userClassPathFirst = $userClassPathFirst): " +
         urls.mkString("'", ",", "'"))
     if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, currentLoader)
+      new ChildFirstURLClassLoader(urls, parentClassLoader)
     } else {
-      new MutableURLClassLoader(urls, currentLoader)
+      new MutableURLClassLoader(urls, parentClassLoader)
     }
   }
 
@@ -922,6 +922,37 @@ private[spark] class Executor(
       }
     } else {
       parent
+    }
+  }
+
+  private def checkAndUpdateUrlClassLoader(newJars: Map[String, Long]): Unit = {
+    def isFoundinNewJars(jarName: String, timestamp: Long): Boolean = {
+      newJars.get(jarName) match {
+        case Some(newTimestamp) if (timestamp == newTimestamp) => true
+        case _ => false
+      }
+    }
+    val userClassPathJars = userClassPath.map(_.getPath.split("/").last)
+    var isNeedToUpdate = false
+    currentJars.takeWhile(_ => !isNeedToUpdate).foreach {
+      case (jarName, timestamp) if (!userClassPathJars.contains(jarName)) &&
+        !isFoundinNewJars(jarName, timestamp) => {
+        isNeedToUpdate = true
+      }
+      case _ => // ignore
+    }
+    if (isNeedToUpdate) {
+      logInfo("Jar class loader needs to be updated.")
+      urlClassLoader.close()
+      urlClassLoader = null
+      currentJars.clear()
+      urlClassLoader = createClassLoader()
+      replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+      env.serializer.setDefaultClassLoader(replClassLoader)
+      env.serializerManager.setDefaultClassLoader(replClassLoader)
+      logInfo("new class loader created and updated.")
+    } else {
+      logInfo("No need to update jar class loader.")
     }
   }
 

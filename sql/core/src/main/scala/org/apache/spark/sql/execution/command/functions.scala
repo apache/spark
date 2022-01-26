@@ -63,13 +63,23 @@ case class CreateFunctionCommand(
         throw QueryCompilationErrors.functionAlreadyExistsError(func.identifier)
       }
       // We first load resources and then put the builder in the function registry.
-      catalog.loadFunctionResources(resources)
+      // If dynamic update for UDF is on, new resources are added and existing resources are updated
+      if (sparkSession.sessionState.conf.updateUdfResourcesEnabled && replace &&
+        catalog.functionExists(func.identifier)) {
+        catalog.loadOrUpdateFunctionResources(resources)
+      }
+      else {
+        catalog.loadFunctionResources(resources)
+      }
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
         // alter the function in the metastore
         catalog.alterFunction(func)
+        if (sparkSession.sessionState.conf.updateUdfResourcesEnabled) {
+          catalog.loadOrUpdateFunctionResources(resources)
+        }
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.

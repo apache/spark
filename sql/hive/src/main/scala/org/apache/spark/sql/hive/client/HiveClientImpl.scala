@@ -960,6 +960,17 @@ private[hive] class HiveClientImpl(
     clientLoader.addJar(jarURI.toURL)
   }
 
+  def addOrUpdateJars(jarPaths: Seq[String]): Unit = {
+    val jarUris = jarPaths.map { path =>
+      Utils.resolveURI(path)
+    }
+    val (oldJars, newJars) = jarUris.partition { path =>
+      clientLoader.classLoader.getURLs.contains(path.toURL)
+    }
+    if (oldJars.nonEmpty) clientLoader.updateHiveClassLoader()
+    newJars.foreach { newJar => clientLoader.addJar(newJar.toURL)}
+  }
+
   def newSession(): HiveClientImpl = {
     clientLoader.createClient().asInstanceOf[HiveClientImpl]
   }

@@ -3521,6 +3521,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val UPDATE_UDF_RESOURCES_ENABLED =
+    buildConf("spark.sql.function.updateUdfResources")
+      .doc("when true, jar resources associated with an UDF can be updated using " +
+        "CREATE OR REPLACE FUNCTION command in ongoing session. New resources will be " +
+        "loaded while existing resources will be replaced with updated one.")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4252,6 +4260,8 @@ class SQLConf extends Serializable with Logging {
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
+
+  def updateUdfResourcesEnabled: Boolean = getConf(SQLConf.UPDATE_UDF_RESOURCES_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

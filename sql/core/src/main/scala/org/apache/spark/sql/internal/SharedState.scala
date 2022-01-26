@@ -173,12 +173,31 @@ private[sql] class SharedState(
     new GlobalTempViewManager(globalTempDB)
   }
 
+  private var nonClosableMutableURLClassLoader = new NonClosableMutableURLClassLoader(Array(),
+    Utils.getContextOrSparkClassLoader)
+
   /**
    * A classloader used to load all user-added jar.
    */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+  def jarClassLoader: NonClosableMutableURLClassLoader = synchronized {
+    nonClosableMutableURLClassLoader
+  }
 
+  def updateJarClassLoader(): Unit = synchronized {
+    // A new classloader is created with existing URLs to update our classpath, as newly
+    // created classloader will download latest jars.
+    nonClosableMutableURLClassLoader =
+      new NonClosableMutableURLClassLoader(nonClosableMutableURLClassLoader.getURLs,
+        Utils.getSparkClassLoader)
+  }
+
+  def removeJarsFromClassLoader(jarURLs: Seq[URL]): Unit = {
+    val remainingJars = nonClosableMutableURLClassLoader.getURLs.filter(!jarURLs.contains(_))
+    if (remainingJars.length != nonClosableMutableURLClassLoader.getURLs.length) {
+      nonClosableMutableURLClassLoader =
+        new NonClosableMutableURLClassLoader(remainingJars, Utils.getSparkClassLoader)
+    }
+  }
 }
 
 object SharedState extends Logging {
