@@ -1040,7 +1040,7 @@ $(document).ready(function () {
               sumCol.visible(!sumCol.visible());
             }
             var para = thisBox.attr('exec-sum-idx');
-            if(para != '') {
+            if(para !== '') {
               var executorSummaryMetricsTableFilteredArray = []
               if (thisBox.is(":checked")) {
                 var selectedExecutorSummaryMetrics = executorSummaryMetricsTableArray.filter(row => (row.executorSumCheckBoxId).toString() == para)
