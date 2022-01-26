@@ -20,19 +20,19 @@ import time
 from itertools import chain
 from datetime import datetime
 from typing import (
-    Generic,
-    TypeVar,
-    Hashable,
+    Any,
     Callable,
+    Generic,
+    Hashable,
     Iterable,
+    List,
     Optional,
     Tuple,
-    overload,
+    TypeVar,
     Union,
-    Any,
-    List,
     TYPE_CHECKING,
     cast,
+    overload,
 )
 
 from py4j.java_gateway import JavaObject
@@ -40,7 +40,6 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.streaming import StreamingContext
 from pyspark.streaming.util import rddToFileName, TransformFunction
 from pyspark.rdd import portable_hash
 from pyspark.resultiterable import ResultIterable
