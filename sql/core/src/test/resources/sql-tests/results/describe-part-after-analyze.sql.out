@@ -91,6 +91,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-08-01/hr=10	                    
+Partition Parameters	{numFiles=2, rawDataSize=1330, totalSize=1330, numRows=3}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 3 rows  	                    
@@ -126,6 +127,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-08-01/hr=10	                    
+Partition Parameters	{numFiles=2, rawDataSize=1330, totalSize=1330, numRows=3}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 3 rows  	                    
@@ -153,6 +155,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-08-01/hr=11	                    
+Partition Parameters	{numFiles=2, rawDataSize=1328, totalSize=1328, numRows=4}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 4 rows  	                    
@@ -188,6 +191,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=10]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-08-01/hr=10	                    
+Partition Parameters	{numFiles=2, rawDataSize=1330, totalSize=1330, numRows=3}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 3 rows  	                    
@@ -215,6 +219,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-08-01, hr=11]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-08-01/hr=11	                    
+Partition Parameters	{numFiles=2, rawDataSize=1328, totalSize=1328, numRows=4}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 4 rows  	                    
@@ -242,6 +247,7 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[ds=2017-09-01, hr=5]	                    
 Location [not included in comparison]/{warehouse_dir}/t/ds=2017-09-01/hr=5	                    
+Partition Parameters	{numFiles=2, rawDataSize=1334, totalSize=1334, numRows=2}	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Partition Statistics	[not included in comparison] bytes, 2 rows  	                    

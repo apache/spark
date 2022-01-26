@@ -123,7 +123,6 @@ case class AnalyzePartitionCommand(
             Map("numRows" -> rowCount.toString)
           }.getOrElse(Map.empty[String, String])
       val newParameters = p.parameters ++ newStatParameters
-      println(newParameters)
       newStats.map(_ => p.copy(stats = newStats, parameters = newParameters))
     }
 
