@@ -221,7 +221,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
+    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
@@ -266,12 +266,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
-      if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
-      } else {
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde =>
+      ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
+
+    // If target is view, force use v1 command
+    case ShowCreateTable(ResolvedViewIdentifier(ident), _, output) =>
+      ShowCreateTableCommand(ident.asTableIdentifier, output)
+
+    case ShowCreateTable(ResolvedV1TableIdentifier(ident), _, output)
+      if conf.useV1Command => ShowCreateTableCommand(ident.asTableIdentifier, output)
+
+    case ShowCreateTable(ResolvedTable(catalog, ident, table: V1Table, _), _, output)
+      if isSessionCatalog(catalog) && DDLUtils.isHiveTable(table.catalogTable) =>
         ShowCreateTableCommand(ident.asTableIdentifier, output)
-      }
 
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
       TruncateTableCommand(ident.asTableIdentifier, None)

@@ -1879,9 +1879,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       }}
     }
 
-    // Group by alias is not allowed in ANSI mode.
-    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
-
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
       _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
@@ -2081,10 +2078,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
           case u @ UnresolvedGenerator(name, arguments) => withPosition(u) {
-            resolveBuiltinOrTempFunction(name.asMultipart, arguments, None).getOrElse {
-              // For generator function, the parser only accepts v1 function name and creates
-              // `FunctionIdentifier`.
-              v1SessionCatalog.resolvePersistentFunction(name, arguments)
+            // For generator function, the parser only accepts v1 function name and creates
+            // `FunctionIdentifier`.
+            v1SessionCatalog.lookupFunction(name, arguments) match {
+              case generator: Generator => generator
+              case other => throw QueryCompilationErrors.generatorNotExpectedError(
+                name, other.getClass.getCanonicalName)
             }
           }
 
@@ -2274,12 +2273,14 @@ class Analyzer(override val catalogManager: CatalogManager)
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
               MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
-                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable,
+                isDeterministic = scalarFunc.isDeterministic)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
               arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              returnNullable = scalarFunc.isResultNullable,
+              isDeterministic = scalarFunc.isDeterministic)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface

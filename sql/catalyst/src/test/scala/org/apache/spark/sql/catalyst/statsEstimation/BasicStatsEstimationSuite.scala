@@ -259,12 +259,16 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics.DUMMY)
   }
 
-  test("SPARK-35203: Improve Repartition statistics estimation") {
+  test("Improve Repartition statistics estimation") {
+    // SPARK-35203 for repartition and repartitionByExpr
+    // SPARK-37949 for rebalance
     Seq(
       RepartitionByExpression(plan.output, plan, 10),
       RepartitionByExpression(Nil, plan, None),
       plan.repartition(2),
-      plan.coalesce(3)).foreach { rep =>
+      plan.coalesce(3),
+      plan.rebalance(),
+      plan.rebalance(plan.output: _*)).foreach { rep =>
       val expectedStats = Statistics(plan.size.get, Some(plan.rowCount), plan.attributeStats)
       checkStats(
         rep,

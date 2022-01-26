@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -720,7 +720,7 @@ object DataSourceStrategy
         case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new Sum(FieldReference.column(name), agg.isDistinct))
         case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new GeneralAggregateFunc("AVG", agg.isDistinct, Array(FieldReference.column(name))))
+          Some(new Avg(FieldReference.column(name), agg.isDistinct))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new GeneralAggregateFunc(
             "VAR_POP", agg.isDistinct, Array(FieldReference.column(name))))
@@ -750,6 +750,31 @@ object DataSourceStrategy
     } else {
       None
     }
+  }
+
+  /**
+   * Translate aggregate expressions and group by expressions.
+   *
+   * @return translated aggregation.
+   */
+  protected[sql] def translateAggregation(
+      aggregates: Seq[AggregateExpression], groupBy: Seq[Expression]): Option[Aggregation] = {
+
+    def columnAsString(e: Expression): Option[FieldReference] = e match {
+      case PushableColumnWithoutNestedColumn(name) =>
+        Some(FieldReference.column(name).asInstanceOf[FieldReference])
+      case _ => None
+    }
+
+    val translatedAggregates = aggregates.flatMap(translateAggregate)
+    val translatedGroupBys = groupBy.flatMap(columnAsString)
+
+    if (translatedAggregates.length != aggregates.length ||
+      translatedGroupBys.length != groupBy.length) {
+      return None
+    }
+
+    Some(new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray))
   }
 
   protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortOrderV2] = {

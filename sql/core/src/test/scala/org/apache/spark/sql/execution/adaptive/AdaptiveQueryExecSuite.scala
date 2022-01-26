@@ -2243,6 +2243,15 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+
+        // The strategy of Eliminate Limits batch should be fixedPoint
+        val (origin3, adaptive3) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM (SELECT c1 + c2 FROM (SELECT DISTINCT * FROM v LIMIT 10086)) LIMIT 20
+          """.stripMargin
+        )
+        assert(findTopLevelLimit(origin3).size == 1)
+        assert(findTopLevelLimit(adaptive3).isEmpty)
       }
     }
   }

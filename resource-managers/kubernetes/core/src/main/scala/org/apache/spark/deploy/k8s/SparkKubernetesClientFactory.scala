@@ -24,9 +24,10 @@ import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
-import io.fabric8.kubernetes.client.utils.HttpClientUtils
+import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -68,6 +69,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
+    // TODO(SPARK-37687): clean up direct usage of OkHttpClient, see also:
+    // https://github.com/fabric8io/kubernetes-client/issues/3547
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
@@ -105,13 +108,14 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
       }.build()
-    val baseHttpClient = HttpClientUtils.createHttpClient(config)
-    val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
-      .dispatcher(dispatcher)
-      .build()
+    val factoryWithCustomDispatcher = new OkHttpClientFactory() {
+      override protected def additionalConfig(builder: OkHttpClient.Builder): Unit = {
+        builder.dispatcher(dispatcher)
+      }
+    }
     logDebug("Kubernetes client config: " +
       new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
-    new DefaultKubernetesClient(httpClientWithCustomDispatcher, config)
+    new DefaultKubernetesClient(factoryWithCustomDispatcher.createHttpClient(config), config)
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)

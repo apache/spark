@@ -1905,15 +1905,28 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new SparkRuntimeException("INVALID_AES_KEY_LENGTH", Array(actualLength.toString))
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "key",
+        "the aes_encrypt/aes_decrypt function",
+        s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_AES_MODE", Array(mode, padding))
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"AES-$mode with the padding $padding by the aes_encrypt/aes_decrypt function."))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
-    new SparkRuntimeException("AES_CRYPTO_ERROR", Array(detailMessage))
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "expr, key",
+        "the aes_encrypt/aes_decrypt function",
+        s"Detail message: $detailMessage"))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
@@ -1935,9 +1948,8 @@ object QueryExecutionErrors {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(format: String): Throwable = {
+  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"Format '$format' used for parsing string to number or " +
-        "formatting number to string is invalid")
+      s"The input string '$input' does not match the given number format: '$format'")
   }
 }
