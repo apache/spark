@@ -52,11 +52,8 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
   def supportsDropSchemaCascade: Boolean = true
 
-  // supports get namespaces with conn.getMetaData.getSchemas
-  def supportsGetNamespacesFromMetadata: Boolean = true
-
-  test("listNamespaces: basic behavior") {
-    if (supportsGetNamespacesFromMetadata) {
+  def testListNamespaces(): Unit = {
+    test("listNamespaces: basic behavior") {
       val commentMap = if (supportsSchemaComment) {
         Map("comment" -> "test comment")
       } else {
@@ -91,8 +88,8 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
     }
   }
 
-  test("Drop namespace") {
-    if (supportsGetNamespacesFromMetadata) {
+  def testDropNamespaces(): Unit = {
+    test("Drop namespace") {
       val ident1 = Identifier.of(Array("foo"), "tab")
       // Drop empty namespace without cascade
       val commentMap = if (supportsSchemaComment) {
@@ -101,19 +98,13 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
         Map.empty[String, String]
       }
       catalog.createNamespace(Array("foo"), commentMap.asJava)
-      if (supportsGetNamespacesFromMetadata) {
-        assert(catalog.namespaceExists(Array("foo")) === true)
-      }
+      assert(catalog.namespaceExists(Array("foo")) === true)
       catalog.dropNamespace(Array("foo"), cascade = false)
-      if (supportsGetNamespacesFromMetadata) {
-        assert(catalog.namespaceExists(Array("foo")) === false)
-      }
+      assert(catalog.namespaceExists(Array("foo")) === false)
 
       // Drop non empty namespace without cascade
       catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
-      if (supportsGetNamespacesFromMetadata) {
-        assert(catalog.namespaceExists(Array("foo")) === true)
-      }
+      assert(catalog.namespaceExists(Array("foo")) === true)
       catalog.createTable(ident1, schema, Array.empty, emptyProps)
       intercept[NonEmptyNamespaceException] {
         catalog.dropNamespace(Array("foo"), cascade = false)
@@ -121,13 +112,9 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
       // Drop non empty namespace with cascade
       if (supportsDropSchemaCascade) {
-        if (supportsGetNamespacesFromMetadata) {
-          assert(catalog.namespaceExists(Array("foo")) === true)
-        }
+        assert(catalog.namespaceExists(Array("foo")) === true)
         catalog.dropNamespace(Array("foo"), cascade = true)
-        if (supportsGetNamespacesFromMetadata) {
-          assert(catalog.namespaceExists(Array("foo")) === false)
-        }
+        assert(catalog.namespaceExists(Array("foo")) === false)
       }
     }
   }

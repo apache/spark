@@ -59,6 +59,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
 
   override val supportsSchemaComment: Boolean = false
 
-  // TODO supports list namespaces
-  override val supportsGetNamespacesFromMetadata: Boolean = false
+  // Cannot get namespaces with conn.getMetaData.getSchemas
+  // TODO testListNamespaces()
+  // TODO testDropNamespaces()
 }

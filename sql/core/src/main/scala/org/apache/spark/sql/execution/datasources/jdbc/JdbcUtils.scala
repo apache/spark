@@ -1162,11 +1162,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     try {
       f
     } catch {
-      case e: Throwable =>
-        // scalastyle:off println
-        println(s"++++++$e")
-        // scalastyle:on println
-        throw dialect.classifyException(message, e)
+      case e: Throwable => throw dialect.classifyException(message, e)
     }
   }
 

@@ -80,4 +80,8 @@ class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespa
       Array("db_denydatawriter"), Array("db_owner"), Array("db_securityadmin"), Array("dbo"),
       Array("guest"), Array("INFORMATION_SCHEMA"), Array("sys"))
   }
+
+  // Cannot create schema dynamically
+  // TODO testListNamespaces()
+  // TODO testDropNamespaces()
 }

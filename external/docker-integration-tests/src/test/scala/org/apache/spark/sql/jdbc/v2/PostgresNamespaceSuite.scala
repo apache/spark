@@ -56,4 +56,7 @@ class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNames
   override def builtinNamespaces: Array[Array[String]] = {
     Array(Array("information_schema"), Array("pg_catalog"), Array("public"))
   }
+
+  testListNamespaces()
+  testDropNamespaces()
 }
