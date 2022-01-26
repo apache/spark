@@ -58,11 +58,10 @@ class DB2NamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceT
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def builtinNamespaces: Array[Array[String]] = {
+  override def builtinNamespaces: Array[Array[String]] =
     Array(Array("NULLID"), Array("SQLJ"), Array("SYSCAT"), Array("SYSFUN"),
       Array("SYSIBM"), Array("SYSIBMADM"), Array("SYSIBMINTERNAL"), Array("SYSIBMTS"),
       Array("SYSPROC"), Array("SYSPUBLIC"), Array("SYSSTAT"), Array("SYSTOOLS"))
-  }
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
     builtinNamespaces ++ Array(namespace)

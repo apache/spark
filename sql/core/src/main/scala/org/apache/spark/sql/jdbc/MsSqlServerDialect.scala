@@ -156,11 +156,7 @@ private object MsSqlServerDialect extends JdbcDialect {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case o =>
-            // scalastyle:off println
-            println(s"sqlException.getErrorCode:$o")
-            // scalastyle:on println
-            super.classifyException(message, e)
+          case _ => super.classifyException(message, e)
         }
       case _ => super.classifyException(message, e)
     }

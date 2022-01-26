@@ -57,12 +57,11 @@ class MsSqlServerNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNa
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def builtinNamespaces: Array[Array[String]] = {
+  override def builtinNamespaces: Array[Array[String]] =
     Array(Array("db_accessadmin"), Array("db_backupoperator"), Array("db_datareader"),
       Array("db_datawriter"), Array("db_ddladmin"), Array("db_denydatareader"),
       Array("db_denydatawriter"), Array("db_owner"), Array("db_securityadmin"), Array("dbo"),
       Array("guest"), Array("INFORMATION_SCHEMA"), Array("sys"))
-  }
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
     builtinNamespaces ++ Array(namespace)

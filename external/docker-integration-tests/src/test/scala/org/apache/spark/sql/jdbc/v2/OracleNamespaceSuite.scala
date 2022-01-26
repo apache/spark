@@ -74,12 +74,11 @@ class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespa
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def builtinNamespaces: Array[Array[String]] = {
-    Array(Array("db_accessadmin"), Array("db_backupoperator"), Array("db_datareader"),
-      Array("db_datawriter"), Array("db_ddladmin"), Array("db_denydatareader"),
-      Array("db_denydatawriter"), Array("db_owner"), Array("db_securityadmin"), Array("dbo"),
-      Array("guest"), Array("INFORMATION_SCHEMA"), Array("sys"))
-  }
+  override def builtinNamespaces: Array[Array[String]] =
+    Array(Array("ANONYMOUS"), Array("APEX_030200"), Array("APEX_PUBLIC_USER"), Array("APPQOSSYS"),
+      Array("BI"), Array("DIP"), Array("FLOWS_FILES"), Array("HR"), Array("OE"), Array("PM"),
+      Array("SCOTT"), Array("SH"), Array("SPATIAL_CSW_ADMIN_USR"), Array("SPATIAL_WFS_ADMIN_USR"),
+      Array("XS$NULL"))
 
   // Cannot create schema dynamically
   // TODO testListNamespaces()
