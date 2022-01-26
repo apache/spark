@@ -208,14 +208,4 @@ class ErrorParserSuite extends AnalysisTest {
         |SELECT b
       """.stripMargin, 2, 9, 10, msg + " test-table")
   }
-
-  test("SPARK-35789: lateral join with non-subquery relations") {
-    val msg = "LATERAL can only be used with subquery"
-    intercept("SELECT * FROM t1, LATERAL t2", msg)
-    intercept("SELECT * FROM t1 JOIN LATERAL t2", msg)
-    intercept("SELECT * FROM t1, LATERAL (t2 JOIN t3)", msg)
-    intercept("SELECT * FROM t1, LATERAL (LATERAL t2)", msg)
-    intercept("SELECT * FROM t1, LATERAL VALUES (0, 1)", msg)
-    intercept("SELECT * FROM t1, LATERAL RANGE(0, 1)", msg)
-  }
 }

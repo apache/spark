@@ -89,12 +89,24 @@
     "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "42000"
   },
+  "INVALID_LATERAL_JOIN_RELATION" : {
+    "message" : [ "LATERAL can only be used with subquery." ],
+    "sqlState" : "42000"
+  },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
     "sqlState" : "22023"
+  },
+  "LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED" : {
+    "message" : [ "LATERAL join with NATURAL join is not supported." ],
+    "sqlState" : "42000"
+  },
+  "LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED" : {
+    "message" : [ "LATERAL join with USING join is not supported." ],
+    "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
@@ -152,6 +164,10 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_LATERAL_JOIN_TYPE" : {
+    "message" : [ "Unsupported LATERAL join type %s" ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
