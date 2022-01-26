@@ -89,12 +89,12 @@
     "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "42000"
   },
+  "INVALID_JSON_SCHEMA_MAPTYPE" : {
+    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
   "INVALID_LATERAL_JOIN_RELATION" : {
     "message" : [ "LATERAL can only be used with subquery." ],
     "sqlState" : "42000"
-  },
-  "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
