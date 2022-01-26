@@ -51,9 +51,6 @@ import org.apache.spark.sql.types._
 @DeveloperApi
 case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 
-class NamespaceNotEmptyException(message: String, cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause)
-
 /**
  * :: DeveloperApi ::
  * Encapsulates everything (extensions, workarounds, quirks) to handle the

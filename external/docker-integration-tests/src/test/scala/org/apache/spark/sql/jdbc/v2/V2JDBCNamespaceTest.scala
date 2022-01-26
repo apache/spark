@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DockerIntegrationFunSuite, NamespaceNotEmptyException}
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.tags.DockerTest
@@ -82,7 +83,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
     catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
     assert(catalog.namespaceExists(Array("foo")) === true)
     catalog.createTable(ident1, schema, Array.empty, emptyProps)
-    val msg = intercept[NamespaceNotEmptyException] {
+    intercept[NonEmptyNamespaceException] {
       catalog.dropNamespace(Array("foo"), cascade = false)
     }
 
