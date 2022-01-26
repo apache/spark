@@ -254,7 +254,8 @@ object InterpretedUnsafeProjection {
         (_, _) => {}
 
       case _ =>
-        throw QueryExecutionErrors.dataTypeUnsupportedForWriterFuncError(dt)
+        throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
+          "generating a writer function for a struct field, array element, map key or map value.")
     }
 
     // Always wrap the writer with a null safe version.

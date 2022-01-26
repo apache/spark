@@ -138,13 +138,6 @@ object QueryExecutionErrors {
       messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
   }
 
-  def dataTypeUnsupportedForWriterFuncError(dt: DataType): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"the data type '${dt.typeName}' while generating " +
-        "a writer function for a struct field, array element, map key or map value."))
-  }
-
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
     new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_DATATYPE",
       messageParameters = Array(dataType + failure))
