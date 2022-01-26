@@ -279,20 +279,11 @@ abstract class SparkFunSuite
               s"Number of events reached the limit of $maxEvents$loggingInfo")
           }
           _loggingEvents.append(copyEvent)
-          // scalastyle:off println
-          println(s"_loggingEvents:${_loggingEvents}")
-          // scalastyle:on println
-          // scalastyle:off println
-          println(s"_threshold:${_threshold}")
-          // scalastyle:on println
         }
       }
     }
 
     def setThreshold(threshold: Level): Unit = {
-      // scalastyle:off println
-      println(s"setThreshold:$threshold")
-      // scalastyle:on println
       _threshold = threshold
     }
 
