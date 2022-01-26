@@ -1377,7 +1377,7 @@ private[spark] class DAGScheduler(
 
     val shuffleId = stage.shuffleDep.shuffleId
     val shuffleMergeId = stage.shuffleDep.shuffleMergeId
-    if (stage.shuffleDep.mergerLocs.nonEmpty) {
+    if (stage.shuffleDep.shuffleMergeEnabled) {
       logInfo(s"Shuffle merge enabled before starting the stage for $stage with shuffle" +
         s" $shuffleId and shuffle merge $shuffleMergeId with" +
         s" ${stage.shuffleDep.getMergerLocs.size} merger locations")
@@ -2608,8 +2608,12 @@ private[spark] class DAGScheduler(
     // isPushBasedShuffleEnabled and shuffleMergers need to be updated at the end.
     stage match {
       case s: ShuffleMapStage =>
-        stage.latestInfo.setPushBasedShuffleEnabled(s.shuffleDep.getMergerLocs.nonEmpty)
-        stage.latestInfo.setShuffleMergerCount(s.shuffleDep.getMergerLocs.size)
+        val isPushShuffleEnabled =
+          s.shuffleDep.shuffleMergeAllowed && s.shuffleDep.getMergerLocs.nonEmpty
+        stage.latestInfo.setPushBasedShuffleEnabled(isPushShuffleEnabled)
+        if (isPushShuffleEnabled) {
+          stage.latestInfo.setShuffleMergerCount(s.shuffleDep.getMergerLocs.size)
+        }
       case _ =>
     }
   }

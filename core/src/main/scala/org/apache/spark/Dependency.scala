@@ -112,6 +112,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergeAllowed = shuffleMergeAllowed
   }
 
+  def shuffleMergeEnabled : Boolean = mergerLocs.nonEmpty
+
   def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
 
   /**
@@ -202,7 +204,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   // Only used by DAGScheduler to coordinate shuffle merge finalization
   @transient private[this] var finalizeTask: Option[ScheduledFuture[_]] = None
 
-  def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
+  private[spark] def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
 
   def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
     finalizeTask = Option(task)
