@@ -1200,6 +1200,11 @@ class Analyzer(override val catalogManager: CatalogManager)
                 val newRelation = multi.newInstance()
                 newRelation.copyTagsFrom(multi)
                 newRelation
+              case view @ View(_, _, child: LogicalPlan) =>
+                val newChild = child.mapExpressions {
+                  case alias: Alias => alias.newInstance()
+                }
+                view.copy(view.desc, view.isTempView, newChild)
             }).orElse {
               val table = CatalogV2Util.loadTable(catalog, ident, timeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
