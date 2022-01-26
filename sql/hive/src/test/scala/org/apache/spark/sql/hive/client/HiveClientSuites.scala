@@ -91,8 +91,10 @@ class HiveClientSuites extends SparkFunSuite with HiveClientVersions {
   }
 
   override def nestedSuites: IndexedSeq[Suite] = {
+    // Hive version less than `0.14` doesn't support purge when DropTable.
     val versionsWithoutPurgeTable =
       if (versions.contains("0.14")) versions.takeWhile(_ != "0.14") else Nil
+    // Hive version less than `1.2` doesn't support purge when DropPartitions.
     val versionsWithoutPurgePartition =
       if (versions.contains("1.2")) versions.takeWhile(_ != "1.2") else Nil
     versions.map(new HiveClientSuite(_, versionsWithoutPurgeTable, versionsWithoutPurgePartition))
