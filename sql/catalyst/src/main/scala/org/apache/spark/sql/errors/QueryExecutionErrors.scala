@@ -126,12 +126,6 @@ object QueryExecutionErrors {
       messageParameters = Array.empty)
   }
 
-  def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"$nodeName does not implement simpleStringWithNodeId"))
-  }
-
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
