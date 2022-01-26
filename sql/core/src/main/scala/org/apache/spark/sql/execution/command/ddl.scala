@@ -476,8 +476,8 @@ case class AlterTableAddPartitionCommand(
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
     if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       // Updating table stats only if new partition is not empty
-      val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
-        parts.map(_.storage.locationUri)).sum
+      val addedSize = CommandUtils.calculateMultipleLocationSizesAndNumFiles(
+        sparkSession, table.identifier, parts.map(_.storage.locationUri)).map(_._1).sum
       if (addedSize > 0) {
         val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
         catalog.alterTableStats(table.identifier, Some(newStats))

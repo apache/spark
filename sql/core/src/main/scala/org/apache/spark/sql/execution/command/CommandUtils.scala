@@ -57,7 +57,7 @@ object CommandUtils extends Logging {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val (newSize, _) = CommandUtils.calculateTotalSizeAndNumFile(sparkSession, newTable)
       val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
       if (isNewStats) {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
@@ -71,28 +71,31 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSizeAndNumFile(
+      spark: SparkSession,
+      catalogTable: CatalogTable): (BigInt, Int) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
-    val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier,
+    val (totalSize, numFiles) = if (catalogTable.partitionColumnNames.isEmpty) {
+      calculateSingleLocationSizeAndFileNum(sessionState, catalogTable.identifier,
         catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      val ret = calculateMultipleLocationSizesAndNumFiles(spark, catalogTable.identifier, paths)
+      (ret.map(_._1).sum, ret.map(_._2).sum)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
-    totalSize
+    (totalSize, numFiles)
   }
 
-  def calculateSingleLocationSize(
+  def calculateSingleLocationSizeAndFileNum(
       sessionState: SessionState,
       identifier: TableIdentifier,
-      locationUri: Option[URI]): Long = {
+      locationUri: Option[URI]): (Long, Int) = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -103,52 +106,54 @@ object CommandUtils extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def getPathSize(fs: FileSystem, path: Path): Long = {
+    def getPathSizeAndNumFile(fs: FileSystem, path: Path): (Long, Int) = {
       val fileStatus = fs.getFileStatus(path)
-      val size = if (fileStatus.isDirectory) {
-        fs.listStatus(path)
+      val (size, numFile) = if (fileStatus.isDirectory) {
+        val result = fs.listStatus(path)
           .map { status =>
             if (isDataPath(status.getPath, stagingDir)) {
-              getPathSize(fs, status.getPath)
+              getPathSizeAndNumFile(fs, status.getPath)
             } else {
-              0L
+              (0L, 0)
             }
-          }.sum
+          }
+        (result.map(_._1).sum, result.map(_._2).sum)
       } else {
-        fileStatus.getLen
+        (fileStatus.getLen, 1)
       }
 
-      size
+      (size, numFile)
     }
 
     val startTime = System.nanoTime()
-    val size = locationUri.map { p =>
+    val (size, numFile) = locationUri.map { p =>
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        getPathSize(fs, path)
+        getPathSizeAndNumFile(fs, path)
       } catch {
         case NonFatal(e) =>
           logWarning(
             s"Failed to get the size of table ${identifier.table} in the " +
               s"database ${identifier.database} because of ${e.toString}", e)
-          0L
+          (0L, 0)
       }
-    }.getOrElse(0L)
+    }.getOrElse(0L, 0)
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
     logDebug(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
 
-    size
+    (size, numFile)
   }
 
-  def calculateMultipleLocationSizes(
+  def calculateMultipleLocationSizesAndNumFiles(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Seq[Long] = {
+      paths: Seq[Option[URI]]): Seq[(Long, Int)] = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
-      calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
+      calculateMultipleLocationSizesAndNumFilesInParallel(
+        sparkSession, paths.map(_.map(new Path(_))))
     } else {
-      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p))
+      paths.map(p => calculateSingleLocationSizeAndFileNum(sparkSession.sessionState, tid, p))
     }
   }
 
@@ -160,18 +165,18 @@ object CommandUtils extends Logging {
    * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
    *         if `paths(i)` is None
    */
-  def calculateMultipleLocationSizesInParallel(
+  def calculateMultipleLocationSizesAndNumFilesInParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Seq[Long] = {
+      paths: Seq[Option[Path]]): Seq[(Long, Int)] = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
-      case (_, files) => files.map(_.getLen).sum
+      case (_, files) => (files.map(_.getLen).sum, files.size)
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
-    paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L) }
+    paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L, 0) }
   }
 
   def compareAndGetNewStats(
@@ -222,7 +227,7 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val (newTotalSize, _) = CommandUtils.calculateTotalSizeAndNumFile(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 

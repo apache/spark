@@ -106,11 +106,13 @@ case class AnalyzePartitionCommand(
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
 
-    val sizes = CommandUtils.calculateMultipleLocationSizes(sparkSession, tableMeta.identifier,
+    val sizesAndNumFiles =
+      CommandUtils.calculateMultipleLocationSizesAndNumFiles(sparkSession, tableMeta.identifier,
       partitions.map(_.storage.locationUri))
     val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
       val newRowCount = rowCounts.get(p.spec)
-      val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), newRowCount)
+      val newStats =
+        CommandUtils.compareAndGetNewStats(p.stats, sizesAndNumFiles(idx)._1, newRowCount)
       newStats.map(_ => p.copy(stats = newStats))
     }
 
