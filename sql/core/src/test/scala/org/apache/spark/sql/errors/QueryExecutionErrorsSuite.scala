@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
@@ -114,11 +114,9 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
-  test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in Literal.apply") {
+  test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any): Unit = {
-      val e = intercept[SparkRuntimeException] {
-        Literal(v)
-      }
+      val e = intercept[SparkRuntimeException] { lit(v) }
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
       assert(e.getMessage.contains("The feature is not supported: literal for "))
