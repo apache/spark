@@ -201,7 +201,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .getTableMetadata(TableIdentifier(checkSizeTable))
           HiveCatalogMetrics.reset()
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-          val (size, numFiles) = CommandUtils.calculateTotalSizeAndNumFile(spark, tableMeta)
+          val (size, numFiles) = CommandUtils.calculateTotalSizeAndNumFiles(spark, tableMeta)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
           assert(size === BigInt(17436))
           assert(numFiles === 3)

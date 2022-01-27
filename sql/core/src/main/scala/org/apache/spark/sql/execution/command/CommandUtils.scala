@@ -57,7 +57,7 @@ object CommandUtils extends Logging {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val (newSize, _) = CommandUtils.calculateTotalSizeAndNumFile(sparkSession, newTable)
+      val (newSize, _) = CommandUtils.calculateTotalSizeAndNumFiles(sparkSession, newTable)
       val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
       if (isNewStats) {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
@@ -71,13 +71,13 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSizeAndNumFile(
+  def calculateTotalSizeAndNumFiles(
       spark: SparkSession,
       catalogTable: CatalogTable): (BigInt, Int) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
     val (totalSize, numFiles) = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSizeAndFileNum(sessionState, catalogTable.identifier,
+      calculateSingleLocationSizeAndFileNums(sessionState, catalogTable.identifier,
         catalogTable.storage.locationUri)
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
@@ -92,7 +92,7 @@ object CommandUtils extends Logging {
     (totalSize, numFiles)
   }
 
-  def calculateSingleLocationSizeAndFileNum(
+  def calculateSingleLocationSizeAndFileNums(
       sessionState: SessionState,
       identifier: TableIdentifier,
       locationUri: Option[URI]): (Long, Int) = {
@@ -106,13 +106,13 @@ object CommandUtils extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def getPathSizeAndNumFile(fs: FileSystem, path: Path): (Long, Int) = {
+    def getPathSizeAndNumFiles(fs: FileSystem, path: Path): (Long, Int) = {
       val fileStatus = fs.getFileStatus(path)
       val (size, numFile) = if (fileStatus.isDirectory) {
         val result = fs.listStatus(path)
           .map { status =>
             if (isDataPath(status.getPath, stagingDir)) {
-              getPathSizeAndNumFile(fs, status.getPath)
+              getPathSizeAndNumFiles(fs, status.getPath)
             } else {
               (0L, 0)
             }
@@ -130,7 +130,7 @@ object CommandUtils extends Logging {
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        getPathSizeAndNumFile(fs, path)
+        getPathSizeAndNumFiles(fs, path)
       } catch {
         case NonFatal(e) =>
           logWarning(
@@ -153,7 +153,7 @@ object CommandUtils extends Logging {
       calculateMultipleLocationSizesAndNumFilesInParallel(
         sparkSession, paths.map(_.map(new Path(_))))
     } else {
-      paths.map(p => calculateSingleLocationSizeAndFileNum(sparkSession.sessionState, tid, p))
+      paths.map(p => calculateSingleLocationSizeAndFileNums(sparkSession.sessionState, tid, p))
     }
   }
 
@@ -227,7 +227,7 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val (newTotalSize, _) = CommandUtils.calculateTotalSizeAndNumFile(sparkSession, tableMeta)
+      val (newTotalSize, _) = CommandUtils.calculateTotalSizeAndNumFiles(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
