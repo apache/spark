@@ -4509,7 +4509,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def foo(x, y) -> np.int32:
+            >>> def multiply(x, y) -> np.int32:
             ...     return x * y
 
             pandas-on-Spark uses return type hint and does not try to infer the type.
@@ -4565,7 +4565,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Now, to combine the two datasets and view the highest speeds
         of the birds across the two datasets
 
-        >>> s1.combine(s2, max)
+        >>> def max_with_return_type(x, y) -> float:
+        ...     return max(x, y)
+        ...
+        >>> s1.combine(s2, max_with_return_type)
         duck        NaN
         eagle     200.0
         falcon    345.0
@@ -4576,7 +4579,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         So, in the example, we set ``fill_value=0``,
         so the maximum value returned will be the value from some dataset.
 
-        >>> s1.combine(s2, max, fill_value=0)
+        >>> s1.combine(s2, max_with_return_type, fill_value=0)
         duck       30.0
         eagle     200.0
         falcon    345.0
@@ -4609,6 +4612,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return_spark_type = sig_return.spark_type
             return_dtype = sig_return.dtype
         except (ValueError, TypeError):
+            # Here we execute with the first 1000 to get the return type.
+            # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified the `func` parameter for `series.combine`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = combined.head(limit + 1)._to_internal_pandas()
             combined_pser = pdf.iloc[:, 0].combine(pdf.iloc[:, 1], func, fill_value=fill_value)
