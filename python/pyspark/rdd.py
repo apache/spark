@@ -94,7 +94,7 @@ if TYPE_CHECKING:
     import io
 
     from pyspark._typing import NonUDFType
-    from pyspark._typing import O, NumberOrArray
+    from pyspark._typing import S, NumberOrArray
     from pyspark.context import SparkContext
     from pyspark.sql.pandas._typing import (
         PandasScalarUDFType,
@@ -846,11 +846,11 @@ class RDD(Generic[T_co]):
 
     @overload
     def repartitionAndSortWithinPartitions(
-        self: "RDD[Tuple[O, V]]",
+        self: "RDD[Tuple[S, V]]",
         numPartitions: Optional[int] = ...,
-        partitionFunc: Callable[["O"], int] = ...,
+        partitionFunc: Callable[["S"], int] = ...,
         ascending: bool = ...,
-    ) -> "RDD[Tuple[O, V]]":
+    ) -> "RDD[Tuple[S, V]]":
         ...
 
     @overload
@@ -859,7 +859,7 @@ class RDD(Generic[T_co]):
         numPartitions: Optional[int],
         partitionFunc: Callable[[K], int],
         ascending: bool,
-        keyfunc: Callable[[K], "O"],
+        keyfunc: Callable[[K], "S"],
     ) -> "RDD[Tuple[K, V]]":
         ...
 
@@ -870,7 +870,7 @@ class RDD(Generic[T_co]):
         partitionFunc: Callable[[K], int] = ...,
         ascending: bool = ...,
         *,
-        keyfunc: Callable[[K], "O"],
+        keyfunc: Callable[[K], "S"],
     ) -> "RDD[Tuple[K, V]]":
         ...
 
@@ -906,7 +906,7 @@ class RDD(Generic[T_co]):
 
     @overload
     def sortByKey(
-        self: "RDD[Tuple[O, V]]",
+        self: "RDD[Tuple[S, V]]",
         ascending: bool = ...,
         numPartitions: Optional[int] = ...,
     ) -> "RDD[Tuple[K, V]]":
@@ -917,7 +917,7 @@ class RDD(Generic[T_co]):
         self: "RDD[Tuple[K, V]]",
         ascending: bool,
         numPartitions: int,
-        keyfunc: Callable[[K], "O"],
+        keyfunc: Callable[[K], "S"],
     ) -> "RDD[Tuple[K, V]]":
         ...
 
@@ -927,7 +927,7 @@ class RDD(Generic[T_co]):
         ascending: bool = ...,
         numPartitions: Optional[int] = ...,
         *,
-        keyfunc: Callable[[K], "O"],
+        keyfunc: Callable[[K], "S"],
     ) -> "RDD[Tuple[K, V]]":
         ...
 
@@ -998,7 +998,7 @@ class RDD(Generic[T_co]):
 
     def sortBy(
         self: "RDD[T]",
-        keyfunc: Callable[[T], "O"],
+        keyfunc: Callable[[T], "S"],
         ascending: bool = True,
         numPartitions: Optional[int] = None,
     ) -> "RDD[T]":
@@ -1419,14 +1419,14 @@ class RDD(Generic[T_co]):
         return partiallyAggregated.reduce(combOp)
 
     @overload
-    def max(self: "RDD[O]") -> "O":
+    def max(self: "RDD[S]") -> "S":
         ...
 
     @overload
-    def max(self: "RDD[T]", key: Callable[[T], "O"]) -> T:
+    def max(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
         ...
 
-    def max(self: "RDD[T]", key: Optional[Callable[[T], "O"]] = None) -> T:
+    def max(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
         Find the maximum item in this RDD.
 
@@ -1448,14 +1448,14 @@ class RDD(Generic[T_co]):
         return self.reduce(lambda a, b: max(a, b, key=key))  # type: ignore[arg-type]
 
     @overload
-    def min(self: "RDD[O]") -> "O":
+    def min(self: "RDD[S]") -> "S":
         ...
 
     @overload
-    def min(self: "RDD[T]", key: Callable[[T], "O"]) -> T:
+    def min(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
         ...
 
-    def min(self: "RDD[T]", key: Optional[Callable[[T], "O"]] = None) -> T:
+    def min(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
         Find the minimum item in this RDD.
 
@@ -1514,8 +1514,8 @@ class RDD(Generic[T_co]):
         )
 
     def histogram(
-        self: "RDD[O]", buckets: Union[int, List["O"], Tuple["O", ...]]
-    ) -> Tuple[Sequence["O"], List[int]]:
+        self: "RDD[S]", buckets: Union[int, List["S"], Tuple["S", ...]]
+    ) -> Tuple[Sequence["S"], List[int]]:
         """
         Compute a histogram using the provided buckets. The buckets
         are all open to the right except for the last which is closed.
@@ -1569,7 +1569,7 @@ class RDD(Generic[T_co]):
             filtered = self.filter(comparable)
 
             # faster than stats()
-            def minmax(a: Tuple["O", "O"], b: Tuple["O", "O"]) -> Tuple["O", "O"]:
+            def minmax(a: Tuple["S", "S"], b: Tuple["S", "S"]) -> Tuple["S", "S"]:
                 return min(a[0], b[0]), max(a[1], b[1])
 
             try:
@@ -1631,7 +1631,7 @@ class RDD(Generic[T_co]):
         else:
             raise TypeError("buckets should be a list or tuple or number(int or long)")
 
-        def histogram(iterator: Iterable["O"]) -> Iterable[List[int]]:
+        def histogram(iterator: Iterable["S"]) -> Iterable[List[int]]:
             counters = [0] * len(buckets)  # type: ignore[arg-type]
             for i in iterator:
                 if (
@@ -1740,14 +1740,14 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(countPartition).reduce(mergeMaps)
 
     @overload
-    def top(self: "RDD[O]", num: int) -> List["O"]:
+    def top(self: "RDD[S]", num: int) -> List["S"]:
         ...
 
     @overload
-    def top(self: "RDD[T]", num: int, key: Callable[[T], "O"]) -> List[T]:
+    def top(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
         ...
 
-    def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], "O"]] = None) -> List[T]:
+    def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
         Get the top N elements from an RDD.
 
@@ -1777,14 +1777,14 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(topIterator).reduce(merge)
 
     @overload
-    def takeOrdered(self: "RDD[O]", num: int) -> "List[O]":
+    def takeOrdered(self: "RDD[S]", num: int) -> "List[S]":
         ...
 
     @overload
-    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "O"]) -> List[T]:
+    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
         ...
 
-    def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], "O"]] = None) -> List[T]:
+    def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
         Get the N elements from an RDD ordered in ascending order or as
         specified by the optional key function.

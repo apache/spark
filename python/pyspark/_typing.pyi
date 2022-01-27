@@ -36,7 +36,7 @@ class SupportsOrdering(Protocol):
 
 class SizedIterable(Protocol, Sized, Iterable[T_co]): ...
 
-O = TypeVar("O", bound=SupportsOrdering)
+S = TypeVar("S", bound=SupportsOrdering)
 
 NumberOrArray = TypeVar(
     "NumberOrArray", float, int, complex, int32, int64, float32, float64, ndarray
