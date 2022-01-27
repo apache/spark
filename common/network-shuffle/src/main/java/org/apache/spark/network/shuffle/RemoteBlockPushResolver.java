@@ -997,8 +997,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   public static class AppShuffleMergePartitionsInfo {
     // ConcurrentHashMap doesn't allow null for keys or values which is why this is required.
-    // Marker to identify finalized indeterminate shuffle partitions in the case of indeterminate
-    // stage retries.
+    // Marker to identify finalized shuffle partitions.
     private static final Map<Integer, AppShufflePartitionInfo> SHUFFLE_FINALIZED_MARKER =
         Collections.emptyMap();
     private final int shuffleMergeId;
