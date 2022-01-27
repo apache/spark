@@ -562,7 +562,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               bitmaps.add(partition.mapTracker);
               reduceIds.add(partition.reduceId);
               sizes.add(partition.getLastChunkOffset());
-              logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalization results " + 
+              logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalization results " +
                   "added for partition {} data size {} index size {} meta size {}",
                   msg.appId, msg.appAttemptId, msg.shuffleId,
                   msg.shuffleMergeId, partition.reduceId, partition.getLastChunkOffset(),
