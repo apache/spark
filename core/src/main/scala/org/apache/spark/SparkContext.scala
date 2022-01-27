@@ -1928,6 +1928,9 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
+  /**
+   * Updates JAR dependencies for all tasks to be executed on this `SparkContext` in the future.
+   */
   private[spark] def updateJars(jarPaths: Seq[String]): Unit = {
     jarPaths.foreach(addJar(_, addedOnSubmit = false, update = true))
   }

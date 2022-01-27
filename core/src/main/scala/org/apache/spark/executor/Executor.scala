@@ -925,8 +925,11 @@ private[spark] class Executor(
     }
   }
 
+  /**
+   * Updates existing jar dependencies, if we receive updated set of jars from SparkContext.
+   */
   private def checkAndUpdateUrlClassLoader(newJars: Map[String, Long]): Unit = {
-    def isFoundinNewJars(jarName: String, timestamp: Long): Boolean = {
+    def isFoundInNewJars(jarName: String, timestamp: Long): Boolean = {
       newJars.get(jarName) match {
         case Some(newTimestamp) if (timestamp == newTimestamp) => true
         case _ => false
@@ -936,7 +939,7 @@ private[spark] class Executor(
     var isNeedToUpdate = false
     currentJars.takeWhile(_ => !isNeedToUpdate).foreach {
       case (jarName, timestamp) if (!userClassPathJars.contains(jarName)) &&
-        !isFoundinNewJars(jarName, timestamp) => {
+        !isFoundInNewJars(jarName, timestamp) => {
         isNeedToUpdate = true
       }
       case _ => // ignore

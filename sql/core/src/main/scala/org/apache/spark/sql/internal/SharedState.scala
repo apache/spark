@@ -191,6 +191,7 @@ private[sql] class SharedState(
         Utils.getSparkClassLoader)
   }
 
+  // Removes given jars from classpath. Used only for testing dynamic update of UDF.
   def removeJarsFromClassLoader(jarURLs: Seq[URL]): Unit = {
     val remainingJars = nonClosableMutableURLClassLoader.getURLs.filter(!jarURLs.contains(_))
     if (remainingJars.length != nonClosableMutableURLClassLoader.getURLs.length) {

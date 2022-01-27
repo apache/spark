@@ -168,7 +168,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
         case FileResource => fileResources.append(resource)
       }
     }
-    addOrUpdateJars(jarResources.map(_.uri))
+    addOrUpdateJars(jarResources.map(_.uri).toSeq)
     // TO-DO : Add logic for updating file and archive resources
   }
 
