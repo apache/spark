@@ -1161,7 +1161,7 @@ public class RemoteBlockPushResolverSuite {
 
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
       pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
-    assertTrue("Determinate shuffle should be marked finalized after finalize shuffle"
+    assertTrue("Determinate shuffle should be marked finalized"
       + " merge", appShuffleInfo.getShuffles().get(0).isFinalized());
     validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
@@ -1293,6 +1293,10 @@ public class RemoteBlockPushResolverSuite {
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
         new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 1, 0));
     assertEquals("no partitions were merged", 0, statuses.reduceIds.length);
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
+        pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertTrue("Determinate shuffle should be marked finalized merge",
+        appShuffleInfo.getShuffles().get(1).isFinalized());
     removeApplication(TEST_APP);
   }
 

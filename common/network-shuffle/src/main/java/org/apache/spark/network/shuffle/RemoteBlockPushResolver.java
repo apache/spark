@@ -162,9 +162,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleMergePartitionsInfo shufflePartitionsWithMergeId =
       shuffles.compute(shuffleId, (id, mergePartitionsInfo) -> {
         if (mergePartitionsInfo == null) {
-          logger.info("{} attempt {} shuffle {} shuffleMerge {}: "
-              + "creating a new shuffle merge metadata",
-              appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId);
+          logger.info("{} attempt {} shuffle {} shuffleMerge {}: creating a new shuffle " +
+              "merge metadata", appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
+              shuffleMergeId);
           return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
         } else {
           int latestShuffleMergeId = mergePartitionsInfo.shuffleMergeId;
@@ -178,13 +178,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // Higher shuffleMergeId seen for the shuffle ID meaning new stage attempt is being
             // run for the shuffle ID. Close and clean up old shuffleMergeId files,
             // happens in the indeterminate stage retries
-            logger.info("{} attempt {} shuffle {} shuffleMerge {}: "
-                + "creating a new shuffle merge metadata since received shuffleMergeId is "
-                + "higher than latest shuffleMergeId {}",
-                appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId,
-                latestShuffleMergeId);
+            logger.info("{} attempt {} shuffle {} shuffleMerge {}: creating a new shuffle " +
+                "merge metadata since received shuffleMergeId is higher than latest " +
+                "shuffleMergeId {}", appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
+                shuffleMergeId, latestShuffleMergeId);
             mergedShuffleCleaner.execute(() ->
-              closeAndDeletePartitionFiles(mergePartitionsInfo.shuffleMergePartitions));
+                closeAndDeletePartitionFiles(mergePartitionsInfo.shuffleMergePartitions));
             return new AppShuffleMergePartitionsInfo(shuffleMergeId, false);
           } else {
             // The request is for block with same shuffleMergeId as the latest shuffleMergeId
@@ -213,9 +212,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         return newAppShufflePartitionInfo(appShuffleInfo.appId, shuffleId, shuffleMergeId,
           reduceId, dataFile, indexFile, metaFile);
       } catch (IOException e) {
-        logger.error(
-          "Cannot create merged shuffle partition with data file {}, index file {}, and "
-            + "meta file {}", dataFile.getAbsolutePath(),
+        logger.error("{} attempt {} shuffle {} shuffleMerge {}: cannot create merged shuffle " +
+            "partition with data file {}, index file {}, and meta file {}", appShuffleInfo.appId,
+            appShuffleInfo.attemptId, shuffleId, shuffleMergeId, dataFile.getAbsolutePath(),
             indexFile.getAbsolutePath(), metaFile.getAbsolutePath());
         throw new RuntimeException(
           String.format("Cannot initialize merged shuffle partition for appId %s shuffleId %s "
@@ -494,8 +493,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   @Override
   public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) {
-    logger.info("{} attempt {} shuffle {} shuffleMerge {}: "
-            + "finalize shuffle merge",
+    logger.info("{} attempt {} shuffle {} shuffleMerge {}: finalize shuffle merge",
         msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
@@ -516,31 +514,31 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shuffleMergePartitionsRef =
       new AtomicReference<>(null);
     appShuffleInfo.shuffles.compute(msg.shuffleId, (shuffleId, mergePartitionsInfo) -> {
-      if (null == mergePartitionsInfo) {
-        //If the mergePartitions was never created then it means that there weren't any push
-        //blocks that were ever received for this shuffle. This could be the case when the driver
-        //doesn't wait for enough time to start the stage which reads this shuffle data.
-        return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
-      } else if (msg.shuffleMergeId < mergePartitionsInfo.shuffleMergeId
-          || mergePartitionsInfo.isFinalized()) {
-        throw new RuntimeException(
-            String.format("Shuffle merge finalize request for shuffle %s with" +
-                " shuffleMergeId %s is %s", msg.shuffleId, msg.shuffleMergeId,
-                ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
-      } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
-        // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
-        // empty MergeStatuses but cleanup the older shuffleMergeId files.
-        mergedShuffleCleaner.execute(() ->
-            closeAndDeletePartitionFiles(mergePartitionsInfo.shuffleMergePartitions));
-        return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
-      } else {
-        // This block covers:
-        //  1. finalization of determinate stage
-        //  2. finalization of indeterminate stage if the shuffleMergeId related to it is the one
-        //  for which the message is received.
-        shuffleMergePartitionsRef.set(mergePartitionsInfo.shuffleMergePartitions);
-        return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+      if (null != mergePartitionsInfo) {
+        if (msg.shuffleMergeId < mergePartitionsInfo.shuffleMergeId ||
+          mergePartitionsInfo.isFinalized()) {
+          throw new RuntimeException(String.format(
+              "Shuffle merge finalize request for shuffle %s with" + " shuffleMergeId %s is %s",
+              msg.shuffleId, msg.shuffleMergeId,
+              ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
+        } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
+          // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
+          // empty MergeStatuses but cleanup the older shuffleMergeId files.
+          mergedShuffleCleaner.execute(() ->
+              closeAndDeletePartitionFiles(mergePartitionsInfo.shuffleMergePartitions));
+        } else {
+          // This block covers:
+          //  1. finalization of determinate stage
+          //  2. finalization of indeterminate stage if the shuffleMergeId related to it is the one
+          //  for which the message is received.
+          shuffleMergePartitionsRef.set(mergePartitionsInfo.shuffleMergePartitions);
+        }
       }
+      // Even when the mergePartitionsInfo is null, we mark the shuffle as finalized but the results
+      // sent to the driver will be empty. This cam happen when the service didn't receive any
+      // blocks for the shuffle yet and the driver didn't wait for enough time to finalize the
+      // shuffle.
+      return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
     });
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions = shuffleMergePartitionsRef.get();
     MergeStatuses mergeStatuses;
@@ -555,8 +553,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       for (AppShufflePartitionInfo partition: shuffleMergePartitions.values()) {
         synchronized (partition) {
           try {
-            logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalizing shuffle partition "
-                + "{} ", msg.appId, msg.appAttemptId, msg.shuffleId,
+            logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalizing shuffle " +
+                "partition {} ", msg.appId, msg.appAttemptId, msg.shuffleId,
                 msg.shuffleMergeId, partition.reduceId);
             // This can throw IOException which will marks this shuffle partition as not merged.
             partition.finalizePartition();
@@ -564,15 +562,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               bitmaps.add(partition.mapTracker);
               reduceIds.add(partition.reduceId);
               sizes.add(partition.getLastChunkOffset());
-              logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalization results added"
-              + " for partition {} data size {} index size {} meta size {}",
+              logger.debug("{} attempt {} shuffle {} shuffleMerge {}: finalization results " + 
+                  "added for partition {} data size {} index size {} meta size {}",
                   msg.appId, msg.appAttemptId, msg.shuffleId,
                   msg.shuffleMergeId, partition.reduceId, partition.getLastChunkOffset(),
                   partition.indexFile.getPos(), partition.metaFile.getPos());
             }
           } catch (IOException ioe) {
-            logger.warn("{} attempt {} shuffle {} shuffleMerge {}: exception while finalizing "
-                + "shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
+            logger.warn("{} attempt {} shuffle {} shuffleMerge {}: exception while " +
+                "finalizing shuffle partition {}", msg.appId, msg.appAttemptId, msg.shuffleId,
                 msg.shuffleMergeId, partition.reduceId);
           } finally {
             partition.closeAllFilesAndDeleteIfNeeded(false);
@@ -583,8 +581,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         bitmaps.toArray(new RoaringBitmap[bitmaps.size()]), Ints.toArray(reduceIds),
         Longs.toArray(sizes));
     }
-    logger.info("{} attempt {} shuffle {} shuffleMerge {}: "
-        + "finalization of shuffle merge completed",
+    logger.info("{} attempt {} shuffle {} shuffleMerge {}: finalization of shuffle merge completed",
         msg.appId, msg.appAttemptId, msg.shuffleId, msg.shuffleMergeId);
     return mergeStatuses;
   }
