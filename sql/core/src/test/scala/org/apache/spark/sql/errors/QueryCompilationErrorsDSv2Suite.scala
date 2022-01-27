@@ -28,24 +28,22 @@ class QueryCompilationErrorsDSv2Suite
 
   test("UNSUPPORTED_FEATURE: IF PARTITION NOT EXISTS not supported by INSERT") {
     val v2Format = classOf[FakeV2Provider].getName
-    val catalogAndNamespace = "testcat.ns1.ns2."
-    val t1 = s"${catalogAndNamespace}tbl"
+    val tbl = "testcat.ns1.ns2.tbl"
 
-    withTable(t1) {
+    withTable(tbl) {
       val view = "tmp_view"
       val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
       df.createOrReplaceTempView(view)
       withTempView(view) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        sql(s"CREATE TABLE $tbl (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
 
         val e = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 1) IF NOT EXISTS SELECT * FROM $view")
+          sql(s"INSERT OVERWRITE TABLE $tbl PARTITION (id = 1) IF NOT EXISTS SELECT * FROM $view")
         }
 
-        checkAnswer(spark.table(t1), spark.emptyDataFrame)
-        assert(e.getMessage.contains("The feature is not supported: " +
-          "IF NOT EXISTS for the table"))
-        assert(e.getMessage.contains(t1))
+        checkAnswer(spark.table(tbl), spark.emptyDataFrame)
+        assert(e.getMessage === "The feature is not supported: " +
+          s"IF NOT EXISTS for the table '$tbl' by INSERT INTO.")
         assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
         assert(e.getSqlState === "0A000")
       }

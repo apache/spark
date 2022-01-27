@@ -94,7 +94,7 @@ object QueryCompilationErrors {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO"))
+      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {

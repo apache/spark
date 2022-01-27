@@ -119,7 +119,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       val e = intercept[SparkRuntimeException] { lit(v) }
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
-      assert(e.getMessage.contains("The feature is not supported: literal for "))
+      assert(e.getMessage.matches("""The feature is not supported: literal for '.+' of .+\."""))
     }
     checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
