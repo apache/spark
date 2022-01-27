@@ -167,5 +167,89 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "UNABLE_TO_DELETE_PARTITION_PATH" : {
+    "message" : [ "Unable to delete partition path %s" ],
+    "sqlState" : "42000"
+  },
+  "UNABLE_TO_CREATE_PARTITION_PATH" : {
+    "message" : [ "Unable to create partition path %s" ],
+    "sqlState" : "42000"
+  },
+  "UNABLE_TO_RENAME_PARTITION_PATH" : {
+    "message" : [ "Unable to rename partition path %s" ],
+    "sqlState" : "42000"
+  },
+  "NOT_A_DATA_SOURCE_RDD_PARTITION" : {
+    "message" : [ "[BUG] Not a DataSourceRDDPartition: %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_CLEAR_PARTITION_DIRECTORY" : {
+    "message" : [ "Unable to clear partition directory %s prior to writing to it" ],
+    "sqlState" : "42000"
+  },
+  "FAILED_TO_CAST_VALUE_TO_DATATYPE_FOR_PARTITION_COLUMN" : {
+    "message" : [ "Failed to cast value %s to %s for partition column %s" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [ "SessionCatalog does not support partition transform: %s" ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_CREATE_JDBC_TABLE_WITH_PARTITIONS" : {
+    "message" : [ "Cannot create JDBC table with partition" ],
+    "sqlState" : "0A000"
+  },
+  "REQUESTED_PARTITIONS_MISMATCH_TABLE_PARTITIONS" : {
+    "message" : [ "Requested partitioning does not match the %s table:\\nRequested partitions: %s\\nTable partitions: %s" ],
+    "sqlState" : "42000"
+  },
+  "DYNAMIC_PARTITION_KEY_NOT_AMONG_WRITTEN_PARTITION_PATHS" : {
+    "message" : [ "Dynamic partition key %s is not among written partition paths." ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_REMOVE_PARTITION_DIR" : {
+    "message" : [ "Cannot remove partition directory '%s'" ],
+    "sqlState" : "42000"
+  },
+  "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED" : {
+    "message" : [ "ALTER TABLE ... DROP PARTITION ... PURGE" ],
+    "sqlState" : "0A000"
+  },
+  "INVALID_PARTITION_FILTER" : {
+    "message" : [ "Partition filter cannot have both `\"` and `'` characters" ],
+    "sqlState" : "0A000"
+  },
+  "GET_PARTITION_METADATA_BY_FILTER" : {
+    "message" : [ "Caught Hive MetaException attempting to get partition metadata by filter from Hive.You can set the Spark configuration setting %s to true to work around this problem, however this will result in degraded performance. Please report a bug: https://issues.apache.org/jira/browse/SPARK" ],
+    "sqlState" : "42000"
+  },
+  "ILLEGAL_LOCATION_CLAUSE_FOR_VIEW_PARTITION" : {
+    "message" : [ "LOCATION clause illegal for view partition" ],
+    "sqlState" : "42000"
+  },
+  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [ "Partition column %s not found in schema %s" ],
+    "sqlState" : "22023"
+  },
+  "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE" : {
+    "message" : [ "Nonatomic partition table %s can not add multiple partitions." ],
+    "sqlState" : "0A000"
+  },
+  "CANNOT_DROP_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE" : {
+    "message" : [ "%s source does not support user-specified schema." ],
+    "sqlState" : "0A000"
+  },
+  "TRUNCATE_MULTI_PARTITION_UNSUPPORTED" : {
+    "message" : [ "The table %s does not support truncation of multiple partition." ],
+    "sqlState" : "0A000"
+  },
+  "DYNAMIC_PARTITION_OVERWRITE_UNSUPPORTED_BY_TABLE" : {
+    "message" : [ "Table does not support dynamic partition overwrite: %s" ],
+    "sqlState" : "0A000"
+  },
+  "WRITE_PARTITION_EXCEED_CONFIG_SIZE_WHEN_DYNAMIC_PARTITION" : {
+    "message" : [ "Number of dynamic partitions created is %s, which is more than %s. To solve this try to set %s to at least %s." ],
+    "sqlState" : "22000"
   }
 }

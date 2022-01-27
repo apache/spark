@@ -422,7 +422,7 @@ object QueryExecutionErrors {
   }
 
   def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to delete partition path $partitionPath", e)
+    new SparkException("UNABLE_TO_DELETE_PARTITION_PATH", Array(partitionPath), e)
   }
 
   def unableToDropTableAsFailedToDeleteDirectoryError(
@@ -438,11 +438,11 @@ object QueryExecutionErrors {
   }
 
   def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to create partition path $partitionPath", e)
+    new SparkException("UNABLE_TO_CREATE_PARTITION_PATH", Array(partitionPath), e)
   }
 
   def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
-    new SparkException(s"Unable to rename partition path $oldPartPath", e)
+    new SparkException("UNABLE_TO_RENAME_PARTITION_PATH", Array(oldPartPath), e)
   }
 
   def methodNotImplementedError(methodName: String): Throwable = {
@@ -499,7 +499,7 @@ object QueryExecutionErrors {
   }
 
   def notADatasourceRDDPartitionError(split: Partition): Throwable = {
-    new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+    new SparkException("NOT_A_DATA_SOURCE_RDD_PARTITION", Array(split), null)
   }
 
   def dataPathNotSpecifiedError(): Throwable = {
@@ -607,13 +607,13 @@ object QueryExecutionErrors {
   }
 
   def cannotClearPartitionDirectoryError(path: Path): Throwable = {
-    new IOException(s"Unable to clear partition directory $path prior to writing to it")
+    new SparkException("CANNOT_CLEAR_PARTITION_DIRECTORY", Array(path), null)
   }
 
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): Throwable = {
-    new RuntimeException(s"Failed to cast value `$value` to " +
-      s"`$dataType` for partition column `$columnName`")
+    new SparkException("FAILED_TO_CAST_VALUE_TO_DATATYPE_FOR_PARTITION_COLUMN"
+      , Array(value, dataType, columnName), null)
   }
 
   def endOfStreamError(): Throwable = {
@@ -668,8 +668,7 @@ object QueryExecutionErrors {
   }
 
   def unsupportedPartitionTransformError(transform: Transform): Throwable = {
-    new UnsupportedOperationException(
-      s"SessionCatalog does not support partition transform: $transform")
+    new SparkException("UNSUPPORTED_PARTITION_TRANSFORM", Array(transform), null)
   }
 
   def missingDatabaseLocationError(): Throwable = {
@@ -708,7 +707,7 @@ object QueryExecutionErrors {
   }
 
   def cannotCreateJDBCTableWithPartitionsError(): Throwable = {
-    new UnsupportedOperationException("Cannot create JDBC table with partition")
+    new SparkException("CANNOT_CREATE_JDBC_TABLE_WITH_PARTITIONS", Array.empty, null)
   }
 
   def unsupportedUserSpecifiedSchemaError(): Throwable = {
@@ -1354,19 +1353,20 @@ object QueryExecutionErrors {
   def requestedPartitionsMismatchTablePartitionsError(
       table: CatalogTable, partition: Map[String, Option[String]]): Throwable = {
     new SparkException(
-      s"""
-         |Requested partitioning does not match the ${table.identifier.table} table:
-         |Requested partitions: ${partition.keys.mkString(",")}
-         |Table partitions: ${table.partitionColumnNames.mkString(",")}
-       """.stripMargin)
+       "REQUESTED_PARTITIONS_MISMATCH_TABLE_PARTITIONS",
+       Array(table.identifier.table,
+         partition.keys.mkString(","),
+         table.partitionColumnNames.mkString(",")
+       ),
+       null)
   }
 
   def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
-    new SparkException(s"Dynamic partition key $key is not among written partition paths.")
+    new SparkException("DYNAMIC_PARTITION_KEY_NOT_AMONG_WRITTEN_PARTITION_PATHS", Array(key), null)
   }
 
   def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
-    new RuntimeException(s"Cannot remove partition directory '$partitionPath'")
+    new SparkException("CANNOT_REMOVE_PARTITION_DIR", Array(partitionPath), null)
   }
 
   def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
@@ -1399,23 +1399,16 @@ object QueryExecutionErrors {
   }
 
   def alterTableWithDropPartitionAndPurgeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("ALTER TABLE ... DROP PARTITION ... PURGE")
+    new SparkException("ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED", Array.empty, null)
   }
 
   def invalidPartitionFilterError(): Throwable = {
-    new UnsupportedOperationException(
-      """Partition filter cannot have both `"` and `'` characters""")
+    new SparkException("INVALID_PARTITION_FILTER", Array.empty, null)
   }
 
   def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
-    new RuntimeException(
-      s"""
-         |Caught Hive MetaException attempting to get partition metadata by filter
-         |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} to true to work
-         |around this problem, however this will result in degraded performance. Please
-         |report a bug: https://issues.apache.org/jira/browse/SPARK
-       """.stripMargin.replaceAll("\n", " "), e)
+     new SparkException("GET_PARTITION_METADATA_BY_FILTER",
+       Array(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key), e)
   }
 
   def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
@@ -1441,7 +1434,7 @@ object QueryExecutionErrors {
   }
 
   def illegalLocationClauseForViewPartitionError(): Throwable = {
-    new SparkException("LOCATION clause illegal for view partition")
+    new SparkException("ILLEGAL_LOCATION_CLAUSE_FOR_VIEW_PARTITION", Array.empty, null)
   }
 
   def renamePathAsExistsPathError(srcPath: Path, dstPath: Path): Throwable = {
@@ -1484,7 +1477,7 @@ object QueryExecutionErrors {
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
-    new RuntimeException(s"Partition column $col not found in schema $schema")
+    new SparkException("PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA", Array(col, schema), null)
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
@@ -1699,8 +1692,9 @@ object QueryExecutionErrors {
   }
 
   def cannotAddMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Nonatomic partition table $tableName can not add multiple partitions.")
+    new SparkException(
+      "CANNOT_ADD_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE",
+      Array(tableName), null)
   }
 
   def userSpecifiedSchemaUnsupportedByDataSourceError(provider: TableProvider): Throwable = {
@@ -1709,13 +1703,13 @@ object QueryExecutionErrors {
   }
 
   def cannotDropMultiPartitionsOnNonatomicPartitionTableError(tableName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"Nonatomic partition table $tableName can not drop multiple partitions.")
+    new SparkException(
+      "CANNOT_DROP_MULTI_PARTITIONS_ON_NONATOMIC_PARTITION_TABLE",
+      Array(tableName), null)
   }
 
   def truncateMultiPartitionUnsupportedError(tableName: String): Throwable = {
-    new UnsupportedOperationException(
-      s"The table $tableName does not support truncation of multiple partition.")
+    new SparkException("TRUNCATE_MULTI_PARTITION_UNSUPPORTED", Array(tableName), null)
   }
 
   def overwriteTableByUnsupportedExpressionError(table: Table): Throwable = {
@@ -1723,7 +1717,7 @@ object QueryExecutionErrors {
   }
 
   def dynamicPartitionOverwriteUnsupportedByTableError(table: Table): Throwable = {
-    new SparkException(s"Table does not support dynamic partition overwrite: $table")
+    new SparkException("DYNAMIC_PARTITION_OVERWRITE_UNSUPPORTED_BY_TABLE", Array(table), null)
   }
 
   def failedMergingSchemaError(schema: StructType, e: SparkException): Throwable = {
@@ -1942,10 +1936,8 @@ object QueryExecutionErrors {
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      s"Number of dynamic partitions created is $numWrittenParts" +
-        s", which is more than $maxDynamicPartitions" +
-        s". To solve this try to set $maxDynamicPartitionsKey" +
-        s" to at least $numWrittenParts.")
+      "WRITE_PARTITION_EXCEED_CONFIG_SIZE_WHEN_DYNAMIC_PARTITION",
+      Array(numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey, numWrittenParts), null)
   }
 
   def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
