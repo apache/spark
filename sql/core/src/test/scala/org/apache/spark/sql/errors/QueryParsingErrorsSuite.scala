@@ -34,7 +34,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_INTERVAL_LITERAL: invalid interval literal") {
     val e = intercept[ParseException] {
-      spark.sql("SELECT INTERVAL DAY")
+      spark.sql("SELECT INTERVAL  DAY")
     }
     assert(e.getErrorClass === "INVALID_INTERVAL_LITERAL")
     assert(e.getMessage.contains(
