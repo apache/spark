@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
@@ -89,7 +90,7 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("UNSUPPORTED_MODE: unsupported combinations of AES modes and padding") {
+  test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
@@ -111,5 +112,27 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
+  }
+
+  test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
+    def checkUnsupportedTypeInLiteral(v: Any): Unit = {
+      val e1 = intercept[SparkRuntimeException] { lit(v) }
+      assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
+      assert(e1.getSqlState === "0A000")
+      assert(e1.getMessage.matches("""The feature is not supported: literal for '.+' of .+\."""))
+    }
+    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
+    checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
+
+    val e2 = intercept[SparkRuntimeException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot(struct(lower($"sales.course"), $"training"))
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(e2.getMessage === "The feature is not supported: " +
+      "literal for '[dotnet,Dummies]' of class " +
+      "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema.")
   }
 }
