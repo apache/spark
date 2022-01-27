@@ -2608,10 +2608,8 @@ private[spark] class DAGScheduler(
     // isPushBasedShuffleEnabled and shuffleMergers need to be updated at the end.
     stage match {
       case s: ShuffleMapStage =>
-        val isPushShuffleEnabled =
-          s.shuffleDep.shuffleMergeAllowed && s.shuffleDep.getMergerLocs.nonEmpty
-        stage.latestInfo.setPushBasedShuffleEnabled(isPushShuffleEnabled)
-        if (isPushShuffleEnabled) {
+        stage.latestInfo.setPushBasedShuffleEnabled(s.shuffleDep.shuffleMergeEnabled)
+        if (s.shuffleDep.shuffleMergeEnabled) {
           stage.latestInfo.setShuffleMergerCount(s.shuffleDep.getMergerLocs.size)
         }
       case _ =>

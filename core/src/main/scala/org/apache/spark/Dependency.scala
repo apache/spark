@@ -112,7 +112,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergeAllowed = shuffleMergeAllowed
   }
 
-  def shuffleMergeEnabled : Boolean = mergerLocs.nonEmpty
+  def shuffleMergeEnabled : Boolean = shuffleMergeAllowed && mergerLocs.nonEmpty
 
   def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
 
@@ -160,14 +160,14 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * this shuffle is finalized.
    */
   def isShuffleMergeFinalizedIfEnabled: Boolean = {
-    if (mergerLocs.nonEmpty) {
+    if (shuffleMergeEnabled) {
       shuffleMergeFinalized
     } else {
       true
     }
   }
 
-  def newShuffleMergeState(): Unit = {
+  private[spark] def newShuffleMergeState(): Unit = {
     _shuffleMergedFinalized = false
     mergerLocs = Nil
     _shuffleMergeId += 1
@@ -196,7 +196,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * @param mapIndex Map task index
    * @return number of map tasks with block push completed
    */
-  def incPushCompleted(mapIndex: Int): Int = {
+  private[spark] def incPushCompleted(mapIndex: Int): Int = {
     shufflePushCompleted.add(mapIndex)
     shufflePushCompleted.getCardinality
   }
@@ -206,7 +206,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private[spark] def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
 
-  def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
+  private[spark] def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
     finalizeTask = Option(task)
   }
 
