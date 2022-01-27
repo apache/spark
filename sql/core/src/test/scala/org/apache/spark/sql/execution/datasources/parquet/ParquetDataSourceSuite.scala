@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.FileDataSourceSuiteBase
+import org.apache.spark.sql.FileBasedDataSourceSuiteBase
 
-class ParquetDataSourceSuite extends FileDataSourceSuiteBase {
+class ParquetDataSourceSuite extends FileBasedDataSourceSuiteBase {
 
   override protected def format: String = "parquet"
 

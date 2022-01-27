@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import org.apache.spark.sql.FileDataSourceSuiteBase
+import org.apache.spark.sql.FileBasedDataSourceSuiteBase
 
-class ORCDataSourceSuite extends FileDataSourceSuiteBase {
+class ORCDataSourceSuite extends FileBasedDataSourceSuiteBase {
 
   override protected def format: String = "orc"
 

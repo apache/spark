@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, FileDataSourceSuiteBase}
+import org.apache.spark.sql.{AnalysisException, FileBasedDataSourceSuiteBase}
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructField, StructType}
 
-class TextDataSourceSuite extends FileDataSourceSuiteBase {
+class TextDataSourceSuite extends FileBasedDataSourceSuiteBase {
   import testImplicits._
 
   override protected def format: String = "text"

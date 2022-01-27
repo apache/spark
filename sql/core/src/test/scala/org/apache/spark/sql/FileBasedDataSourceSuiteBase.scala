@@ -40,7 +40,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-abstract class FileDataSourceSuiteBase extends QueryTest
+abstract class FileBasedDataSourceSuiteBase extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
