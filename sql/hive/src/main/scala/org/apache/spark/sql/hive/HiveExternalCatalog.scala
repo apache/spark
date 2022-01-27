@@ -40,14 +40,13 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, FSNamespaceUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
-
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -1261,9 +1260,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
+    val specFS = conf.get(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
     val clientPrunedPartitions =
       client.getPartitionsByFilter(rawTable, predicates).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap),
+          storage = FSNamespaceUtils.replaceLocationWithSpecialPrefix(specFS, part.storage))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
