@@ -500,24 +500,8 @@ class SessionCatalog(
   @throws[NoSuchTableException]
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val t = getTableRawMetadata(name)
-    if (conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION) != null && t.storage.locationUri != null) {
-      t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema),
-        storage = replaceLocationWithSpecialPrefix(t.storage))
-    } else {
-      t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
-    }
-  }
-
-  def replaceLocationWithSpecialPrefix(storage: CatalogStorageFormat): CatalogStorageFormat = {
-    val specificLocation = conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
-    val path = storage.locationUri.get
-    val replacePathStr = path.toString.replaceAll("hdfs://hacluster", specificLocation)
-    CatalogStorageFormat(Option(new URI(replacePathStr)),
-      storage.inputFormat,
-      storage.outputFormat,
-      storage.serde,
-      storage.compressed,
-      storage.properties)
+    val l = conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
+    t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
   }
 
   /**

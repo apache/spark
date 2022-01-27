@@ -203,9 +203,6 @@ class HadoopTableReader(
             }
 
             var partPath = partition.getDataLocation
-            if (conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION) != null) {
-              partPath = replaceLocationWithSpecialPrefix(partPath)
-            }
             val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size()
             val pathPatternStr = getPathPatternByPath(partNum, partPath)
             if (!pathPatternSet.contains(pathPatternStr)) {
@@ -217,20 +214,10 @@ class HadoopTableReader(
       }
     }
 
-    def replaceLocationWithSpecialPrefix(path: Path): Path = {
-      val specificLocation = conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
-      val tmpPath = path.toUri.toString.replaceAll("hdfs://hacluster", specificLocation)
-      val newPath = new Path(tmpPath)
-      newPath
-    }
-
     val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
       .map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
       var partPath = partition.getDataLocation
-      if (conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION) != null) {
-        partPath = replaceLocationWithSpecialPrefix(partPath)
-      }
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
       val skipHeaderLineCount =
         tableDesc.getProperties.getProperty("skip.header.line.count", "0").toInt
