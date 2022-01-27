@@ -1014,9 +1014,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Drops a namespace from the JDBC database.
    */
-  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
+  def dropNamespace(
+      conn: Connection, options: JDBCOptions, namespace: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    val dropCmd = if (cascade) {
+      s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}"
+    }
+    executeStatement(conn, options, dropCmd)
   }
 
   /**

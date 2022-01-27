@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
@@ -90,25 +89,6 @@ case class WindowExec(
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
   extends WindowExecBase {
-
-  override def output: Seq[Attribute] =
-    child.output ++ windowExpression.map(_.toAttribute)
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MiB?
-      logWarning("No Partition Defined for Window operation! Moving all data to a single "
-        + "partition, this can cause serious performance degradation.")
-      AllTuples :: Nil
-    } else ClusteredDistribution(partitionSpec) :: Nil
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the window expressions and window frame factories from the map.

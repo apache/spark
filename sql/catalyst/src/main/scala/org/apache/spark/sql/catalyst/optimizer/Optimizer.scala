@@ -721,9 +721,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      Limit(le, Project(a.output, LocalLimit(le, a.child)))
+      Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      Limit(le, p.copy(child = Project(a.output, LocalLimit(le, a.child))))
+      Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
   }
 }
 
@@ -764,22 +764,22 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
+  def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
+    val newFirstChild = Project(projectList, u.children.head)
+    val newOtherChildren = u.children.tail.map { child =>
+      val rewrites = buildRewrites(u.children.head, child)
+      Project(projectList.map(pushToRight(_, rewrites)), child)
+    }
+    newFirstChild +: newOtherChildren
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u: Union) =>
-      assert(u.children.nonEmpty)
-      if (projectList.forall(_.deterministic)) {
-        val newFirstChild = Project(projectList, u.children.head)
-        val newOtherChildren = u.children.tail.map { child =>
-          val rewrites = buildRewrites(u.children.head, child)
-          Project(projectList.map(pushToRight(_, rewrites)), child)
-        }
-        u.copy(children = newFirstChild +: newOtherChildren)
-      } else {
-        p
-      }
+    case Project(projectList, u: Union)
+        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+      u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
 
@@ -1006,7 +1006,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     }.isEmpty)
   }
 
-  private def buildCleanedProjectList(
+  def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     val aliases = getAliasMap(lower)
@@ -1300,6 +1300,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
  * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
+  import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
+  import PushProjectionThroughUnion.pushProjectionThroughUnion
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
     case u: Union => flattenUnion(u, false)
@@ -1321,6 +1324,10 @@ object CombineUnions extends Rule[LogicalPlan] {
     // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
+        case p1 @ Project(_, p2: Project)
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+          val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+          stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
             if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
@@ -1332,6 +1339,20 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        // Push down projection through Union and then push pushed plan to Stack if
+        // there is a Project.
+        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
+        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
+        case Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
           flattened += child
       }

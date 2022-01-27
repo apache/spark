@@ -15,15 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
 
 /**
- * The class contains tests for the `DROP NAMESPACE` command to check V1 Hive external
- * table catalog.
+ * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
+ * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class DropNamespaceSuite extends v1.DropNamespaceSuiteBase with CommandSuiteBase {
-  override def isCasePreserving: Boolean = false
-  override def commandVersion: String = super[DropNamespaceSuiteBase].commandVersion
+case class NonEmptyNamespaceException(
+    override val message: String,
+    override val cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(namespace: Array[String]) = {
+    this(s"Namespace '${namespace.quoted}' is non empty.")
+  }
 }

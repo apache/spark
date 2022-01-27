@@ -66,6 +66,12 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
+    // Avro source implementation is internal.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
     // [SPARK-34848][CORE] Add duration to TaskMetricDistributions
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this"),
