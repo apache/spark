@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
-MINIMUM_MYPY="0.910"
+MINIMUM_MYPY="0.920"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -149,6 +149,15 @@ function mypy_examples_test {
 function mypy_test {
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
+        return
+    fi
+
+    _MYPY_VERSION=($($MYPY_BUILD --version))
+    MYPY_VERSION="${_MYPY_VERSION[1]}"
+    EXPECTED_MYPY="$(satisfies_min_version $MYPY_VERSION $MINIMUM_MYPY)"
+
+    if [[ "$EXPECTED_MYPY" == "False" ]]; then
+        echo "The minimum mypy version needs to be $MINIMUM_MYPY. Your current version is $MYPY_VERSION. Skipping for now."
         return
     fi
 

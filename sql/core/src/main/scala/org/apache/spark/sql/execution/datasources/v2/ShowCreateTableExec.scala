@@ -127,9 +127,7 @@ case class ShowCreateTableExec(
     val showProps = table.properties.asScala
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
-        && !tableOptions.contains(key)
-        && !key.equals(TableCatalog.PROP_EXTERNAL)
-      )
+        && !tableOptions.contains(key))
     if (showProps.nonEmpty) {
       val props = showProps.toSeq.sortBy(_._1).map {
         case (key, value) =>
