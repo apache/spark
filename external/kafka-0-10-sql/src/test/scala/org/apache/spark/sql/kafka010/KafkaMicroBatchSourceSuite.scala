@@ -48,7 +48,7 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MockedSystemClock, Utils}
 
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
@@ -474,12 +474,19 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("maxOffsetsPerTrigger", 20)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
+      // mock system time to ensure deterministic behavior
+      // in determining if maxOffsetsPerTrigger is satisfied
+      .option("_mockSystemTime", "")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
     val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
 
     val clock = new StreamManualClock
+
+    def advanceSystemClock(mills: Long): ExternalAction = () => {
+      MockedSystemClock.advanceCurrentSystemTime(mills)
+    }
 
     testStream(mapped)(
       StartStream(Trigger.ProcessingTime(100), clock),
@@ -492,6 +499,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // No data is processed for next batch as data is less than minOffsetsPerTrigger
       // and maxTriggerDelay is not expired
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       CheckNewAnswer(),
       Assert {
@@ -501,6 +509,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         true
       },
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       // Running batch now as number of new records is greater than minOffsetsPerTrigger
       // but reading limited data as per maxOffsetsPerTrigger
@@ -512,14 +521,11 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // Testing maxTriggerDelay
       // No data is processed for next batch till maxTriggerDelay is expired
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       CheckNewAnswer(),
-      // Sleeping for 5s to let maxTriggerDelay expire
-      Assert {
-        Thread.sleep(5 * 1000)
-        true
-      },
       AdvanceManualClock(100),
+      advanceSystemClock(5000),
       // Running batch as maxTriggerDelay is expired
       waitUntilBatchProcessed(clock),
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,

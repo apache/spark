@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.util.MockedSystemClock.currentMockSystemTime
+
 /**
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
@@ -97,5 +99,22 @@ private[spark] class SystemClock extends Clock {
       Thread.sleep(sleepTime)
     }
     -1
+  }
+}
+
+/**
+ * To return a mocked system clock for testing purposes
+ */
+private[spark] class MockedSystemClock extends ManualClock {
+  override def getTimeMillis(): Long = {
+    currentMockSystemTime
+  }
+}
+
+object MockedSystemClock {
+  var currentMockSystemTime = 0L
+
+  def advanceCurrentSystemTime(advanceByMillis: Long): Unit = {
+    currentMockSystemTime += advanceByMillis
   }
 }

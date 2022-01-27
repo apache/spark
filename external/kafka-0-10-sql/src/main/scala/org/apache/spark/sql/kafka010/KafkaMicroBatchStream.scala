@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFacto
 import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, MockedSystemClock, SystemClock, UninterruptibleThread, Utils}
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
@@ -72,6 +72,13 @@ private[kafka010] class KafkaMicroBatchStream(
   private[kafka010] val maxTriggerDelayMs =
     Utils.timeStringAsMs(Option(options.get(
       KafkaSourceProvider.MAX_TRIGGER_DELAY)).getOrElse(DEFAULT_MAX_TRIGGER_DELAY))
+
+  // this allows us to mock system clock for testing purposes
+  private[kafka010] val clock: Clock = if (options.containsKey(MOCK_SYSTEM_TIME)) {
+    new MockedSystemClock
+  } else {
+    new SystemClock
+  }
 
   private var lastTriggerMillis = 0L
 
@@ -166,9 +173,9 @@ private[kafka010] class KafkaMicroBatchStream(
       currentOffsets: Map[TopicPartition, Long],
       maxTriggerDelayMs: Long): Boolean = {
     // Checking first if the maxbatchDelay time has passed
-    if ((System.currentTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
+    if ((clock.getTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
       logDebug("Maximum wait time is passed, triggering batch")
-      lastTriggerMillis = System.currentTimeMillis()
+      lastTriggerMillis = clock.getTimeMillis()
       false
     } else {
       val newRecords = latestOffsets.flatMap {
@@ -176,7 +183,7 @@ private[kafka010] class KafkaMicroBatchStream(
           Some(topic -> (offset - currentOffsets.getOrElse(topic, 0L)))
       }.values.sum.toDouble
       if (newRecords < minLimit) true else {
-        lastTriggerMillis = System.currentTimeMillis()
+        lastTriggerMillis = clock.getTimeMillis()
         false
       }
     }
