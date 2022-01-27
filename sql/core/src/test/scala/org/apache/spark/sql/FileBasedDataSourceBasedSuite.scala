@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * This class contains tests for all file-based data sources but not related to source format.
  *
  */
-class FileDataSourceBasedSuite extends FileBasedDataSourceSuiteBase {
+class FileBasedDataSourceBasedSuite extends FileBasedDataSourceSuiteBase {
   override protected def format: String = ""
   import testImplicits._
 
