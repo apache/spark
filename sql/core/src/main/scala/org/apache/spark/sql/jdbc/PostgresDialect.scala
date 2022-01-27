@@ -23,7 +23,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -252,6 +252,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
           case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
           case _ => super.classifyException(message, e)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
