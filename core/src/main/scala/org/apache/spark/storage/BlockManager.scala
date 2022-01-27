@@ -57,7 +57,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, LocalDiskStoredShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -282,6 +282,9 @@ private[spark] class BlockManager(
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver =
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
+
+  private lazy val localDiskStoredShuffleBlockResolver: LocalDiskStoredShuffleBlockResolver =
+    shuffleManager.shuffleBlockResolver.asInstanceOf[LocalDiskStoredShuffleBlockResolver]
 
   private lazy val indexShuffleBlockResolver: IndexShuffleBlockResolver =
     shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
@@ -672,7 +675,7 @@ private[spark] class BlockManager(
   override def getHostLocalShuffleData(
       blockId: BlockId,
       dirs: Array[String]): ManagedBuffer = {
-    indexShuffleBlockResolver.getBlockData(blockId, Some(dirs))
+    localDiskStoredShuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
   /**
@@ -683,7 +686,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
       try {
-        indexShuffleBlockResolver.getBlockData(blockId)
+        localDiskStoredShuffleBlockResolver.getBlockData(blockId)
       } catch {
         case e: IOException =>
           if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {

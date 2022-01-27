@@ -52,7 +52,7 @@ private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
     var _blockManager: BlockManager = null)
-  extends ShuffleBlockResolver
+  extends LocalDiskStoredShuffleBlockResolver
   with Logging with MigratableResolver {
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
@@ -561,7 +561,7 @@ private[spark] class IndexShuffleBlockResolver(
     *
     * If the data for that block is not available, throws an unspecified exception.
     */
-   def getBlockData(
+   override def getBlockData(
       blockId: BlockId,
       dirs: Option[Array[String]] = None): ManagedBuffer = {
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
