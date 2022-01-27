@@ -149,7 +149,9 @@ def combine_frames(
     if get_option("compute.ops_on_diff_frames"):
 
         def resolve(internal: InternalFrame, side: str) -> InternalFrame:
-            rename = lambda col: "__{}_{}".format(side, col)
+            def rename(col: str) -> str:
+                return "__{}_{}".format(side, col)
+
             internal = internal.resolved_copy
             sdf = internal.spark_frame
             sdf = internal.spark_frame.select(

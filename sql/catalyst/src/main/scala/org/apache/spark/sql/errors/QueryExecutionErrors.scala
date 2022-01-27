@@ -68,11 +68,6 @@ import org.apache.spark.util.CircularBuffer
  */
 object QueryExecutionErrors {
 
-  def columnChangeUnsupportedError(): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_CHANGE_COLUMN",
-      messageParameters = Array.empty)
-  }
-
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
@@ -131,20 +126,10 @@ object QueryExecutionErrors {
       messageParameters = Array.empty)
   }
 
-  def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID",
-      messageParameters = Array(nodeName))
-  }
-
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
-  }
-
-  def dataTypeUnsupportedError(dt: DataType): Throwable = {
-    new SparkException(errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Array(dt.typeName), null)
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
@@ -257,8 +242,9 @@ object QueryExecutionErrors {
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
-      Array(v.getClass.toString, v.toString))
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -784,8 +770,10 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
-      Array.empty)
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("the target JDBC server does not support transaction and " +
+        "can only support ALTER TABLE with a single action."))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -1905,13 +1893,28 @@ object QueryExecutionErrors {
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
-    new RuntimeException("The key length of aes_encrypt/aes_decrypt should be " +
-      s"one of 16, 24 or 32 bytes, but got: $actualLength")
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "key",
+        "the aes_encrypt/aes_decrypt function",
+        s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
-    new UnsupportedOperationException(
-      s"The AES mode $mode with the padding $padding is not supported")
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"AES-$mode with the padding $padding by the aes_encrypt/aes_decrypt function."))
+  }
+
+  def aesCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array(
+        "expr, key",
+        "the aes_encrypt/aes_decrypt function",
+        s"Detail message: $detailMessage"))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): Throwable = {
@@ -1933,9 +1936,8 @@ object QueryExecutionErrors {
         s" to at least $numWrittenParts.")
   }
 
-  def invalidNumberFormatError(format: String): Throwable = {
+  def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
-      s"Format '$format' used for parsing string to number or " +
-        "formatting number to string is invalid")
+      s"The input string '$input' does not match the given number format: '$format'")
   }
 }

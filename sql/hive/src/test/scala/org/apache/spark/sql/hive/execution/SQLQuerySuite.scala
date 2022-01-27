@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.command.{FunctionsCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -202,7 +202,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assert(allFunctions.contains(f))
     }
 
-    FunctionsCommand.virtualOperators.foreach { f =>
+    FunctionRegistry.builtinOperators.keys.foreach { f =>
       assert(allFunctions.contains(f))
     }
 
@@ -263,8 +263,8 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
 
-    checkKeywordsExist(sql("describe functioN abcadf"),
-      "Function: abcadf not found.")
+    val e = intercept[AnalysisException](sql("describe functioN abcadf"))
+    assert(e.message.contains("Undefined function: abcadf"))
 
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
@@ -1319,7 +1319,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql(
           s"""FROM(
             |  FROM test SELECT TRANSFORM(a, b)
-            |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+            |  USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
             |  AS (c STRING, d STRING)
             |) t
             |SELECT c
@@ -1341,7 +1341,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |SELECT TRANSFORM(a, b)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
-          |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
+          |USING 'python3 $scriptFilePath/scripts/test_transform.py "|"'
           |AS (c STRING, d STRING)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -2212,44 +2212,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-21912 Parquet table should not create invalid column names") {
-    Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      val source = "PARQUET"
-      withTable("t21912") {
-        val m = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
-        }.getMessage
-        assert(m.contains(s"contains invalid character(s)"))
-
-        val m1 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
-        }.getMessage
-        assert(m1.contains(s"contains invalid character(s)"))
-
-        val m2 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
-        }.getMessage
-        assert(m2.contains(s"contains invalid character(s)"))
-
-        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-          val m3 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
-          }.getMessage
-          assert(m3.contains(s"contains invalid character(s)"))
-        }
-
-        sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-        val m4 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
-        }.getMessage
-        assert(m4.contains(s"contains invalid character(s)"))
-      }
-    }
-  }
-
   test("SPARK-32889: ORC table column name supports special characters") {
-    // " " "," is not allowed.
-    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+    // "," is not allowed since cannot create a table having a column whose name
+    // contains commas in Hive metastore.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=", " ", "a b").foreach { name =>
       val source = "ORC"
       Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
           s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
@@ -2440,6 +2406,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
   test("SPARK-25158: " +
     "Executor accidentally exit because ScriptTransformationWriterThread throw Exception") {
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("test") {
       val defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
       try {
@@ -2459,7 +2426,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[SparkException] {
           sql(
             s"""FROM test SELECT TRANSFORM(a)
-               |USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
+               |USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
              """.stripMargin).collect()
         }
         assert(e.getMessage.contains("Failed to produce data."))

@@ -43,22 +43,22 @@ import org.apache.spark.sql.types._
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly *ThriftServerQueryTestSuite"
+ *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite"
  * }}}
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly *ThriftServerQueryTestSuite -- -z inline-table.sql"
+ *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite"
  * }}}
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * TODO:

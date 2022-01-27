@@ -43,6 +43,7 @@ def print_happiest_words(rdd):
     for tuple in top_list:
         print("%s (%d happiness)" % (tuple[1], tuple[0]))
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: network_wordjoinsentiments.py <hostname> <port>", file=sys.stderr)

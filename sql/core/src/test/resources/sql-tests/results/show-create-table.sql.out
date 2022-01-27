@@ -15,10 +15,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 
 
@@ -44,10 +44,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 OPTIONS (
   'a' = '1')
@@ -75,10 +75,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 LOCATION 'file:/path/to/table'
 
@@ -105,10 +105,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 LOCATION 'file:/path/to/table'
 
@@ -135,10 +135,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `b` STRING,
-  `c` INT,
-  `a` INT)
+CREATE TABLE default.tbl (
+  b STRING,
+  c INT,
+  a INT)
 USING parquet
 PARTITIONED BY (a)
 
@@ -165,10 +165,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 CLUSTERED BY (a)
 SORTED BY (b)
@@ -197,10 +197,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 COMMENT 'This is a comment'
 
@@ -227,10 +227,10 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` INT,
-  `b` STRING,
-  `c` INT)
+CREATE TABLE default.tbl (
+  a INT,
+  b STRING,
+  c INT)
 USING parquet
 TBLPROPERTIES (
   'a' = '1')
@@ -257,11 +257,11 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE `default`.`tbl` (
-  `a` FLOAT,
-  `b` DECIMAL(10,0),
-  `c` DECIMAL(10,0),
-  `d` DECIMAL(10,1))
+CREATE TABLE default.tbl (
+  a FLOAT,
+  b DECIMAL(10,0),
+  c DECIMAL(10,0),
+  d DECIMAL(10,1))
 USING parquet
 
 
@@ -295,7 +295,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302`(
+CREATE VIEW default.view_SPARK_30302 (
   `aaa`,
   `bbb`)
 AS SELECT a, b FROM tbl
@@ -306,7 +306,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302` (
+CREATE VIEW default.view_SPARK_30302 (
   `aaa`,
   `bbb`)
 AS SELECT a, b FROM tbl
@@ -335,7 +335,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302`(
+CREATE VIEW default.view_SPARK_30302 (
   `aaa` COMMENT 'comment with \'quoted text\' for aaa',
   `bbb`)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -347,7 +347,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302` (
+CREATE VIEW default.view_SPARK_30302 (
   `aaa` COMMENT 'comment with \'quoted text\' for aaa',
   `bbb`)
 COMMENT 'This is a comment with \'quoted text\' for view'
@@ -377,7 +377,7 @@ SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302`(
+CREATE VIEW default.view_SPARK_30302 (
   `aaa`,
   `bbb`)
 TBLPROPERTIES (
@@ -391,7 +391,7 @@ SHOW CREATE TABLE view_SPARK_30302
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE VIEW `default`.`view_SPARK_30302` (
+CREATE VIEW default.view_SPARK_30302 (
   `aaa`,
   `bbb`)
 TBLPROPERTIES (

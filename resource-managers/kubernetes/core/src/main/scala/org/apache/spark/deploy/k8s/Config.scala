@@ -147,13 +147,13 @@ private[spark] object Config extends Logging {
       .createWithDefault(0)
 
   object ExecutorRollPolicy extends Enumeration {
-    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS = Value
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, OUTLIER = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
-      .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME (default), " +
-        "TOTAL_DURATION, and FAILED_TASKS. " +
+      .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
+        "TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default). " +
         "When executor roll happens, Spark uses this policy to choose " +
         "an executor and decommission it. The built-in policies are based on executor summary." +
         "ID policy chooses an executor with the smallest executor ID. " +
@@ -161,12 +161,16 @@ private[spark] object Config extends Logging {
         "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
         "TOTAL_DURATION policy chooses an executor with the biggest total task time. " +
         "AVERAGE_DURATION policy chooses an executor with the biggest average task time. " +
-        "FAILED_TASKS policy chooses an executor with the most number of failed tasks.")
+        "FAILED_TASKS policy chooses an executor with the most number of failed tasks. " +
+        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
+        "at least two standard deviation from the mean in average task time, " +
+        "total task time, total task GC time, and the number of failed tasks if exists. " +
+        "If there is no outlier, it works like TOTAL_DURATION policy.")
       .version("3.3.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(ExecutorRollPolicy.values.map(_.toString))
-      .createWithDefault(ExecutorRollPolicy.TOTAL_GC_TIME.toString)
+      .createWithDefault(ExecutorRollPolicy.OUTLIER.toString)
 
   val MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING =
     ConfigBuilder("spark.kubernetes.executor.minTasksPerExecutorBeforeRolling")

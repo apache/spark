@@ -102,7 +102,7 @@ if (in_spark):
     # Construct links for setup
     try:
         os.mkdir(TEMP_PATH)
-    except:
+    except BaseException:
         print("Temp path for symlink to parent already exists {0}".format(TEMP_PATH),
               file=sys.stderr)
         sys.exit(-1)

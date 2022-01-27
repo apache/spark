@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkFunSuite, TestUtils}
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -119,18 +119,18 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
-      sparkAppConf
-        .set("spark.files", baseURL.toString + REMOTE_PAGE_RANK_DATA_FILE)
+      sparkAppConf.set("spark.files", baseURL.toString +
+          REMOTE_PAGE_RANK_DATA_FILE.replace(sys.props("spark.test.home"), "").substring(1))
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
   }
 }
 
-private[spark] object BasicTestsSuite {
+private[spark] object BasicTestsSuite extends SparkFunSuite {
   val SPARK_PAGE_RANK_MAIN_CLASS: String = "org.apache.spark.examples.SparkPageRank"
   val CONTAINER_LOCAL_FILE_DOWNLOAD_PATH = "/var/spark-data/spark-files"
   val CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE =
      s"$CONTAINER_LOCAL_FILE_DOWNLOAD_PATH/pagerank_data.txt"
-  val REMOTE_PAGE_RANK_DATA_FILE = "data/mllib/pagerank_data.txt"
+  val REMOTE_PAGE_RANK_DATA_FILE = getTestResourcePath("pagerank_data.txt")
   val REMOTE_PAGE_RANK_FILE_NAME = "pagerank_data.txt"
 }

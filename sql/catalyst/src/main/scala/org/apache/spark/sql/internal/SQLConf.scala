@@ -396,6 +396,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.requireAllClusterKeysForCoPartition")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
+        "of the children, to eliminate the shuffles for the operator that needs its children to " +
+        "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
+        "significant performance regression if shuffles are eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
