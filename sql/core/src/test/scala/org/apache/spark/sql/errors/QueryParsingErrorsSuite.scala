@@ -35,32 +35,32 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage.contains(message))
   }
 
-  test("LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED: LATERAL join with NATURAL join not supported") {
+  test("UNSUPPORTED_FEATURE: LATERAL join with NATURAL join not supported") {
     validateParsingError(
       sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
-      errorClass = "LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE",
       sqlState = "0A000",
-      message = "LATERAL join with NATURAL join is not supported.")
+      message = "The feature is not supported: LATERAL join with NATURAL join.")
   }
 
-  test("LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED: LATERAL join with USING join not supported") {
+  test("UNSUPPORTED_FEATURE: LATERAL join with USING join not supported") {
     validateParsingError(
       sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
-      errorClass = "LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED",
+      errorClass = "UNSUPPORTED_FEATURE",
       sqlState = "0A000",
-      message = "LATERAL join with USING join is not supported.")
+      message = "The feature is not supported: LATERAL join with USING join.")
   }
 
-  test("UNSUPPORTED_LATERAL_JOIN_TYPE: Unsupported LATERAL join type") {
+  test("UNSUPPORTED_FEATURE: Unsupported LATERAL join type") {
     Seq(("RIGHT OUTER", "RightOuter"),
       ("FULL OUTER", "FullOuter"),
       ("LEFT SEMI", "LeftSemi"),
       ("LEFT ANTI", "LeftAnti")).foreach { pair =>
       validateParsingError(
         sqlText = s"SELECT * FROM t1 ${pair._1} JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
-        errorClass = "UNSUPPORTED_LATERAL_JOIN_TYPE",
+        errorClass = "UNSUPPORTED_FEATURE",
         sqlState = "0A000",
-        message = s"Unsupported LATERAL join type ${pair._2}")
+        message = s"The feature is not supported: LATERAL join type '${pair._2}'.")
     }
   }
 

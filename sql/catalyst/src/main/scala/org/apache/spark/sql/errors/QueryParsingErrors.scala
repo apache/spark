@@ -102,15 +102,15 @@ object QueryParsingErrors {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with NATURAL join."), ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with USING join."), ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException("UNSUPPORTED_LATERAL_JOIN_TYPE", Array(joinType), ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array(s"LATERAL join type '$joinType'."), ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
