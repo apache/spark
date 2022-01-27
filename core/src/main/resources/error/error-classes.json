@@ -169,7 +169,7 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_FROM_TO_INTERVAL" : {
-    "message" : [ "Intervals FROM %s TO %s are not supported. " ]
+    "message" : [ "Intervals FROM %s TO %s are not supported." ]
   },
   "UNSUPPORTED_LITERAL_TYPE" : {
     "message" : [ "Unsupported literal type %s %s" ],
