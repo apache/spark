@@ -604,8 +604,8 @@ object DockerIntegrationTests {
 }
 
 /**
- * These settings run a hardcoded configuration of the Kubernetes integration tests using
- * minikube. Docker images will have the "dev" tag, and will be overwritten every time the
+ * These settings run the Kubernetes integration tests.
+ * Docker images will have the "dev" tag, and will be overwritten every time the
  * integration tests are run. The integration tests are actually bound to the "test" phase,
  * so running "test" on this module will run the integration tests.
  *
@@ -625,6 +625,7 @@ object KubernetesIntegrationTests {
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
   val imageTag = settingKey[String]("Tag to use for images built during the test.")
   val namespace = settingKey[String]("Namespace where to run pods.")
+  val deployMode = sys.props.get("spark.kubernetes.test.deployMode")
 
   // Hack: this variable is used to control whether to build docker images. It's updated by
   // the tasks below in a non-obvious way, so that you get the functionality described in
@@ -645,10 +646,11 @@ object KubernetesIntegrationTests {
         } else {
           Seq("-b", s"java_image_tag=$javaImageTag")
         }
-        val cmd = Seq(dockerTool, "-m",
+        val cmd = Seq(dockerTool,
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
           "-R", s"$bindingsDir/R/Dockerfile") ++
+          (if (deployMode == Some("docker-for-desktop")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
         val ec = Process(cmd).!
@@ -666,7 +668,7 @@ object KubernetesIntegrationTests {
     }.value,
     (Test / test) := (Test / test).dependsOn(dockerBuild).value,
     (Test / javaOptions) ++= Seq(
-      "-Dspark.kubernetes.test.deployMode=minikube",
+      s"-Dspark.kubernetes.test.deployMode=${deployMode.getOrElse("minikube")}",
       s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
       s"-Dspark.kubernetes.test.namespace=${namespace.value}",
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"

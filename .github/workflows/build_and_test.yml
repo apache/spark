@@ -252,7 +252,7 @@ jobs:
     - name: Install Python packages (Python 3.8)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-'))
       run: |
-        python3.8 -m pip install 'numpy>=1.20.0' 'pyarrow<5.0.0' pandas scipy xmlrunner
+        python3.8 -m pip install 'numpy>=1.20.0' 'pyarrow<7.0.0' pandas scipy xmlrunner
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
@@ -530,7 +530,7 @@ jobs:
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' 'pyarrow<5.0.0' pandas 'plotly>=4.8'
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' 'pyarrow<7.0.0' pandas 'plotly>=4.8'
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"

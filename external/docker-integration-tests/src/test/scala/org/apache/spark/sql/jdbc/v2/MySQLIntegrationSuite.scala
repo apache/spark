@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
  *
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
@@ -57,13 +57,17 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
   private var mySQLVersion = -1
 
-  override def dataPreparation(conn: Connection): Unit = {
-    mySQLVersion = conn.getMetaData.getDatabaseMajorVersion
+  override def tablePreparation(connection: Connection): Unit = {
+    mySQLVersion = connection.getMetaData.getDatabaseMajorVersion
+    connection.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
+        " bonus DOUBLE)").executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -119,4 +123,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
 }
