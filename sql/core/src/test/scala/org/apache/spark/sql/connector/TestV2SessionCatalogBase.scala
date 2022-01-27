@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
  * and SQL).
  */
-private[sql] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
+private[connector] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
 
   protected val tables: util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
 
