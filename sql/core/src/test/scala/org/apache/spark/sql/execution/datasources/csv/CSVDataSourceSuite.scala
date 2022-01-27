@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, FileDataSourceSuiteBase, Row}
+import org.apache.spark.sql.{AnalysisException, FileBasedDataSourceSuiteBase, Row}
 import org.apache.spark.sql.types.{StructField, StructType, TestUDT}
 
-class CSVDataSourceSuite extends FileDataSourceSuiteBase {
+class CSVDataSourceSuite extends FileBasedDataSourceSuiteBase {
 
   import testImplicits._
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 /**
  * The trait contains tests for all file-based data sources.
  * The tests that are not applicable to all file-based data sources should be placed to
- * [[org.apache.spark.sql.FileDataSourceSuiteBase]].
+ * [[org.apache.spark.sql.FileBasedDataSourceSuiteBase]].
  */
 trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
 

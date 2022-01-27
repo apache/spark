@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.FileDataSourceSuiteBase
+import org.apache.spark.sql.FileBasedDataSourceSuiteBase
 
-class JsonDataSourceSuite extends FileDataSourceSuiteBase {
+class JsonDataSourceSuite extends FileBasedDataSourceSuiteBase {
 
   override protected def format: String = "json"
 
