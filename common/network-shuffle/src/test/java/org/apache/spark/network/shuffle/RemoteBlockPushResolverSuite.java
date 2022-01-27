@@ -1287,6 +1287,15 @@ public class RemoteBlockPushResolverSuite {
       + " up", appShuffleInfo.getMergedShuffleDataFile(0, 4, 0).exists());
   }
 
+  @Test
+  public void testFinalizationResultIsEmptyWhenTheServerDidNotReceiveAnyBlocks() {
+    //shuffle 1 0 is finalized even though the server didn't receive any blocks for it.
+    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
+        new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 1, 0));
+    assertEquals("no partitions were merged", 0, statuses.reduceIds.length);
+    removeApplication(TEST_APP);
+  }
+
   // Test for SPARK-37675 and SPARK-37793
   @Test
   public void testEmptyMergePartitionsAreNotReported() throws IOException {

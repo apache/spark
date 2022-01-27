@@ -516,7 +516,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shuffleMergePartitionsRef =
       new AtomicReference<>(null);
     appShuffleInfo.shuffles.compute(msg.shuffleId, (shuffleId, mergePartitionsInfo) -> {
-      if (null == mergePartitionsInfo || msg.shuffleMergeId < mergePartitionsInfo.shuffleMergeId
+      if (null == mergePartitionsInfo) {
+        //If the mergePartitions was never created then it means that there weren't any push
+        //blocks that were ever received for this shuffle. This could be the case when the driver
+        //doesn't wait for enough time to start the stage which reads this shuffle data.
+        return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
+      } else if (msg.shuffleMergeId < mergePartitionsInfo.shuffleMergeId
           || mergePartitionsInfo.isFinalized()) {
         throw new RuntimeException(
             String.format("Shuffle merge finalize request for shuffle %s with" +
