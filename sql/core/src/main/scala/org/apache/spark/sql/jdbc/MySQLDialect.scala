@@ -83,7 +83,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     // scalastyle:off println
     println("namespacesExists")
     // scalastyle:on println
-    listNamespaces(conn, options).exists(_ == Array(namespace))
+    val namespaces = listNamespaces(conn, options)
+    // scalastyle:off println
+    println(s"namespaces:$namespaces")
+    // scalastyle:on println
+    namespaces.exists(ns => ns.head == namespace)
   }
 
   override def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
