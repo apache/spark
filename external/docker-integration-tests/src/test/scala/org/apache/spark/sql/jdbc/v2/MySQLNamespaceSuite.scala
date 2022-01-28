@@ -23,6 +23,7 @@ import java.sql.SQLFeatureNotSupportedException
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.catalog.NamespaceChange
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
@@ -60,22 +61,44 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
   override def builtinNamespaces: Array[Array[String]] =
     Array(Array("information_schema"), Array("mysql"), Array("performance_schema"), Array("sys"))
 
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    Array(builtinNamespaces.head, namespace) ++ builtinNamespaces.tail
+  }
+
   override val supportsSchemaComment: Boolean = false
 
-  // Cannot get namespaces with conn.getMetaData.getSchemas
-  // TODO testListNamespaces()
-  // TODO testDropNamespaces()
+  override val supportsDropSchemaRestrict: Boolean = false
 
-  test("Create MySQL namespace with comment") {
-    val e = intercept[AnalysisException] {
+  testListNamespaces()
+  testDropNamespaces()
+
+  test("Create or remove comment of namespace unsupported") {
+    val e1 = intercept[AnalysisException] {
       catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
     }
-    assert(e.getMessage.contains("Failed create name space: foo"))
-    assert(e.getCause.isInstanceOf[SQLFeatureNotSupportedException])
-    assert(e.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+    assert(e1.getMessage.contains("Failed create name space: foo"))
+    assert(e1.getCause.isInstanceOf[SQLFeatureNotSupportedException])
+    assert(e1.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
       .contains("Create namespace comment is not supported"))
     assert(catalog.namespaceExists(Array("foo")) === false)
     catalog.createNamespace(Array("foo"), Map.empty[String, String].asJava)
     assert(catalog.namespaceExists(Array("foo")) === true)
+    val e2 = intercept[AnalysisException] {
+      catalog.alterNamespace(Array("foo"), NamespaceChange
+        .setProperty("comment", "comment for foo"))
+    }
+    assert(e2.getMessage.contains("Failed create comment on name space: foo"))
+    assert(e2.getCause.isInstanceOf[SQLFeatureNotSupportedException])
+    assert(e2.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      .contains("Create namespace comment is not supported"))
+    val e3 = intercept[AnalysisException] {
+      catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
+    }
+    assert(e3.getMessage.contains("Failed remove comment on name space: foo"))
+    assert(e3.getCause.isInstanceOf[SQLFeatureNotSupportedException])
+    assert(e3.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      .contains("Remove namespace comment is not supported"))
+    catalog.dropNamespace(Array("foo"), cascade = true)
+    assert(catalog.namespaceExists(Array("foo")) === false)
   }
 }

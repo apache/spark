@@ -80,39 +80,19 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def namespacesExists(
       conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
-    // scalastyle:off println
-    println("namespacesExists")
-    // scalastyle:on println
-    val namespaces = listNamespaces(conn, options)
-    // scalastyle:off println
-    println(s"namespaces:$namespaces")
-    // scalastyle:on println
-    namespaces.exists(ns => ns.head == namespace)
+    listNamespaces(conn, options).exists(_.head == namespace)
   }
 
   override def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
-    // scalastyle:off println
-    println("listNamespaces")
-    // scalastyle:on println
     val schemaBuilder = ArrayBuilder.make[Array[String]]
     try {
       JdbcUtils.executeQuery(conn, options, "SHOW SCHEMAS") { rs =>
-        // scalastyle:off println
-        println("------------")
-        // scalastyle:on println
         while (rs.next()) {
-          val database = rs.getString("Database")
-          // scalastyle:off println
-          println(s"database:$database")
-          // scalastyle:on println
-          schemaBuilder += Array(database)
+          schemaBuilder += Array(rs.getString("Database"))
         }
       }
     } catch {
       case _: Exception =>
-        // scalastyle:off println
-        println("=============")
-        // scalastyle:on println
         logWarning("Cannot show schemas.")
     }
     schemaBuilder.result
@@ -178,6 +158,10 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getSchemaCommentQuery(schema: String, comment: String): String = {
     throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+  }
+
+  override def removeSchemaCommentQuery(schema: String): String = {
+    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError()
   }
 
   // CREATE INDEX syntax
@@ -264,6 +248,14 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         }
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
+    }
+  }
+
+  override def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    } else {
+      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
     }
   }
 }

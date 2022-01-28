@@ -244,7 +244,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           case set: NamespaceChange.SetProperty =>
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.createNamespaceComment(conn, options, db, set.value)
+                JdbcUtils.classifyException(s"Failed create comment on name space: $db", dialect) {
+                  JdbcUtils.createNamespaceComment(conn, options, db, set.value)
+                }
               }
             } else {
               throw QueryCompilationErrors.cannotSetJDBCNamespaceWithPropertyError(set.property)
@@ -253,7 +255,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           case unset: NamespaceChange.RemoveProperty =>
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.removeNamespaceComment(conn, options, db)
+                JdbcUtils.classifyException(s"Failed remove comment on name space: $db", dialect) {
+                  JdbcUtils.removeNamespaceComment(conn, options, db)
+                }
               }
             } else {
               throw QueryCompilationErrors.cannotUnsetJDBCNamespaceWithPropertyError(unset.property)

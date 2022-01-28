@@ -984,8 +984,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } else {
       dialect.getSchemaCommentQuery(namespace, comment)
     }
-    executeStatement(conn, options,
-      s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)};$schemaCommentQuery")
+    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    if (comment.nonEmpty) executeStatement(conn, options, schemaCommentQuery)
   }
 
   def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
@@ -1004,13 +1004,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
-    }
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(namespace, comment))
   }
 
   def removeNamespaceComment(
@@ -1018,12 +1012,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions,
       namespace: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
   }
 
   /**
@@ -1169,9 +1158,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     try {
       statement.setQueryTimeout(options.queryTimeout)
       val rs = statement.executeQuery(sql)
-      // scalastyle:off println
-      println("executeQuery")
-      // scalastyle:on println
       try {
         f(rs)
       } finally {
