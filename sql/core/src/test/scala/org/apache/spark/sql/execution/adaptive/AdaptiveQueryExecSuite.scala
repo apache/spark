@@ -199,9 +199,9 @@ class AdaptiveQueryExecSuite
           """
             |SELECT * FROM (
             | SELECT distinct c1 from t1
-            | )t1 JOIN (
+            | ) tmp1 JOIN (
             |  SELECT distinct c1 from t2
-            | )t2 ON t1.c1 = t2.c1
+            | ) tmp2 ON tmp1.c1 = tmp2.c1
             |""".stripMargin)
         assert(findTopLevelBroadcastHashJoin(plan).size == 1)
         assert(findTopLevelBroadcastHashJoin(adaptivePlan).isEmpty)
