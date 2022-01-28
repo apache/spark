@@ -979,8 +979,23 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
+    val schemaCommentQuery = if (comment.isEmpty) {
+      comment
+    } else {
+      dialect.getSchemaCommentQuery(namespace, comment)
+    }
+    executeStatement(conn, options,
+      s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)};$schemaCommentQuery")
+  }
+
+  def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.namespacesExists(conn, options, namespace)
+  }
+
+  def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listNamespaces(conn, options)
   }
 
   def createNamespaceComment(
@@ -1148,11 +1163,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
+    f: ResultSet => Unit): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
+      val rs = statement.executeQuery(sql)
+      // scalastyle:off println
+      println("executeQuery")
+      // scalastyle:on println
+      try {
+        f(rs)
+      } finally {
+        rs.close()
+      }
     } finally {
       statement.close()
     }

@@ -18,9 +18,11 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.sql.SQLFeatureNotSupportedException
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
@@ -55,11 +57,25 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def builtinNamespaces: Array[Array[String]] = Array()
+  override def builtinNamespaces: Array[Array[String]] =
+    Array(Array("information_schema"), Array("mysql"), Array("performance_schema"), Array("sys"))
 
   override val supportsSchemaComment: Boolean = false
 
   // Cannot get namespaces with conn.getMetaData.getSchemas
   // TODO testListNamespaces()
   // TODO testDropNamespaces()
+
+  test("Create MySQL namespace with comment") {
+    val e = intercept[AnalysisException] {
+      catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
+    }
+    assert(e.getMessage.contains("Failed create name space: foo"))
+    assert(e.getCause.isInstanceOf[SQLFeatureNotSupportedException])
+    assert(e.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
+      .contains("Create namespace comment is not supported"))
+    assert(catalog.namespaceExists(Array("foo")) === false)
+    catalog.createNamespace(Array("foo"), Map.empty[String, String].asJava)
+    assert(catalog.namespaceExists(Array("foo")) === true)
+  }
 }

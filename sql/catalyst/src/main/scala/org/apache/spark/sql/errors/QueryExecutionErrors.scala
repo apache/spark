@@ -1952,4 +1952,8 @@ object QueryExecutionErrors {
     new IllegalArgumentException(
       s"The input string '$input' does not match the given number format: '$format'")
   }
+
+  def unsupportedCreateNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  }
 }

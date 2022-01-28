@@ -173,23 +173,14 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
-        val rs = conn.getMetaData.getSchemas(null, db)
-        while (rs.next()) {
-          if (rs.getString(1) == db) return true;
-        }
-        false
+        JdbcUtils.namespaceExists(conn, options, db)
       }
     case _ => false
   }
 
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
-      val schemaBuilder = ArrayBuilder.make[Array[String]]
-      val rs = conn.getMetaData.getSchemas()
-      while (rs.next()) {
-        schemaBuilder += Array(rs.getString(1))
-      }
-      schemaBuilder.result
+      JdbcUtils.listNamespaces(conn, options)
     }
   }
 
