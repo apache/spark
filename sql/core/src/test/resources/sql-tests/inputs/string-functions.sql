@@ -27,6 +27,14 @@ select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 SELECT split('aa1cc2ee3', '[1-9]+');
 SELECT split('aa1cc2ee3', '[1-9]+', 2);
 
+-- split_part function
+SELECT split_part('11.12.13', '.', 2);
+SELECT split_part('11.12.13', '.', -1);
+SELECT split_part('11.12.13', '.', -3);
+SELECT split_part('11.12.13', '', 1);
+SELECT split_part('11ab12ab13', 'ab', 1);
+SELECT split_part('11.12.13', '.', 0);
+
 -- substring function
 SELECT substr('Spark SQL', 5);
 SELECT substr('Spark SQL', -3);

@@ -2943,3 +2943,87 @@ case class Sentences(
     copy(str = newFirst, language = newSecond, country = newThird)
 
 }
+
+/**
+ * Splits a given string by a specified delimiter.
+ */
+case class SplitByDelimiter(
+    str: Expression,
+    delimiter: Expression)
+  extends BinaryExpression with NullIntolerant {
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+  override def left: Expression = str
+  override def right: Expression = delimiter
+
+  override def nullSafeEval(string: Any, delimiter: Any): Any = {
+    val strings = {
+      // if delimiter is empty string, skip the regex based splitting directly as regex
+      // treats empty string as matching anything, thus use the input directly.
+      if (delimiter.asInstanceOf[UTF8String].numBytes() == 0) {
+        Array(string)
+      } else {
+        string.asInstanceOf[UTF8String].splitSQL(
+          delimiter.asInstanceOf[UTF8String], -1)
+      }
+    }
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val arrayClass = classOf[GenericArrayData].getName
+    nullSafeCodeGen(ctx, ev, (str, delimiter) => {
+      if (delimiter.asInstanceOf[UTF8String].numBytes() == 0) {
+        s"""${ev.value} = Array($str)""".stripMargin
+      } else {
+        // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+        s"""${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));""".stripMargin
+      }
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+    newFirst: Expression, newSecond: Expression): SplitByDelimiter =
+    copy(str = newFirst, delimiter = newSecond)
+}
+
+/**
+ * Splits a given string by a specified delimiter and returns the requested part.
+ * If any input is null, returns null.
+ * If index is out of range of split parts, return empty string.
+ * If index is 0, throws an ArrayIndexOutOfBoundsException.
+ */
+@ExpressionDescription(
+  usage =
+    """
+    _FUNC_(str, delimiter, partNum) - Splits `str` by delimiter and return
+      requested part of the split (1-based). If any input is null, returns null.
+      if `partNum` is out of range of split parts, returns null. If `partNum` is 0,
+      throws an error. If `partNum` is negative, the parts are counted backward from the
+      end of the string. If the `delimiter` is an empty string, the `str` is not split.
+  """,
+  examples =
+    """
+    Examples:
+      > SELECT _FUNC_('11.12.13', '.', 3);
+       13
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class SplitPart (
+    str: Expression,
+    delimiter: Expression,
+    partNum: Expression)
+  extends RuntimeReplaceable {
+  override lazy val replacement: Expression =
+    ElementAt(SplitByDelimiter(str, delimiter), partNum, Some(Literal.create("", StringType)),
+      SQLConf.get.ansiEnabled)
+  override def nodeName: String = "split_part"
+
+  override def flatArguments: Iterator[Any] = Iterator(str, delimiter, partNum)
+
+  def children: Seq[Expression] = Seq(str, delimiter, partNum)
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
+    copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
+      partNum = newChildren.apply(2))
+  }
+}
