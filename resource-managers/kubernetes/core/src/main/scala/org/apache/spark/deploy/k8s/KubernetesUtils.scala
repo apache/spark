@@ -385,29 +385,9 @@ object KubernetesUtils extends Logging {
 
   @Since("3.3.0")
   def loadFeatureStep(conf: KubernetesConf, className: String): KubernetesFeatureConfigStep = {
-    val constructors = Utils.classForName(className).getConstructors
-    // Try to find constructor with only type matched conf or only KubernetesConf conf
-    val confConstructor = constructors.find { constructor =>
-      constructor.getParameterCount == 1 &&
-        (constructor.getParameterTypes()(0) == conf.getClass ||
-          constructor.getParameterTypes()(0) == classOf[KubernetesConf])
-    }
-    // Try to find no param constructor
-    val noParamConstructor = constructors.find { constructor =>
-      constructor.getParameterCount == 0
-    }
-    // Throw SparkException if no expected constructor found
-    if (noParamConstructor.isEmpty && confConstructor.isEmpty) {
-      throw new SparkException(s"Failed to load feature step: $className, " +
-        s"the constructor of the feature step should be no param or with only " +
-        s"${conf.getClass.getSimpleName}/KubernetesConf param.")
-    }
-
-    val constructor = confConstructor.map { confConstructor =>
-      (conf: KubernetesConf) => confConstructor.newInstance(conf)
-    }.getOrElse {
-      (_: KubernetesConf) => noParamConstructor.get.newInstance()
-    }
-    constructor(conf).asInstanceOf[KubernetesFeatureConfigStep]
+    val feature =
+      Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+    feature.init(conf)
+    feature
   }
 }

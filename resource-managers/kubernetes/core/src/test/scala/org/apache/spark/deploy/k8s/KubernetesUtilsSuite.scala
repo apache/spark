@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
 class KubernetesUtilsSuite extends SparkFunSuite {
@@ -77,28 +77,30 @@ class KubernetesUtilsSuite extends SparkFunSuite {
     val driverFeatureNames = "org.apache.spark.deploy.k8s.TestStepWithDrvConf"
     val execFeatureNames = "org.apache.spark.deploy.k8s.TestStepWithExecConf"
 
+    // Make sure common and driver feature step can be loaded in driver side
     (basicFeatureNames :+ driverFeatureNames).foreach { featureName =>
       val drvFeatureStep = KubernetesUtils.loadFeatureStep(driverConf, featureName)
       assert(drvFeatureStep.isInstanceOf[KubernetesFeatureConfigStep])
     }
 
+    // Make sure common and driver feature step can be loaded in executor side
     (basicFeatureNames :+ execFeatureNames).foreach { featureName =>
       val execFeatureStep = KubernetesUtils.loadFeatureStep(execConf, featureName)
       assert(execFeatureStep.isInstanceOf[KubernetesFeatureConfigStep])
     }
 
-    val e1 = intercept[SparkException] {
+    // Raise exception when feature step and conf type mismatched
+    val e1 = intercept[ClassCastException] {
       KubernetesUtils.loadFeatureStep(execConf, driverFeatureNames)
     }
-    assert(e1.getMessage.contains(s"Failed to load feature step: $driverFeatureNames"))
-    assert(e1.getMessage.contains("with only KubernetesExecutorConf/KubernetesConf param"))
+    assert(e1.getMessage.contains("KubernetesExecutorConf cannot be cast"))
 
-    val e2 = intercept[SparkException] {
+    val e2 = intercept[ClassCastException] {
       KubernetesUtils.loadFeatureStep(driverConf, execFeatureNames)
     }
-    assert(e2.getMessage.contains(s"Failed to load feature step: $execFeatureNames"))
-    assert(e2.getMessage.contains("with only KubernetesDriverConf/KubernetesConf param"))
+    assert(e2.getMessage.contains("KubernetesDriverConf cannot be cast"))
 
+    // Raise exception when loading unknow class name
     val e3 = intercept[ClassNotFoundException] {
       KubernetesUtils.loadFeatureStep(execConf, "unknow.class")
     }

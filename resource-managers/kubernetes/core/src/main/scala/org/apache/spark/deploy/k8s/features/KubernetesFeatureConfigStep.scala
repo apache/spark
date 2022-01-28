@@ -19,7 +19,58 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
-import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * A base class to help user extend custom feature step in driver and executor side.
+ * Note: If your custom feature step would be used in both driver and executor, please use this.
+ */
+@Unstable
+@DeveloperApi
+trait KubernetesCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
+
+  protected var kubernetesConf: KubernetesConf = _
+
+  override def init(conf: KubernetesConf): Unit = {
+    kubernetesConf = conf
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * A base class to help user extend custom feature step in driver side.
+ * Note: If your custom feature step would be used in only driver, please use this.
+ */
+@Unstable
+@DeveloperApi
+trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
+
+  protected var driverConf: KubernetesDriverConf = _
+
+  override def init(config: KubernetesConf): Unit = {
+    driverConf = config.asInstanceOf[KubernetesDriverConf]
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * A base class to help user extend custom feature step in executor side.
+ * Note: If your custom feature step would be used in only driver, please use this.
+ */
+@Unstable
+@DeveloperApi
+trait KubernetesExecutorCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
+
+  protected var executorConf: KubernetesExecutorConf = _
+
+  override def init(config: KubernetesConf): Unit = {
+    executorConf = config.asInstanceOf[KubernetesExecutorConf]
+  }
+}
 
 /**
  * :: DeveloperApi ::
@@ -30,6 +81,13 @@ import org.apache.spark.deploy.k8s.SparkPod
 @Unstable
 @DeveloperApi
 trait KubernetesFeatureConfigStep {
+
+  /**
+   * Initialize the configuration for user feature step, this only applicable when user specified
+   * `spark.kubernetes.executor.pod.featureSteps` or `spark.kubernetes.executor.pod.featureSteps`,
+   * the init would be called after feature step loading.
+   */
+  def init(config: KubernetesConf): Unit = {}
 
   /**
    * Apply modifications on the given pod in accordance to this feature. This can include attaching
