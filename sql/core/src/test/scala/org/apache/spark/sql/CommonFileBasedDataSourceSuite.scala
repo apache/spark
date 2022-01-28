@@ -17,81 +17,29 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FileNotFoundException}
+import java.io.File
 import java.nio.file.{Files, StandardOpenOption}
 
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.execution.SimpleMode
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.input_file_name
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * This class contains tests for all file-based data sources but not related to source format.
  *
  */
-class FileBasedDataSourceBasedSuite extends FileBasedDataSourceSuiteBase {
-  override protected def format: String = ""
+class CommonFileBasedDataSourceSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
-
-  testQuietly(s"Enabling/disabling ignoreMissingFiles using") {
-    def testIgnoreMissingFiles(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-
-        Seq("0").toDF("a").write.format(format)
-          .save(new Path(basePath, "second").toString)
-        Seq("1").toDF("a").write.format(format)
-          .save(new Path(basePath, "fourth").toString)
-
-        val firstPath = new Path(basePath, "first")
-        val thirdPath = new Path(basePath, "third")
-        val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
-        Seq("2").toDF("a").write.format(format).save(firstPath.toString)
-        Seq("3").toDF("a").write.format(format).save(thirdPath.toString)
-        val files = Seq(firstPath, thirdPath).flatMap { p =>
-          fs.listStatus(p).filter(_.isFile).map(_.getPath)
-        }
-
-        val df = spark.read.format(format).load(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString,
-          new Path(basePath, "fourth").toString)
-
-        // Make sure all data files are deleted and can't be opened.
-        files.foreach(f => fs.delete(f, false))
-        assert(fs.delete(thirdPath, true))
-        for (f <- files) {
-          intercept[FileNotFoundException](fs.open(f))
-        }
-
-        checkAnswer(df, Seq(Row("0"), Row("1")))
-      }
-    }
-
-    for {
-      ignore <- Seq("true", "false")
-      sources <- Seq("", format)
-    } {
-      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignore,
-        SQLConf.USE_V1_SOURCE_LIST.key -> sources) {
-        if (ignore.toBoolean) {
-          testIgnoreMissingFiles()
-        } else {
-          val exception = intercept[SparkException] {
-            testIgnoreMissingFiles()
-          }
-          assert(exception.getMessage().contains("does not exist"))
-        }
-      }
-    }
-  }
 
   test("sizeInBytes should be the total size of all files") {
     Seq("orc", "").foreach { useV1SourceReaderList =>
