@@ -80,11 +80,10 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 `ALTER TABLE DROP COLUMNS` statement drops mentioned columns from an existing table.
 Note that this statement is only supported with v2 tables.
 
-
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier DROP COLUMNS ( col_name1, ... )
+ALTER TABLE table_identifier DROP { COLUMN | COLUMNS } [ ( ] col_name [ , ... ] [ ) ]
 ```
 
 #### Parameters
@@ -94,17 +93,20 @@ ALTER TABLE table_identifier DROP COLUMNS ( col_name1, ... )
   Specifies a table name, which may be optionally qualified with a database name.
 
   **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column to be renamed.
 
 ### RENAME COLUMN
 
 `ALTER TABLE RENAME COLUMN` statement changes the column name of an existing table.
 Note that this statement is only supported with v2 tables.
 
-
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier RENAME COLUMN col_spec to col_spec
+ALTER TABLE table_identifier RENAME COLUMN col_name TO col_name
 ```
 
 #### Parameters
@@ -115,9 +117,9 @@ ALTER TABLE table_identifier RENAME COLUMN col_spec to col_spec
 
   **Syntax:** `[ database_name. ] table_name`
 
-* **COLUMN ( col_spec )**
+* **col_name**
 
-  Specifies the column to be renamed.
+  Specifies the name of the column.
 
 ### ALTER OR CHANGE COLUMN
 
@@ -126,7 +128,7 @@ ALTER TABLE table_identifier RENAME COLUMN col_spec to col_spec
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnAction
+ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_name alterColumnAction
 ```
 
 #### Parameters
@@ -137,9 +139,9 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
     **Syntax:** `[ database_name. ] table_name`
 
-* **COLUMNS ( col_spec )**
+* **col_name**
 
-    Specifies the column to be altered or be changed.
+    Specifies the name of the column to be renamed.
 
 * **alterColumnAction**
 
@@ -150,12 +152,11 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 `ALTER TABLE REPLACE COLUMNS` statement removes all existing columns and adds the new set of columns.
 Note that this statement is only supported with v2 tables.
 
-
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier REPLACE COLUMNS  
-  [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
+ALTER TABLE table_identifier [ partition_spec ] REPLACE COLUMNS  
+  [ ( ] qualified_col_type_with_position_list [ ) ]
 ```
 
 #### Parameters
@@ -165,6 +166,18 @@ ALTER TABLE table_identifier REPLACE COLUMNS
   Specifies a table name, which may be optionally qualified with a database name.
 
   **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+  Partition to be replaced. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
+
+  **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **qualified_col_type_with_position_list**
+
+  The list of the column(s) to be added
+
+  **Syntax:** `( col_name col_type [ col_comment ] [ col_position ] [ , ... ] )`
 
 ### ADD AND DROP PARTITION
 
@@ -466,7 +479,7 @@ DESC StudentInfo;
 
 ALTER TABLE StudentInfo ALTER COLUMN FirstName COMMENT "new comment";
 
---After ALTER or CHANGE COLUMNS
+-- After ALTER or CHANGE COLUMNS
 DESC StudentInfo;
 +-----------------------+---------+-----------+
 |               col_name|data_type|    comment|
@@ -494,14 +507,16 @@ DESC StudentInfo;
 
 ALTER TABLE StudentInfo REPLACE COLUMNS (name string, ID int COMMENT 'new comment');
 
---After replacing COLUMNS
+-- After replacing COLUMNS
 DESC StudentInfo;
-+--------+---------+-----------+
-|col_name|data_type|    comment|
-+--------+---------+-----------+
-|    name|   string|       NULL|
-|      ID|      int|new comment|
-+--------+---------+-----------+
++-----=---------+---------+-----------+
+|       col_name|data_type|    comment|
++---------------+---------+-----------+
+|           name|   string|       NULL|
+|             ID|      int|new comment|
+| # Partitioning|         |           |
+|Not partitioned|         |           |
++---------------+---------+-----------+
 
 -- Add a new partition to a table 
 SHOW PARTITIONS StudentInfo;
@@ -599,7 +614,7 @@ ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'This is a new comment.');
 ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner');
 
 -- RECOVER PARTITIONS
-ALTER TABLE dbx.tab1 RECOVER PARTITIONS
+ALTER TABLE dbx.tab1 RECOVER PARTITIONS;
 ```
 
 ### Related Statements
