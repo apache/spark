@@ -50,6 +50,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     if (memoryMode == MemoryMode.OFF_HEAP) {
       lengthsVector = new OffHeapColumnVector(valueCount, IntegerType);
+      lengthsVector.putInts(0, valueCount, 0);
     } else {
       lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
     }
