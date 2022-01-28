@@ -159,8 +159,9 @@ To load files with paths matching a given modified time range, you can use:
 
 ### Scan parallelism
 
-`parallel` is used to set the parallelism when reading data files.
-We will fall back to using `spark.sql.files.maxPartitionBytes` to determine the parallelism if it is not set.
+`parallel` is used to set the expected parallelism while reading data from files. We will fall back to 
+using `spark.sql.files.maxPartitionBytes` to determine the parallelism if it is not set.
+Please note that Spark can not guarantee the parallelism exactly is `parallel`. 
 
 To set the parallelism when reading data files, you can use:
 
