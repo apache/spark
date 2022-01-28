@@ -35,7 +35,7 @@
     <spark.kubernetes.test.sparkTgz>N/A</spark.kubernetes.test.sparkTgz>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
-    <spark.kubernetes.test.javaImageTag>8-jre-slim</spark.kubernetes.test.javaImageTag>
+    <spark.kubernetes.test.javaImageTag>N/A</spark.kubernetes.test.javaImageTag>
     <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
@@ -43,7 +43,7 @@
     <spark.kubernetes.test.master></spark.kubernetes.test.master>
     <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
     <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
-    <spark.kubernetes.test.dockerFile>N/A</spark.kubernetes.test.dockerFile>
+    <spark.kubernetes.test.dockerFile>resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17</spark.kubernetes.test.dockerFile>
 
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
