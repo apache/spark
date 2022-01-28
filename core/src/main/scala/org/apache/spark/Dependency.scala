@@ -126,7 +126,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * Stores the information about whether the shuffle merge is finalized for the shuffle map stage
    * associated with this shuffle dependency
    */
-  private[this] var _shuffleMergedFinalized: Boolean = false
+  private[this] var _shuffleMergeFinalized: Boolean = false
 
   /**
    * shuffleMergeId is used to uniquely identify merging process of shuffle
@@ -144,31 +144,27 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
   private[spark] def markShuffleMergeFinalized(): Unit = {
-    _shuffleMergedFinalized = true
+    _shuffleMergeFinalized = true
   }
 
-  /**
-   * Returns true if the RDD is an empty RDD or if the shuffle merge for this shuffle is
-   * finalized.
-   */
-  def shuffleMergeFinalized: Boolean = {
-    _shuffleMergedFinalized
+  private[spark] def isShuffleMergeFinalizedMarked: Boolean = {
+    _shuffleMergeFinalized
   }
 
   /**
    * Returns true if push-based shuffle is disabled or if the shuffle merge for
    * this shuffle is finalized.
    */
-  def isShuffleMergeFinalizedIfEnabled: Boolean = {
+  def shuffleMergeFinalized: Boolean = {
     if (shuffleMergeEnabled) {
-      shuffleMergeFinalized
+      isShuffleMergeFinalizedMarked
     } else {
       true
     }
   }
 
-  private[spark] def newShuffleMergeState(): Unit = {
-    _shuffleMergedFinalized = false
+  def newShuffleMergeState(): Unit = {
+    _shuffleMergeFinalized = false
     mergerLocs = Nil
     _shuffleMergeId += 1
     finalizeTask = None

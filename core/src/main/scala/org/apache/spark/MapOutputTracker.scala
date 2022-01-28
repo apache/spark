@@ -1274,7 +1274,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching outputs for shuffle $shuffleId")
     val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf,
       // enableBatchFetch can be set to false during stage retry when the
-      // shuffleDependency.shuffleMergeFinalized is set to false, and Driver
+      // shuffleDependency.isShuffleMergeFinalizedMarked is set to false, and Driver
       // has already collected the mergedStatus for its shuffle dependency.
       // In this case, boolean check helps to ensure that the unnecessary
       // mergeStatus won't be fetched, thus mergedOutputStatuses won't be
