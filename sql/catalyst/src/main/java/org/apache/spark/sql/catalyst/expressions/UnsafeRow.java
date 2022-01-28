@@ -95,26 +95,32 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   public static boolean isFixedLength(DataType dt) {
-    if (dt instanceof UserDefinedType) {
-      return isFixedLength(((UserDefinedType) dt).sqlType());
-    }
+    while (true) {
+      if (dt instanceof UserDefinedType) {
+        dt = ((UserDefinedType<?>) dt).sqlType();
+        continue;
+      }
 
-    if (dt instanceof DecimalType) {
-      return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
-    } else {
-      return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
-        mutableFieldTypes.contains(dt);
+      if (dt instanceof DecimalType) {
+        return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
+      } else {
+        return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
+          mutableFieldTypes.contains(dt);
+      }
     }
   }
 
   public static boolean isMutable(DataType dt) {
-    if (dt instanceof UserDefinedType) {
-      return isMutable(((UserDefinedType) dt).sqlType());
-    }
+    while (true) {
+      if (dt instanceof UserDefinedType) {
+        dt = ((UserDefinedType<?>) dt).sqlType();
+        continue;
+      }
 
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
-      dt instanceof YearMonthIntervalType;
+      return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
+        dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
+        dt instanceof YearMonthIntervalType;
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
