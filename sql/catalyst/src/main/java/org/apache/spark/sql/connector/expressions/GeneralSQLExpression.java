@@ -26,6 +26,10 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * The currently supported SQL expressions:
  * <ol>
+ *  <li><pre>Literal</pre> Since 3.3.0</li>
+ *  <li><pre>Attribute</pre> Since 3.3.0</li>
+ *  <li><pre>IsNull</pre> Since 3.3.0</li>
+ *  <li><pre>IsNotNull</pre> Since 3.3.0</li>
  *  <li><pre>CaseWhen</pre> Since 3.3.0</li>
  * </ol>
  *

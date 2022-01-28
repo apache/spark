@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CaseWhen, Expression, IsNotNull, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 
 /**
@@ -32,7 +32,22 @@ class ExpressionSQLBuilder(e: Expression) {
     case a: Attribute => Some(quoteIfNeeded(a.name))
     case IsNull(col) => generateSQL(col).map(c => s"$c IS NULL")
     case IsNotNull(col) => generateSQL(col).map(c => s"$c IS NOT NULL")
-    // TODO supports other basic expressions
+    case b: BinaryOperator =>
+      val l = generateSQL(b.left)
+      val r = generateSQL(b.right)
+      if (l.isDefined && r.isDefined) {
+        Some(s"${l.get} ${b.sqlOperator} ${r.get}")
+      } else {
+        None
+      }
+    case Not(EqualTo(left, right)) =>
+      val l = generateSQL(left)
+      val r = generateSQL(right)
+      if (l.isDefined && r.isDefined) {
+        Some(s"${l.get} != ${r.get}")
+      } else {
+        None
+      }
     case CaseWhen(branches, elseValue) =>
       val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
       val valuesSQL = branches.map(_._2).flatMap(generateSQL)
@@ -44,6 +59,7 @@ class ExpressionSQLBuilder(e: Expression) {
       } else {
         None
       }
+    // TODO supports other expressions
     case _ => None
   }
 }
