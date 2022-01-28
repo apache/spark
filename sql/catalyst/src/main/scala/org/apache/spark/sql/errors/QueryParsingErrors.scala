@@ -114,7 +114,7 @@ object QueryParsingErrors {
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException("INVALID_LATERAL_JOIN_RELATION", Array.empty, ctx)
+    new ParseException("INVALID_SQL_SYNTAX", Array("LATERAL can only be used with subquery."), ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {

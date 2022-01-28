@@ -23,10 +23,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   def validateParsingError(
-    sqlText: String,
-    errorClass: String,
-    sqlState: String,
-    message: String): Unit = {
+      sqlText: String,
+      errorClass: String,
+      sqlState: String,
+      message: String): Unit = {
     val e = intercept[ParseException] {
       sql(sqlText)
     }
@@ -64,7 +64,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-35789: INVALID_LATERAL_JOIN_RELATION - LATERAL can only be used with subquery") {
+  test("SPARK-35789: INVALID_SQL_SYNTAX - LATERAL can only be used with subquery") {
     Seq("SELECT * FROM t1, LATERAL t2",
       "SELECT * FROM t1 JOIN LATERAL t2",
       "SELECT * FROM t1, LATERAL (t2 JOIN t3)",
@@ -73,9 +73,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       "SELECT * FROM t1, LATERAL RANGE(0, 1)").foreach { sqlText =>
       validateParsingError(
         sqlText = sqlText,
-        errorClass = "INVALID_LATERAL_JOIN_RELATION",
+        errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
-        message = "LATERAL can only be used with subquery.")
+        message = "Invalid SQL syntax: LATERAL can only be used with subquery.")
     }
   }
 }
