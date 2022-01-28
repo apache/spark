@@ -75,7 +75,7 @@ private[sql] class StreamingQueryStatusListener(
     store.write(new StreamingQueryData(
       event.name,
       event.id,
-      event.runId,
+      event.runId.toString,
       isActive = true,
       None,
       startTimestamp
@@ -118,7 +118,7 @@ private[sql] class StreamingQueryStatusListener(
 private[sql] class StreamingQueryData(
     val name: String,
     val id: UUID,
-    @KVIndexParam val runId: UUID,
+    @KVIndexParam val runId: String,
     @KVIndexParam("active") val isActive: Boolean,
     val exception: Option[String],
     @KVIndexParam("startTimestamp") val startTimestamp: Long,
