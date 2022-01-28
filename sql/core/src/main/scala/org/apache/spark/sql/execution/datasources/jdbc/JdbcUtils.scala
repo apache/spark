@@ -979,8 +979,23 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
+    val schemaCommentQuery = if (comment.isEmpty) {
+      comment
+    } else {
+      dialect.getSchemaCommentQuery(namespace, comment)
+    }
     executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
+    if (comment.nonEmpty) executeStatement(conn, options, schemaCommentQuery)
+  }
+
+  def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.namespacesExists(conn, options, namespace)
+  }
+
+  def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listNamespaces(conn, options)
   }
 
   def createNamespaceComment(
@@ -989,13 +1004,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
-    }
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(namespace, comment))
   }
 
   def removeNamespaceComment(
@@ -1003,12 +1012,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions,
       namespace: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
   }
 
   /**
@@ -1148,11 +1152,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
+    f: ResultSet => Unit): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
+      val rs = statement.executeQuery(sql)
+      try {
+        f(rs)
+      } finally {
+        rs.close()
+      }
     } finally {
       statement.close()
     }

@@ -21,7 +21,6 @@ import java.util
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
@@ -173,23 +172,14 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
-        val rs = conn.getMetaData.getSchemas(null, db)
-        while (rs.next()) {
-          if (rs.getString(1) == db) return true;
-        }
-        false
+        JdbcUtils.namespaceExists(conn, options, db)
       }
     case _ => false
   }
 
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
-      val schemaBuilder = ArrayBuilder.make[Array[String]]
-      val rs = conn.getMetaData.getSchemas()
-      while (rs.next()) {
-        schemaBuilder += Array(rs.getString(1))
-      }
-      schemaBuilder.result
+      JdbcUtils.listNamespaces(conn, options)
     }
   }
 
@@ -254,7 +244,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           case set: NamespaceChange.SetProperty =>
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.createNamespaceComment(conn, options, db, set.value)
+                JdbcUtils.classifyException(s"Failed create comment on name space: $db", dialect) {
+                  JdbcUtils.createNamespaceComment(conn, options, db, set.value)
+                }
               }
             } else {
               throw QueryCompilationErrors.cannotSetJDBCNamespaceWithPropertyError(set.property)
@@ -263,7 +255,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           case unset: NamespaceChange.RemoveProperty =>
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
-                JdbcUtils.removeNamespaceComment(conn, options, db)
+                JdbcUtils.classifyException(s"Failed remove comment on name space: $db", dialect) {
+                  JdbcUtils.removeNamespaceComment(conn, options, db)
+                }
               }
             } else {
               throw QueryCompilationErrors.cannotUnsetJDBCNamespaceWithPropertyError(unset.property)
