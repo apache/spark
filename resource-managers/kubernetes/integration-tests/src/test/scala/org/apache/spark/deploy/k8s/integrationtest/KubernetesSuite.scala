@@ -37,7 +37,6 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -76,7 +75,7 @@ class KubernetesSuite extends SparkFunSuite
   protected override def logForFailedTest(): Unit = {
     logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
     logInfo("BEGIN DESCRIBE PODS for application\n" +
-      Minikube.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
+      testBackend.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
     logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
