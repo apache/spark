@@ -96,7 +96,7 @@ ALTER TABLE table_identifier DROP { COLUMN | COLUMNS } [ ( ] col_name [ , ... ] 
 
 * **col_name**
 
-  Specifies the name of the column to be renamed.
+  Specifies the name of the column.
 
 ### RENAME COLUMN
 
@@ -141,7 +141,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_name alterColumnA
 
 * **col_name**
 
-    Specifies the name of the column to be renamed.
+    Specifies the name of the column.
 
 * **alterColumnAction**
 
@@ -177,7 +177,7 @@ ALTER TABLE table_identifier [ partition_spec ] REPLACE COLUMNS
 
   The list of the column(s) to be added
 
-  **Syntax:** `( col_name col_type [ col_comment ] [ col_position ] [ , ... ] )`
+  **Syntax:** `col_name col_type [ col_comment ] [ col_position ] [ , ... ]`
 
 ### ADD AND DROP PARTITION
 
