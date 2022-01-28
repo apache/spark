@@ -904,7 +904,7 @@ class Frame(object, metaclass=ABCMeta):
 
         .. note:: output JSON format is different from pandas'. It always use `orient='records'`
             for its output. This behaviour might have to change in the near future.
-         
+
         .. note:: Set `ignoreNullFields` keyword argument to `True` to omit `None` or `NaN` values
             when writing JSON objects. It works only when `path` is provided.
 
@@ -983,7 +983,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
-        
+
         default_options: Dict[str, Any] = {"ignoreNullFields": False}
         options = {**default_options, **options}
 
