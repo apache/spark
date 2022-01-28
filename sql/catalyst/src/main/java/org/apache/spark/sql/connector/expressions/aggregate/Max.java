@@ -27,12 +27,12 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class Max implements AggregateFunc {
-  private final Expression column;
+  private final Expression input;
 
-  public Max(Expression column) { this.column = column; }
+  public Max(Expression column) { this.input = column; }
 
-  public Expression column() { return column; }
+  public Expression column() { return input; }
 
   @Override
-  public String toString() { return "MAX(" + column.describe() + ")"; }
+  public String toString() { return "MAX(" + input.describe() + ")"; }
 }

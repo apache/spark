@@ -27,23 +27,23 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class Avg implements AggregateFunc {
-  private final Expression column;
+  private final Expression input;
   private final boolean isDistinct;
 
   public Avg(Expression column, boolean isDistinct) {
-    this.column = column;
+    this.input = column;
     this.isDistinct = isDistinct;
   }
 
-  public Expression column() { return column; }
+  public Expression column() { return input; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override
   public String toString() {
     if (isDistinct) {
-      return "AVG(DISTINCT " + column.describe() + ")";
+      return "AVG(DISTINCT " + input.describe() + ")";
     } else {
-      return "AVG(" + column.describe() + ")";
+      return "AVG(" + input.describe() + ")";
     }
   }
 }

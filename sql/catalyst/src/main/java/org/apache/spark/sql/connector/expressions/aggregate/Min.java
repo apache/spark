@@ -27,12 +27,12 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class Min implements AggregateFunc {
-  private final Expression column;
+  private final Expression input;
 
-  public Min(Expression column) { this.column = column; }
+  public Min(Expression column) { this.input = column; }
 
-  public Expression column() { return column; }
+  public Expression column() { return input; }
 
   @Override
-  public String toString() { return "MIN(" + column.describe() + ")"; }
+  public String toString() { return "MIN(" + input.describe() + ")"; }
 }

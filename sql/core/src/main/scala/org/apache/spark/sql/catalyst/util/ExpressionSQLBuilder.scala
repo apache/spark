@@ -17,37 +17,30 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Expression, Literal}
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, LiteralValue}
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CaseWhen, Expression, IsNotNull, IsNull, Literal}
+import org.apache.spark.sql.connector.expressions.LiteralValue
 
 /**
- * The builder to build {@link GeneralSQLExpression}.
+ * The builder to build expression and generate sql string.
  */
 class ExpressionSQLBuilder(e: Expression) {
 
-  def build(): Option[GeneralSQLExpression] = e match {
+  def build(): Option[String] = generateSQL(e)
+
+  private def generateSQL(expr: Expression): Option[String] = expr match {
+    case Literal(value, dataType) => Some(LiteralValue(value, dataType).toString)
+    case a: Attribute => Some(quoteIfNeeded(a.name))
+    case IsNull(col) => generateSQL(col).map(c => s"$c IS NULL")
+    case IsNotNull(col) => generateSQL(col).map(c => s"$c IS NOT NULL")
+    // TODO supports other basic expressions
     case CaseWhen(branches, elseValue) =>
-      val newBranches = branches.collect {
-        case (predicate: Expression, Literal(value, dataType)) =>
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
-          (translated, LiteralValue(value, dataType))
-        case (predicate: Expression, PushableColumnWithoutNestedColumn(name)) =>
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(predicate, None, false)
-          (translated, FieldReference.column(name))
-      }.filter(_._1.isDefined)
-      if (newBranches.length == branches.length) {
-        val branchSQL = newBranches.map { case (c, v) => s" WHEN ${c.get} THEN $v" }.mkString
-        val elseSQL = elseValue.map {
-          case Literal(value, dataType) => LiteralValue(value, dataType)
-          case PushableColumnWithoutNestedColumn(name) => FieldReference.column(name)
-          case _ => return None
-        }.map(l => s" ELSE $l").getOrElse("")
-        val sql = s"CASE$branchSQL$elseSQL END"
-        Some(new GeneralSQLExpression(sql))
+      val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
+      val valuesSQL = branches.map(_._2).flatMap(generateSQL)
+      if (conditionsSQL.length == branches.length && valuesSQL.length == branches.length) {
+        val branchSQL =
+          conditionsSQL.zip(valuesSQL).map { case (c, v) => s" WHEN $c THEN $v" }.mkString
+        val elseSQL = elseValue.flatMap(generateSQL).map(v => s" ELSE $v").getOrElse("")
+        Some(s"CASE$branchSQL$elseSQL END")
       } else {
         None
       }

@@ -852,6 +852,27 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     checkAnswer(df2, Seq(Row(12000d, 1, 12000d, 12000d, 12000d),
       Row(19000d, 2, 9500d, 10000d, 9000d), Row(22000d, 2, 11000d, 12000d, 10000d)))
+
+    val df3 = sql(
+      """
+        |SELECT
+        |  SUM(CASE WHEN SALARY > 0 THEN 0 ELSE SALARY END),
+        |  SUM(CASE WHEN SALARY >= 0 THEN 0 ELSE SALARY END),
+        |  SUM(CASE WHEN SALARY < 0 THEN 0 ELSE SALARY END),
+        |  SUM(CASE WHEN SALARY <= 0 THEN 0 ELSE SALARY END),
+        |  SUM(CASE WHEN SALARY = 0 THEN 0 ELSE SALARY END),
+        |  SUM(CASE WHEN SALARY != 0 THEN 0 ELSE SALARY END)
+        |FROM h2.test.employee GROUP BY DEPT
+      """.stripMargin)
+    checkAggregateRemoved(df3, false)
+    df3.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+            "PushedFilters: []"
+        checkKeywordsExistsInExplain(df3, expected_plan_fragment)
+    }
+    checkAnswer(df3, Seq(Row(0d, 0d, 12000, 12000, 12000, 0d),
+      Row(0d, 0d, 19000d, 19000d, 19000d, 0d), Row(0d, 0d, 22000d, 22000d, 22000d, 0d)))
   }
 
   test("scan with aggregate push-down: partition columns with multi group by columns") {

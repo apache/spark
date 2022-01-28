@@ -876,6 +876,7 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
  * Get the SQL string of an expression that can be pushed down.
  */
 object PushableExpression {
-  def unapply(e: Expression): Option[GeneralSQLExpression] =
-    new ExpressionSQLBuilder(e).build()
+  def unapply(e: Expression): Option[GeneralSQLExpression] = {
+    new ExpressionSQLBuilder(e).build().map(new GeneralSQLExpression(_))
+  }
 }

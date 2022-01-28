@@ -27,23 +27,23 @@ import org.apache.spark.sql.connector.expressions.Expression;
  */
 @Evolving
 public final class Count implements AggregateFunc {
-  private final Expression column;
+  private final Expression input;
   private final boolean isDistinct;
 
   public Count(Expression column, boolean isDistinct) {
-    this.column = column;
+    this.input = column;
     this.isDistinct = isDistinct;
   }
 
-  public Expression column() { return column; }
+  public Expression column() { return input; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override
   public String toString() {
     if (isDistinct) {
-      return "COUNT(DISTINCT " + column.describe() + ")";
+      return "COUNT(DISTINCT " + input.describe() + ")";
     } else {
-      return "COUNT(" + column.describe() + ")";
+      return "COUNT(" + input.describe() + ")";
     }
   }
 }
