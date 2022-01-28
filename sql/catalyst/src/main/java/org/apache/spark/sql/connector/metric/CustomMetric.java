@@ -21,9 +21,12 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A custom metric. Data source can define supported custom metrics using this interface.
- * During query execution, Spark will collect the task metrics using {@link CustomTaskMetric}
- * and combine the metrics at the driver side. How to combine task metrics is defined by the
- * metric class with the same metric name.
+ *
+ * If this metric belongs to the driver {@link #isDriverSide == true}, it will be sent to Driver directly.
+ *
+ * If this metric belongs to the executor {@link #isDriverSide == false}, During query execution, Spark will
+ * collect the task metrics using {@link CustomTaskMetric} and combine the metrics at the driver side. How to
+ * combine task metrics is defined by the metric class with the same metric name.
  *
  * @since 3.2.0
  */
@@ -48,4 +51,9 @@ public interface CustomMetric {
    * Given an array of task metric values, returns aggregated final metric value.
    */
   String aggregateTaskMetrics(long[] taskMetrics);
+
+  /**
+   * Returns a Boolean type indicating whether metric belongs to the driver.
+   */
+  boolean isDriverSide();
 }

@@ -29,7 +29,7 @@ import java.text.DecimalFormat;
  * @since 3.2.0
  */
 @Evolving
-public abstract class CustomAvgMetric implements CustomMetric {
+public abstract class CustomAvgMetric extends CustomExecutorSideMetric {
   @Override
   public String aggregateTaskMetrics(long[] taskMetrics) {
     if (taskMetrics.length > 0) {

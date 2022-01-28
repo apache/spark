@@ -91,7 +91,7 @@ case class BatchScanExec(
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
       new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customExecutorMetrics)
     }
   }
 

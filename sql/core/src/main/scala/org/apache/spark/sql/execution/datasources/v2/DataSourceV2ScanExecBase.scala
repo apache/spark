@@ -23,22 +23,38 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 trait DataSourceV2ScanExecBase extends LeafExecNode {
 
-  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  lazy val (customDriverMetrics, customExecutorMetrics) = {
+    val customMetrics = scan.supportedCustomMetrics().partition(_.isDriverSide)
+
+    def createCustomMetric(customMetric: CustomMetric): (String, SQLMetric) = {
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+    }
+    (customMetrics._1.map(createCustomMetric).toMap, customMetrics._2.map(createCustomMetric).toMap)
+  }
 
   override lazy val metrics = {
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
-      customMetrics
+      customDriverMetrics ++
+      customExecutorMetrics
+  }
+
+  /**
+   * Send the driver-side metrics. Before calling this function, selectedPartitions has
+   * been initialized.
+   */
+  private def sendDriverMetrics(): Unit = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, customDriverMetrics.values.toSeq)
   }
 
   def scan: Scan
@@ -102,6 +118,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
 
   override def doExecute(): RDD[InternalRow] = {
+    sendDriverMetrics()
     val numOutputRows = longMetric("numOutputRows")
     inputRDD.map { r =>
       numOutputRows += 1
@@ -110,6 +127,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    sendDriverMetrics()
     val numOutputRows = longMetric("numOutputRows")
     inputRDD.asInstanceOf[RDD[ColumnarBatch]].map { b =>
       numOutputRows += b.numRows()

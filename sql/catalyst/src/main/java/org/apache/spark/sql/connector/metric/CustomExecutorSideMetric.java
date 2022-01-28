@@ -19,18 +19,20 @@ package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Arrays;
-
 /**
- * Built-in `CustomMetric` that sums up metric values. Note that please extend this class
- * and override `name` and `description` to create your custom metric for real usage.
+ * An executor side custom metric. Data source can define supported custom metrics using this interface.
  *
- * @since 3.2.0
+ * During query execution, Spark will collect the task metrics using {@link CustomTaskMetric}
+ * and combine the metrics at the driver side. How to combine task metrics is defined by the
+ * metric class with the same metric name.
+ *
+ * @since 3.3.0
  */
 @Evolving
-public abstract class CustomSumMetric extends CustomExecutorSideMetric {
+public abstract class CustomExecutorSideMetric implements CustomMetric {
+
   @Override
-  public String aggregateTaskMetrics(long[] taskMetrics) {
-    return String.valueOf(Arrays.stream(taskMetrics).sum());
+  public boolean isDriverSide() {
+    return false;
   }
 }

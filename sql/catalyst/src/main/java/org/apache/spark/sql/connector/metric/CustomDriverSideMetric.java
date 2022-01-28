@@ -19,18 +19,23 @@ package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Arrays;
-
 /**
- * Built-in `CustomMetric` that sums up metric values. Note that please extend this class
- * and override `name` and `description` to create your custom metric for real usage.
+ * A Driver custom metric. Data source can define supported custom metrics using this interface.
  *
- * @since 3.2.0
+ * it will be sent to Driver directly.
+ *
+ * @since 3.3.0
  */
 @Evolving
-public abstract class CustomSumMetric extends CustomExecutorSideMetric {
+public abstract class CustomDriverSideMetric implements CustomMetric {
+
   @Override
   public String aggregateTaskMetrics(long[] taskMetrics) {
-    return String.valueOf(Arrays.stream(taskMetrics).sum());
+    return "";
+  }
+
+  @Override
+  public boolean isDriverSide() {
+    return true;
   }
 }
