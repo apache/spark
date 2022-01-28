@@ -48,6 +48,11 @@ trait AggregateCodegenSupport
   private var bufVars: Seq[Seq[ExprCode]] = _
 
   /**
+   * Whether this operator needs to build hash table.
+   */
+  protected def needHashTable: Boolean
+
+  /**
    * The generated code for `doProduce` call when aggregate has grouping keys.
    */
   protected def doProduceWithKeys(ctx: CodegenContext): String
@@ -154,14 +159,23 @@ trait AggregateCodegenSupport
        """.stripMargin)
 
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val aggTime = metricTerm(ctx, "aggTime")
-    val beforeAgg = ctx.freshName("beforeAgg")
+    val doAggWithRecordMetric =
+      if (needHashTable) {
+        val aggTime = metricTerm(ctx, "aggTime")
+        val beforeAgg = ctx.freshName("beforeAgg")
+        s"""
+           |long $beforeAgg = System.nanoTime();
+           |$doAggFuncName();
+           |$aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+         """.stripMargin
+      } else {
+        s"$doAggFuncName();"
+      }
+
     s"""
        |while (!$initAgg) {
        |  $initAgg = true;
-       |  long $beforeAgg = System.nanoTime();
-       |  $doAggFuncName();
-       |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
+       |  $doAggWithRecordMetric
        |
        |  // output the result
        |  ${genResult.trim}

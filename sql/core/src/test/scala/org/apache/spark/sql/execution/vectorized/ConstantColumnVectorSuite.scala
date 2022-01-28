@@ -27,7 +27,9 @@ class ConstantColumnVectorSuite extends SparkFunSuite {
   private def testVector(name: String, size: Int, dt: DataType)
     (f: ConstantColumnVector => Unit): Unit = {
     test(name) {
-      f(new ConstantColumnVector(size, dt))
+      val vector = new ConstantColumnVector(size, dt)
+      f(vector)
+      vector.close()
     }
   }
 

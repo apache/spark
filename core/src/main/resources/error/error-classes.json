@@ -51,9 +51,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
-  "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
-    "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
-  },
   "ILLEGAL_SUBSTRING" : {
     "message" : [ "%s cannot contain %s." ]
   },
@@ -141,27 +138,12 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_CHANGE_COLUMN" : {
-    "message" : [ "Please add an implementation for a column change here" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_LITERAL_TYPE" : {
-    "message" : [ "Unsupported literal type %s %s" ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
-    "message" : [ "%s does not implement simpleStringWithNodeId" ]
-  },
-  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
-    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
     "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {
