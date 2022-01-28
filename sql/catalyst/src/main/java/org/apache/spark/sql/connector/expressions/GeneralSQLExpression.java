@@ -30,6 +30,8 @@ import org.apache.spark.annotation.Evolving;
  *  <li><pre>Attribute</pre> Since 3.3.0</li>
  *  <li><pre>IsNull</pre> Since 3.3.0</li>
  *  <li><pre>IsNotNull</pre> Since 3.3.0</li>
+ *  <li><pre>BinaryOperator</pre> Since 3.3.0</li>
+ *  <li><pre>Not</pre> Since 3.3.0</li>
  *  <li><pre>CaseWhen</pre> Since 3.3.0</li>
  * </ol>
  *

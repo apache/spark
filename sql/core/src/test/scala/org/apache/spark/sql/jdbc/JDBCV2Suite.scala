@@ -914,6 +914,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d)))
   }
 
+  test("scan with aggregate push-down: aggregate function with CAST") {
+    val df5 = sql("SELECT AVG(CAST(SALARY AS DOUBLE)) FROM h2.test.employee GROUP BY DEPT")
+    checkAggregateRemoved(df5, false)
+    df5.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: []"
+        checkKeywordsExistsInExplain(df5, expected_plan_fragment)
+    }
+    checkAnswer(df5, Seq(Row(11000d), Row(12000d), Row(9500d)))
+  }
+
   test("scan with aggregate push-down: partition columns with multi group by columns") {
     val df = spark.read
       .option("partitionColumn", "dept")
