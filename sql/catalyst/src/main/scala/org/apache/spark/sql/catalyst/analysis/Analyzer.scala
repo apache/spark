@@ -3843,8 +3843,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   windowId <- ceil((timestamp - startTime) / slideDuration)
-   *   windowStart <- windowId * slideDuration + (i - maxNumOverlapping) * slideDuration + startTime
+   *   lastStart <- timestamp - (timestamp - startTime + windowDuration) % windowDuration
+   *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
    *
@@ -3884,14 +3884,11 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
+        val timestamp = PreciseTimestampConversion(window.timeColumn, TimestampType, LongType)
+        val lastStart = timestamp - (timestamp- window.startTime
+          + window.slideDuration) % window.slideDuration
         def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
-          val division = (PreciseTimestampConversion(
-            window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
-          val ceil = Ceil(division)
-          // if the division is equal to the ceiling, our record is the start of a window
-          val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
-          val windowStart = (windowId + i - overlappingWindows) *
-            window.slideDuration + window.startTime
+          val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
