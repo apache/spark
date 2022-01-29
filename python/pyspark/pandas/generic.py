@@ -24,6 +24,7 @@ from functools import reduce
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterable,
     IO,
     List,
