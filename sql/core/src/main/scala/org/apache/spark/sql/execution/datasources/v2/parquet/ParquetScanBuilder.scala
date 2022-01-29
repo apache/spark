@@ -86,7 +86,7 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
-  override val enablePushAggregation: Boolean =
+  override def enablePushAggregation(): Boolean =
     sparkSession.sessionState.conf.parquetAggregatePushDown
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {

@@ -72,7 +72,7 @@ case class JDBCScanBuilder(
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
-  override val enablePushAggregation: Boolean = jdbcOptions.pushDownAggregate
+  override def enablePushAggregation(): Boolean = jdbcOptions.pushDownAggregate
 
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
