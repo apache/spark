@@ -4615,7 +4615,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
             log_advice(
-                "If the type hints is not specified the `func` parameter for `series.combine`, "
+                "If the type hints is not specified for the `func` parameter of `series.combine`, "
                 "it is expensive to infer the data type internally."
             )
             limit = ps.get_option("compute.shortcut_limit")
