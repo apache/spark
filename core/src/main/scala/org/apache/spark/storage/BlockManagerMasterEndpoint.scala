@@ -296,18 +296,22 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    val removeRddBlockViaExtShuffleServiceFutures = externalBlockStoreClient.map { shuffleClient =>
-      blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
-        Future[Int] {
-          val numRemovedBlocks = shuffleClient.removeBlocks(
-            bmId.host,
-            bmId.port,
-            bmId.executorId,
-            blockIds.map(_.toString).toArray)
-          numRemovedBlocks.get(defaultRpcTimeout.duration.toSeconds, TimeUnit.SECONDS)
+    val removeRddBlockViaExtShuffleServiceFutures = if (externalShuffleServiceRddFetchEnabled) {
+      externalBlockStoreClient.map { shuffleClient =>
+        blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
+          Future[Int] {
+            val numRemovedBlocks = shuffleClient.removeBlocks(
+              bmId.host,
+              bmId.port,
+              bmId.executorId,
+              blockIds.map(_.toString).toArray)
+            numRemovedBlocks.get(defaultRpcTimeout.duration.toSeconds, TimeUnit.SECONDS)
+          }
         }
-      }
-    }.getOrElse(Seq.empty)
+      }.getOrElse(Seq.empty)
+    } else {
+      Seq.empty
+    }
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
@@ -319,16 +323,17 @@ class BlockManagerMasterEndpoint(
     if (externalBlockStoreClient.isDefined) {
       mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
         shuffleStatus.mapStatuses.foreach { mapStatus =>
-          // Port should always be external shuffle port if external shuffle is enabled
-          val isShufflePort = mapStatus.location.port == externalShuffleServicePort
-          val executorDeallocated =
-            !blockManagerIdByExecutor.contains(mapStatus.location.executorId)
-          if (isShufflePort && executorDeallocated) {
-            val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
-              new mutable.HashSet[BlockId])
+          // Port should always be external shuffle port if external shuffle is enabled so
+          // also check if the executor has been deallocated
+          if (mapStatus.location.port == externalShuffleServicePort &&
+              !blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
             val blocksToDel =
               shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
-            blocks ++= blocksToDel
+            if (blocksToDel.nonEmpty) {
+              val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
+                new mutable.HashSet[BlockId])
+              blocks ++= blocksToDel
+            }
           }
         }
       }
