@@ -3884,20 +3884,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-//        val timestamp = PreciseTimestampConversion(window.timeColumn, TimestampType, LongType)
-//        val lastStart = timestamp - (timestamp- window.startTime
-//          + window.slideDuration) % window.slideDuration
+
         def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
-//          val windowStart = lastStart - i * window.slideDuration
-//          val windowEnd = windowStart + window.windowDuration
-            val division = (PreciseTimestampConversion(
-              window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
-            val ceil = Ceil(division)
-              // if the division is equal to the ceiling, our record is the start of a window
-            val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
-            val windowStart = (windowId + i - overlappingWindows) *
-                window.slideDuration + window.startTime
-            val windowEnd = windowStart + window.windowDuration
+          val timestamp = PreciseTimestampConversion(window.timeColumn, TimestampType, LongType)
+          val lastStart = timestamp - (timestamp- window.startTime + window.slideDuration) % window.slideDuration
+          val windowStart = lastStart - i * window.slideDuration
+          val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
             Literal(WINDOW_START) ::
