@@ -73,11 +73,10 @@ case class OrcScanBuilder(
     }
   }
 
-  override def pushAggregation(aggregation: Aggregation): Boolean = {
-    if (!sparkSession.sessionState.conf.orcAggregatePushDown) {
-      return false
-    }
+  override val enablePushAggregation: Boolean =
+    sparkSession.sessionState.conf.orcAggregatePushDown
 
+  override def pushAggregation(aggregation: Aggregation): Boolean = {
     AggregatePushDownUtils.getSchemaForPushedAggregation(
       aggregation,
       schema,

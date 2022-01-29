@@ -48,6 +48,13 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
+   * Whether enable aggregation push-down.
+   *
+   * @return true if enable aggregation push-down, false otherwise.
+   */
+  boolean enablePushAggregation();
+
+  /**
    * Whether the datasource support complete aggregation push-down. Spark will do grouping again
    * if this method returns false.
    *

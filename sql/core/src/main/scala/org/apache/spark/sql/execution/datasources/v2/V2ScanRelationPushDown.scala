@@ -95,7 +95,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
-            case r: SupportsPushDownAggregates =>
+            case r: SupportsPushDownAggregates if r.enablePushAggregation() =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               val aggregates = collectAggregates(resultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
