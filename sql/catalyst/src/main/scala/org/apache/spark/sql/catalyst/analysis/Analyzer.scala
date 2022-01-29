@@ -3887,8 +3887,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, TimestampType, LongType)
-          val lastStart = timestamp- (timestamp- window.startTime
-              + window.slideDuration) % window.slideDuration
+          val offset = window.startTime
+          val slide = window.windowDuration
+          val lastStart = timestamp- (timestamp- offset + slide) % slide
           val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
