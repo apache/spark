@@ -56,8 +56,7 @@ object AggregatePushDownUtils {
           (max.column.asInstanceOf[NamedReference], "max")
         case min: Min if min.column().isInstanceOf[NamedReference] =>
           (min.column.asInstanceOf[NamedReference], "min")
-        case _ =>
-          throw new IllegalArgumentException(s"Unexpected type of AggregateFunc ${agg.describe}")
+        case _ => return false
       }
 
       if (isPartitionCol(column)) {
