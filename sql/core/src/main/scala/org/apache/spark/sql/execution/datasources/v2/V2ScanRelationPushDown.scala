@@ -37,7 +37,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
+    val pushDownRules = Seq[LogicalPlan => LogicalPlan] (
       createScanBuilder,
       pushDownSample,
       pushDownFilters,
@@ -45,7 +45,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       pushDownLimits,
       pruneColumns)
 
-    pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
+    pushDownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
       pushDownRule(newPlan)
     }
   }
@@ -88,7 +88,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
-  def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
+  private def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
@@ -289,7 +289,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Cast(expression, expectedDataType)
     }
 
-  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
+  private def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
       val normalizedProjects = DataSourceStrategy
@@ -327,7 +327,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       withProjection
   }
 
-  def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
+  private def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
     case sample: Sample => sample.child match {
       case ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
         val tableSample = TableSampleInfo(
@@ -375,7 +375,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case other => other
   }
 
-  def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
+  private def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
       val newChild = pushDownLimit(child, limitValue)
       val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
