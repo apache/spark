@@ -52,7 +52,7 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    *
    * @return true if enable aggregation push-down, false otherwise.
    */
-  boolean enablePushAggregation();
+  default boolean enablePushAggregation() { return false; }
 
   /**
    * Whether the datasource support complete aggregation push-down. Spark will do grouping again
