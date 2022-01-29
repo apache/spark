@@ -48,7 +48,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // result checking
     assert(queryStore.allQueryUIData.count(_.summary.isActive) == 1)
     assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(uiData =>
-      uiData.summary.runId == runId && uiData.summary.name.equals("test")))
+      uiData.summary.runId == runId.toString && uiData.summary.name.equals("test")))
 
     // handle query progress event
     val progress = mock(classOf[StreamingQueryProgress], RETURNS_SMART_NULLS)
@@ -64,7 +64,7 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
 
     // result checking
     val activeQuery =
-      queryStore.allQueryUIData.filter(_.summary.isActive).find(_.summary.runId == runId)
+      queryStore.allQueryUIData.filter(_.summary.isActive).find(_.summary.runId == runId.toString)
     assert(activeQuery.isDefined)
     assert(activeQuery.get.summary.isActive)
     assert(activeQuery.get.recentProgress.length == 1)
@@ -81,7 +81,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     listener.onQueryTerminated(terminateEvent)
 
     assert(!queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.isActive)
-    assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId)
+    assert(
+      queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId.toString)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.id == id)
   }
 
@@ -110,10 +111,12 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     // result checking
     assert(queryStore.allQueryUIData.count(_.summary.isActive) == 1)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).length == 1)
-    assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(_.summary.runId == runId1))
+    assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(
+      _.summary.runId == runId1.toString))
     assert(queryStore.allQueryUIData.filter(_.summary.isActive).exists(uiData =>
-      uiData.summary.runId == runId1 && uiData.summary.id == id))
-    assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId0)
+      uiData.summary.runId == runId1.toString && uiData.summary.id == id))
+    assert(
+      queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.runId == runId0.toString)
     assert(queryStore.allQueryUIData.filterNot(_.summary.isActive).head.summary.id == id)
   }
 

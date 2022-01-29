@@ -100,7 +100,7 @@ private[sql] class StreamingQueryStatusListener(
 
   override def onQueryTerminated(
       event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
-    val querySummary = store.read(classOf[StreamingQueryData], event.runId)
+    val querySummary = store.read(classOf[StreamingQueryData], event.runId.toString)
     val curTime = System.currentTimeMillis()
     store.write(new StreamingQueryData(
       querySummary.name,
