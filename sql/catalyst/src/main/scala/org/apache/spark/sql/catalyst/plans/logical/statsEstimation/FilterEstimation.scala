@@ -307,7 +307,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attr: Attribute,
       literal: Literal,
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr)) {
+    if (!colStatsMap.contains(attr) || !colStatsMap.hasMinMaxStats(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
