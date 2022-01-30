@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
+import org.apache.spark.sql.connector.expressions.IdentityTransform
 
 case class DescribeTableExec(
     output: Seq[Attribute],
@@ -62,7 +63,7 @@ case class DescribeTableExec(
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.schema.sortBy(_.name).map { column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
+        column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 
@@ -80,13 +81,23 @@ case class DescribeTableExec(
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow("# Partitioning", "", "")
-    if (table.partitioning.isEmpty) {
-      rows += toCatalystRow("Not partitioned", "", "")
-    } else {
-      rows ++= table.partitioning.zipWithIndex.map {
-        case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+    if (table.partitioning.nonEmpty) {
+      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      if (partitionColumnsOnly) {
+        val nameToField = table.schema.map(f => (f.name, f)).toMap
+        rows += toCatalystRow("# Partition Information", "", "")
+        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        rows ++= table.partitioning.sortBy(_.describe).map {
+          case t =>
+            val field = nameToField(t.describe)
+            toCatalystRow(t.describe, field.dataType.simpleString, field.getComment().orNull)
+        }
+      } else {
+        rows += emptyRow()
+        rows += toCatalystRow("# Partitioning", "", "")
+        rows ++= table.partitioning.zipWithIndex.map {
+          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        }
       }
     }
   }

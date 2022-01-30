@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.types.StringType
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that check V1 and V2
@@ -35,4 +36,61 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DESCRIBE TABLE"
 
   protected def namespace: String
+
+  test("basic") {
+    withNamespaceAndTable(namespace, "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+      val description = descriptionDf.collect()
+      assert(description === Seq(
+        Row("data", "string", null),
+        Row("id", "bigint", null)).toArray)
+    }
+  }
+
+  test("describe table with partition columns") {
+    withNamespaceAndTable(namespace, "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+      val description = descriptionDf.collect()
+      assert(description === Seq(
+        Row("data", "string", null),
+        Row("id", "bigint", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("id", "bigint", null)).toArray)
+    }
+  }
+
+  test("describe table extended") {
+    withNamespaceAndTable(namespace, "table") { tbl =>
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+        " PARTITIONED BY (id)")
+      val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      descriptionDf.show(false)
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+        Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+      val description = descriptionDf.collect()
+      assert(description === Seq(
+        Row("data", "string", null),
+        Row("id", "bigint", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("id", "bigint", null)).toArray)
+    }
+  }
 }
