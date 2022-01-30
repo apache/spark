@@ -33,8 +33,9 @@ trait KubernetesCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
 
   protected var kubernetesConf: KubernetesConf = _
 
-  override def init(conf: KubernetesConf): Unit = {
+  override def init(conf: KubernetesConf): KubernetesFeatureConfigStep = {
     kubernetesConf = conf
+    this
   }
 }
 
@@ -50,8 +51,9 @@ trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigSte
 
   protected var driverConf: KubernetesDriverConf = _
 
-  override def init(config: KubernetesConf): Unit = {
+  override def init(config: KubernetesConf): KubernetesFeatureConfigStep = {
     driverConf = config.asInstanceOf[KubernetesDriverConf]
+    this
   }
 }
 
@@ -67,8 +69,9 @@ trait KubernetesExecutorCustomFeatureConfigStep extends KubernetesFeatureConfigS
 
   protected var executorConf: KubernetesExecutorConf = _
 
-  override def init(config: KubernetesConf): Unit = {
+  override def init(config: KubernetesConf): KubernetesFeatureConfigStep = {
     executorConf = config.asInstanceOf[KubernetesExecutorConf]
+    this
   }
 }
 
@@ -87,7 +90,7 @@ trait KubernetesFeatureConfigStep {
    * `spark.kubernetes.executor.pod.featureSteps` or `spark.kubernetes.executor.pod.featureSteps`,
    * the init would be called after feature step loading.
    */
-  def init(config: KubernetesConf): Unit = {}
+  def init(config: KubernetesConf): KubernetesFeatureConfigStep = this
 
   /**
    * Apply modifications on the given pod in accordance to this feature. This can include attaching

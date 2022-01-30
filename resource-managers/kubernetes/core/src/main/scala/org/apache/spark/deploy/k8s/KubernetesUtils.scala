@@ -383,11 +383,12 @@ object KubernetesUtils extends Logging {
     }
   }
 
+  // Load and init custom feature step according to `className` and `conf`
+  // This method is used by `KubernetesDriverBuilder` and `KubernetesExecutorBuilder`
   @Since("3.3.0")
   def loadFeatureStep(conf: KubernetesConf, className: String): KubernetesFeatureConfigStep = {
     val feature =
       Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
     feature.init(conf)
-    feature
   }
 }
