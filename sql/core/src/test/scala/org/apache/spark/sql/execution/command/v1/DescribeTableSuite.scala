@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.Row
+// import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.types.StringType
+// import org.apache.spark.sql.types.StringType
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that checks V1
@@ -34,25 +34,25 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
 
-  test("basic") {
-    withNamespaceAndTable(namespace, "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)")
-      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
-        Seq(
-          ("col_name", StringType),
-          ("data_type", StringType),
-          ("comment", StringType)))
-      val description = descriptionDf.collect()
-      assert(description === Seq(
-        Row("data", "string", "null"),
-        Row("id", "bigint", "null"),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("id", "bigint", "null")).toArray)
-    }
-  }
+//  test("basic v1") {
+//    withNamespaceAndTable(namespace, "table") { tbl =>
+//      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
+//        " PARTITIONED BY (id)")
+//      val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
+//      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+//        Seq(
+//          ("col_name", StringType),
+//          ("data_type", StringType),
+//          ("comment", StringType)))
+//      val description = descriptionDf.collect()
+//      assert(description === Seq(
+//        Row("data", "string", "null"),
+//        Row("id", "bigint", "null"),
+//        Row("# Partition Information", "", ""),
+//        Row("# col_name", "data_type", "comment"),
+//        Row("id", "bigint", "null")).toArray)
+//    }
+//  }
 }
 
 /**

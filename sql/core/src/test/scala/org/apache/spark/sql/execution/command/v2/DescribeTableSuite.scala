@@ -29,10 +29,10 @@ import org.apache.spark.util.Utils
 class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
 
-  test("DESCRIBE TABLE using v2 catalog") {
+  test("DESCRIBE TABLE with non-'partitioned-by' clause") {
     withNamespaceAndTable(namespace, "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)")
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        "CLUSTERED BY (id) INTO 3 BUCKETS")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE $tbl")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
@@ -41,16 +41,20 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
           ("comment", StringType)))
       val description = descriptionDf.collect()
       assert(description === Seq(
-        Row("data", "string", ""),
-        Row("id", "bigint", ""),
+        Row("data", "string", null),
+        Row("id", "bigint", null),
         Row("", "", ""),
         Row("# Partitioning", "", ""),
-        Row("Part 0", "id", "")))
+        Row("Part 0", "bucket(3, id)", "")))
+  }
 
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+  test("Describing a partition is not supported") {
+    withNamespaceAndTable(namespace, "table") { tbl =>
+        val e = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+        }
+        assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
       }
-      assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
     }
   }
 
