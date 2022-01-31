@@ -147,7 +147,8 @@ private[spark] object Config extends Logging {
       .createWithDefault(0)
 
   object ExecutorRollPolicy extends Enumeration {
-    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, OUTLIER = Value
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
+    OUTLIER, OUTLIER_OR_TOTAL_DURATION = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -165,7 +166,9 @@ private[spark] object Config extends Logging {
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
-        "If there is no outlier, it works like TOTAL_DURATION policy.")
+        "If there is no outlier then no executor will be rolled." +
+        "OUTLIER_OR_TOTAL_DURATION policy picks an outlier using the OUTLIER policy above. " +
+        "If there is no outlier it works like TOTAL_DURATION policy.")
       .version("3.3.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -181,16 +184,6 @@ private[spark] object Config extends Logging {
       .intConf
       .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
       .createWithDefault(0)
-
-  val EXECUTOR_ROLL_OUTLIERS_ONLY =
-    ConfigBuilder("spark.kubernetes.executor.onlyRollOutliers")
-      .doc("Only roll an executor if it is an outlier. An outlier is defined to be at least two " +
-        "standard deviation outside of the mean. If no outlier is found then no executor will " +
-        "be rolled."
-      )
-      .version("3.3.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"

@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_OUTLIERS_ONLY, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
+import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
@@ -66,7 +66,6 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       sparkContext = sc
 
       val policy = ExecutorRollPolicy.withName(sc.conf.get(EXECUTOR_ROLL_POLICY))
-      val onlyKillOutliers = sc.conf.get(EXECUTOR_ROLL_OUTLIERS_ONLY)
       periodicService.scheduleAtFixedRate(() => {
         try {
           sparkContext.schedulerBackend match {
@@ -74,7 +73,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
               val executorSummaryList = sparkContext
                 .statusStore
                 .executorList(true)
-              choose(executorSummaryList, policy, onlyKillOutliers) match {
+              choose(executorSummaryList, policy) match {
                 case Some(id) =>
                   // Use decommission to be safe.
                   logInfo(s"Ask to decommission executor $id")
@@ -100,10 +99,8 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
 
   override def shutdown(): Unit = periodicService.shutdown()
 
-  private def choose(
-      list: Seq[v1.ExecutorSummary],
-      policy: ExecutorRollPolicy.Value,
-      onlyKillOutliers: Boolean) : Option[String] = {
+  private def choose(list: Seq[v1.ExecutorSummary], policy: ExecutorRollPolicy.Value)
+      : Option[String] = {
     val listWithoutDriver = list
       .filterNot(_.id.equals(SparkContext.DRIVER_IDENTIFIER))
       .filter(_.totalTasks >= minTasks)
@@ -113,45 +110,34 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       case ExecutorRollPolicy.ADD_TIME =>
         listWithoutDriver.sortBy(_.addTime)
       case ExecutorRollPolicy.TOTAL_GC_TIME =>
-        sort(listWithoutDriver, _.totalGCTime, onlyKillOutliers)
+        listWithoutDriver.sortBy(_.totalGCTime).reverse
       case ExecutorRollPolicy.TOTAL_DURATION =>
-        sort(listWithoutDriver, _.totalDuration, onlyKillOutliers)
+        listWithoutDriver.sortBy(_.totalDuration).reverse
       case ExecutorRollPolicy.AVERAGE_DURATION =>
-        sort(listWithoutDriver,
-          e => e.totalDuration.toFloat / Math.max(1, e.totalTasks),
-          onlyKillOutliers)
+        listWithoutDriver.sortBy(e => e.totalDuration.toFloat / Math.max(1, e.totalTasks)).reverse
       case ExecutorRollPolicy.FAILED_TASKS =>
-        sort(listWithoutDriver, _.failedTasks, onlyKillOutliers)
-      case ExecutorRollPolicy.OUTLIER =>
-        // We build multiple outlier lists and concat in the following importance order to find
-        // outliers in various perspective:
-        //   AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS
-        // Since we will choose only first item, the duplication is okay. If there is no outlier,
-        // We fallback to TOTAL_DURATION policy.
-        outliers(listWithoutDriver.filter(_.totalTasks > 0), e => e.totalDuration / e.totalTasks) ++
-          outliers(listWithoutDriver, e => e.totalDuration) ++
-          outliers(listWithoutDriver, e => e.totalGCTime) ++
-          outliers(listWithoutDriver, e => e.failedTasks) ++
-          (if (onlyKillOutliers) Seq() else listWithoutDriver.sortBy(_.totalDuration).reverse)
+        listWithoutDriver.sortBy(_.failedTasks).reverse
+      case ExecutorRollPolicy.OUTLIER => outliers(listWithoutDriver)
+      case ExecutorRollPolicy.OUTLIER_OR_TOTAL_DURATION =>
+        // If there is no outlier we fallback to TOTAL_DURATION policy.
+        outliers(listWithoutDriver) ++ listWithoutDriver.sortBy(_.totalDuration).reverse
     }
     sortedList.headOption.map(_.id)
   }
 
   /**
-   * Sort on the policy, or search for outliers if we're only killing outliers.
+   * We build multiple outlier lists and concat in the following importance order to find
+   * outliers in various perspective:
+   * AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS
+   * Since we will choose only first item, the duplication is okay.
    */
-  private def sort(
-      list: Seq[v1.ExecutorSummary],
-      get: v1.ExecutorSummary => Float,
-      onlyKillOutliers: Boolean): Seq[v1.ExecutorSummary] = {
-    if (list.isEmpty) {
-      list
-    } else if (onlyKillOutliers) {
-      outliers(list, get)
-    } else {
-      list.sortBy(get(_)).reverse
-    }
-  }
+  private def outliers(listWithoutDriver: Seq[v1.ExecutorSummary]) =
+    outliersForFn(
+      listWithoutDriver.filter(_.totalTasks > 0),
+      e => e.totalDuration / e.totalTasks) ++
+      outliersForFn(listWithoutDriver, e => e.totalDuration) ++
+      outliersForFn(listWithoutDriver, e => e.totalGCTime) ++
+      outliersForFn(listWithoutDriver, e => e.failedTasks)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is
@@ -160,7 +146,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * Here, we borrowed 2-sigma idea from https://en.wikipedia.org/wiki/68-95-99.7_rule.
    * In case of normal distribution, this is known to be 2.5 percent roughly.
    */
-  private def outliers(
+  private def outliersForFn(
       list: Seq[v1.ExecutorSummary],
       get: v1.ExecutorSummary => Float): Seq[v1.ExecutorSummary] = {
     if (list.isEmpty) {
