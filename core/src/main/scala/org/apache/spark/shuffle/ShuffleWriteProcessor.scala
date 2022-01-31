@@ -72,7 +72,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         // The map task only takes care of converting the shuffle data file into multiple
         // block push requests. It delegates pushing the blocks to a different thread-pool -
         // ShuffleBlockPusher.BLOCK_PUSHER_POOL.
-        if (dep.getMergerLocs.nonEmpty && !dep.isShuffleMergeFinalizedMarked) {
+        if (!dep.shuffleMergeFinalized) {
           manager.shuffleBlockResolver match {
             case resolver: IndexShuffleBlockResolver =>
               logInfo(s"Shuffle merge enabled with ${dep.getMergerLocs.size} merger locations " +

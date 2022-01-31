@@ -728,8 +728,7 @@ private[spark] class DAGScheduler(
                 // Mark mapStage as available with shuffle outputs only after shuffle merge is
                 // finalized with push based shuffle. If not, subsequent ShuffleMapStage won't
                 // read from merged output as the MergeStatuses are not available.
-                if (!mapStage.isAvailable ||
-                  !mapStage.shuffleDep.shuffleMergeFinalized) {
+                if (!mapStage.isAvailable || !mapStage.shuffleDep.shuffleMergeFinalized) {
                   missing += mapStage
                 } else {
                   // Forward the nextAttemptId if skipped and get visited for the first time.

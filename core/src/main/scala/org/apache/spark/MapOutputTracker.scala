@@ -1346,25 +1346,18 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   }
 
   private def getMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    val mergers = shufflePushMergerLocations.get(shuffleId).orNull
-    if (mergers == null) {
-      fetchingLock.withLock(shuffleId) {
-        var fetchedMergers = shufflePushMergerLocations.get(shuffleId).orNull
-        if (null == fetchedMergers) {
-          fetchedMergers =
-            askTracker[Seq[BlockManagerId]](GetShufflePushMergerLocations(shuffleId))
-          if (fetchedMergers.nonEmpty) {
-            shufflePushMergerLocations(shuffleId) = fetchedMergers
-          } else {
-            fetchedMergers = Seq.empty[BlockManagerId]
-          }
+    fetchingLock.withLock(shuffleId) {
+      var fetchedMergers = shufflePushMergerLocations.get(shuffleId).orNull
+      if (null == fetchedMergers) {
+        fetchedMergers =
+          askTracker[Seq[BlockManagerId]](GetShufflePushMergerLocations(shuffleId))
+        if (fetchedMergers.nonEmpty) {
+          shufflePushMergerLocations(shuffleId) = fetchedMergers
         } else {
-          Seq.empty[BlockManagerId]
+          fetchedMergers = Seq.empty[BlockManagerId]
         }
-        fetchedMergers
       }
-    } else {
-      mergers
+      fetchedMergers
     }
   }
 
