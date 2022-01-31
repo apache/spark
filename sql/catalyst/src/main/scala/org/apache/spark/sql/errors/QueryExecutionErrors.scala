@@ -422,7 +422,7 @@ object QueryExecutionErrors {
   }
 
   def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("UNABLE_TO_DELETE_PARTITION_PATH", Array(partitionPath), e)
+    new SparkException("UNABLE_TO_DELETE_PARTITION_PATH", Array(partitionPath.toString), e)
   }
 
   def unableToDropTableAsFailedToDeleteDirectoryError(
@@ -438,11 +438,11 @@ object QueryExecutionErrors {
   }
 
   def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
-    new SparkException("UNABLE_TO_CREATE_PARTITION_PATH", Array(partitionPath), e)
+    new SparkException("UNABLE_TO_CREATE_PARTITION_PATH", Array(partitionPath.toString), e)
   }
 
   def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
-    new SparkException("UNABLE_TO_RENAME_PARTITION_PATH", Array(oldPartPath), e)
+    new SparkException("UNABLE_TO_RENAME_PARTITION_PATH", Array(oldPartPath.toString), e)
   }
 
   def methodNotImplementedError(methodName: String): Throwable = {
@@ -499,7 +499,7 @@ object QueryExecutionErrors {
   }
 
   def notADatasourceRDDPartitionError(split: Partition): Throwable = {
-    new SparkException("NOT_A_DATA_SOURCE_RDD_PARTITION", Array(split), null)
+    new SparkException("NOT_A_DATA_SOURCE_RDD_PARTITION", Array(split.toString), null)
   }
 
   def dataPathNotSpecifiedError(): Throwable = {
@@ -607,13 +607,13 @@ object QueryExecutionErrors {
   }
 
   def cannotClearPartitionDirectoryError(path: Path): Throwable = {
-    new SparkException("CANNOT_CLEAR_PARTITION_DIRECTORY", Array(path), null)
+    new SparkException("CANNOT_CLEAR_PARTITION_DIRECTORY", Array(path.toString), null)
   }
 
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): Throwable = {
     new SparkException("FAILED_TO_CAST_VALUE_TO_DATATYPE_FOR_PARTITION_COLUMN"
-      , Array(value, dataType, columnName), null)
+      , Array(value, dataType.toString, columnName), null)
   }
 
   def endOfStreamError(): Throwable = {
@@ -668,7 +668,7 @@ object QueryExecutionErrors {
   }
 
   def unsupportedPartitionTransformError(transform: Transform): Throwable = {
-    new SparkException("UNSUPPORTED_PARTITION_TRANSFORM", Array(transform), null)
+    new SparkException("UNSUPPORTED_PARTITION_TRANSFORM", Array(transform.toString), null)
   }
 
   def missingDatabaseLocationError(): Throwable = {
@@ -1366,7 +1366,7 @@ object QueryExecutionErrors {
   }
 
   def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
-    new SparkException("CANNOT_REMOVE_PARTITION_DIR", Array(partitionPath), null)
+    new SparkException("CANNOT_REMOVE_PARTITION_DIR", Array(partitionPath.toString), null)
   }
 
   def cannotCreateStagingDirError(message: String, e: IOException): Throwable = {
@@ -1477,7 +1477,7 @@ object QueryExecutionErrors {
   }
 
   def partitionColumnNotFoundInSchemaError(col: String, schema: StructType): Throwable = {
-    new SparkException("PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA", Array(col, schema), null)
+    new SparkException("PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA", Array(col, schema.toString), null)
   }
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
@@ -1717,7 +1717,8 @@ object QueryExecutionErrors {
   }
 
   def dynamicPartitionOverwriteUnsupportedByTableError(table: Table): Throwable = {
-    new SparkException("DYNAMIC_PARTITION_OVERWRITE_UNSUPPORTED_BY_TABLE", Array(table), null)
+    new SparkException("DYNAMIC_PARTITION_OVERWRITE_UNSUPPORTED_BY_TABLE",
+      Array(table.toString), null)
   }
 
   def failedMergingSchemaError(schema: StructType, e: SparkException): Throwable = {
@@ -1937,7 +1938,8 @@ object QueryExecutionErrors {
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
       "WRITE_PARTITION_EXCEED_CONFIG_SIZE_WHEN_DYNAMIC_PARTITION",
-      Array(numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey, numWrittenParts), null)
+      Array(numWrittenParts.toString, maxDynamicPartitions.toString,
+        maxDynamicPartitionsKey, numWrittenParts.toString), null)
   }
 
   def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
