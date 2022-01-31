@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
-import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
+import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_OUTLIERS_ONLY, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
@@ -66,6 +66,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       sparkContext = sc
 
       val policy = ExecutorRollPolicy.withName(sc.conf.get(EXECUTOR_ROLL_POLICY))
+      val onlyKillOutliers = sc.conf.get(EXECUTOR_ROLL_OUTLIERS_ONLY)
       periodicService.scheduleAtFixedRate(() => {
         try {
           sparkContext.schedulerBackend match {
@@ -73,7 +74,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
               val executorSummaryList = sparkContext
                 .statusStore
                 .executorList(true)
-              choose(executorSummaryList, policy) match {
+              choose(executorSummaryList, policy, onlyKillOutliers) match {
                 case Some(id) =>
                   // Use decommission to be safe.
                   logInfo(s"Ask to decommission executor $id")
@@ -99,8 +100,10 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
 
   override def shutdown(): Unit = periodicService.shutdown()
 
-  private def choose(list: Seq[v1.ExecutorSummary], policy: ExecutorRollPolicy.Value)
-      : Option[String] = {
+  private def choose(
+      list: Seq[v1.ExecutorSummary],
+      policy: ExecutorRollPolicy.Value,
+      onlyKillOutliers: Boolean) : Option[String] = {
     val listWithoutDriver = list
       .filterNot(_.id.equals(SparkContext.DRIVER_IDENTIFIER))
       .filter(_.totalTasks >= minTasks)
@@ -110,13 +113,15 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
       case ExecutorRollPolicy.ADD_TIME =>
         listWithoutDriver.sortBy(_.addTime)
       case ExecutorRollPolicy.TOTAL_GC_TIME =>
-        listWithoutDriver.sortBy(_.totalGCTime).reverse
+        sort(listWithoutDriver, _.totalGCTime, onlyKillOutliers)
       case ExecutorRollPolicy.TOTAL_DURATION =>
-        listWithoutDriver.sortBy(_.totalDuration).reverse
+        sort(listWithoutDriver, _.totalDuration, onlyKillOutliers)
       case ExecutorRollPolicy.AVERAGE_DURATION =>
-        listWithoutDriver.sortBy(e => e.totalDuration.toFloat / Math.max(1, e.totalTasks)).reverse
+        sort(listWithoutDriver,
+          e => e.totalDuration.toFloat / Math.max(1, e.totalTasks),
+          onlyKillOutliers)
       case ExecutorRollPolicy.FAILED_TASKS =>
-        listWithoutDriver.sortBy(_.failedTasks).reverse
+        sort(listWithoutDriver, _.failedTasks, onlyKillOutliers)
       case ExecutorRollPolicy.OUTLIER =>
         // We build multiple outlier lists and concat in the following importance order to find
         // outliers in various perspective:
@@ -127,9 +132,25 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
           outliers(listWithoutDriver, e => e.totalDuration) ++
           outliers(listWithoutDriver, e => e.totalGCTime) ++
           outliers(listWithoutDriver, e => e.failedTasks) ++
-          listWithoutDriver.sortBy(_.totalDuration).reverse
+          (if (onlyKillOutliers) Seq() else listWithoutDriver.sortBy(_.totalDuration).reverse)
     }
     sortedList.headOption.map(_.id)
+  }
+
+  /**
+   * Sort on the policy, or search for outliers if we're only killing outliers.
+   */
+  private def sort(
+      list: Seq[v1.ExecutorSummary],
+      get: v1.ExecutorSummary => Float,
+      onlyKillOutliers: Boolean): Seq[v1.ExecutorSummary] = {
+    if (list.isEmpty) {
+      list
+    } else if (onlyKillOutliers) {
+      outliers(list, get)
+    } else {
+      list.sortBy(get(_)).reverse
+    }
   }
 
   /**

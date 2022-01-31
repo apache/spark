@@ -182,6 +182,16 @@ private[spark] object Config extends Logging {
       .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
       .createWithDefault(0)
 
+  val EXECUTOR_ROLL_OUTLIERS_ONLY =
+    ConfigBuilder("spark.kubernetes.executor.onlyRollOutliers")
+      .doc("Only roll an executor if it is an outlier. An outlier is defined to be at least two " +
+        "standard deviation outside of the mean. If no outlier is found then no executor will " +
+        "be rolled."
+      )
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
