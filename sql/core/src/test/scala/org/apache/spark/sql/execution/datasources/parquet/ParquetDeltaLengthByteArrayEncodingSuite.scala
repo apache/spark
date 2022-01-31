@@ -21,7 +21,6 @@ import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
 import org.apache.parquet.io.api.Binary
 
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -42,7 +41,7 @@ class ParquetDeltaLengthByteArrayEncodingSuite
   protected override def beforeEach(): Unit = {
     writer =
       new DeltaLengthByteArrayValuesWriter(64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
-    reader = new VectorizedDeltaLengthByteArrayReader(MemoryMode.OFF_HEAP)
+    reader = new VectorizedDeltaLengthByteArrayReader()
     super.beforeAll()
   }
 
@@ -69,7 +68,7 @@ class ParquetDeltaLengthByteArrayEncodingSuite
       reader.skipBinary(1)
       i += 2
     }
-    reader = new VectorizedDeltaLengthByteArrayReader(MemoryMode.OFF_HEAP)
+    reader = new VectorizedDeltaLengthByteArrayReader()
     reader.initFromPage(values.length, writer.getBytes.toInputStream)
     writableColumnVector = new OnHeapColumnVector(values.length, StringType)
     var skipCount = 0

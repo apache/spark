@@ -99,12 +99,6 @@ public interface VectorizedValuesReader {
           length);
     }
 
-    static void copyWriteByteBuffer(WritableColumnVector c, int rowId, ByteBuffer val, int length) {
-      byte[] bytes = new byte[length];
-      val.get(bytes);
-      c.putByteArray(rowId, bytes);
-    }
-
     static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) { }
 
   }

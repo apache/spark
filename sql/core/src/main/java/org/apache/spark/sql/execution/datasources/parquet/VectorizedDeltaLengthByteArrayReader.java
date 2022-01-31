@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.io.ParquetDecodingException;
-import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
@@ -35,25 +33,18 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase implements
     VectorizedValuesReader {
 
-  private final MemoryMode memoryMode;
   private final VectorizedDeltaBinaryPackedReader lengthReader =
       new VectorizedDeltaBinaryPackedReader();
   private ByteBufferInputStream in;
   private WritableColumnVector lengthsVector;
   private int currentRow = 0;
 
-  VectorizedDeltaLengthByteArrayReader(MemoryMode memoryMode) {
-    this.memoryMode = memoryMode;
+  VectorizedDeltaLengthByteArrayReader() {
   }
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    if (memoryMode == MemoryMode.OFF_HEAP) {
-      lengthsVector = new OffHeapColumnVector(valueCount, IntegerType);
-      lengthsVector.putInts(0, valueCount, 0);
-    } else {
-      lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
-    }
+    lengthsVector = new OnHeapColumnVector(valueCount, IntegerType);
     lengthReader.initFromPage(valueCount, in);
     lengthReader.readIntegers(lengthReader.getTotalValueCount(), lengthsVector, 0);
     this.in = in.remainingStream();
@@ -66,20 +57,18 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     }
     ByteBuffer buffer;
     ByteBufferOutputWriter outputWriter;
-    if (memoryMode == MemoryMode.OFF_HEAP) {
-      outputWriter = ByteBufferOutputWriter::copyWriteByteBuffer;
-    } else {
-      outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
-    }
+    outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(rowId + i);
-      try {
-        buffer = in.slice(length);
-      } catch (EOFException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      if (length > 0) {
+        try {
+          buffer = in.slice(length);
+        } catch (EOFException e) {
+          throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        }
+        outputWriter.write(c, rowId + i, buffer, length);
       }
-      outputWriter.write(c, rowId + i, buffer, length);
       currentRow++;
     }
   }

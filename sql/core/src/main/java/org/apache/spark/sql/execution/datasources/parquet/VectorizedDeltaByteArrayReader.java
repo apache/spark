@@ -23,8 +23,6 @@ import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
@@ -38,7 +36,6 @@ import java.nio.ByteBuffer;
 public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     implements VectorizedValuesReader, RequiresPreviousReader {
 
-  private final MemoryMode memoryMode;
   private final VectorizedDeltaBinaryPackedReader prefixLengthReader =
       new VectorizedDeltaBinaryPackedReader();
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
@@ -50,25 +47,15 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   //temporary variable used by getBinary
   private final WritableColumnVector binaryValVector;
 
-  VectorizedDeltaByteArrayReader(MemoryMode memoryMode){
-    this.memoryMode = memoryMode;
-    this.suffixReader = new VectorizedDeltaLengthByteArrayReader(memoryMode);
-    if (memoryMode == MemoryMode.OFF_HEAP) {
-      binaryValVector = new OffHeapColumnVector(1, BinaryType);
-    } else {
-      binaryValVector = new OnHeapColumnVector(1, BinaryType);
-    }
+  VectorizedDeltaByteArrayReader() {
+    this.suffixReader = new VectorizedDeltaLengthByteArrayReader();
+    binaryValVector = new OnHeapColumnVector(1, BinaryType);
   }
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    if (memoryMode == MemoryMode.OFF_HEAP) {
-      prefixLengthVector = new OffHeapColumnVector(valueCount, IntegerType);
-      suffixVector = new OffHeapColumnVector(valueCount, BinaryType);
-    } else {
-      prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
-      suffixVector = new OnHeapColumnVector(valueCount, BinaryType);
-    }
+    prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
+    suffixVector = new OnHeapColumnVector(valueCount, BinaryType);
     prefixLengthReader.initFromPage(valueCount, in);
     prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
         prefixLengthVector, 0);

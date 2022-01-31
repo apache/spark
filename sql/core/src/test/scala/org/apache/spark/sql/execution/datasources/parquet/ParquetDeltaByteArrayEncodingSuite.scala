@@ -20,7 +20,6 @@ import org.apache.parquet.bytes.DirectByteBufferAllocator
 import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
 
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -39,7 +38,7 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
 
   protected override def beforeEach(): Unit = {
     writer = new DeltaByteArrayWriter(64 * 1024, 64 * 1024, new DirectByteBufferAllocator)
-    reader = new VectorizedDeltaByteArrayReader(MemoryMode.ON_HEAP)
+    reader = new VectorizedDeltaByteArrayReader()
     super.beforeAll()
   }
 

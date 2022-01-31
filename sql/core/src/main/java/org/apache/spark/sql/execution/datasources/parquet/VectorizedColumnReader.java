@@ -38,7 +38,6 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotat
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.Decimal;
 
@@ -91,7 +90,6 @@ public class VectorizedColumnReader {
   private final LogicalTypeAnnotation logicalTypeAnnotation;
   private final String datetimeRebaseMode;
   private final ParsedVersion writerVersion;
-  private final MemoryMode memoryMode;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -103,8 +101,7 @@ public class VectorizedColumnReader {
       String datetimeRebaseTz,
       String int96RebaseMode,
       String int96RebaseTz,
-      ParsedVersion writerVersion,
-      MemoryMode memoryMode) throws IOException {
+      ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
@@ -138,7 +135,6 @@ public class VectorizedColumnReader {
     assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
       "CORRECTED".equals(int96RebaseMode);
     this.writerVersion = writerVersion;
-    this.memoryMode = memoryMode;
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
@@ -306,7 +302,7 @@ public class VectorizedColumnReader {
       case PLAIN:
         return new VectorizedPlainValuesReader();
       case DELTA_BYTE_ARRAY:
-        return new VectorizedDeltaByteArrayReader(memoryMode);
+        return new VectorizedDeltaByteArrayReader();
       case DELTA_BINARY_PACKED:
         return new VectorizedDeltaBinaryPackedReader();
       case RLE:
