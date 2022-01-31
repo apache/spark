@@ -201,9 +201,13 @@ class StreamingQueryManagerSuite extends StreamTest {
 
       // After that query is stopped, awaitAnyTerm should throw exception
       eventually(Timeout(streamingTimeout)) { require(!q3.isActive) } // wait for query to stop
+      // When `isActive` becomes `false`, `StreamingQueryManager` may not receive the error yet.
+      // Hence, call `stop` to wait until the thread of `q3` exits so that we can ensure
+      // `StreamingQueryManager` has already received the error.
+      q3.stop()
       testAwaitAnyTermination(
         ExpectException[SparkException],
-        awaitTimeout = 2.second,
+        awaitTimeout = 100.milliseconds,
         testBehaviorFor = 4.seconds)
 
 
