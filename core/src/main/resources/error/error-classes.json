@@ -93,7 +93,7 @@
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
     "sqlState" : "22023"
   },
-  "INVALID_SQL_SYNTAX": {
+  "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: %s" ],
     "sqlState" : "42000"
   },
