@@ -622,7 +622,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
-  test("SPARK-38075: ORDER BY with LIMIT adds fake rows") {
+  test("SPARK-38075: ORDER BY with LIMIT should not add fake rows") {
     withTempView("v") {
       val df = Seq((1), (2), (3)).toDF("a")
       df.createTempView("v")
