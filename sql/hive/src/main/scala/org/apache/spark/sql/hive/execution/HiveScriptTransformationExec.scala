@@ -64,7 +64,7 @@ private[hive] case class HiveScriptTransformationExec(
       outputSoi: StructObjectInspector,
       hadoopConf: Configuration): Iterator[InternalRow] = {
     new Iterator[InternalRow] with HiveInspectors {
-      var completed = false
+      private var completed = false
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
