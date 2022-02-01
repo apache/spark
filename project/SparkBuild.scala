@@ -649,7 +649,7 @@ object KubernetesIntegrationTests {
           "-t", imageTag.getOrElse("dev"),
           "-p", s"$bindingsDir/python/Dockerfile",
           "-R", s"$bindingsDir/R/Dockerfile") ++
-          (if (deployMode == Some("docker-for-desktop")) Seq.empty else Seq("-m")) ++
+          (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
         val ec = Process(cmd).!
