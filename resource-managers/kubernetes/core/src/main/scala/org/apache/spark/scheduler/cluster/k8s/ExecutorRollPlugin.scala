@@ -134,9 +134,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * Since we will choose only first item, the duplication is okay.
    */
   private def outliersFromMultipleDimensions(listWithoutDriver: Seq[v1.ExecutorSummary]) =
-    outliers(
-      listWithoutDriver.filter(_.totalTasks > 0),
-      e => e.totalDuration / e.totalTasks) ++
+    outliers(listWithoutDriver.filter(_.totalTasks > 0), e => e.totalDuration / e.totalTasks) ++
       outliers(listWithoutDriver, e => e.totalDuration) ++
       outliers(listWithoutDriver, e => e.totalGCTime) ++
       outliers(listWithoutDriver, e => e.failedTasks)
