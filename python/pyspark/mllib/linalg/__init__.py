@@ -575,8 +575,8 @@ class DenseVector(Vector):
     def __neg__(self) -> "DenseVector":
         return DenseVector(-self.array)
 
-    def _delegate(op: str) -> Callable[["DenseVector", Any], Any]:  # type: ignore[misc]
-        def func(self: "DenseVector", other: Any) -> Any:
+    def _delegate(op: str) -> Callable[["DenseVector", Any], "DenseVector"]:  # type: ignore[misc]
+        def func(self: "DenseVector", other: Any) -> "DenseVector":
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
@@ -768,7 +768,7 @@ class SparseVector(Vector):
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(cast(int, size), indices, values)
 
-    def dot(self, other: Any) -> np.float64:
+    def dot(self, other: Iterable[float]) -> np.float64:
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
@@ -824,9 +824,9 @@ class SparseVector(Vector):
                 return np.dot(self_values, other.values[other_cmind])
 
         else:
-            return self.dot(_convert_to_vector(other))
+            return self.dot(_convert_to_vector(other))  # type: ignore[arg-type]
 
-    def squared_distance(self, other: Any) -> np.float64:
+    def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
         Squared distance from a SparseVector or 1-dimensional NumPy array.
 
@@ -894,7 +894,7 @@ class SparseVector(Vector):
                 j += 1
             return result
         else:
-            return self.squared_distance(_convert_to_vector(other))
+            return self.squared_distance(_convert_to_vector(other))  # type: ignore[arg-type]
 
     def toArray(self) -> np.ndarray:
         """
@@ -1140,7 +1140,7 @@ class Vectors:
         return v1.squared_distance(v2)  # type: ignore[attr-defined]
 
     @staticmethod
-    def norm(vector: Vector, p: Union[float, str]) -> np.float64:
+    def norm(vector: Vector, p: "NormType") -> np.float64:
         """
         Find norm of the given vector.
         """
