@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
@@ -436,6 +437,23 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           """.stripMargin).collect()
       }.getMessage
       assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+    }
+  }
+
+  test("SPARK-38075: ORDER BY with LIMIT should not add fake rows") {
+    withTempView("v") {
+      val df = Seq((1), (2), (3)).toDF("a")
+      df.createTempView("v")
+      checkAnswer(sql(
+        """
+          |SELECT TRANSFORM(a)
+          |  USING 'cat' AS (a)
+          |FROM v
+          |ORDER BY a
+          |LIMIT 10
+          |""".stripMargin),
+        identity,
+        Row("1") :: Row("2") :: Row("3") :: Nil)
     }
   }
 }
