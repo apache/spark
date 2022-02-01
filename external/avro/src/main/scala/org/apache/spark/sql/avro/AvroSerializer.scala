@@ -126,16 +126,20 @@ private[sql] class AvroSerializer(
       case (d: DecimalType, FIXED)
         if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
-          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
-          decimalConversions.toFixed(decimal.toJavaBigDecimal, avroType,
-            LogicalTypes.decimal(d.precision, d.scale))
-
+          getter.get(ordinal, d) match {
+            case bigDecimal: java.math.BigDecimal => decimalConversions.toFixed(bigDecimal, avroType, LogicalTypes.decimal(bigDecimal.precision, bigDecimal.scale))
+            case decimal: Decimal => decimalConversions.toFixed(decimal.toJavaBigDecimal, avroType, LogicalTypes.decimal(d.precision, d.scale))
+            case other => throw new IncompatibleSchemaException(s"Expected java.math.BigDecimal or Decimal, found ${other.getClass}")
+          }
+        
       case (d: DecimalType, BYTES)
         if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
-          val decimal = getter.getDecimal(ordinal, d.precision, d.scale)
-          decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType,
-            LogicalTypes.decimal(d.precision, d.scale))
+          getter.get(ordinal, d) match {
+            case bigDecimal: java.math.BigDecimal => decimalConversions.toBytes(bigDecimal, avroType, LogicalTypes.decimal(bigDecimal.precision, bigDecimal.scale))
+            case decimal: Decimal => decimalConversions.toBytes(decimal.toJavaBigDecimal, avroType, LogicalTypes.decimal(d.precision, d.scale))
+            case other => throw new IncompatibleSchemaException(s"Expected java.math.BigDecimal or Decimal, found ${other.getClass}")
+          }
 
       case (StringType, ENUM) =>
         val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
@@ -166,27 +170,53 @@ private[sql] class AvroSerializer(
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
       case (DateType, INT) =>
-        (getter, ordinal) => dateRebaseFunc(getter.getInt(ordinal))
-
-      case (TimestampType, LONG) => avroType.getLogicalType match {
+        (getter, ordinal) => getter.get(ordinal, DateType) match {
+          case epochDays: java.lang.Integer => dateRebaseFunc(epochDays)
+          case date: java.sql.Date => dateRebaseFunc(date.toLocalDate().toEpochDay().toInt)
+          case localDate: java.time.LocalDate => dateRebaseFunc(localDate.toEpochDay().toInt)
+          case other => throw new IncompatibleSchemaException(s"Expected java.lang.Integer, java.sql.Date, or java.time.LocalDate, found ${other.getClass}")
+        }
+          
+      case (TimestampType, LONG) => 
+        avroType.getLogicalType match {
           // For backward compatibility, if the Avro type is Long and it is not logical type
           // (the `null` case), output the timestamp value as with millisecond precision.
           case null | _: TimestampMillis => (getter, ordinal) =>
             DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
+            getter.get(ordinal, TimestampType) match {
+              case micros: java.lang.Long => DateTimeUtils.microsToMillis(timestampRebaseFunc(micros))
+              case javaTimestamp: java.sql.Timestamp => javaTimestamp.getTime
+              case instant: java.time.Instant => instant.toEpochMilli
+              case other => throw new IncompatibleSchemaException(s"Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant, found ${other.getClass}")
+            }
           case _: TimestampMicros => (getter, ordinal) =>
-            timestampRebaseFunc(getter.getLong(ordinal))
+            getter.get(ordinal, TimestampType) match {
+              case micros: java.lang.Long => timestampRebaseFunc(micros)
+              case javaTimestamp: java.sql.Timestamp => timestampRebaseFunc(DateTimeUtils.millisToMicros(javaTimestamp.getTime))
+              case instant: java.time.Instant => timestampRebaseFunc(DateTimeUtils.millisToMicros(instant.toEpochMilli))
+              case other => throw new IncompatibleSchemaException(s"Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant, found ${other.getClass}")
+            }
           case other => throw new IncompatibleSchemaException(errorPrefix +
             s"SQL type ${TimestampType.sql} cannot be converted to Avro logical type $other")
         }
 
-      case (TimestampNTZType, LONG) => avroType.getLogicalType match {
+      case (TimestampNTZType, LONG) => 
+        avroType.getLogicalType match {
         // To keep consistent with TimestampType, if the Avro type is Long and it is not
         // logical type (the `null` case), output the TimestampNTZ as long value
         // in millisecond precision.
         case null | _: LocalTimestampMillis => (getter, ordinal) =>
-          DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+          getter.get(ordinal, TimestampNTZType) match {
+            case micros: java.lang.Long => DateTimeUtils.microsToMillis(micros)
+            case localDateTime: java.time.LocalDateTime => localDateTime.atZone(java.time.ZoneId.of("UTC")).toInstant().toEpochMilli()
+            case other => throw new IncompatibleSchemaException(s"Expected java.lang.Long or java.time.LocalDateTime, found ${other.getClass}")
+          }
         case _: LocalTimestampMicros => (getter, ordinal) =>
-          getter.getLong(ordinal)
+          getter.get(ordinal, TimestampNTZType) match {
+            case micros: java.lang.Long => micros
+            case localDateTime: java.time.LocalDateTime => DateTimeUtils.millisToMicros(localDateTime.atZone(java.time.ZoneId.of("UTC")).toInstant().toEpochMilli())
+            case other => throw new IncompatibleSchemaException(s"Expected java.lang.Long or java.time.LocalDateTime, found ${other.getClass}")
+          }
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
       }
