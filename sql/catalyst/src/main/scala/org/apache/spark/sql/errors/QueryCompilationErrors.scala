@@ -927,6 +927,10 @@ object QueryCompilationErrors {
     tableDoesNotSupportError("atomic partition management", table)
   }
 
+  def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
+    throw new AnalysisException(s"Table ${table.name} is not a row-level operation table")
+  }
+
   def cannotRenameTableWithAlterViewError(): Throwable = {
     new AnalysisException(
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
