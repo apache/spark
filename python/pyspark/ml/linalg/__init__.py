@@ -441,7 +441,7 @@ class DenseVector(Vector):
             other = other.toArray()
         elif not isinstance(other, np.ndarray):
             other = np.array(other)
-        diff = self.toArray() - other
+        diff: np.ndarray = self.toArray() - other
         return np.dot(diff, diff)
 
     def toArray(self) -> np.ndarray:
