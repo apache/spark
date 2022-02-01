@@ -315,7 +315,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
+    throw new IllegalStateException(s"$nodeName does not implement simpleStringWithNodeId")
   }
 
   protected def typeSuffix =

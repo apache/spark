@@ -26,35 +26,48 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:14.0):
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:14.0
- *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresNamespaceSuite"
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2NamespaceSuite"
  * }}}
  */
 @DockerTest
-class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
+class DB2NamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:14.0-alpine")
+    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
     override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
+      "DB2INST1_PASSWORD" -> "rootpass",
+      "LICENSE" -> "accept",
+      "DBNAME" -> "db2foo",
+      "ARCHIVE_LOGS" -> "false",
+      "AUTOCONFIG" -> "false"
     )
     override val usesIpc = false
-    override val jdbcPort = 5432
+    override val jdbcPort: Int = 50000
+    override val privileged = true
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
+      s"jdbc:db2://$ip:$port/db2foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
 
   val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
-      "driver" -> "org.postgresql.Driver").asJava)
+      "driver" -> "com.ibm.db2.jcc.DB2Driver").asJava)
 
-  catalog.initialize("postgresql", map)
+  catalog.initialize("db2", map)
 
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def builtinNamespaces: Array[Array[String]] =
-    Array(Array("information_schema"), Array("pg_catalog"), Array("public"))
+    Array(Array("NULLID"), Array("SQLJ"), Array("SYSCAT"), Array("SYSFUN"),
+      Array("SYSIBM"), Array("SYSIBMADM"), Array("SYSIBMINTERNAL"), Array("SYSIBMTS"),
+      Array("SYSPROC"), Array("SYSPUBLIC"), Array("SYSSTAT"), Array("SYSTOOLS"))
+
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    builtinNamespaces ++ Array(namespace)
+  }
+
+  override val supportsDropSchemaCascade: Boolean = false
 
   testListNamespaces()
   testDropNamespaces()

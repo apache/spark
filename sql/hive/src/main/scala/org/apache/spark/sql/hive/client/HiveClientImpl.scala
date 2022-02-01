@@ -49,7 +49,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -332,14 +332,24 @@ private[hive] class HiveClientImpl(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
     val hiveDb = toHiveDatabase(database, Some(userName))
-    shim.createDatabase(client, hiveDb, ignoreIfExists)
+    try {
+      shim.createDatabase(client, hiveDb, ignoreIfExists)
+    } catch {
+      case _: AlreadyExistsException =>
+        throw new DatabaseAlreadyExistsException(database.name)
+    }
   }
 
   override def dropDatabase(
       name: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withHiveState {
-    shim.dropDatabase(client, name, true, ignoreIfNotExists, cascade)
+    try {
+      shim.dropDatabase(client, name, true, ignoreIfNotExists, cascade)
+    } catch {
+      case e: HiveException if e.getMessage.contains(s"Database $name is not empty") =>
+        throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(name)
+    }
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {

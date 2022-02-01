@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode,
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
@@ -93,8 +93,8 @@ object QueryCompilationErrors {
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "IF_PARTITION_NOT_EXISTS_UNSUPPORTED",
-      messageParameters = Array(tableName))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -1367,11 +1367,6 @@ object QueryCompilationErrors {
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
-    new AnalysisException("Transforms cannot be converted to partition columns: " +
-      nonIdTransforms.map(_.describe).mkString(", "))
   }
 
   def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {

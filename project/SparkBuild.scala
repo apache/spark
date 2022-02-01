@@ -376,8 +376,8 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, kvstore, avro
+      spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010
     ).contains(x)
   }
 
@@ -604,8 +604,8 @@ object DockerIntegrationTests {
 }
 
 /**
- * These settings run a hardcoded configuration of the Kubernetes integration tests using
- * minikube. Docker images will have the "dev" tag, and will be overwritten every time the
+ * These settings run the Kubernetes integration tests.
+ * Docker images will have the "dev" tag, and will be overwritten every time the
  * integration tests are run. The integration tests are actually bound to the "test" phase,
  * so running "test" on this module will run the integration tests.
  *
@@ -623,8 +623,9 @@ object KubernetesIntegrationTests {
 
   val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
-  val imageTag = settingKey[String]("Tag to use for images built during the test.")
-  val namespace = settingKey[String]("Namespace where to run pods.")
+  val imageTag = sys.props.get("spark.kubernetes.test.imageTag")
+  val namespace = sys.props.get("spark.kubernetes.test.namespace")
+  val deployMode = sys.props.get("spark.kubernetes.test.deployMode")
 
   // Hack: this variable is used to control whether to build docker images. It's updated by
   // the tasks below in a non-obvious way, so that you get the functionality described in
@@ -632,23 +633,23 @@ object KubernetesIntegrationTests {
   private var shouldBuildImage = true
 
   lazy val settings = Seq(
-    imageTag := "dev",
-    namespace := "default",
     dockerBuild := {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
-        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
-        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
-        val extraOptions = if (dockerFile.isDefined) {
-          Seq("-f", s"${dockerFile.get}")
-        } else {
+        val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
+        val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
+            "resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+        val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
+        } else {
+          Seq("-f", s"$dockerFile")
         }
-        val cmd = Seq(dockerTool, "-m",
-          "-t", imageTag.value,
+        val cmd = Seq(dockerTool,
+          "-t", imageTag.getOrElse("dev"),
           "-p", s"$bindingsDir/python/Dockerfile",
           "-R", s"$bindingsDir/R/Dockerfile") ++
+          (if (deployMode == Some("docker-for-desktop")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
         val ec = Process(cmd).!
@@ -666,11 +667,11 @@ object KubernetesIntegrationTests {
     }.value,
     (Test / test) := (Test / test).dependsOn(dockerBuild).value,
     (Test / javaOptions) ++= Seq(
-      "-Dspark.kubernetes.test.deployMode=minikube",
-      s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
-      s"-Dspark.kubernetes.test.namespace=${namespace.value}",
+      s"-Dspark.kubernetes.test.deployMode=${deployMode.getOrElse("minikube")}",
+      s"-Dspark.kubernetes.test.imageTag=${imageTag.getOrElse("dev")}",
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
+    (Test / javaOptions) ++= namespace.map("-Dspark.kubernetes.test.namespace=" + _),
     // Force packaging before building images, so that the latest code is tested.
     dockerBuild := dockerBuild
       .dependsOn(assembly / Compile / packageBin)
