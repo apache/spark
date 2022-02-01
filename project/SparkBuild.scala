@@ -623,6 +623,7 @@ object KubernetesIntegrationTests {
 
   val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
+  val imageRepo = sys.props.getOrElse("spark.kubernetes.test.imageRepo", "docker.io/kubespark")
   val imageTag = sys.props.get("spark.kubernetes.test.imageTag")
   val namespace = sys.props.get("spark.kubernetes.test.namespace")
   val deployMode = sys.props.get("spark.kubernetes.test.deployMode")
@@ -646,6 +647,7 @@ object KubernetesIntegrationTests {
           Seq("-f", s"$dockerFile")
         }
         val cmd = Seq(dockerTool,
+          "-r", imageRepo,
           "-t", imageTag.getOrElse("dev"),
           "-p", s"$bindingsDir/python/Dockerfile",
           "-R", s"$bindingsDir/R/Dockerfile") ++
@@ -655,6 +657,13 @@ object KubernetesIntegrationTests {
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
+        if (deployMode == Some("cloud")) {
+          val cmd = Seq(dockerTool, "-r", imageRepo, "-t", imageTag.getOrElse("dev"), "push")
+          val ret = Process(cmd).!
+          if (ret != 0) {
+            throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ret.")
+          }
         }
       }
       shouldBuildImage = true
