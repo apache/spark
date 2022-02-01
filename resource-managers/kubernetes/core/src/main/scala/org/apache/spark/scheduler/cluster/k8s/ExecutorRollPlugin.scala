@@ -117,10 +117,12 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
         listWithoutDriver.sortBy(e => e.totalDuration.toFloat / Math.max(1, e.totalTasks)).reverse
       case ExecutorRollPolicy.FAILED_TASKS =>
         listWithoutDriver.sortBy(_.failedTasks).reverse
-      case ExecutorRollPolicy.OUTLIER => outliers(listWithoutDriver)
-      case ExecutorRollPolicy.OUTLIER_OR_TOTAL_DURATION =>
+      case ExecutorRollPolicy.OUTLIER =>
         // If there is no outlier we fallback to TOTAL_DURATION policy.
-        outliers(listWithoutDriver) ++ listWithoutDriver.sortBy(_.totalDuration).reverse
+        outliersFromMultipleDimensions(listWithoutDriver) ++
+          listWithoutDriver.sortBy(_.totalDuration).reverse
+      case ExecutorRollPolicy.OUTLIER_NO_FALLBACK =>
+        outliersFromMultipleDimensions(listWithoutDriver)
     }
     sortedList.headOption.map(_.id)
   }
@@ -128,16 +130,16 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   /**
    * We build multiple outlier lists and concat in the following importance order to find
    * outliers in various perspective:
-   * AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS
+   *   AVERAGE_DURATION > TOTAL_DURATION > TOTAL_GC_TIME > FAILED_TASKS
    * Since we will choose only first item, the duplication is okay.
    */
-  private def outliers(listWithoutDriver: Seq[v1.ExecutorSummary]) =
-    outliersForFn(
+  private def outliersFromMultipleDimensions(listWithoutDriver: Seq[v1.ExecutorSummary]) =
+    outliers(
       listWithoutDriver.filter(_.totalTasks > 0),
       e => e.totalDuration / e.totalTasks) ++
-      outliersForFn(listWithoutDriver, e => e.totalDuration) ++
-      outliersForFn(listWithoutDriver, e => e.totalGCTime) ++
-      outliersForFn(listWithoutDriver, e => e.failedTasks)
+      outliers(listWithoutDriver, e => e.totalDuration) ++
+      outliers(listWithoutDriver, e => e.totalGCTime) ++
+      outliers(listWithoutDriver, e => e.failedTasks)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is
@@ -146,7 +148,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * Here, we borrowed 2-sigma idea from https://en.wikipedia.org/wiki/68-95-99.7_rule.
    * In case of normal distribution, this is known to be 2.5 percent roughly.
    */
-  private def outliersForFn(
+  private def outliers(
       list: Seq[v1.ExecutorSummary],
       get: v1.ExecutorSummary => Float): Seq[v1.ExecutorSummary] = {
     if (list.isEmpty) {
