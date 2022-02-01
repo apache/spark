@@ -28,7 +28,7 @@ import org.apache.spark.launcher.SparkLauncher
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
 
   import BasicTestsSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite.{k8sTestTag, localTestTag}
   import KubernetesSuite.{TIMEOUT, INTERVAL}
 
   test("Run SparkPi with no resources", k8sTestTag) {
@@ -116,7 +116,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
-  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
+  test("Run SparkRemoteFileTest using a remote data file", k8sTestTag, localTestTag) {
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
       sparkAppConf.set("spark.files", baseURL.toString +
