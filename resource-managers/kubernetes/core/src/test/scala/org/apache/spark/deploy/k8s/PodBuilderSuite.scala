@@ -26,7 +26,7 @@ import org.mockito.Mockito.{mock, never, verify, when}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.features.{KubernetesCustomFeatureConfigStep, KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep, KubernetesFeatureConfigStep}
+import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep, KubernetesFeatureConfigStep}
 import org.apache.spark.internal.config.ConfigEntry
 
 abstract class PodBuilderSuite extends SparkFunSuite {
@@ -98,6 +98,35 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val metadata = pod.pod.getMetadata
     assert(metadata.getAnnotations.containsKey(annotationKey))
     assert(metadata.getAnnotations.get(annotationKey) === "test-features-value")
+  }
+
+  test("SPARK-37145: configure a custom test step with wrong type config") {
+    val client = mockKubernetesClient()
+    val featureSteps = this.getClass.getSimpleName match {
+      case "KubernetesDriverBuilderSuite" =>
+        "org.apache.spark.deploy.k8s.TestStepWithExecConf"
+      case "KubernetesExecutorBuilderSuite" =>
+        "org.apache.spark.deploy.k8s.TestStepWithDrvConf"
+    }
+    val sparkConf = baseConf.clone()
+      .set(templateFileConf.key, "template-file.yaml")
+      .set(userFeatureStepsConf.key, featureSteps)
+    val e = intercept[SparkException] {
+      buildPod(sparkConf, client)
+    }
+    assert(e.getMessage.contains("Failed to initialize feature step"))
+  }
+
+  test("SPARK-37145: configure a custom test step with wrong name") {
+    val client = mockKubernetesClient()
+    val featureSteps = "unknow.class"
+    val sparkConf = baseConf.clone()
+      .set(templateFileConf.key, "template-file.yaml")
+      .set(userFeatureStepsConf.key, featureSteps)
+    val e = intercept[ClassNotFoundException] {
+      buildPod(sparkConf, client)
+    }
+    assert(e.getMessage.contains("unknow.class"))
   }
 
   test("complain about misconfigured pod template") {
@@ -287,8 +316,19 @@ class TestStepTwo extends KubernetesFeatureConfigStep {
 /**
  * A test user feature step would be used in driver and executor.
  */
-class TestStepWithConf extends KubernetesCustomFeatureConfigStep {
+class TestStepWithConf extends KubernetesDriverCustomFeatureConfigStep
+  with KubernetesExecutorCustomFeatureConfigStep {
   import io.fabric8.kubernetes.api.model._
+
+  private var kubernetesConf: KubernetesConf = _
+
+  override def init(conf: KubernetesDriverConf): Unit = {
+    kubernetesConf = conf
+  }
+
+  override def init(conf: KubernetesExecutorConf): Unit = {
+    kubernetesConf = conf
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
@@ -306,6 +346,12 @@ class TestStepWithConf extends KubernetesCustomFeatureConfigStep {
 class TestStepWithDrvConf extends KubernetesDriverCustomFeatureConfigStep {
   import io.fabric8.kubernetes.api.model._
 
+  private var driverConf: KubernetesDriverConf = _
+
+  override def init(config: KubernetesDriverConf): Unit = {
+    driverConf = config
+  }
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
@@ -321,6 +367,12 @@ class TestStepWithDrvConf extends KubernetesDriverCustomFeatureConfigStep {
  */
 class TestStepWithExecConf extends KubernetesExecutorCustomFeatureConfigStep {
   import io.fabric8.kubernetes.api.model._
+
+  private var executorConf: KubernetesExecutorConf = _
+
+  def init(config: KubernetesExecutorConf): Unit = {
+    executorConf = config
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)

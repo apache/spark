@@ -18,10 +18,13 @@ package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
-private[spark] class KubernetesDriverBuilder {
+private[spark] class KubernetesDriverBuilder extends Logging {
 
   def buildFromFeatures(
       conf: KubernetesDriverConf,
@@ -37,8 +40,27 @@ private[spark] class KubernetesDriverBuilder {
       .getOrElse(SparkPod.initialPod())
 
     val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
-      .map { className =>
-        KubernetesUtils.loadFeatureStep(conf, className)
+      .map { className => {
+        val feature = Utils.classForName[Any](className).newInstance()
+        val initializedFeature = feature match {
+          // Since 3.3, allow user implements feature with KubernetesDriverConf
+          case d: KubernetesDriverCustomFeatureConfigStep =>
+            d.init(conf)
+            Some(d)
+          // raise SparkException with wrong type feature step
+          case _: KubernetesExecutorCustomFeatureConfigStep =>
+            None
+          // Since 3.2, allow user implements feature without config
+          case f: KubernetesFeatureConfigStep =>
+            Some(f)
+          case _ => None
+        }
+        initializedFeature.getOrElse {
+          logError(s"Failed to initialize feature step: $className, " +
+            s"please make sure your driver side feature steps are implemented by " +
+            s"`KubernetesDriverCustomFeatureConfigStep` or `KubernetesCustomFeatureConfigStep`.")
+          throw new SparkException(s"Failed to initialize feature step: $className") }
+      }
       }
 
     val features = Seq(

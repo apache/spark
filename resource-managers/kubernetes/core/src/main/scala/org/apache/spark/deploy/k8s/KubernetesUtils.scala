@@ -32,7 +32,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
-import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -381,14 +380,5 @@ object KubernetesUtils extends Logging {
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
     }
-  }
-
-  // Load and init custom feature step according to `className` and `conf`
-  // This method is used by `KubernetesDriverBuilder` and `KubernetesExecutorBuilder`
-  @Since("3.3.0")
-  def loadFeatureStep(conf: KubernetesConf, className: String): KubernetesFeatureConfigStep = {
-    val feature =
-      Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
-    feature.init(conf)
   }
 }

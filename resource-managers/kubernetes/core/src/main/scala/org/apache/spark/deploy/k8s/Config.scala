@@ -341,9 +341,8 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
       .doc("Class names of an extra driver pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps. After 3.3.0, you can extend your " +
-        "driver feature step by implementing `KubernetesCustomFeatureConfigStep` and " +
-        "`KubernetesDriverCustomFeatureConfigStep`.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, you can extend your " +
+        "driver feature step by implementing `KubernetesDriverCustomFeatureConfigStep`.")
       .version("3.2.0")
       .stringConf
       .toSequence
@@ -353,9 +352,8 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps. After 3.3.0, you can extend your " +
-        "executor feature step by implementing `KubernetesCustomFeatureConfigStep` and " +
-        "`KubernetesExecutorCustomFeatureConfigStep`.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, you can extend your " +
+        "executor feature step by implementing `KubernetesExecutorCustomFeatureConfigStep`.")
       .version("3.2.0")
       .stringConf
       .toSequence
