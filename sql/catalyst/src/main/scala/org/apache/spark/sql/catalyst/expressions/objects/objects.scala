@@ -254,6 +254,18 @@ case class StaticInvoke(
     returnNullable: Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
 
+  def this(
+      staticObject: Class[_],
+      dataType: DataType,
+      functionName: String,
+      arguments: Seq[Expression],
+      inputTypes: Seq[AbstractDataType],
+      propagateNull: Boolean,
+      returnNullable: Boolean) = {
+    this(staticObject, dataType, functionName, arguments, inputTypes,
+      propagateNull, returnNullable, true)
+  }
+
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
     staticObject
@@ -321,6 +333,20 @@ case class StaticInvoke(
     copy(arguments = newChildren)
 }
 
+object StaticInvoke {
+  def apply(
+      staticObject: Class[_],
+      dataType: DataType,
+      functionName: String,
+      arguments: Seq[Expression],
+      inputTypes: Seq[AbstractDataType],
+      propagateNull: Boolean,
+      returnNullable: Boolean): StaticInvoke = {
+    StaticInvoke(staticObject, dataType, functionName, arguments, inputTypes, propagateNull,
+      returnNullable, true)
+  }
+}
+
 /**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
@@ -357,6 +383,18 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
+
+  def this(
+      targetObject: Expression,
+      functionName: String,
+      dataType: DataType,
+      arguments: Seq[Expression],
+      methodInputTypes: Seq[AbstractDataType],
+      propagateNull: Boolean,
+      returnNullable : Boolean) = {
+    this(targetObject, functionName, dataType, arguments, methodInputTypes, propagateNull,
+      returnNullable, true)
+  }
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
@@ -471,6 +509,19 @@ case class Invoke(
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
 }
 
+object Invoke {
+  def apply(
+      targetObject: Expression,
+      functionName: String,
+      dataType: DataType,
+      arguments: Seq[Expression],
+      methodInputTypes: Seq[AbstractDataType],
+      propagateNull: Boolean,
+      returnNullable : Boolean): Invoke = {
+    Invoke(targetObject, functionName, dataType, arguments, methodInputTypes,
+      propagateNull, returnNullable, true)
+  }
+}
 object NewInstance {
   def apply(
       cls: Class[_],
