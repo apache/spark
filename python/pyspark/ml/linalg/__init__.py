@@ -327,13 +327,14 @@ class DenseVector(Vector):
     """
 
     def __init__(self, ar: Union[bytes, np.ndarray, Iterable[float]]):
+        ar_: np.ndarray
         if isinstance(ar, bytes):
-            ar = np.frombuffer(ar, dtype=np.float64)
+            ar_ = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
-            ar = np.array(ar, dtype=np.float64)
-        if ar.dtype != np.float64:
-            ar = ar.astype(np.float64)
-        self.array = cast(np.ndarray, ar)
+            ar_ = np.array(ar, dtype=np.float64)
+        else:
+            ar_ = ar.astype(np.float64) if ar.dtype != np.float64 else ar
+        self.array = ar_
 
     def __reduce__(self) -> Tuple[Type["DenseVector"], Tuple[bytes]]:
         return DenseVector, (self.array.tostring(),)  # type: ignore[attr-defined, union-attr]
