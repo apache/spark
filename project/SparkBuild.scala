@@ -677,6 +677,7 @@ object KubernetesIntegrationTests {
     (Test / test) := (Test / test).dependsOn(dockerBuild).value,
     (Test / javaOptions) ++= Seq(
       s"-Dspark.kubernetes.test.deployMode=${deployMode.getOrElse("minikube")}",
+      s"-Dspark.kubernetes.test.imageRepo=${imageRepo}",
       s"-Dspark.kubernetes.test.imageTag=${imageTag.getOrElse("dev")}",
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
