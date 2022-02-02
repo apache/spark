@@ -210,8 +210,9 @@ private[sql] class AvroSerializer(
             case date: java.sql.Date => dateRebaseFunc(date.toLocalDate().toEpochDay().toInt)
             case localDate: java.time.LocalDate => dateRebaseFunc(localDate.toEpochDay().toInt)
             case other =>
-              throw new IncompatibleSchemaException(
-                s"Expected java.lang.Integer, java.sql.Date, or java.time.LocalDate, found ${other.getClass}")
+              throw new IncompatibleSchemaException(s"""
+                  |Expected java.lang.Integer, java.sql.Date, or java.time.LocalDate,
+                  | but found ${other.getClass}""".stripMargin)
           }
 
       case (TimestampType, LONG) =>
@@ -226,8 +227,9 @@ private[sql] class AvroSerializer(
                 case javaTimestamp: java.sql.Timestamp => javaTimestamp.getTime
                 case instant: java.time.Instant => instant.toEpochMilli
                 case other =>
-                  throw new IncompatibleSchemaException(
-                    s"Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant, found ${other.getClass}")
+                  throw new IncompatibleSchemaException(s"""
+                       |Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant,
+                       | but found ${other.getClass}""".stripMargin)
               }
           case _: TimestampMicros =>
             (getter, ordinal) =>
@@ -238,8 +240,9 @@ private[sql] class AvroSerializer(
                 case instant: java.time.Instant =>
                   timestampRebaseFunc(DateTimeUtils.millisToMicros(instant.toEpochMilli))
                 case other =>
-                  throw new IncompatibleSchemaException(
-                    s"Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant, found ${other.getClass}")
+                  throw new IncompatibleSchemaException(s"""
+                       |Expected Expected java.lang.Long, java.sql.Timestamp, or java.time.Instant,
+                       | but found ${other.getClass}""".stripMargin)
               }
           case other =>
             throw new IncompatibleSchemaException(
@@ -259,8 +262,9 @@ private[sql] class AvroSerializer(
                 case localDateTime: java.time.LocalDateTime =>
                   localDateTime.atZone(java.time.ZoneId.of("UTC")).toInstant().toEpochMilli()
                 case other =>
-                  throw new IncompatibleSchemaException(
-                    s"Expected java.lang.Long or java.time.LocalDateTime, found ${other.getClass}")
+                  throw new IncompatibleSchemaException(s"""
+                       |Expected java.lang.Long or java.time.LocalDateTime,
+                       | but found ${other.getClass}""".stripMargin)
               }
           case _: LocalTimestampMicros =>
             (getter, ordinal) =>
@@ -270,8 +274,9 @@ private[sql] class AvroSerializer(
                   DateTimeUtils.millisToMicros(
                     localDateTime.atZone(java.time.ZoneId.of("UTC")).toInstant().toEpochMilli())
                 case other =>
-                  throw new IncompatibleSchemaException(
-                    s"Expected java.lang.Long or java.time.LocalDateTime, found ${other.getClass}")
+                  throw new IncompatibleSchemaException(s"""
+                       |Expected java.lang.Long or java.time.LocalDateTime,
+                       | but found ${other.getClass}""".stripMargin)
               }
           case other =>
             throw new IncompatibleSchemaException(errorPrefix +

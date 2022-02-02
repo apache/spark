@@ -16,21 +16,21 @@
  */
 package org.apache.spark.sql.avro
 
+import java.nio.ByteBuffer
+import java.time.{Instant, ZoneId}
+
+import scala.collection.JavaConverters._
+
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
-import org.apache.avro.generic.{GenericFixed, GenericRecord, GenericRecordBuilder}
-import org.apache.avro.Schema.Type._
 import org.apache.avro.Conversions.DecimalConversion
+import org.apache.avro.Schema.Type._
+import org.apache.avro.generic.{GenericFixed, GenericRecord, GenericRecordBuilder}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
 import org.apache.spark.sql.types._
-
-import java.nio.ByteBuffer
-import java.time.{Instant, ZoneId}
-
-import scala.collection.JavaConverters._
 
 /**
  * Tests for [[AvroSerializer]] and [[AvroDeserializer]], complementing those in [[AvroSuite]]
@@ -159,8 +159,10 @@ class AvroSerdeSuite extends SparkFunSuite {
     }
   }
 
-  test(
-    "Serialize TimestampType to Avro LONG with logical type timestamp-micros and timestamp-millis") {
+  test(s"""
+        |Serialize TimestampType to Avro LONG with logical type
+        | timestamp-micros and timestamp-millis
+        """.stripMargin) {
     withFieldMatchType { fieldMatch =>
       val structType = StructType(
         Seq(
