@@ -24,7 +24,7 @@ import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesExecutorConf
 /**
  * :: DeveloperApi ::
  *
- * A base class to help user extend custom feature step in driver side.
+ * A base interface to help user extend custom feature step in driver side.
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
  */
@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesExecutorConf
 trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
   /**
    * Initialize the configuration for driver user feature step, this only applicable when user
-   * specified `spark.kubernetes.driver.pod.featureSteps`, the init would be called after feature
+   * specified `spark.kubernetes.driver.pod.featureSteps`, the init will be called after feature
    * step loading.
    */
   def init(config: KubernetesDriverConf): Unit
@@ -42,7 +42,7 @@ trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigSte
 /**
  * :: DeveloperApi ::
  *
- * A base class to help user extend custom feature step in executor side.
+ * A base interface to help user extend custom feature step in executor side.
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
  */
@@ -51,7 +51,7 @@ trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigSte
 trait KubernetesExecutorCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
   /**
    * Initialize the configuration for executor user feature step, this only applicable when user
-   * specified `spark.kubernetes.executor.pod.featureSteps` the init would be called after feature
+   * specified `spark.kubernetes.executor.pod.featureSteps` the init will be called after feature
    * step loading.
    */
   def init(config: KubernetesExecutorConf): Unit

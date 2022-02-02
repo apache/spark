@@ -30,10 +30,16 @@ import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfig
 import org.apache.spark.internal.config.ConfigEntry
 
 abstract class PodBuilderSuite extends SparkFunSuite {
+  val TEST_ANNOTATION_KEY: String
+  val TEST_ANNOTATION_VALUE: String
 
   protected def templateFileConf: ConfigEntry[_]
 
   protected def userFeatureStepsConf: ConfigEntry[_]
+
+  protected def userFeatureStepWithExpectedAnnotation: (String, String)
+
+  protected def wrongTypeFeatureStep: String
 
   protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod
 
@@ -76,41 +82,29 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
     val metadata = pod.pod.getMetadata
-    assert(metadata.getAnnotations.containsKey("test-user-feature-annotation"))
+    assert(metadata.getAnnotations.containsKey("test-features-key"))
+    assert(metadata.getAnnotations.get("test-features-key") === "test-features-value")
   }
 
   test("SPARK-37145: configure a custom test step with driver or executor config") {
     val client = mockKubernetesClient()
-    val (featureSteps, annotationKey) = this.getClass.getSimpleName match {
-      case "KubernetesDriverBuilderSuite" =>
-        ("org.apache.spark.deploy.k8s.TestStepWithDrvConf",
-          "test-drv-user-feature-annotation")
-      case "KubernetesExecutorBuilderSuite" =>
-        ("org.apache.spark.deploy.k8s.TestStepWithExecConf",
-          "test-exec-user-feature-annotation")
-    }
+    val (featureSteps, annotation) = userFeatureStepWithExpectedAnnotation
     val sparkConf = baseConf.clone()
       .set(templateFileConf.key, "template-file.yaml")
       .set(userFeatureStepsConf.key, featureSteps)
-      .set("test-features-key", "test-features-value")
+      .set(TEST_ANNOTATION_KEY, annotation)
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
     val metadata = pod.pod.getMetadata
-    assert(metadata.getAnnotations.containsKey(annotationKey))
-    assert(metadata.getAnnotations.get(annotationKey) === "test-features-value")
+    assert(metadata.getAnnotations.containsKey(TEST_ANNOTATION_KEY))
+    assert(metadata.getAnnotations.get(TEST_ANNOTATION_KEY) === annotation)
   }
 
   test("SPARK-37145: configure a custom test step with wrong type config") {
     val client = mockKubernetesClient()
-    val featureSteps = this.getClass.getSimpleName match {
-      case "KubernetesDriverBuilderSuite" =>
-        "org.apache.spark.deploy.k8s.TestStepWithExecConf"
-      case "KubernetesExecutorBuilderSuite" =>
-        "org.apache.spark.deploy.k8s.TestStepWithDrvConf"
-    }
     val sparkConf = baseConf.clone()
       .set(templateFileConf.key, "template-file.yaml")
-      .set(userFeatureStepsConf.key, featureSteps)
+      .set(userFeatureStepsConf.key, wrongTypeFeatureStep)
     val e = intercept[SparkException] {
       buildPod(sparkConf, client)
     }
@@ -333,51 +327,7 @@ class TestStepWithConf extends KubernetesDriverCustomFeatureConfigStep
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
-        .addToAnnotations("test-user-feature-annotation", kubernetesConf.get("test-features-key"))
-      .endMetadata()
-    val k8sPod = k8sPodBuilder.build()
-    SparkPod(k8sPod, pod.container)
-  }
-}
-
-/**
- * A test driver user feature step would be used in only driver.
- */
-class TestStepWithDrvConf extends KubernetesDriverCustomFeatureConfigStep {
-  import io.fabric8.kubernetes.api.model._
-
-  private var driverConf: KubernetesDriverConf = _
-
-  override def init(config: KubernetesDriverConf): Unit = {
-    driverConf = config
-  }
-
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val k8sPodBuilder = new PodBuilder(pod.pod)
-      .editOrNewMetadata()
-      .addToAnnotations("test-drv-user-feature-annotation", driverConf.get("test-features-key"))
-      .endMetadata()
-    val k8sPod = k8sPodBuilder.build()
-    SparkPod(k8sPod, pod.container)
-  }
-}
-
-/**
- * A test executor user feature step would be used in only executor.
- */
-class TestStepWithExecConf extends KubernetesExecutorCustomFeatureConfigStep {
-  import io.fabric8.kubernetes.api.model._
-
-  private var executorConf: KubernetesExecutorConf = _
-
-  def init(config: KubernetesExecutorConf): Unit = {
-    executorConf = config
-  }
-
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val k8sPodBuilder = new PodBuilder(pod.pod)
-      .editOrNewMetadata()
-      .addToAnnotations("test-exec-user-feature-annotation", executorConf.get("test-features-key"))
+        .addToAnnotations("test-features-key", kubernetesConf.get("test-features-key"))
       .endMetadata()
     val k8sPod = k8sPodBuilder.build()
     SparkPod(k8sPod, pod.container)
