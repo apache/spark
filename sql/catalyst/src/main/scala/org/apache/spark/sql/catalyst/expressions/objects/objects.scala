@@ -254,6 +254,8 @@ case class StaticInvoke(
     returnNullable: Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
 
+  // This additional constructor is added to keep binary compatibility after the addition of the
+  // above `isDeterministic` parameter. See SPARK-38077 for more detail.
   def this(
       staticObject: Class[_],
       dataType: DataType,
@@ -384,6 +386,8 @@ case class Invoke(
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
 
+  // This additional constructor is added to keep binary compatibility after the addition of the
+  // above `isDeterministic` parameter. See SPARK-38077 for more detail.
   def this(
       targetObject: Expression,
       functionName: String,
