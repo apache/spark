@@ -3671,7 +3671,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeShuffleMapStageSuccessfully(0, 0, parts)
     val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(shuffleStage.shuffleDep.mergerLocs.isEmpty)
+    assert(!shuffleStage.shuffleDep.shuffleMergeAllowed &&
+      shuffleStage.shuffleDep.mergerLocs.isEmpty)
 
     completeNextResultStageWithSuccess(1, 0)
 
