@@ -56,8 +56,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       return;
     }
     ByteBuffer buffer;
-    ByteBufferOutputWriter outputWriter;
-    outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
+    ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(rowId + i);
@@ -69,8 +68,8 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
         }
         outputWriter.write(c, rowId + i, buffer, length);
       }
-      currentRow++;
     }
+    currentRow += total;
   }
 
   @Override

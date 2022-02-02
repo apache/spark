@@ -69,7 +69,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     return Binary.fromConstantByteArray(binaryValVector.getBinary(0));
   }
 
-  public void readValues(int total, WritableColumnVector c, int rowId,
+  private void readValues(int total, WritableColumnVector c, int rowId,
       ByteBufferOutputWriter outputWriter) {
     if (total == 0) {
       return;
