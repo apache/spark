@@ -48,8 +48,8 @@ class AvroSerdeSuite extends SparkFunSuite {
       }
       val avro = createNestedAvroSchemaWithFields(top, _.optionalInt(nest))
       val record = new GenericRecordBuilder(avro)
-          .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, 42).build())
-          .build()
+        .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, 42).build())
+        .build()
       val serializer = Serializer.create(CATALYST_STRUCT, avro, fieldMatch)
       val deserializer = Deserializer.create(CATALYST_STRUCT, avro, fieldMatch)
       assert(serializer.serialize(deserializer.deserialize(record).get) === record)
@@ -59,18 +59,23 @@ class AvroSerdeSuite extends SparkFunSuite {
   test("Serialize DecimalType to Avro FIXED with logical type decimal") {
     withFieldMatchType { fieldMatch =>
       val structType = StructType(
-        Seq(StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
-            StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
+        Seq(
+          StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
+          StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
 
       val fixedSchema = Schema.createFixed("fixed_name", "doc", "namespace", 32)
       val logicalType = LogicalTypes.decimal(6, 2)
       val fieldSchema = logicalType.addToSchema(fixedSchema)
 
-      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+      val avroSchema = Schema.createRecord(
+        "name",
+        "doc",
+        "space",
+        true,
+        Seq(
           new Schema.Field("javaBigDecimal", fieldSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])
-        ).asJava)      
-      
+          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])).asJava)
+
       val serializer = Serializer.create(structType, avroSchema, fieldMatch)
 
       val input = InternalRow(new java.math.BigDecimal("1000.12"), Decimal("1000.12"))
@@ -80,26 +85,32 @@ class AvroSerdeSuite extends SparkFunSuite {
       val sparkDecimal = grec.get("sparkDecimal").asInstanceOf[GenericFixed]
 
       assert(javaDecimal === sparkDecimal)
-      assert(new DecimalConversion().fromFixed(sparkDecimal, fixedSchema, logicalType) ===
-        new java.math.BigDecimal("1000.12"))
+      assert(
+        new DecimalConversion().fromFixed(sparkDecimal, fixedSchema, logicalType) ===
+          new java.math.BigDecimal("1000.12"))
     }
   }
 
   test("Serialize DecimalType to Avro BYTES with logical type decimal") {
     withFieldMatchType { fieldMatch =>
       val structType = StructType(
-        Seq(StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
-            StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
+        Seq(
+          StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
+          StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
 
       val bytesSchema = Schema.create(BYTES)
       val logicalType = LogicalTypes.decimal(6, 2)
       val fieldSchema = logicalType.addToSchema(bytesSchema)
 
-      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+      val avroSchema = Schema.createRecord(
+        "name",
+        "doc",
+        "space",
+        true,
+        Seq(
           new Schema.Field("javaBigDecimal", fieldSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])
-        ).asJava)      
-      
+          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])).asJava)
+
       val serializer = Serializer.create(structType, avroSchema, fieldMatch)
 
       val input = InternalRow(new java.math.BigDecimal("1000.12"), Decimal("1000.12"))
@@ -109,24 +120,30 @@ class AvroSerdeSuite extends SparkFunSuite {
       val sparkDecimal = grec.get("sparkDecimal").asInstanceOf[ByteBuffer]
 
       assert(javaDecimal === sparkDecimal)
-      assert(new DecimalConversion().fromBytes(sparkDecimal, bytesSchema, logicalType) ===
-        new java.math.BigDecimal("1000.12"))
+      assert(
+        new DecimalConversion().fromBytes(sparkDecimal, bytesSchema, logicalType) ===
+          new java.math.BigDecimal("1000.12"))
     }
   }
 
   test("Serialize DateType to Avro INT") {
     withFieldMatchType { fieldMatch =>
       val structType = StructType(
-        Seq(StructField("javaSqlDate", DateType, nullable = false),
-            StructField("java8TimeDate", DateType, nullable = false)))
+        Seq(
+          StructField("javaSqlDate", DateType, nullable = false),
+          StructField("java8TimeDate", DateType, nullable = false)))
 
       val dateSchema = Schema.create(INT)
 
-      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+      val avroSchema = Schema.createRecord(
+        "name",
+        "doc",
+        "space",
+        true,
+        Seq(
           new Schema.Field("javaSqlDate", dateSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("java8TimeDate", dateSchema, "", null.asInstanceOf[AnyVal])
-        ).asJava)      
-      
+          new Schema.Field("java8TimeDate", dateSchema, "", null.asInstanceOf[AnyVal])).asJava)
+
       val serializer = Serializer.create(structType, avroSchema, fieldMatch)
 
       val input = InternalRow(
@@ -142,40 +159,48 @@ class AvroSerdeSuite extends SparkFunSuite {
     }
   }
 
-   test("Serialize TimestampType to Avro LONG with logical type timestamp-micros and timestamp-millis") {
+  test(
+    "Serialize TimestampType to Avro LONG with logical type timestamp-micros and timestamp-millis") {
     withFieldMatchType { fieldMatch =>
       val structType = StructType(
-        Seq(StructField("javaSqlTimeMicro", TimestampType, nullable = false),
-            StructField("java8TimeInstantMicro", TimestampType, nullable = false),
-            StructField("javaSqlTimeMillis", TimestampType, nullable = false),
-            StructField("java8TimeInstantMillis", TimestampType, nullable = false)
-          ))
+        Seq(
+          StructField("javaSqlTimeMicro", TimestampType, nullable = false),
+          StructField("java8TimeInstantMicro", TimestampType, nullable = false),
+          StructField("javaSqlTimeMillis", TimestampType, nullable = false),
+          StructField("java8TimeInstantMillis", TimestampType, nullable = false)))
 
       val microSchema = LogicalTypes.timestampMicros().addToSchema(Schema.create(LONG))
 
       val millisSchema = LogicalTypes.timestampMillis().addToSchema(Schema.create(LONG))
 
-      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+      val avroSchema = Schema.createRecord(
+        "name",
+        "doc",
+        "space",
+        true,
+        Seq(
           new Schema.Field("javaSqlTimeMicro", microSchema, "", null.asInstanceOf[AnyVal]),
           new Schema.Field("java8TimeInstantMicro", microSchema, "", null.asInstanceOf[AnyVal]),
           new Schema.Field("javaSqlTimeMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("java8TimeInstantMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
-        ).asJava)      
-      
+          new Schema.Field(
+            "java8TimeInstantMillis",
+            millisSchema,
+            "",
+            null.asInstanceOf[AnyVal])).asJava)
+
       val serializer = Serializer.create(structType, avroSchema, fieldMatch)
 
       val epoch = 1643121231000L
       val epochMicro = 1000 * 1643121231000L
 
       val input = InternalRow(
-                    new java.sql.Timestamp(epoch),
-                    Instant.ofEpochMilli(epoch),
-                    new java.sql.Timestamp(epoch),
-                    Instant.ofEpochMilli(epoch)
-                  )
+        new java.sql.Timestamp(epoch),
+        Instant.ofEpochMilli(epoch),
+        new java.sql.Timestamp(epoch),
+        Instant.ofEpochMilli(epoch))
 
       val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
-      
+
       assert(grec.get("javaSqlTimeMicro").asInstanceOf[Long] === epochMicro)
       assert(grec.get("java8TimeInstantMicro").asInstanceOf[Long] === epochMicro)
       assert(grec.get("javaSqlTimeMillis").asInstanceOf[Long] === epoch)
@@ -186,11 +211,17 @@ class AvroSerdeSuite extends SparkFunSuite {
   test("Fail to convert with field type mismatch") {
     val avro = createAvroSchemaWithTopLevelFields(_.requiredInt("foo"))
     withFieldMatchType { fieldMatch =>
-      assertFailedConversionMessage(avro, Deserializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Deserializer,
+        fieldMatch,
         "Cannot convert Avro field 'foo' to SQL field 'foo' because schema is incompatible " +
           s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType.sql})""")
 
-      assertFailedConversionMessage(avro, Serializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Serializer,
+        fieldMatch,
         s"Cannot convert SQL field 'foo' to Avro field 'foo' because schema is incompatible " +
           s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, avroType = "int")""")
     }
@@ -200,11 +231,17 @@ class AvroSerdeSuite extends SparkFunSuite {
     val avro = createNestedAvroSchemaWithFields("foo", _.optionalFloat("bar"))
 
     withFieldMatchType { fieldMatch =>
-      assertFailedConversionMessage(avro, Deserializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Deserializer,
+        fieldMatch,
         "Cannot convert Avro field 'foo.bar' to SQL field 'foo.bar' because schema is " +
           """incompatible (avroType = "float", sqlType = INT)""")
 
-      assertFailedConversionMessage(avro, Serializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Serializer,
+        fieldMatch,
         "Cannot convert SQL field 'foo.bar' to Avro field 'foo.bar' because " +
           """schema is incompatible (sqlType = INT, avroType = "float")""")
     }
@@ -213,17 +250,24 @@ class AvroSerdeSuite extends SparkFunSuite {
   test("Fail to convert with missing nested Avro fields") {
     val avro = createNestedAvroSchemaWithFields("foo", _.optionalInt("NOTbar"))
     val nonnullCatalyst = new StructType()
-        .add("foo", new StructType().add("bar", IntegerType, nullable = false))
+      .add("foo", new StructType().add("bar", IntegerType, nullable = false))
     // Positional matching will work fine with the name change, so add a new field
-    val extraNonnullCatalyst = new StructType().add("foo",
+    val extraNonnullCatalyst = new StructType().add(
+      "foo",
       new StructType().add("bar", IntegerType).add("baz", IntegerType, nullable = false))
 
     // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
     Deserializer.create(CATALYST_STRUCT, avro, BY_NAME)
-    assertFailedConversionMessage(avro, Deserializer, BY_NAME,
+    assertFailedConversionMessage(
+      avro,
+      Deserializer,
+      BY_NAME,
       "Cannot find field 'foo.bar' in Avro schema",
       nonnullCatalyst)
-    assertFailedConversionMessage(avro, Deserializer, BY_POSITION,
+    assertFailedConversionMessage(
+      avro,
+      Deserializer,
+      BY_POSITION,
       "Cannot find field at position 1 of field 'foo' from Avro schema (using positional matching)",
       extraNonnullCatalyst)
 
@@ -231,24 +275,38 @@ class AvroSerdeSuite extends SparkFunSuite {
     val byNameMsg = "Cannot find field 'foo.bar' in Avro schema"
     assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg)
     assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
-    assertFailedConversionMessage(avro, Serializer, BY_POSITION,
+    assertFailedConversionMessage(
+      avro,
+      Serializer,
+      BY_POSITION,
       "Cannot find field at position 1 of field 'foo' from Avro schema (using positional matching)",
       extraNonnullCatalyst)
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
-    val avro = SchemaBuilder.builder().record("toptest").fields()
-        .name("top").`type`(createNestedAvroSchemaWithFields("foo", _.optionalFloat("bar")))
-        .noDefault().endRecord()
+    val avro = SchemaBuilder
+      .builder()
+      .record("toptest")
+      .fields()
+      .name("top")
+      .`type`(createNestedAvroSchemaWithFields("foo", _.optionalFloat("bar")))
+      .noDefault()
+      .endRecord()
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
     withFieldMatchType { fieldMatch =>
-      assertFailedConversionMessage(avro, Deserializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Deserializer,
+        fieldMatch,
         "Cannot convert Avro field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
           """is incompatible (avroType = "float", sqlType = INT)""",
         catalyst)
 
-      assertFailedConversionMessage(avro, Serializer, fieldMatch,
+      assertFailedConversionMessage(
+        avro,
+        Serializer,
+        fieldMatch,
         "Cannot convert SQL field 'top.foo.bar' to Avro field 'top.foo.bar' because schema is " +
           """incompatible (sqlType = INT, avroType = "float")""",
         catalyst)
@@ -259,24 +317,42 @@ class AvroSerdeSuite extends SparkFunSuite {
     // Note that this is allowed for deserialization, but not serialization
     val tooManyFields =
       createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
-    assertFailedConversionMessage(tooManyFields, Serializer, BY_NAME,
+    assertFailedConversionMessage(
+      tooManyFields,
+      Serializer,
+      BY_NAME,
       "Found field 'bar' in Avro schema but there is no match in the SQL schema")
-    assertFailedConversionMessage(tooManyFields, Serializer, BY_POSITION,
+    assertFailedConversionMessage(
+      tooManyFields,
+      Serializer,
+      BY_POSITION,
       "Found field 'bar' at position 1 of top-level record from Avro schema but there is no " +
         "match in the SQL schema at top-level record (using positional matching)")
 
     val tooManyFieldsNested =
       createNestedAvroSchemaWithFields("foo", _.optionalInt("bar").optionalInt("baz"))
-    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_NAME,
+    assertFailedConversionMessage(
+      tooManyFieldsNested,
+      Serializer,
+      BY_NAME,
       "Found field 'foo.baz' in Avro schema but there is no match in the SQL schema")
-    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_POSITION,
+    assertFailedConversionMessage(
+      tooManyFieldsNested,
+      Serializer,
+      BY_POSITION,
       s"Found field 'baz' at position 1 of field 'foo' from Avro schema but there is no match " +
         s"in the SQL schema at field 'foo' (using positional matching)")
 
     val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
-    assertFailedConversionMessage(tooFewFields, Serializer, BY_NAME,
+    assertFailedConversionMessage(
+      tooFewFields,
+      Serializer,
+      BY_NAME,
       "Cannot find field 'foo' in Avro schema")
-    assertFailedConversionMessage(tooFewFields, Serializer, BY_POSITION,
+    assertFailedConversionMessage(
+      tooFewFields,
+      Serializer,
+      BY_POSITION,
       "Cannot find field at position 0 of top-level record from Avro schema " +
         "(using positional matching)")
   }
@@ -286,7 +362,8 @@ class AvroSerdeSuite extends SparkFunSuite {
    * assert that it fails, and assert that the _cause_ of the thrown exception has a message
    * matching `expectedCauseMessage`.
    */
-  private def assertFailedConversionMessage(avroSchema: Schema,
+  private def assertFailedConversionMessage(
+      avroSchema: Schema,
       serdeFactory: SerdeFactory[_],
       fieldMatchType: MatchType,
       expectedCauseMessage: String,
@@ -311,8 +388,8 @@ class AvroSerdeSuite extends SparkFunSuite {
       }
     }
   }
-}
 
+}
 
 object AvroSerdeSuite {
 
@@ -331,6 +408,7 @@ object AvroSerdeSuite {
   }
 
   import MatchType._
+
   /**
    * Specifier for type of serde to be used for easy creation of tests that do both
    * serialization and deserialization.
@@ -338,11 +416,16 @@ object AvroSerdeSuite {
   private sealed trait SerdeFactory[T] {
     def create(sqlSchema: StructType, avroSchema: Schema, fieldMatchType: MatchType): T
   }
+
   private object Serializer extends SerdeFactory[AvroSerializer] {
+
     override def create(sql: StructType, avro: Schema, matchType: MatchType): AvroSerializer =
       new AvroSerializer(sql, avro, false, isPositional(matchType), CORRECTED)
+
   }
+
   private object Deserializer extends SerdeFactory[AvroDeserializer] {
+
     override def create(sql: StructType, avro: Schema, matchType: MatchType): AvroDeserializer =
       new AvroDeserializer(
         avro,
@@ -350,6 +433,7 @@ object AvroSerdeSuite {
         isPositional(matchType),
         RebaseSpec(CORRECTED),
         new NoopFilters)
+
   }
 
   /**
@@ -360,7 +444,8 @@ object AvroSerdeSuite {
   private def createNestedAvroSchemaWithFields(
       nestedRecordFieldName: String,
       f: SchemaBuilder.FieldAssembler[Schema] => SchemaBuilder.FieldAssembler[Schema]): Schema = {
-    createAvroSchemaWithTopLevelFields(_.name(nestedRecordFieldName)
+    createAvroSchemaWithTopLevelFields(
+      _.name(nestedRecordFieldName)
         .`type`(f(SchemaBuilder.builder().record("test").fields()).endRecord())
         .noDefault())
   }
@@ -373,4 +458,5 @@ object AvroSerdeSuite {
       f: SchemaBuilder.FieldAssembler[Schema] => SchemaBuilder.FieldAssembler[Schema]): Schema = {
     f(SchemaBuilder.builder().record("top").fields()).endRecord()
   }
+
 }
