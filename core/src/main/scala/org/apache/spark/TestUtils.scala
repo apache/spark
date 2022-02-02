@@ -263,8 +263,7 @@ private[spark] object TestUtils {
       contains = contain(e, msg)
     }
     assert(contains,
-      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg\n" +
-        Utils.exceptionString(e))
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg")
   }
 
   /**
