@@ -26,36 +26,40 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:14.0):
+ * To run this test suite for a specific version (e.g., mysql:5.7.36):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:14.0
- *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresNamespaceSuite"
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLNamespaceSuite"
  * }}}
  */
 @DockerTest
-class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
+class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:14.0-alpine")
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
     override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
+      "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
     override val usesIpc = false
-    override val jdbcPort = 5432
+    override val jdbcPort: Int = 3306
+
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
+      s"jdbc:mysql://$ip:$port/" +
+        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
   val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
-      "driver" -> "org.postgresql.Driver").asJava)
+      "driver" -> "com.mysql.jdbc.Driver").asJava)
 
-  catalog.initialize("postgresql", map)
+  catalog.initialize("mysql", map)
 
   override def dataPreparation(conn: Connection): Unit = {}
 
-  override def builtinNamespaces: Array[Array[String]] =
-    Array(Array("information_schema"), Array("pg_catalog"), Array("public"))
+  override def builtinNamespaces: Array[Array[String]] = Array()
 
-  testListNamespaces()
-  testDropNamespaces()
+  override val supportsSchemaComment: Boolean = false
+
+  // Cannot get namespaces with conn.getMetaData.getSchemas
+  // TODO testListNamespaces()
+  // TODO testDropNamespaces()
 }

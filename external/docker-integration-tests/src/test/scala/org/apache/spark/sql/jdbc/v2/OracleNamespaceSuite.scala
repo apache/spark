@@ -18,15 +18,11 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
-import java.util.Locale
 
-import org.scalatest.time.SpanSugar._
+import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.DatabaseOnDocker
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -44,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * 4. Start docker: sudo service docker start
  *    - Optionally, docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 5. Run Spark integration tests for Oracle with: ./build/sbt -Pdocker-integration-tests
- *    "testOnly org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.v2.OracleNamespaceSuite"
  *
  * A sequence of commands to build the Oracle XE database container image:
  *  $ git clone https://github.com/oracle/docker-images.git
@@ -55,9 +51,7 @@ import org.apache.spark.tags.DockerTest
  * This procedure has been validated with Oracle 18.4.0 Express Edition.
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
-  override val catalogName: String = "oracle"
-  override val namespaceOpt: Option[String] = Some("SYSTEM")
+class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
@@ -72,43 +66,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/xe"
   }
 
-  override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
-    .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
-    .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
+  val map = new CaseInsensitiveStringMap(
+    Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
+      "driver" -> "oracle.jdbc.OracleDriver").asJava)
 
-  override val connectionTimeout = timeout(7.minutes)
+  catalog.initialize("system", map)
 
-  override def tablePreparation(connection: Connection): Unit = {
-    connection.prepareStatement(
-      "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
-        " bonus BINARY_DOUBLE)").executeUpdate()
-  }
+  override def dataPreparation(conn: Connection): Unit = {}
 
-  override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER)")
-    var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, defaultMetadata)
-    assert(t.schema === expectedSchema)
-    sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
-    t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
-    assert(t.schema === expectedSchema)
-    // Update column type from STRING to INTEGER
-    val msg1 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
-    }.getMessage
-    assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
-  }
+  override def builtinNamespaces: Array[Array[String]] =
+    Array(Array("ANONYMOUS"), Array("APEX_030200"), Array("APEX_PUBLIC_USER"), Array("APPQOSSYS"),
+      Array("BI"), Array("DIP"), Array("FLOWS_FILES"), Array("HR"), Array("OE"), Array("PM"),
+      Array("SCOTT"), Array("SH"), Array("SPATIAL_CSW_ADMIN_USR"), Array("SPATIAL_WFS_ADMIN_USR"),
+      Array("XS$NULL"))
 
-  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
-
-  testVarPop()
-  testVarSamp()
-  testStddevPop()
-  testStddevSamp()
-  testCovarPop()
-  testCovarSamp()
-  testCorr()
+  // Cannot create schema dynamically
+  // TODO testListNamespaces()
+  // TODO testDropNamespaces()
 }

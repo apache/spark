@@ -33,6 +33,8 @@ public final class ArrowColumnVector extends ColumnVector {
   private final ArrowVectorAccessor accessor;
   private ArrowColumnVector[] childColumns;
 
+  public ValueVector getValueVector() { return accessor.vector; }
+
   @Override
   public boolean hasNull() {
     return accessor.getNullCount() > 0;
