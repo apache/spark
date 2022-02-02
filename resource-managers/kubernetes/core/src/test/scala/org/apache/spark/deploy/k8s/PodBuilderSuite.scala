@@ -30,6 +30,7 @@ import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfig
 import org.apache.spark.internal.config.ConfigEntry
 
 abstract class PodBuilderSuite extends SparkFunSuite {
+  val POD_ROLE: String
   val TEST_ANNOTATION_KEY: String
   val TEST_ANNOTATION_VALUE: String
 
@@ -108,7 +109,7 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       buildPod(sparkConf, client)
     }
-    assert(e.getMessage.contains("Failed to initialize feature step"))
+    assert(e.getMessage.contains(s"please make sure your $POD_ROLE side feature steps"))
   }
 
   test("SPARK-37145: configure a custom test step with wrong name") {

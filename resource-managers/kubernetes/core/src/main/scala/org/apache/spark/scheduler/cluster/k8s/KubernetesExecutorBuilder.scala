@@ -21,11 +21,10 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.{SecurityManager, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Utils
 
-private[spark] class KubernetesExecutorBuilder extends Logging {
+private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
       conf: KubernetesExecutorConf,
@@ -43,26 +42,26 @@ private[spark] class KubernetesExecutorBuilder extends Logging {
       .getOrElse(SparkPod.initialPod())
 
     val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
-      .map { className => {
+      .map { className =>
         val feature = Utils.classForName[Any](className).newInstance()
         val initializedFeature = feature match {
-          // Since 3.3, allow user implements feature with KubernetesExecutorConf
+          // Since 3.3, allow user to implement feature with KubernetesExecutorConf
           case e: KubernetesExecutorCustomFeatureConfigStep =>
             e.init(conf)
             Some(e)
           // raise SparkException with wrong type feature step
           case _: KubernetesDriverCustomFeatureConfigStep =>
             None
-          // Since 3.2, allow user implements feature without config
+          // Since 3.2, allow user to implement feature without config
           case f: KubernetesFeatureConfigStep =>
             Some(f)
           case _ => None
         }
         initializedFeature.getOrElse {
-          logError(s"Failed to initialize feature step: $className, " +
+          throw new SparkException(s"Failed to initialize feature step: $className, " +
             s"please make sure your executor side feature steps are implemented by " +
-            s"`KubernetesExecutorCustomFeatureConfigStep` or `KubernetesCustomFeatureConfigStep`.")
-          throw new SparkException(s"Failed to initialize feature step: $className") }
+            s"`${classOf[KubernetesExecutorCustomFeatureConfigStep].getSimpleName}` or " +
+            s"`${classOf[KubernetesFeatureConfigStep].getSimpleName}`.")
         }
       }
 

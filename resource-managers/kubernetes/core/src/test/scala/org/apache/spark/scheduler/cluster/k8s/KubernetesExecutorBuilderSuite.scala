@@ -25,6 +25,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile
 
 class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
+  val POD_ROLE: String = "executor"
   val TEST_ANNOTATION_KEY: String = "executor-annotation-key"
   val TEST_ANNOTATION_VALUE: String = "executor-annotation-value"
 

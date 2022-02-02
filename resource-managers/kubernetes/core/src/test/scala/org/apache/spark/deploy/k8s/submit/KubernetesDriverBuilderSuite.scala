@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfig
 import org.apache.spark.internal.config.ConfigEntry
 
 class KubernetesDriverBuilderSuite extends PodBuilderSuite {
+  val POD_ROLE: String = "driver"
   val TEST_ANNOTATION_KEY: String = "driver-annotation-key"
   val TEST_ANNOTATION_VALUE: String = "driver-annotation-value"
 

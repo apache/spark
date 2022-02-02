@@ -19,43 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
-import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
-
-/**
- * :: DeveloperApi ::
- *
- * A base interface to help user extend custom feature step in driver side.
- * Note: If your custom feature step would be used only in driver or both in driver and executor,
- * please use this.
- */
-@Unstable
-@DeveloperApi
-trait KubernetesDriverCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
-  /**
-   * Initialize the configuration for driver user feature step, this only applicable when user
-   * specified `spark.kubernetes.driver.pod.featureSteps`, the init will be called after feature
-   * step loading.
-   */
-  def init(config: KubernetesDriverConf): Unit
-}
-
-/**
- * :: DeveloperApi ::
- *
- * A base interface to help user extend custom feature step in executor side.
- * Note: If your custom feature step would be used only in driver or both in driver and executor,
- * please use this.
- */
-@Unstable
-@DeveloperApi
-trait KubernetesExecutorCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
-  /**
-   * Initialize the configuration for executor user feature step, this only applicable when user
-   * specified `spark.kubernetes.executor.pod.featureSteps` the init will be called after feature
-   * step loading.
-   */
-  def init(config: KubernetesExecutorConf): Unit
-}
+import org.apache.spark.deploy.k8s.SparkPod
 
 /**
  * :: DeveloperApi ::
