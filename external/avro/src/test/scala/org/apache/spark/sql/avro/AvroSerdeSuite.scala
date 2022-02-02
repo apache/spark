@@ -16,14 +16,21 @@
  */
 package org.apache.spark.sql.avro
 
-import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.avro.generic.GenericRecordBuilder
+import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
+import org.apache.avro.generic.{GenericFixed, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.Schema.Type._
+import org.apache.avro.Conversions.DecimalConversion
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.NoopFilters
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
+
+import java.nio.ByteBuffer
+import java.time.{Instant, ZoneId}
+
+import scala.collection.JavaConverters._
 
 /**
  * Tests for [[AvroSerializer]] and [[AvroDeserializer]], complementing those in [[AvroSuite]]
@@ -46,6 +53,133 @@ class AvroSerdeSuite extends SparkFunSuite {
       val serializer = Serializer.create(CATALYST_STRUCT, avro, fieldMatch)
       val deserializer = Deserializer.create(CATALYST_STRUCT, avro, fieldMatch)
       assert(serializer.serialize(deserializer.deserialize(record).get) === record)
+    }
+  }
+
+  test("Serialize DecimalType to Avro FIXED with logical type decimal") {
+    withFieldMatchType { fieldMatch =>
+      val structType = StructType(
+        Seq(StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
+            StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
+
+      val fixedSchema = Schema.createFixed("fixed_name", "doc", "namespace", 32)
+      val logicalType = LogicalTypes.decimal(6, 2)
+      val fieldSchema = logicalType.addToSchema(fixedSchema)
+
+      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+          new Schema.Field("javaBigDecimal", fieldSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])
+        ).asJava)      
+      
+      val serializer = Serializer.create(structType, avroSchema, fieldMatch)
+
+      val input = InternalRow(new java.math.BigDecimal("1000.12"), Decimal("1000.12"))
+
+      val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
+      val javaDecimal = grec.get("javaBigDecimal").asInstanceOf[GenericFixed]
+      val sparkDecimal = grec.get("sparkDecimal").asInstanceOf[GenericFixed]
+
+      assert(javaDecimal === sparkDecimal)
+      assert(new DecimalConversion().fromFixed(sparkDecimal, fixedSchema, logicalType) ===
+        new java.math.BigDecimal("1000.12"))
+    }
+  }
+
+  test("Serialize DecimalType to Avro BYTES with logical type decimal") {
+    withFieldMatchType { fieldMatch =>
+      val structType = StructType(
+        Seq(StructField("javaBigDecimal", DecimalType(6, 2), nullable = false),
+            StructField("sparkDecimal", DecimalType(6, 2), nullable = false)))
+
+      val bytesSchema = Schema.create(BYTES)
+      val logicalType = LogicalTypes.decimal(6, 2)
+      val fieldSchema = logicalType.addToSchema(bytesSchema)
+
+      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+          new Schema.Field("javaBigDecimal", fieldSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("sparkDecimal", fieldSchema, "", null.asInstanceOf[AnyVal])
+        ).asJava)      
+      
+      val serializer = Serializer.create(structType, avroSchema, fieldMatch)
+
+      val input = InternalRow(new java.math.BigDecimal("1000.12"), Decimal("1000.12"))
+
+      val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
+      val javaDecimal = grec.get("javaBigDecimal").asInstanceOf[ByteBuffer]
+      val sparkDecimal = grec.get("sparkDecimal").asInstanceOf[ByteBuffer]
+
+      assert(javaDecimal === sparkDecimal)
+      assert(new DecimalConversion().fromBytes(sparkDecimal, bytesSchema, logicalType) ===
+        new java.math.BigDecimal("1000.12"))
+    }
+  }
+
+  test("Serialize DateType to Avro INT") {
+    withFieldMatchType { fieldMatch =>
+      val structType = StructType(
+        Seq(StructField("javaSqlDate", DateType, nullable = false),
+            StructField("java8TimeDate", DateType, nullable = false)))
+
+      val dateSchema = Schema.create(INT)
+
+      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+          new Schema.Field("javaSqlDate", dateSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("java8TimeDate", dateSchema, "", null.asInstanceOf[AnyVal])
+        ).asJava)      
+      
+      val serializer = Serializer.create(structType, avroSchema, fieldMatch)
+
+      val input = InternalRow(
+        new java.sql.Date(1643121231000L),
+        Instant.ofEpochMilli(1643121231000L).atZone(ZoneId.of("UTC")).toLocalDate())
+
+      val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
+      val javaSqlDate = grec.get("javaSqlDate").asInstanceOf[Int]
+      val java8TimeDate = grec.get("java8TimeDate").asInstanceOf[Int]
+
+      assert(javaSqlDate === java8TimeDate)
+      assert(javaSqlDate === 19017) // 19017 is 25 January 2022
+    }
+  }
+
+   test("Serialize TimestampType to Avro LONG with logical type timestamp-micros and timestamp-millis") {
+    withFieldMatchType { fieldMatch =>
+      val structType = StructType(
+        Seq(StructField("javaSqlTimeMicro", TimestampType, nullable = false),
+            StructField("java8TimeInstantMicro", TimestampType, nullable = false),
+            StructField("javaSqlTimeMillis", TimestampType, nullable = false),
+            StructField("java8TimeInstantMillis", TimestampType, nullable = false)
+          ))
+
+      val microSchema = LogicalTypes.timestampMicros().addToSchema(Schema.create(LONG))
+
+      val millisSchema = LogicalTypes.timestampMillis().addToSchema(Schema.create(LONG))
+
+      val avroSchema =Schema.createRecord("name", "doc", "space", true, Seq(
+          new Schema.Field("javaSqlTimeMicro", microSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("java8TimeInstantMicro", microSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("javaSqlTimeMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
+          new Schema.Field("java8TimeInstantMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
+        ).asJava)      
+      
+      val serializer = Serializer.create(structType, avroSchema, fieldMatch)
+
+      val epoch = 1643121231000L
+      val epochMicro = 1000 * 1643121231000L
+
+      val input = InternalRow(
+                    new java.sql.Timestamp(epoch),
+                    Instant.ofEpochMilli(epoch),
+                    new java.sql.Timestamp(epoch),
+                    Instant.ofEpochMilli(epoch)
+                  )
+
+      val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
+      
+      assert(grec.get("javaSqlTimeMicro").asInstanceOf[Long] === epochMicro)
+      assert(grec.get("java8TimeInstantMicro").asInstanceOf[Long] === epochMicro)
+      assert(grec.get("javaSqlTimeMillis").asInstanceOf[Long] === epoch)
+      assert(grec.get("java8TimeInstantMillis").asInstanceOf[Long] === epoch)
     }
   }
 
