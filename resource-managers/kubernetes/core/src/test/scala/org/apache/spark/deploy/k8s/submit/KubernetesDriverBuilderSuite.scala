@@ -22,10 +22,13 @@ import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
+import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesFeatureConfigStep}
 import org.apache.spark.internal.config.ConfigEntry
 
 class KubernetesDriverBuilderSuite extends PodBuilderSuite {
+  val POD_ROLE: String = "driver"
+  val TEST_ANNOTATION_KEY: String = "driver-annotation-key"
+  val TEST_ANNOTATION_VALUE: String = "driver-annotation-value"
 
   override protected def templateFileConf: ConfigEntry[_] = {
     Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
@@ -33,6 +36,14 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
 
   override protected def userFeatureStepsConf: ConfigEntry[_] = {
     Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
+  }
+
+  override protected def userFeatureStepWithExpectedAnnotation: (String, String) = {
+    ("org.apache.spark.deploy.k8s.submit.TestStepWithDrvConf", TEST_ANNOTATION_VALUE)
+  }
+
+  override protected def wrongTypeFeatureStep: String = {
+    "org.apache.spark.scheduler.cluster.k8s.TestStepWithExecConf"
   }
 
   override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
@@ -81,4 +92,28 @@ class TestStep extends KubernetesFeatureConfigStep {
         .endMetadata()
       .build()
   )
+}
+
+
+/**
+ * A test driver user feature step would be used in only driver.
+ */
+class TestStepWithDrvConf extends KubernetesDriverCustomFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  private var driverConf: KubernetesDriverConf = _
+
+  override def init(config: KubernetesDriverConf): Unit = {
+    driverConf = config
+  }
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+       // The annotation key = TEST_ANNOTATION_KEY, value = TEST_ANNOTATION_VALUE
+      .addToAnnotations("driver-annotation-key", driverConf.get("driver-annotation-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
+  }
 }
