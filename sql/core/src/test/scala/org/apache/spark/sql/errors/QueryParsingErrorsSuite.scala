@@ -55,8 +55,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT extract(MONTH FROM INTERVAL '2021-11' YEAR TO DAY)")
     }
     assert(e.getErrorClass === "UNSUPPORTED_FROM_TO_INTERVAL")
-    assert(e.getMessage.contains(
-      "Intervals FROM YEAR TO DAY are not supported"))
+    assert(e.getMessage.matches(
+      """Intervals FROM \w+ TO \w+ are not supported"""))
   }
 
   test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
