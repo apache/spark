@@ -15,6 +15,9 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
+  "CANNOT_UP_CAST_DATATYPE" : {
+    "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
@@ -92,6 +95,10 @@
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
     "sqlState" : "22023"
+  },
+  "INVALID_SQL_SYNTAX" : {
+    "message" : [ "Invalid SQL syntax: %s" ],
+    "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]

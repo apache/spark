@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode,
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
@@ -158,16 +158,24 @@ object QueryCompilationErrors {
   def upCastFailureError(
       fromStr: String, from: Expression, to: DataType, walkedTypePath: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
+      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      messageParameters = Array(
+        fromStr,
+        from.dataType.catalogString,
+        to.catalogString,
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
+          "You can either add an explicit cast to the input data or choose a higher precision " +
+          "type of the field in the target object"
+      )
+    )
   }
 
   def unsupportedAbstractDataTypeForUpCastError(gotType: AbstractDataType): Throwable = {
     new AnalysisException(
-      s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters =
+        Array(s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
+    )
   }
 
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
@@ -413,13 +421,6 @@ object QueryCompilationErrors {
     new AnalysisException(
       s"Attribute with name '$colName' is not found in " +
         s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
-  }
-
-  def cannotUpCastAsAttributeError(
-      fromAttr: Attribute, toAttr: Attribute): Throwable = {
-    new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
-      s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
-      "as it may truncate")
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
@@ -1367,11 +1368,6 @@ object QueryCompilationErrors {
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
-    new AnalysisException("Transforms cannot be converted to partition columns: " +
-      nonIdTransforms.map(_.describe).mkString(", "))
   }
 
   def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {

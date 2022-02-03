@@ -655,7 +655,7 @@ object QueryExecutionErrors {
 
   def unsupportedPartitionTransformError(transform: Transform): Throwable = {
     new UnsupportedOperationException(
-      s"SessionCatalog does not support partition transform: $transform")
+      s"Unsupported partition transform: $transform")
   }
 
   def missingDatabaseLocationError(): Throwable = {
@@ -1939,5 +1939,9 @@ object QueryExecutionErrors {
   def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
       s"The input string '$input' does not match the given number format: '$format'")
+  }
+
+  def MultipleBucketTransformsError(): Throwable = {
+    new UnsupportedOperationException("Multiple bucket transforms are not supported.")
   }
 }
