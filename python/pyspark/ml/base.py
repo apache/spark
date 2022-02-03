@@ -104,7 +104,7 @@ class _FitMultipleIterator(Generic[M]):
 
 
 @inherit_doc
-class Estimator(Generic[M], Params, metaclass=ABCMeta):
+class Estimator(Params, Generic[M], metaclass=ABCMeta):
     """
     Abstract class for estimators that fit models to data.
 
@@ -382,7 +382,7 @@ class Predictor(Estimator[M], _PredictorParams, metaclass=ABCMeta):
 
 
 @inherit_doc
-class PredictionModel(Generic[T], Transformer, _PredictorParams, metaclass=ABCMeta):
+class PredictionModel(Model, _PredictorParams, Generic[T], metaclass=ABCMeta):
     """
     Model for prediction tasks (regression and classification).
     """

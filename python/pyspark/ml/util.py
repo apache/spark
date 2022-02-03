@@ -274,7 +274,7 @@ class GeneralJavaMLWritable(JavaMLWritable):
 
 
 @inherit_doc
-class MLReader(Generic[RL], BaseReadWrite):
+class MLReader(BaseReadWrite, Generic[RL]):
     """
     Utility class that can load ML instances.
 
