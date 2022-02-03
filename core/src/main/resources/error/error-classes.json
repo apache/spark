@@ -93,6 +93,10 @@
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
     "sqlState" : "22023"
   },
+  "INVALID_SQL_SYNTAX" : {
+    "message" : [ "Invalid SQL syntax: %s" ],
+    "sqlState" : "42000"
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
   },
