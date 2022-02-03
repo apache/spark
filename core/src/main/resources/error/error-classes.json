@@ -54,9 +54,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
-  "UNSUPPORTED_GROUPING_EXPRESSION" : {
-    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
-  },
   "ILLEGAL_SUBSTRING" : {
     "message" : [ "%s cannot contain %s." ]
   },
@@ -155,6 +152,9 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_GROUPING_EXPRESSION" : {
+    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
