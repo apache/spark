@@ -700,7 +700,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
-    new AnalysisException(s"Cannot read table property '$key' as it's corrupted.$details")
+    new AnalysisException(errorClass = "CANNOT_READ_CORRUPTED_TABLE_PROPERTY",
+      messageParameters = Array(key, details))
   }
 
   def invalidSchemaStringError(exp: Expression): Throwable = {
@@ -884,7 +885,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
-    new AnalysisException(s"$cmd is not supported in JDBC catalog.")
+    new AnalysisException(errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("JDBC_CATALOG", cmd))
   }
 
   def cannotCreateJDBCTableUsingProviderError(): Throwable = {
@@ -953,7 +955,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
-    new AnalysisException(s"$cmd is not supported for v2 tables.")
+    new AnalysisException(errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"$cmd is not supported for v2 tables."))
   }
 
   def analyzeTableNotSupportedForV2TablesError(): Throwable = {
@@ -1792,7 +1795,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
-    new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
+    new AnalysisException(errorClass = "UNSET_NON_EXISTENT_PROPERTY",
+      messageParameters = Array(property, table))
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(

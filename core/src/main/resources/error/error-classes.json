@@ -19,6 +19,10 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
+  "CANNOT_READ_CORRUPTED_TABLE_PROPERTY" : {
+    "message" : [ "Cannot read table property '%s' as it's corrupted.%s" ],
+    "sqlState" : "42000"
+  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },
@@ -182,6 +186,10 @@
     "message" : [ "Unrecognized SQL type <typeName>" ],
     "sqlState" : "42000"
   },
+  "UNSET_NON_EXISTENT_PROPERTY" : {
+    "message" : [ "Attempted to unset non-existent property '%s' in table '%s'" ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type <typeName>" ],
     "sqlState" : "0A000"
@@ -200,6 +208,9 @@
       },
       "JDBC_TRANSACTION" : {
         "message" : [ "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action." ]
+      },
+      "JDBC_CATALOG" : {
+        "message" : [ "<command> is not supported in JDBC catalog." ]
       },
       "LATERAL_JOIN_OF_TYPE" : {
         "message" : [ "<joinType> JOIN with LATERAL correlation." ]
