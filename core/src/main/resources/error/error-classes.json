@@ -153,9 +153,6 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
-  "UNSUPPORTED_FROM_TO_INTERVAL" : {
-    "message" : [ "Intervals FROM %s TO %s are not supported." ]
-  },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
@@ -167,6 +164,9 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_FROM_TO_INTERVAL" : {
+    "message" : [ "Intervals FROM %s TO %s are not supported." ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
