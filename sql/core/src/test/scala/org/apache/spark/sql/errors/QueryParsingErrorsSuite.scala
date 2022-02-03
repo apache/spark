@@ -56,7 +56,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.getErrorClass === "UNSUPPORTED_FROM_TO_INTERVAL")
     assert(e.getMessage.contains(
-      "Intervals FROM YEAR TO DAY are not supported."))
+      "Intervals FROM YEAR TO DAY are not supported"))
   }
 
   test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
