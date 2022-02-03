@@ -934,6 +934,23 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+   val PARQUET_FIELD_ID_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers" +
+        " will use field IDs (if present) in the requested Spark schema to look up Parquet" +
+        " fields instead of using column names; Parquet writers will also populate the field Id" +
+        " metadata (if present) in the Spark schema to the Parquet schema.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val IGNORE_MISSING_PARQUET_FIELD_ID =
+    buildConf("spark.sql.parquet.fieldId.ignoreMissing")
+      .doc("When the Parquet file does't have any field IDs but the" +
+        " Spark read schema is using field IDs to read, we will return silently return nulls" +
+        "when this flag is enabled, or error otherwise.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -4250,6 +4267,8 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def parquetFieldIdEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
