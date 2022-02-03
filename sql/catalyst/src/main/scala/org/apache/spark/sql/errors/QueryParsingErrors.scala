@@ -190,29 +190,28 @@ object QueryParsingErrors {
   }
 
   def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("Can only have a single from-to unit in the interval literal syntax", ctx)
+    new ParseException(s"MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException("at least one time unit should be given for interval literal", ctx)
+    new ParseException(s"INVALID_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
-    new ParseException("Can only use numbers in the interval value part for" +
-      s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
+    new ParseException(s"INVALID_INTERVAL_FORM", Array(value), ctx)
   }
 
   def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
-    new ParseException("The value of from-to unit must be a string", ctx)
+    new ParseException(s"INVALID_FROM_TO_UNIT_VALUE", Array.empty, ctx)
   }
 
   def fromToIntervalUnsupportedError(
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
+    new ParseException(s"UNSUPPORTED_FROM_TO_INTERVAL", Array(from, to), ctx)
   }
 
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Cannot mix year-month and day-time fields: $literal", ctx)
+    new ParseException(s"MIXED_INTERVAL_UNITS", Array(literal), ctx)
   }
 
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
