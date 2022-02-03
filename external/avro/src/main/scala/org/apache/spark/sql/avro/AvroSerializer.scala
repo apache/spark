@@ -111,6 +111,18 @@ private[sql] class AvroSerializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
+  private def extractDecimal(
+      getter: SpecializedGetters,
+      ordinal: Int,
+      d: DecimalType): java.math.BigDecimal =
+    getter.get(ordinal, d) match {
+      case bd: java.math.BigDecimal => bd
+      case dec: Decimal => dec.toJavaBigDecimal
+      case other =>
+        throw new IncompatibleSchemaException(
+          s"Expected java.math.BigDecimal or Decimal, found ${other.getClass}")
+    }
+
   private def newConverter(
       catalystType: DataType,
       avroType: Schema,
@@ -138,40 +150,20 @@ private[sql] class AvroSerializer(
       case (d: DecimalType, FIXED)
           if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
-          getter.get(ordinal, d) match {
-            case bigDecimal: java.math.BigDecimal =>
-              decimalConversions.toFixed(
-                bigDecimal,
-                avroType,
-                LogicalTypes.decimal(bigDecimal.precision, bigDecimal.scale))
-            case decimal: Decimal =>
-              decimalConversions.toFixed(
-                decimal.toJavaBigDecimal,
-                avroType,
-                LogicalTypes.decimal(d.precision, d.scale))
-            case other =>
-              throw new IncompatibleSchemaException(
-                s"Expected java.math.BigDecimal or Decimal, found ${other.getClass}")
-          }
+          val decimal = extractDecimal(getter, ordinal, d)
+          decimalConversions.toFixed(
+            decimal,
+            avroType,
+            LogicalTypes.decimal(d.precision, d.scale))
 
       case (d: DecimalType, BYTES)
           if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
-          getter.get(ordinal, d) match {
-            case bigDecimal: java.math.BigDecimal =>
-              decimalConversions.toBytes(
-                bigDecimal,
-                avroType,
-                LogicalTypes.decimal(bigDecimal.precision, bigDecimal.scale))
-            case decimal: Decimal =>
-              decimalConversions.toBytes(
-                decimal.toJavaBigDecimal,
-                avroType,
-                LogicalTypes.decimal(d.precision, d.scale))
-            case other =>
-              throw new IncompatibleSchemaException(
-                s"Expected java.math.BigDecimal or Decimal, found ${other.getClass}")
-          }
+          val decimal = extractDecimal(getter, ordinal, d)
+          decimalConversions.toBytes(
+            decimal,
+            avroType,
+            LogicalTypes.decimal(d.precision, d.scale))
 
       case (StringType, ENUM) =>
         val enumSymbols: Set[String] = avroType.getEnumSymbols.asScala.toSet
