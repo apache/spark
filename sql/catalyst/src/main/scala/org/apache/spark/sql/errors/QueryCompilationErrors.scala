@@ -200,7 +200,9 @@ object QueryCompilationErrors {
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
-    new AnalysisException("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+      messageParameters = Array.empty)
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {

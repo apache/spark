@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Alias, UpCast}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.functions.{grouping, grouping_id}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.NumericType
 
@@ -75,5 +76,57 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(msg.matches("The feature is not supported: " +
       "UpCast only support DecimalType as AbstractDataType yet," +
       """ but got: org.apache.spark.sql.types.NumericType\$\@\w+"""))
+  }
+
+  test("UNSUPPORTED_GROUPING_EXPRESSION: filter with grouping/grouping_Id expression") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+
+    // filter with grouping
+    var errMsg = intercept[AnalysisException] {
+      df.filter("grouping(CustomerId)=17850")
+        .groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    }
+    assert(errMsg.message ===
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+
+    // filter with grouping_id
+    errMsg = intercept[AnalysisException] {
+      df.filter("grouping_id(CustomerId)=17850").
+        groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    }
+    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+    assert(errMsg.message ===
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+  }
+
+  test("UNSUPPORTED_GROUPING_EXPRESSION: Sort with grouping/grouping_Id expression") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+
+   // Sort with grouping
+    var errMsg = intercept[AnalysisException] {
+      df.sort(grouping("CustomerId"))
+        .groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    }
+    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+    assert(errMsg.message ===
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+
+    // Sort with grouping_id
+    errMsg = intercept[AnalysisException] {
+      df.sort(grouping_id("CustomerId")).
+        groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    }
+    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+    assert(errMsg.message ===
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
   }
 }
