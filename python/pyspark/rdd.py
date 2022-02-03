@@ -1777,7 +1777,7 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(topIterator).reduce(merge)
 
     @overload
-    def takeOrdered(self: "RDD[S]", num: int) -> "List[S]":
+    def takeOrdered(self: "RDD[S]", num: int) -> List["S"]:
         ...
 
     @overload
