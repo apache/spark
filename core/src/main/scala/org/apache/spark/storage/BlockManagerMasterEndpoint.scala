@@ -107,6 +107,8 @@ class BlockManagerMasterEndpoint(
 
   logInfo("BlockManagerMasterEndpoint up")
 
+  private val externalShuffleServiceRemoveShuffleEnabled: Boolean =
+    externalBlockStoreClient.isDefined && conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
   private val externalShuffleServiceRddFetchEnabled: Boolean =
     externalBlockStoreClient.isDefined && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
@@ -320,7 +322,7 @@ class BlockManagerMasterEndpoint(
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
-    if (externalBlockStoreClient.isDefined) {
+    if (externalShuffleServiceRemoveShuffleEnabled) {
       mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
         shuffleStatus.mapStatuses.foreach { mapStatus =>
           // Port should always be external shuffle port if external shuffle is enabled so

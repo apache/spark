@@ -654,6 +654,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED =
+    ConfigBuilder("spark.shuffle.service.remove.shuffle.enabled")
+      .doc("Whether to use the ExternalShuffleService for deleting shuffle blocks for " +
+        "deallocated executors.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
       .doc("Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks. " +

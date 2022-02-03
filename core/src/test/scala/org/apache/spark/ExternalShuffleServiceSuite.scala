@@ -145,59 +145,67 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
   }
 
   test("SPARK-37618: external shuffle service removes shuffle blocks from deallocated executors") {
-    // Use local disk reading to get location of shuffle files on disk
-    val confWithLocalDiskReading =
-      conf.clone.set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
-    sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithLocalDiskReading)
-    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
-    try {
-      val rdd = sc.parallelize(0 until 100, 2)
-        .map { i => (i, 1) }
-        .repartition(1)
+    for (enabled <- Seq(true, false)) {
+      // Use local disk reading to get location of shuffle files on disk
+      val confWithLocalDiskReading = conf.clone
+        .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
+        .set(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED, enabled)
+      sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithLocalDiskReading)
+      sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+      sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
+      try {
+        val rdd = sc.parallelize(0 until 100, 2)
+          .map { i => (i, 1) }
+          .repartition(1)
 
-      rdd.count()
+        rdd.count()
 
-      val mapOutputs = sc.env.mapOutputTracker.getMapSizesByExecutorId(0, 0).toSeq
+        val mapOutputs = sc.env.mapOutputTracker.getMapSizesByExecutorId(0, 0).toSeq
 
-      val dirManager = sc.env.blockManager.hostLocalDirManager
-        .getOrElse(fail("No host local dir manager"))
+        val dirManager = sc.env.blockManager.hostLocalDirManager
+          .getOrElse(fail("No host local dir manager"))
 
-      val promises = mapOutputs.map { case (bmid, blocks) =>
-        val promise = Promise[Seq[File]]()
-        dirManager.getHostLocalDirs(bmid.host, bmid.port, Seq(bmid.executorId).toArray) {
-          case scala.util.Success(res) => res.foreach { case (eid, dirs) =>
-            val files = blocks.flatMap { case (blockId, _, _) =>
-              val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
-              Seq(
-                ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
-                  ShuffleDataBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
-                    shuffleBlockId.reduceId).name),
-                ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
-                  ShuffleIndexBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
-                    shuffleBlockId.reduceId).name)
-              )
+        val promises = mapOutputs.map { case (bmid, blocks) =>
+          val promise = Promise[Seq[File]]()
+          dirManager.getHostLocalDirs(bmid.host, bmid.port, Seq(bmid.executorId).toArray) {
+            case scala.util.Success(res) => res.foreach { case (eid, dirs) =>
+              val files = blocks.flatMap { case (blockId, _, _) =>
+                val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+                Seq(
+                  ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
+                    ShuffleDataBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
+                      shuffleBlockId.reduceId).name),
+                  ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
+                    ShuffleIndexBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
+                      shuffleBlockId.reduceId).name)
+                )
+              }
+              promise.success(files)
             }
-            promise.success(files)
+            case scala.util.Failure(error) => promise.failure(error)
           }
-          case scala.util.Failure(error) => promise.failure(error)
+          promise.future
         }
-        promise.future
+        val filesToCheck = promises.flatMap(p => ThreadUtils.awaitResult(p, Duration(2, "sec")))
+        assert(filesToCheck.length == 4)
+        assert(filesToCheck.forall(_.exists()))
+
+        sc.killExecutors(sc.getExecutorIds())
+        eventually(timeout(2.seconds), interval(100.milliseconds)) {
+          assert(sc.env.blockManager.master.getExecutorEndpointRef("0").isEmpty)
+        }
+
+        sc.cleaner.foreach(_.doCleanupShuffle(0, true))
+
+        if (enabled) {
+          assert(filesToCheck.forall(!_.exists()))
+        } else {
+          assert(filesToCheck.forall(_.exists()))
+        }
+      } finally {
+        rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        sc.stop()
       }
-      val filesToCheck = promises.flatMap(p => ThreadUtils.awaitResult(p, Duration(2, "sec")))
-      assert(filesToCheck.length == 4)
-      filesToCheck.foreach { f => assert(f.exists()) }
-
-      sc.killExecutors(sc.getExecutorIds())
-      eventually(timeout(2.seconds), interval(100.milliseconds)) {
-        assert(sc.env.blockManager.master.getExecutorEndpointRef("0").isEmpty)
-      }
-
-      sc.cleaner.foreach(_.doCleanupShuffle(0, true))
-
-      filesToCheck.foreach { f => assert(!f.exists()) }
-    } finally {
-      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
     }
   }
 }
