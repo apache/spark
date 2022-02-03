@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.parquet.column.ParquetProperties
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,7 +56,16 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
 
     formats.foreach { format =>
       runBenchmark(s"$format writer benchmark") {
-        runDataSourceBenchmark(format)
+        if (format.equals("Parquet")) {
+          ParquetProperties.WriterVersion.values().foreach {
+            writeVersion =>
+              withSQLConf(ParquetOutputFormat.WRITER_VERSION -> writeVersion.toString) {
+                runDataSourceBenchmark("Parquet", Some(writeVersion.toString))
+              }
+          }
+        } else {
+          runDataSourceBenchmark(format)
+        }
       }
     }
   }
