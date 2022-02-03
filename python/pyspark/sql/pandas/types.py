@@ -86,8 +86,13 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType]:
+        if type(dt.elementType) == TimestampType:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        elif type(dt.elementType) == StructType:
+            if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                raise TypeError(
+                    "Array of StructType is only supported with pyarrow 2.0.0 and above"
+                )
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):

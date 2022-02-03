@@ -134,6 +134,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
+    def test_pandas_array_struct(self):
+        @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
+        def return_cols(cols):
+            return cols
+
+        df = self.spark.createDataFrame(
+            [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
+            "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
+        )
+        result = df.select(return_cols("array_struct_col").alias("output"))
+        self.assertEqual(
+            [
+                Row(output=[Row(col1="a", col2=2, col3=3.0), Row(col1="a", col2=2, col3=3.0)]),
+                Row(output=[Row(col1="b", col2=5, col3=6.0), Row(col1="b", col2=5, col3=6.0)]),
+            ],
+            result.collect(),
+        )
+
     def test_vectorized_udf_basic(self):
         df = self.spark.range(10).select(
             col("id").cast("string").alias("str"),
@@ -655,15 +673,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     "Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType",
                 ):
                     pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
-                with self.assertRaisesRegex(
-                    NotImplementedError,
-                    "Invalid return type.*scalar Pandas UDF.*ArrayType.StructType",
-                ):
-                    pandas_udf(
-                        lambda x: x,
-                        ArrayType(StructType([StructField("a", IntegerType())])),
-                        udf_type,
-                    )
 
     def test_vectorized_udf_dates(self):
         schema = StructType().add("idx", LongType()).add("date", DateType())
