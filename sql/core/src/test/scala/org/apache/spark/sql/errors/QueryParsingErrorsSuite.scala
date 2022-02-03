@@ -119,6 +119,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR")
     }
     assert(e.getErrorClass === "MIXED_INTERVAL_UNITS")
+
     assert(e.getMessage.contains(
       "Cannot mix year-month and day-time fields"))
   }
