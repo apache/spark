@@ -15,6 +15,9 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
+  "CANNOT_UP_CAST_DATATYPE" : {
+    "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
