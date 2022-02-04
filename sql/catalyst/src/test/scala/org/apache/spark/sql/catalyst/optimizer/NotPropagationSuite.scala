@@ -173,4 +173,53 @@ class NotPropagationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(('a === 'b) =!= ('a === 'c), ('a === 'b) =!= ('a === 'c))
     checkCondition(('a === 'b) =!= ('c in(1, 2, 3)), ('a === 'b) =!= ('c in(1, 2, 3)))
   }
+
+  test("[SPARK-36665] Do not simplify Not(InSubquery)") {
+    object Optimize extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
+        Batch("Not Propagation", FixedPoint(50), NotPropagation, BooleanSimplification) :: Nil
+    }
+
+    // As checkCondition() changes the exprId of sub-queries, defining a stable checker here
+    def shouldNotOptimize(input: Expression): Unit = {
+      val plan = testRelation.where(input).analyze
+      val actual = Optimize.execute(plan)
+      assert(actual == plan)
+    }
+
+    // Check whether the input becomes a BinaryComparison and its one side matches the expected
+    def checkOneSide(input: Expression, expected: Expression): Unit = {
+      val plan = testRelation.where(input).analyze
+      val actual = Optimize.execute(plan)
+      val comp = actual.asInstanceOf[Filter].condition.asInstanceOf[BinaryComparison]
+      val side = testRelation.where(expected).analyze.asInstanceOf[Filter].condition
+      assert(comp.left == side || comp.right == side)
+    }
+
+    val inSubquery = InSubquery(Seq('a), ListQuery(testRelation.select("a")))
+    shouldNotOptimize(Not(inSubquery) === Literal(true))
+    shouldNotOptimize(Literal(true) === Not(inSubquery))
+    shouldNotOptimize(Not(inSubquery) <=> Literal(true))
+    shouldNotOptimize(Literal(true) <=> Not(inSubquery))
+
+    shouldNotOptimize(Not(inSubquery) === Not('a === 'b))
+    shouldNotOptimize(Not('a === 'b) === Not(inSubquery))
+    shouldNotOptimize(Not(inSubquery) <=> Not('a === 'b))
+    shouldNotOptimize(Not('a === 'b) <=> Not(inSubquery))
+
+    shouldNotOptimize(Not(Not(inSubquery) === ('a === 'b)))
+    shouldNotOptimize(Not(('a === 'b) === Not(inSubquery)))
+    shouldNotOptimize(Not(Not(inSubquery) <=> ('a === 'b)))
+    shouldNotOptimize(Not(('a === 'b) <=> Not(inSubquery)))
+
+    checkOneSide(Not(Not(inSubquery) === Literal(true)), Literal(false))
+    checkOneSide(Not(Literal(true) === Not(inSubquery)), Literal(false))
+    shouldNotOptimize(Not(Not(inSubquery) <=> Literal(true)))
+    shouldNotOptimize(Not(Literal(true) <=> Not(inSubquery)))
+
+    checkOneSide(Not(Not(inSubquery)) === Not('a === 'b), Not('a === 'b))
+    checkOneSide(Not('a === 'b) === Not(Not(inSubquery)), Not('a === 'b))
+    checkOneSide(Not(Not(inSubquery)) <=> Not('a === 'b), Not('a === 'b))
+    checkOneSide(Not('a === 'b) <=> Not(Not(inSubquery)), Not('a === 'b))
+  }
 }

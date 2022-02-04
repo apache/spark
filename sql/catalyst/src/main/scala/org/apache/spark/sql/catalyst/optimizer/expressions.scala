@@ -466,9 +466,18 @@ object NotPropagation extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  private def hasInSubquery(x: Expression): Boolean = x match {
+    case _: InSubquery => true
+    case Not(e) => hasInSubquery(e)
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(NOT), ruleId) {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(NOT), ruleId) {
+      // [SPARK-36665][SPARK-38085] Do not simplify Not(InSubquery)
+      case e @ Equality(a, b) if hasInSubquery(a) || hasInSubquery(b) => e
+
       // Move `Not` from one side of `EqualTo`/`EqualNullSafe` to the other side if it's beneficial.
       // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
       // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
@@ -483,12 +492,12 @@ object NotPropagation extends Rule[LogicalPlan] {
 
       // Push `Not` to one side of `EqualTo`/`EqualNullSafe` if it's beneficial.
       // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
-      case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
-      case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
-      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) =>
-        EqualNullSafe(a, Not(b))
-      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(a) =>
-        EqualNullSafe(Not(a), b)
+      case Not(EqualTo(a, b)) if canSimplifyNot(b) && !hasInSubquery(b) => EqualTo(a, Not(b))
+      case Not(EqualTo(a, b)) if canSimplifyNot(a) && !hasInSubquery(a) => EqualTo(Not(a), b)
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) &&
+        !hasInSubquery(b) => EqualNullSafe(a, Not(b))
+      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(a) &&
+        !hasInSubquery(a) => EqualNullSafe(Not(a), b)
     }
   }
 }
