@@ -25,6 +25,8 @@ from pyspark.sql.dataframe import DataFrame
 
 from pyspark.ml.param import Param
 
+from py4j.java_gateway import JavaObject  # type: ignore[import]
+
 class _FPGrowthParams(HasPredictionCol):
     itemsCol: Param[str]
     minSupport: Param[float]
@@ -74,6 +76,7 @@ class FPGrowth(
     def setNumPartitions(self, value: int) -> FPGrowth: ...
     def setMinConfidence(self, value: float) -> FPGrowth: ...
     def setPredictionCol(self, value: str) -> FPGrowth: ...
+    def _create_model(self, java_model: JavaObject) -> FPGrowthModel: ...
 
 class PrefixSpan(JavaParams):
     minSupport: Param[float]
