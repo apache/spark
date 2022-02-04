@@ -25,11 +25,11 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.connector.V1Function
@@ -96,8 +96,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-
-    val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
+    val (partitionColumns, maybeBucketSpec) = partitions.toSeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -329,32 +329,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
 }
 
 private[sql] object V2SessionCatalog {
-
-  /**
-   * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
-   */
-  private def convertTransforms(partitions: Seq[Transform]): (Seq[String], Option[BucketSpec]) = {
-    val identityCols = new mutable.ArrayBuffer[String]
-    var bucketSpec = Option.empty[BucketSpec]
-
-    partitions.map {
-      case IdentityTransform(FieldReference(Seq(col))) =>
-        identityCols += col
-
-      case BucketTransform(numBuckets, col, sortCol) =>
-        if (sortCol.isEmpty) {
-          bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
-        } else {
-          bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
-            sortCol.map(_.fieldNames.mkString("."))))
-        }
-
-      case transform =>
-        throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
-    }
-
-    (identityCols.toSeq, bucketSpec)
-  }
 
   private def toCatalogDatabase(
       db: String,

@@ -623,8 +623,9 @@ object KubernetesIntegrationTests {
 
   val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
-  val imageTag = settingKey[String]("Tag to use for images built during the test.")
-  val namespace = settingKey[String]("Namespace where to run pods.")
+  val imageRepo = sys.props.getOrElse("spark.kubernetes.test.imageRepo", "docker.io/kubespark")
+  val imageTag = sys.props.get("spark.kubernetes.test.imageTag")
+  val namespace = sys.props.get("spark.kubernetes.test.namespace")
   val deployMode = sys.props.get("spark.kubernetes.test.deployMode")
 
   // Hack: this variable is used to control whether to build docker images. It's updated by
@@ -633,29 +634,36 @@ object KubernetesIntegrationTests {
   private var shouldBuildImage = true
 
   lazy val settings = Seq(
-    imageTag := "dev",
-    namespace := "default",
     dockerBuild := {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
-        val dockerFile = sys.props.get("spark.kubernetes.test.dockerFile")
-        val javaImageTag = sys.props.getOrElse("spark.kubernetes.test.javaImageTag", "8-jre-slim")
-        val extraOptions = if (dockerFile.isDefined) {
-          Seq("-f", s"${dockerFile.get}")
-        } else {
+        val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
+        val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
+            "resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+        val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
+        } else {
+          Seq("-f", s"$dockerFile")
         }
         val cmd = Seq(dockerTool,
-          "-t", imageTag.value,
+          "-r", imageRepo,
+          "-t", imageTag.getOrElse("dev"),
           "-p", s"$bindingsDir/python/Dockerfile",
           "-R", s"$bindingsDir/R/Dockerfile") ++
-          (if (deployMode == Some("docker-for-desktop")) Seq.empty else Seq("-m")) ++
+          (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
+        if (deployMode == Some("cloud")) {
+          val cmd = Seq(dockerTool, "-r", imageRepo, "-t", imageTag.getOrElse("dev"), "push")
+          val ret = Process(cmd).!
+          if (ret != 0) {
+            throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ret.")
+          }
         }
       }
       shouldBuildImage = true
@@ -669,10 +677,11 @@ object KubernetesIntegrationTests {
     (Test / test) := (Test / test).dependsOn(dockerBuild).value,
     (Test / javaOptions) ++= Seq(
       s"-Dspark.kubernetes.test.deployMode=${deployMode.getOrElse("minikube")}",
-      s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
-      s"-Dspark.kubernetes.test.namespace=${namespace.value}",
+      s"-Dspark.kubernetes.test.imageRepo=${imageRepo}",
+      s"-Dspark.kubernetes.test.imageTag=${imageTag.getOrElse("dev")}",
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
+    (Test / javaOptions) ++= namespace.map("-Dspark.kubernetes.test.namespace=" + _),
     // Force packaging before building images, so that the latest code is tested.
     dockerBuild := dockerBuild
       .dependsOn(assembly / Compile / packageBin)

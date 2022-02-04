@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class CreateTablePartitioningValidationSuite extends AnalysisTest {
 
   test("CreateTableAsSelect: fail missing top-level column") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -46,7 +46,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing top-level column nested reference") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -63,7 +63,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail missing nested column") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -80,7 +80,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: fail with multiple errors") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -98,7 +98,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success with top-level column") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -112,7 +112,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using nested column") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -126,7 +126,7 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
   }
 
   test("CreateTableAsSelect: success using complex column") {
-    val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+    val tableSpec = TableSpec(Map.empty, None, Map.empty,
       None, None, None, false)
     val plan = CreateTableAsSelect(
       UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
