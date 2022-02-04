@@ -212,7 +212,6 @@ object QueryParsingErrors {
       messageParameters = Array(s"Intervals FROM $from TO $to are not supported."),
       ctx)
   }
-  Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO.")
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"MIXED_INTERVAL_UNITS", Array(literal), ctx)
   }
