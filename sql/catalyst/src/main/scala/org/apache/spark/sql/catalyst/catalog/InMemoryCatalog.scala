@@ -30,8 +30,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -50,7 +52,7 @@ class InMemoryCatalog(
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
-    val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
+    var partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
   }
 
   private class DatabaseDesc(var db: CatalogDatabase) {
@@ -124,7 +126,9 @@ class InMemoryCatalog(
           throw QueryExecutionErrors.unableToCreateDatabaseAsFailedToCreateDirectoryError(
             dbDefinition, e)
       }
-      catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
+      val newDb = dbDefinition.copy(
+        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName))
+      catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
   }
 
@@ -135,11 +139,8 @@ class InMemoryCatalog(
     if (catalog.contains(db)) {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
-        if (catalog(db).tables.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "tables")
-        }
-        if (catalog(db).functions.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "functions")
+        if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
       }
       // Remove the database.
@@ -297,8 +298,17 @@ class InMemoryCatalog(
             oldName, newName, oldDir, e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
-    }
 
+      val newPartitions = oldDesc.partitions.map { case (spec, partition) =>
+        val storage = partition.storage
+        val newLocationUri = storage.locationUri.map { uri =>
+          new Path(uri.toString.replace(oldDir.toString, newDir.toString)).toUri
+        }
+        val newPartition = partition.copy(storage = storage.copy(locationUri = newLocationUri))
+        (spec, newPartition)
+      }
+      oldDesc.partitions = newPartitions
+    }
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }

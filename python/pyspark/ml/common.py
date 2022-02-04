@@ -66,7 +66,10 @@ def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))  # type: ignore[attr-defined]
-    return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(rdd._jrdd, True)  # type: ignore[attr-defined]
+    assert rdd.ctx._jvm is not None
+    return rdd.ctx._jvm.org.apache.spark.ml.python.MLSerDe.pythonToJava(
+        rdd._jrdd, True  # type: ignore[attr-defined]
+    )
 
 
 def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
@@ -85,7 +88,8 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
         pass
     else:
         data = bytearray(CPickleSerializer().dumps(obj))
-        obj = sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(data)  # type: ignore[attr-defined]
+        assert sc._jvm is not None
+        obj = sc._jvm.org.apache.spark.ml.python.MLSerDe.loads(data)
     return obj
 
 
@@ -97,18 +101,20 @@ def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "byt
             r = r.toJavaRDD()
             clsName = "JavaRDD"
 
+        assert sc._jvm is not None
+
         if clsName == "JavaRDD":
-            jrdd = sc._jvm.org.apache.spark.ml.python.MLSerDe.javaToPython(r)  # type: ignore[attr-defined]
+            jrdd = sc._jvm.org.apache.spark.ml.python.MLSerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
         if clsName == "Dataset":
             return DataFrame(r, SparkSession(sc)._wrapped)
 
         if clsName in _picklable_classes:
-            r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)  # type: ignore[attr-defined]
+            r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)  # type: ignore[attr-defined]
+                r = sc._jvm.org.apache.spark.ml.python.MLSerDe.dumps(r)
             except Py4JJavaError:
                 pass  # not picklable
 

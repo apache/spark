@@ -108,7 +108,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   override def create(): Unit = {
     val tableSpec = TableSpec(
-      bucketSpec = None,
       properties = properties.toMap,
       provider = provider,
       options = Map.empty,
@@ -198,7 +197,6 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private def internalReplace(orCreate: Boolean): Unit = {
     val tableSpec = TableSpec(
-      bucketSpec = None,
       properties = properties.toMap,
       provider = provider,
       options = Map.empty,

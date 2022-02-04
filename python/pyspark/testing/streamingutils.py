@@ -76,7 +76,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jSparkContextOption = SparkContext._jvm.SparkContext.get()
             if jSparkContextOption.nonEmpty():
                 jSparkContextOption.get().stop()
-        except:
+        except BaseException:
             pass
 
     def setUp(self):
@@ -90,7 +90,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
             if jStreamingContextOption.nonEmpty():
                 jStreamingContextOption.get().stop(False)
-        except:
+        except BaseException:
             pass
 
     def wait_for(self, result, n):

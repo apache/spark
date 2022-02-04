@@ -23,6 +23,7 @@ import javax.security.auth.login.Configuration
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkConf
+import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.sql.test.SharedSparkSession
@@ -68,12 +69,20 @@ class ConnectionProviderSuite
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -92,12 +101,20 @@ class ConnectionProviderSuite
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         mock[Connection]
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -107,12 +124,50 @@ class ConnectionProviderSuite
     assert(providerBase.create(mock[Driver], Map.empty, Some("test2")).isInstanceOf[Connection])
   }
 
+  test("Synchronize on SecurityConfigurationLock when the specified connection provider needs") {
+    val provider1 = new JdbcConnectionProvider() {
+      override val name: String = "test1"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+        assert(Thread.holdsLock(SecurityConfigurationLock))
+        mock[Connection]
+      }
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = true
+    }
+    val provider2 = new JdbcConnectionProvider() {
+      override val name: String = "test2"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+        assert(!Thread.holdsLock(SecurityConfigurationLock))
+        mock[Connection]
+      }
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
+    }
+
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq(provider1, provider2)
+    }
+    // We don't expect any exceptions or null here
+    assert(providerBase.create(mock[Driver], Map.empty, Some("test1")).isInstanceOf[Connection])
+    assert(providerBase.create(mock[Driver], Map.empty, Some("test2")).isInstanceOf[Connection])
+  }
+
   test("Throw an error when user specified provider that does not exist") {
     val provider = new JdbcConnectionProvider() {
       override val name: String = "provider"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {

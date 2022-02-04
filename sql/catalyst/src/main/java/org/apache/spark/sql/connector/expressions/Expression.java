@@ -29,5 +29,5 @@ public interface Expression {
   /**
    * Format the expression as a human readable SQL-like string.
    */
-  String describe();
+  default String describe() { return this.toString(); }
 }

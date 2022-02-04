@@ -33,7 +33,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPermanentFunctionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -183,6 +183,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+
+      intercept[DatabaseAlreadyExistsException] {
+        client.createDatabase(tempDB, ignoreIfExists = false)
+      }
     }
 
     test(s"$version: create/get/alter database should pick right user name as owner") {
@@ -265,6 +269,14 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: dropDatabase") {
       assert(client.databaseExists("temporary"))
+
+      client.createTable(table("temporary", tableName = "tbl"), ignoreIfExists = false)
+      val ex = intercept[AnalysisException] {
+        client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = false)
+        assert(false, "dropDatabase should throw HiveException")
+      }
+      assert(ex.message.contains("Cannot drop a non-empty database: temporary."))
+
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
       assert(client.databaseExists("temporary") == false)
     }

@@ -21,11 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -59,7 +59,6 @@ class DDLParserSuite extends AnalysisTest {
         .add("a", IntegerType, nullable = true, "test")
         .add("b", StringType, nullable = false)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -83,7 +82,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("a", IntegerType).add("b", StringType)),
         Seq.empty[Transform],
-        None,
         Map.empty[String, String],
         Some("parquet"),
         Map.empty[String, String],
@@ -104,7 +102,6 @@ class DDLParserSuite extends AnalysisTest {
         .add("a", IntegerType, nullable = true, "test")
         .add("b", StringType)),
       Seq(IdentityTransform(FieldReference("a"))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -159,7 +156,6 @@ class DDLParserSuite extends AnalysisTest {
           FieldReference("a"),
           LiteralValue(UTF8String.fromString("bar"), StringType),
           LiteralValue(34, IntegerType)))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -181,14 +177,14 @@ class DDLParserSuite extends AnalysisTest {
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      Seq.empty[Transform],
-      Some(BucketSpec(5, Seq("a"), Seq("b"))),
+      List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
       None,
       None,
       None)
+
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
@@ -201,7 +197,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -222,7 +217,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
       Seq.empty[Transform],
-      None,
       Map("test" -> "test"),
       Some("parquet"),
       Map.empty[String, String],
@@ -241,7 +235,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("a", IntegerType).add("b", StringType)),
         Seq.empty[Transform],
-        None,
         Map.empty[String, String],
         Some("parquet"),
         Map.empty[String, String],
@@ -260,7 +253,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("1m", "2g"),
       Some(new StructType().add("a", IntegerType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -279,7 +271,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -298,7 +289,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -317,7 +307,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -361,7 +350,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -387,7 +375,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("id", LongType).add("part", StringType)),
         Seq(IdentityTransform(FieldReference("part"))),
-        None,
         Map.empty[String, String],
         None,
         Map.empty[String, String],
@@ -430,7 +417,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -469,7 +455,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -493,7 +478,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -627,7 +611,6 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Some(new StructType),
           Seq.empty[Transform],
-          Option.empty[BucketSpec],
           Map.empty[String, String],
           Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
@@ -683,7 +666,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("mydb", "page_view"),
         None,
         Seq.empty[Transform],
-        None,
         Map("p1" -> "v1", "p2" -> "v2"),
         Some("parquet"),
         Map.empty[String, String],
@@ -1686,122 +1668,6 @@ class DDLParserSuite extends AnalysisTest {
       ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
   }
 
-  test("create namespace -- backward compatibility with DATABASE/DBPROPERTIES") {
-    val expected = CreateNamespace(
-      UnresolvedDBObjectName(Seq("a", "b", "c"), true),
-      ifNotExists = true,
-      Map(
-        "a" -> "a",
-        "b" -> "b",
-        "c" -> "c",
-        "comment" -> "namespace_comment",
-        "location" -> "/home/user/db"))
-
-    comparePlans(
-      parsePlan(
-        """
-          |CREATE NAMESPACE IF NOT EXISTS a.b.c
-          |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
-          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
-        """.stripMargin),
-      expected)
-
-    comparePlans(
-      parsePlan(
-        """
-          |CREATE DATABASE IF NOT EXISTS a.b.c
-          |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
-          |COMMENT 'namespace_comment' LOCATION '/home/user/db'
-        """.stripMargin),
-      expected)
-  }
-
-  test("create namespace -- check duplicates") {
-    def createDatabase(duplicateClause: String): String = {
-      s"""
-         |CREATE NAMESPACE IF NOT EXISTS a.b.c
-         |$duplicateClause
-         |$duplicateClause
-      """.stripMargin
-    }
-    val sql1 = createDatabase("COMMENT 'namespace_comment'")
-    val sql2 = createDatabase("LOCATION '/home/user/db'")
-    val sql3 = createDatabase("WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-    val sql4 = createDatabase("WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-
-    intercept(sql1, "Found duplicate clauses: COMMENT")
-    intercept(sql2, "Found duplicate clauses: LOCATION")
-    intercept(sql3, "Found duplicate clauses: WITH PROPERTIES")
-    intercept(sql4, "Found duplicate clauses: WITH DBPROPERTIES")
-  }
-
-  test("create namespace - property values must be set") {
-    assertUnsupported(
-      sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')",
-      containsThesePhrases = Seq("key_without_value"))
-  }
-
-  test("create namespace -- either PROPERTIES or DBPROPERTIES is allowed") {
-    val sql =
-      s"""
-         |CREATE NAMESPACE IF NOT EXISTS a.b.c
-         |WITH PROPERTIES ('a'='a', 'b'='b', 'c'='c')
-         |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
-      """.stripMargin
-    intercept(sql, "Either PROPERTIES or DBPROPERTIES is allowed")
-  }
-
-  test("create namespace - support for other types in PROPERTIES") {
-    val sql =
-      """
-        |CREATE NAMESPACE a.b.c
-        |LOCATION '/home/user/db'
-        |WITH PROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
-      """.stripMargin
-    comparePlans(
-      parsePlan(sql),
-      CreateNamespace(
-        UnresolvedDBObjectName(Seq("a", "b", "c"), true),
-        ifNotExists = false,
-        Map(
-          "a" -> "1",
-          "b" -> "0.1",
-          "c" -> "true",
-          "location" -> "/home/user/db")))
-  }
-
-  test("set namespace properties") {
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET PROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET PROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-
-    comparePlans(
-      parsePlan("ALTER DATABASE a.b.c SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a", "b" -> "b", "c" -> "c")))
-
-    comparePlans(
-      parsePlan("ALTER SCHEMA a.b.c SET DBPROPERTIES ('a'='a')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("a" -> "a")))
-
-    comparePlans(
-      parsePlan("ALTER NAMESPACE a.b.c SET DBPROPERTIES ('b'='b')"),
-      SetNamespaceProperties(
-        UnresolvedNamespace(Seq("a", "b", "c")), Map("b" -> "b")))
-  }
-
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
@@ -1953,19 +1819,6 @@ class DDLParserSuite extends AnalysisTest {
         true,
         true,
         Some(Map("ds" -> "2017-06-10"))))
-  }
-
-  test("SHOW CREATE table") {
-    comparePlans(
-      parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false)))
-
-    comparePlans(
-      parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
-      ShowCreateTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false),
-        asSerde = true))
   }
 
   test("CACHE TABLE") {
@@ -2149,71 +2002,78 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("DESCRIBE FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
+      UnresolvedFunc(name, "DESCRIBE FUNCTION", false, None)
+    }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
-      DescribeFunction(UnresolvedFunc(Seq("a")), false))
+      DescribeFunction(createFuncPlan(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a"),
-      DescribeFunction(UnresolvedFunc(Seq("a")), false))
+      DescribeFunction(createFuncPlan(Seq("a")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION a.b.c"),
-      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), false))
+      DescribeFunction(createFuncPlan(Seq("a", "b", "c")), false))
     comparePlans(
       parsePlan("DESCRIBE FUNCTION EXTENDED a.b.c"),
-      DescribeFunction(UnresolvedFunc(Seq("a", "b", "c")), true))
+      DescribeFunction(createFuncPlan(Seq("a", "b", "c")), true))
   }
 
   test("SHOW FUNCTIONS") {
+    val nsPlan = UnresolvedNamespace(Nil)
     comparePlans(
       parsePlan("SHOW FUNCTIONS"),
-      ShowFunctions(None, true, true, None))
+      ShowFunctions(nsPlan, true, true, None))
     comparePlans(
       parsePlan("SHOW USER FUNCTIONS"),
-      ShowFunctions(None, true, false, None))
+      ShowFunctions(nsPlan, true, false, None))
     comparePlans(
       parsePlan("SHOW user FUNCTIONS"),
-      ShowFunctions(None, true, false, None))
+      ShowFunctions(nsPlan, true, false, None))
     comparePlans(
       parsePlan("SHOW SYSTEM FUNCTIONS"),
-      ShowFunctions(None, false, true, None))
+      ShowFunctions(nsPlan, false, true, None))
     comparePlans(
       parsePlan("SHOW ALL FUNCTIONS"),
-      ShowFunctions(None, true, true, None))
+      ShowFunctions(nsPlan, true, true, None))
+    comparePlans(
+      parsePlan("SHOW FUNCTIONS 'funct*'"),
+      ShowFunctions(nsPlan, true, true, Some("funct*")))
     comparePlans(
       parsePlan("SHOW FUNCTIONS LIKE 'funct*'"),
-      ShowFunctions(None, true, true, Some("funct*")))
+      ShowFunctions(nsPlan, true, true, Some("funct*")))
     comparePlans(
-      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
-      ShowFunctions(Some(UnresolvedFunc(Seq("a", "b", "c"))), true, true, None))
+      parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
+      ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
     val sql = "SHOW other FUNCTIONS"
     intercept(sql, s"$sql not supported")
-  }
+    intercept("SHOW FUNCTIONS IN db f1",
+      "Invalid pattern in SHOW FUNCTIONS: f1")
+    intercept("SHOW FUNCTIONS IN db LIKE f1",
+      "Invalid pattern in SHOW FUNCTIONS: f1")
 
-  test("DROP FUNCTION") {
+    // The legacy syntax.
     comparePlans(
-      parsePlan("DROP FUNCTION a"),
-      DropFunction(UnresolvedFunc(Seq("a")), false, false))
+      parsePlan("SHOW FUNCTIONS a"),
+      ShowFunctions(nsPlan, true, true, Some("a")))
     comparePlans(
-      parsePlan("DROP FUNCTION a.b.c"),
-      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, false))
+      parsePlan("SHOW FUNCTIONS LIKE a"),
+      ShowFunctions(nsPlan, true, true, Some("a")))
     comparePlans(
-      parsePlan("DROP TEMPORARY FUNCTION a.b.c"),
-      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), false, true))
-    comparePlans(
-      parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, false))
-    comparePlans(
-      parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a.b.c"),
-      DropFunction(UnresolvedFunc(Seq("a", "b", "c")), true, true))
+      parsePlan("SHOW FUNCTIONS LIKE a.b.c"),
+      ShowFunctions(UnresolvedNamespace(Seq("a", "b")), true, true, Some("c")))
   }
 
   test("REFRESH FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
+      UnresolvedFunc(name, "REFRESH FUNCTION", true, None)
+    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(UnresolvedFunc(Seq("c"))))
+      RefreshFunction(createFuncPlan(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(UnresolvedFunc(Seq("b", "c"))))
+      RefreshFunction(createFuncPlan(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(UnresolvedFunc(Seq("a", "b", "c"))))
+      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {
@@ -2246,7 +2106,6 @@ class DDLParserSuite extends AnalysisTest {
       name: Seq[String],
       schema: Option[StructType],
       partitioning: Seq[Transform],
-      bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: Option[String],
       options: Map[String, String],
@@ -2263,7 +2122,6 @@ class DDLParserSuite extends AnalysisTest {
             create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(create.tableSchema),
             create.partitioning,
-            create.tableSpec.bucketSpec,
             create.tableSpec.properties,
             create.tableSpec.provider,
             create.tableSpec.options,
@@ -2276,7 +2134,6 @@ class DDLParserSuite extends AnalysisTest {
             replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
-            replace.tableSpec.bucketSpec,
             replace.tableSpec.properties,
             replace.tableSpec.provider,
             replace.tableSpec.options,
@@ -2288,7 +2145,6 @@ class DDLParserSuite extends AnalysisTest {
             ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
-            ctas.tableSpec.bucketSpec,
             ctas.tableSpec.properties,
             ctas.tableSpec.provider,
             ctas.tableSpec.options,
@@ -2301,7 +2157,6 @@ class DDLParserSuite extends AnalysisTest {
             rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
-            rtas.tableSpec.bucketSpec,
             rtas.tableSpec.properties,
             rtas.tableSpec.provider,
             rtas.tableSpec.options,
@@ -2339,7 +2194,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("1m", "2g"),
       Some(new StructType().add("a", IntegerType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],

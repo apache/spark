@@ -251,31 +251,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
-    val dummyKey16 = "1234567812345678"
-    val dummyKey24 = "123456781234567812345678"
-    val dummyKey32 = "12345678123456781234567812345678"
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
     val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
     val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
     val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
-
-    def checkInvalidKeyLength(df: => DataFrame): Unit = {
-      val e = intercept[Exception] {
-        df.collect
-      }
-      assert(e.getMessage.contains(
-        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
-    }
-
-    def checkUnsupportedMode(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause
-      assert(e.isInstanceOf[UnsupportedOperationException])
-      assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
-    }
 
     val df1 = Seq("Spark", "").toDF
 
@@ -286,10 +267,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (key32, encryptedText32, encryptedEmptyText32)).foreach {
       case (key, encryptedText, encryptedEmptyText) =>
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(value, '$key'))"),
+          df1.selectExpr(s"base64(aes_encrypt(value, '$key', 'ECB'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
         checkAnswer(
-          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key'))"),
+          df1.selectExpr(s"base64(aes_encrypt(binary(value), '$key', 'ECB'))"),
           Seq(Row(encryptedText), Row(encryptedEmptyText)))
     }
 
@@ -315,15 +296,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
       Seq(Row(null), Row(null)))
 
-    // Encryption failure - invalid key length
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
-
-    // Unsupported AES mode and padding in encrypt
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"))
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"))
-
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -336,10 +308,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       ("value32", key32)).foreach {
       case (colName, key) =>
         checkAnswer(
-          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key') as string)"),
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), '$key', 'ECB') as string)"),
           Seq(Row("Spark"), Row("")))
         checkAnswer(
-          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key')) as string)"),
+          df2.selectExpr(s"cast(aes_decrypt(unbase64($colName), binary('$key'), 'ECB') as string)"),
           Seq(Row("Spark"), Row("")))
     }
 
@@ -360,34 +332,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
         Seq(Row(null), Row(null)))
     }
-
-    // Decryption failure - invalid key length
-    Seq("value16", "value24", "value32").foreach { colName =>
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary(''))"))
-    }
-
-    // Decryption failure - key mismatch
-    Seq(
-      ("value16", dummyKey16),
-      ("value24", dummyKey24),
-      ("value32", dummyKey32)).foreach {
-      case (colName, key) =>
-        val e = intercept[Exception] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'))").collect
-        }
-        assert(e.getMessage.contains("BadPaddingException"))
-    }
-
-    // Unsupported AES mode and padding in decrypt
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
   test("string function find_in_set") {

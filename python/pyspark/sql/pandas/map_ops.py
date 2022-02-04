@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
 
 
-class PandasMapOpsMixin(object):
+class PandasMapOpsMixin:
     """
     Min-in for pandas map operations. Currently, only :class:`DataFrame`
     can use this class.

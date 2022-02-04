@@ -20,7 +20,7 @@ import random
 import math
 
 
-class RDDSamplerBase(object):
+class RDDSamplerBase:
     def __init__(self, withReplacement, seed=None):
         self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
         self._withReplacement = withReplacement
@@ -41,10 +41,10 @@ class RDDSamplerBase(object):
         # http://en.wikipedia.org/wiki/Poisson_distribution
         if mean < 20.0:
             # one exp and k+1 random calls
-            l = math.exp(-mean)
+            lda = math.exp(-mean)
             p = self._random.random()
             k = 0
-            while p > l:
+            while p > lda:
                 k += 1
                 p *= self._random.random()
         else:

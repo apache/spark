@@ -332,8 +332,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c STRUCT<c: $typeName(5)>) USING $format")
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
-      val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      val e = intercept[RuntimeException](sql("INSERT INTO t SELECT struct('123456')"))
+      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
     }
   }
 
@@ -840,16 +840,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           checkAnswer(spark.table("t"), Row("123456"))
         }
       }
-    }
-  }
-
-  // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
-  test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
-      val rest = sql("SHOW CREATE TABLE t").head().getString(0)
-      assert(rest.contains("VARCHAR(3)"))
-      assert(rest.contains("CHAR(5)"))
     }
   }
 

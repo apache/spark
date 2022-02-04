@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from distutils.version import LooseVersion
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
@@ -247,7 +247,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             return obj
 
 
-class TestUtils(object):
+class TestUtils:
     @contextmanager
     def temp_dir(self):
         tmp = tempfile.mkdtemp()

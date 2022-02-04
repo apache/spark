@@ -36,7 +36,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class MissingPandasLikeDataFrameGroupBy(object):
+class MissingPandasLikeDataFrameGroupBy:
 
     # Properties
     corr = _unsupported_property("corr")
@@ -68,7 +68,7 @@ class MissingPandasLikeDataFrameGroupBy(object):
     sem = _unsupported_function("sem")
 
 
-class MissingPandasLikeSeriesGroupBy(object):
+class MissingPandasLikeSeriesGroupBy:
 
     # Properties
     corr = _unsupported_property("corr")
