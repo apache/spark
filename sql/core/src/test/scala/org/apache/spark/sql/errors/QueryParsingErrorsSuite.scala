@@ -113,6 +113,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.getMessage.contains("The feature is not supported"))
   }
+
   // Moved from ExpressionParserSuite
   test("UNSUPPORTED_FEATURE: Unsupported month to second interval") {
     val e = intercept[ParseException] {
@@ -122,15 +123,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.getMessage.contains("The feature is not supported"))
   }
-  // Moved from Interval.sql
-  test("UNSUPPORTED_FEATURE: Unsupported month to second interval") {
-    val e = intercept[ParseException] {
-      spark.sql("select interval '1' year to second")
-    }
-    assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e.getSqlState === "0A000")
-    assert(e.getMessage.contains("The feature is not supported"))
-  }
+
   test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
     val e = intercept[ParseException] {
       spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR")
