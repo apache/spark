@@ -836,10 +836,6 @@ class ExpressionParserSuite extends AnalysisTest {
       }
     }
 
-    // Unknown FROM TO intervals
-    intercept("interval '10' month to second",
-      "Intervals FROM month TO second are not supported.")
-
     // Composed intervals.
     checkIntervals(
       "10 years 3 months", Literal.create(Period.of(10, 3, 0), YearMonthIntervalType()))

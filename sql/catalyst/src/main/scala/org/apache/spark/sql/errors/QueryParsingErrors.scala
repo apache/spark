@@ -207,9 +207,12 @@ object QueryParsingErrors {
 
   def fromToIntervalUnsupportedError(
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"UNSUPPORTED_FROM_TO_INTERVAL", Array(from, to), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"Intervals FROM $from TO $to are not supported."),
+      ctx)
   }
-
+  Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO.")
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"MIXED_INTERVAL_UNITS", Array(literal), ctx)
   }
