@@ -212,6 +212,7 @@ object QueryParsingErrors {
       messageParameters = Array(s"Intervals FROM $from TO $to are not supported."),
       ctx)
   }
+
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"MIXED_INTERVAL_UNITS", Array(literal), ctx)
   }
