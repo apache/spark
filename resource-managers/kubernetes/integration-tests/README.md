@@ -187,7 +187,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.master</code></td>
     <td>
-      When using the <code>cloud-url</code> backend must be specified to indicate the K8S master URL to communicate 
+      When using the <code>cloud</code> backend must be specified to indicate the K8S master URL to communicate
       with.
     </td>
     <td></td>
