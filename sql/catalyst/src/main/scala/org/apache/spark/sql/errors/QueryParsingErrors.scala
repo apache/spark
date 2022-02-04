@@ -207,7 +207,7 @@ object QueryParsingErrors {
 
   def fromToIntervalUnsupportedError(
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"UNSUPPORTED_FEATURE", Array.empty, ctx)
+    new ParseException(s"UNSUPPORTED_FROM_TO_INTERVAL", Array(from, to), ctx)
   }
 
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
