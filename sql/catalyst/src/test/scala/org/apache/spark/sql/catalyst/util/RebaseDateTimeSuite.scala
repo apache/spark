@@ -252,7 +252,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     import scala.collection.mutable.ArrayBuffer
 
     import com.fasterxml.jackson.databind.ObjectMapper
-    import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+    import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
     val rebaseRecords = ThreadUtils.parmap(ALL_TIMEZONES, "JSON-rebase-gen", 16) { zid =>
@@ -296,7 +296,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
     val result = new ArrayBuffer[RebaseRecord]()
     rebaseRecords.sortBy(_.tz).foreach(result.append(_))
-    val mapper = (new ObjectMapper() with ScalaObjectMapper)
+    val mapper = (new ObjectMapper() with ClassTagExtensions)
       .registerModule(DefaultScalaModule)
       .writerWithDefaultPrettyPrinter()
     mapper.writeValue(

@@ -53,11 +53,7 @@ class CapturedException(Exception):
         self.stackTrace = (
             stackTrace
             if stackTrace is not None
-            else (
-                SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(  # type: ignore[attr-defined]
-                    origin
-                )
-            )
+            else (SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(origin))
         )
         self.cause = convert_exception(cause) if cause is not None else None
         if self.cause is None and origin is not None and origin.getCause() is not None:

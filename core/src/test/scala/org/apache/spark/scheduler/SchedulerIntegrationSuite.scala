@@ -136,7 +136,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc): Future[Any] = {
     val waiter: JobWaiter[Any] = scheduler.submitJob(rdd, func, partitions.toSeq, CallSite("", ""),
       (index, res) => results(index) = res, new Properties())
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     waiter.completionFuture.recover { case ex =>
       failure = ex
     }
@@ -697,7 +699,9 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       // Submit a job containing an RDD which will hang in getPartitions() until we release
       // the countdown latch:
+      // scalastyle:off executioncontextglobal
       import scala.concurrent.ExecutionContext.Implicits.global
+      // scalastyle:on executioncontextglobal
       val slowJobFuture = Future { submit(rddWithSlowGetPartitions, Array(0)) }.flatten
 
       // Block the current thread until the other thread has started the getPartitions() call:

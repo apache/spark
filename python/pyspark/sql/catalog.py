@@ -345,9 +345,8 @@ class Catalog:
         if path is not None:
             options["path"] = path
         if source is None:
-            source = (
-                self._sparkSession._wrapped._conf.defaultDataSourceName()  # type: ignore[attr-defined]
-            )
+            c = self._sparkSession._wrapped._conf
+            source = c.defaultDataSourceName()  # type: ignore[attr-defined]
         if description is None:
             description = ""
         if schema is None:

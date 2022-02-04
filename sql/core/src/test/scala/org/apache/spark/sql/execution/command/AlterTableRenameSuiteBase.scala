@@ -126,4 +126,14 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       spark.sessionState.catalogManager.reset()
     }
   }
+
+  test("SPARK-37963: preserve partition info") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (i int, j int) $defaultUsing partitioned by (j)")
+      sql(s"insert into table $src partition(j=2) values (1)")
+      sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+      checkAnswer(spark.table(dst), Row(1, 2))
+    }
+  }
 }

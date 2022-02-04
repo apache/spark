@@ -2356,12 +2356,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Name: value1, dtype: int64
         """
         if dropna:
-            stat_function = lambda col: F.countDistinct(col)
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col)
+
         else:
-            stat_function = lambda col: (
-                F.countDistinct(col)
-                + F.when(F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1).otherwise(0)
-            )
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col) + F.when(
+                    F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
+                ).otherwise(0)
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
@@ -2563,7 +2567,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        stat_function = lambda col: F.percentile_approx(col, 0.5, accuracy)
+        def stat_function(col: Column) -> Column:
+            return F.percentile_approx(col, 0.5, accuracy)
+
         return self._reduce_for_stat_function(stat_function, only_numeric=numeric_only)
 
     def _reduce_for_stat_function(

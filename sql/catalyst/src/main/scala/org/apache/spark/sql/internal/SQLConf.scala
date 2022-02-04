@@ -396,6 +396,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.requireAllClusterKeysForCoPartition")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
+        "of the children, to eliminate the shuffles for the operator that needs its children to " +
+        "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
+        "significant performance regression if shuffles are eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -2665,6 +2676,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
+      "operator will throw an exception if array index is out of bound, or map key does not " +
+      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -4129,6 +4148,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
+
+  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>

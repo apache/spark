@@ -45,28 +45,4 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(input, expected)
     }
   }
-
-  test("try_element_at: array") {
-    val left = Literal(Array(1, 2, 3))
-    Seq(
-      (0, null),
-      (1, 1),
-      (4, null)
-    ).foreach { case (index, expected) =>
-      val input = TryEval(ElementAt(left, Literal(index), failOnError = false))
-      checkEvaluation(input, expected)
-    }
-  }
-
-  test("try_element_at: map") {
-    val left = Literal.create(Map(1 -> 1))
-    Seq(
-      (0, null),
-      (1, 1),
-      (4, null)
-    ).foreach { case (index, expected) =>
-      val input = TryEval(ElementAt(left, Literal(index), failOnError = false))
-      checkEvaluation(input, expected)
-    }
-  }
 }

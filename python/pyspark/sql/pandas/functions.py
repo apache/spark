@@ -17,7 +17,8 @@
 
 import functools
 import warnings
-from inspect import getfullargspec
+from inspect import getfullargspec, signature
+from typing import get_type_hints
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
@@ -317,15 +318,15 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     # |                       string|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|              'a'|                   X|                            X|             X|                X|                 X|            'A'|                               X|  # noqa
     # |                decimal(10,0)|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|        Decimal('1')|                            X|             X|                X|                 X|              X|                               X|  # noqa
     # |                   array<int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                    [1, 2, 3]|             X|                X|                 X|              X|                               X|  # noqa
-    # |              map<string,int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
+    # |              map<string,int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
     # |               struct<_1:int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
     # |                       binary|                  None|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|  bytearray(b'\x01')|  bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'')|bytearray(b'')|bytearray(b'')|                     bytearray(b'')|                                       bytearray(b'')|  bytearray(b'a')|                   X|                            X|bytearray(b'')|   bytearray(b'')|    bytearray(b'')|bytearray(b'A')|                  bytearray(b'')|  # noqa
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa    #
+    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
     #
     # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
     #       used in `returnType`.
     # Note: The values inside of the table are generated by `repr`.
-    # Note: Python 3.7.3, Pandas 1.1.1 and PyArrow 1.0.1 are used.
+    # Note: Python 3.9.5, Pandas 1.4.0 and PyArrow 6.0.1 are used.
     # Note: Timezone is KST.
     # Note: 'X' means it throws an exception during the conversion.
     require_minimum_pandas_version()
@@ -385,8 +386,6 @@ def _create_pandas_udf(f, returnType, evalType):
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
-    from inspect import signature
-
     if evalType in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -410,7 +409,11 @@ def _create_pandas_udf(f, returnType, evalType):
         # 'SQL_COGROUPED_MAP_PANDAS_UDF', the evaluation type will always be set.
         pass
     elif len(argspec.annotations) > 0:
-        evalType = infer_eval_type(signature(f))
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+        evalType = infer_eval_type(signature(f), type_hints)
         assert evalType is not None
 
     if evalType is None:

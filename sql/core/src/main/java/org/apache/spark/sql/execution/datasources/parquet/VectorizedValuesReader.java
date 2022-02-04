@@ -68,4 +68,22 @@ public interface VectorizedValuesReader {
    void skipDoubles(int total);
    void skipBinary(int total);
    void skipFixedLenByteArray(int total, int len);
+
+  /**
+   * A functional interface to write integer values to columnar output
+   */
+  @FunctionalInterface
+  interface IntegerOutputWriter {
+
+    /**
+     * A functional interface that writes a long value to a specified row in an output column
+     * vector
+     *
+     * @param outputColumnVector the vector to write to
+     * @param rowId the row to write to
+     * @param val value to write
+     */
+    void write(WritableColumnVector outputColumnVector, int rowId, long val);
+  }
+
 }

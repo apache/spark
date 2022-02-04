@@ -57,7 +57,7 @@ private[kafka010] class KafkaMicroBatchStream(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsAdmissionControl with ReportsSourceMetrics with MicroBatchStream with Logging {
+  extends SupportsTriggerAvailableNow with ReportsSourceMetrics with MicroBatchStream with Logging {
 
   private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
@@ -81,6 +81,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private var latestPartitionOffsets: PartitionOffsetMap = _
 
+  private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -98,7 +100,8 @@ private[kafka010] class KafkaMicroBatchStream(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+      // TODO (SPARK-37973) Directly call super.getDefaultReadLimit when scala issue 12523 is fixed
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }
 
@@ -113,7 +116,13 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+
+    // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
+    latestPartitionOffsets = if (allDataForTriggerAvailableNow != null) {
+      allDataForTriggerAvailableNow
+    } else {
+      kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+    }
 
     val limits: Seq[ReadLimit] = readLimit match {
       case rows: CompositeReadLimit => rows.getReadLimits
@@ -297,6 +306,11 @@ private[kafka010] class KafkaMicroBatchStream(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allDataForTriggerAvailableNow = kafkaOffsetReader.fetchLatestOffsets(
+      Some(getOrCreateInitialPartitionOffsets()))
   }
 }
 

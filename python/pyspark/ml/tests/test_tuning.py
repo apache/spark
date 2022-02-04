@@ -80,11 +80,7 @@ class InducedErrorEstimator(Estimator, HasInducedError):
 class ParamGridBuilderTests(SparkSessionTestCase):
     def test_addGrid(self):
         with self.assertRaises(TypeError):
-            grid = (
-                ParamGridBuilder()
-                .addGrid("must be an instance of Param", ["not", "string"])
-                .build()
-            )
+            (ParamGridBuilder().addGrid("must be an instance of Param", ["not", "string"]).build())
 
 
 class ValidatorTestUtilsMixin:

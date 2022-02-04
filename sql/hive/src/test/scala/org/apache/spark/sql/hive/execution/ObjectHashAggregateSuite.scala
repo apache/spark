@@ -32,7 +32,9 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 
+@SlowHiveTest
 class ObjectHashAggregateSuite
   extends QueryTest
   with SQLTestUtils

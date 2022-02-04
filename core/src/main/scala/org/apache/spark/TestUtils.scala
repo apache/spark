@@ -24,7 +24,7 @@ import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale, Properties}
+import java.util.{Arrays, EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
@@ -41,9 +41,10 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
-// scalastyle:off
-import org.apache.log4j.PropertyConfigurator
-// scalastyle:on
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.appender.ConsoleAppender
+import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
 import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
@@ -262,7 +263,8 @@ private[spark] object TestUtils {
       contains = contain(e, msg)
     }
     assert(contains,
-      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg")
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg\n" +
+        Utils.exceptionString(e))
   }
 
   /**
@@ -336,22 +338,26 @@ private[spark] object TestUtils {
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
 
-    // Disable cert and host name validation for HTTPS tests.
-    if (connection.isInstanceOf[HttpsURLConnection]) {
-      val sslCtx = SSLContext.getInstance("SSL")
-      val trustManager = new X509TrustManager {
-        override def getAcceptedIssuers(): Array[X509Certificate] = null
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate],
-            s: String): Unit = {}
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate],
-            s: String): Unit = {}
-      }
-      val verifier = new HostnameVerifier() {
-        override def verify(hostname: String, session: SSLSession): Boolean = true
-      }
-      sslCtx.init(null, Array(trustManager), new SecureRandom())
-      connection.asInstanceOf[HttpsURLConnection].setSSLSocketFactory(sslCtx.getSocketFactory())
-      connection.asInstanceOf[HttpsURLConnection].setHostnameVerifier(verifier)
+    connection match {
+      // Disable cert and host name validation for HTTPS tests.
+      case httpConnection: HttpsURLConnection =>
+        val sslCtx = SSLContext.getInstance("SSL")
+        val trustManager = new X509TrustManager {
+          override def getAcceptedIssuers: Array[X509Certificate] = null
+
+          override def checkClientTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+
+          override def checkServerTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+        }
+        val verifier = new HostnameVerifier() {
+          override def verify(hostname: String, session: SSLSession): Boolean = true
+        }
+        sslCtx.init(null, Array(trustManager), new SecureRandom())
+        httpConnection.setSSLSocketFactory(sslCtx.getSocketFactory)
+        httpConnection.setHostnameVerifier(verifier)
+      case _ => // do nothing
     }
 
     try {
@@ -418,17 +424,18 @@ private[spark] object TestUtils {
   }
 
   /**
-   * config a log4j properties used for testsuite
+   * config a log4j2 properties used for testsuite
    */
-  def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
+  def configTestLog4j2(level: String): Unit = {
+    val builder = ConfigurationBuilderFactory.newConfigurationBuilder()
+    val appenderBuilder = builder.newAppender("console", "CONSOLE")
+      .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
+    appenderBuilder.add(builder.newLayout("PatternLayout")
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n"))
+    builder.add(appenderBuilder)
+    builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
+    val configuration = builder.build()
+    LogManager.getContext(false).asInstanceOf[LoggerContext].reconfigure(configuration)
   }
 
   /**
@@ -438,6 +445,21 @@ private[spark] object TestUtils {
     require(f.isDirectory)
     val current = f.listFiles
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+  }
+
+  /**
+   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
+   * by MapReduce.
+   */
+  def listDirectory(path: File): Array[String] = {
+    val result = ArrayBuffer.empty[String]
+    if (path.isDirectory) {
+      path.listFiles.foreach(f => result.appendAll(listDirectory(f)))
+    } else {
+      val c = path.getName.charAt(0)
+      if (c != '.' && c != '_') result.append(path.getAbsolutePath)
+    }
+    result.toArray
   }
 
   /** Creates a temp JSON file that contains the input JSON record. */

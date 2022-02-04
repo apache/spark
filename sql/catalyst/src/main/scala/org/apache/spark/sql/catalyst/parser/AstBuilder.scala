@@ -55,6 +55,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -3203,6 +3204,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
+      case (PROP_EXTERNAL, _) if !legacyOn =>
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
+      case (PROP_EXTERNAL, _) => false
       case _ => true
     }
   }
@@ -3468,8 +3473,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
@@ -3552,8 +3558,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, false)
 
     Option(ctx.query).map(plan) match {
@@ -4390,7 +4397,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         Seq(describeFuncName.getText)
       }
-    DescribeFunction(UnresolvedFunc(functionName), EXTENDED != null)
+    DescribeFunction(
+      UnresolvedFunc(
+        functionName,
+        "DESCRIBE FUNCTION",
+        requirePersistent = false,
+        funcTypeMismatchHint = None),
+      EXTENDED != null)
   }
 
   /**
@@ -4421,25 +4434,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     ShowFunctions(nsPlan, userScope, systemScope, pattern)
   }
 
-  /**
-   * Create a DROP FUNCTION statement.
-   *
-   * For example:
-   * {{{
-   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
-   * }}}
-   */
-  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropFunction(
-      UnresolvedFunc(functionName),
-      ctx.EXISTS != null,
-      ctx.TEMPORARY != null)
-  }
-
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(functionIdentifier))
+    RefreshFunction(UnresolvedFunc(
+      functionIdentifier,
+      "REFRESH FUNCTION",
+      requirePersistent = true,
+      funcTypeMismatchHint = None))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {

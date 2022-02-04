@@ -22,17 +22,23 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
 
+import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -637,5 +643,41 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
       "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
+  }
+
+  test("SPARK-37906: Spark SQL CLI should not pass final comment") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("SPARK-37906")
+    val sparkContext = new SparkContext(sparkConf)
+    SparkSQLEnv.sparkContext = sparkContext
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val sessionState = new CliSessionState(cliConf)
+    SessionState.setCurrentSessionState(sessionState)
+    val cli = new SparkSQLCLIDriver
+    Seq("SELECT 1; --comment" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment" -> Seq("SELECT 1", " /* comment"),
+      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", " /* comment select 1;"),
+      "/* This is a comment without end symbol SELECT 1;" ->
+        Seq("/* This is a comment without end symbol SELECT 1;"),
+      "SELECT 1; --comment\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment */\n" -> Seq("SELECT 1"),
+      "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
+      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
+      "/* This is a comment without end symbol SELECT 1;\n" ->
+        Seq("/* This is a comment without end symbol SELECT 1;\n"),
+      "/* comment */ SELECT 1;" -> Seq("/* comment */ SELECT 1"),
+      "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
+      "-- comment " -> Seq(),
+      "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
+      "/*  comment */  " -> Seq()
+    ).foreach { case (query, ret) =>
+      assert(cli.splitSemiColon(query).asScala === ret)
+    }
+    sessionState.close()
+    SparkSQLEnv.stop()
   }
 }

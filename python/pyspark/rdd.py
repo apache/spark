@@ -996,7 +996,7 @@ class RDD:
         This method should only be used if the resulting array is expected
         to be small, as all the data is loaded into the driver's memory.
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
@@ -1014,7 +1014,7 @@ class RDD:
             FutureWarning,
         )
 
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
@@ -2171,7 +2171,7 @@ class RDD:
 
         keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
             jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions, id(partitionFunc))
         jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
@@ -2362,7 +2362,10 @@ class RDD:
         >>> x.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
-        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
+
+        def flat_map_fn(kv):
+            return ((kv[0], x) for x in f(kv[1]))
+
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def mapValues(self, f):
@@ -2378,7 +2381,10 @@ class RDD:
         >>> x.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
-        map_values_fn = lambda kv: (kv[0], f(kv[1]))
+
+        def map_values_fn(kv):
+            return kv[0], f(kv[1])
+
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def groupWith(self, other, *others):
@@ -2826,7 +2832,7 @@ class RDD:
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
                 self._jrdd.rdd(), prefetchPartitions
             )

@@ -29,8 +29,7 @@ import org.apache.spark.sql.functions.{col, substring_index}
 class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Single column of images named "image"
-  private lazy val imagePath = "../data/mllib/images/partitioned"
-  private lazy val recursiveImagePath = "../data/mllib/images"
+  private lazy val imagePath = getTestResourcePath("images/partitioned")
 
   test("Smoke test: create basic ImageSchema dataframe") {
     val origin = "path"
