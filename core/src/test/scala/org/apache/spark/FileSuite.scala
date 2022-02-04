@@ -473,6 +473,23 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
 
+  test ("save Hadoop Dataset through new Hadoop API with PathOutputCommitProtocol") {
+    sc = new SparkContext("local", "test")
+    val randomRDD = sc.parallelize(
+      Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
+    val job = Job.getInstance(sc.hadoopConfiguration)
+    job.setOutputKeyClass(classOf[String])
+    job.setOutputValueClass(classOf[String])
+    job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
+    val jobConfig = job.getConfiguration
+    jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
+      tempDir.getPath + "/outputDataset_new")
+    jobConfig.set("mapreduce.sources.commitProtocolClass",
+      "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
+    randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
+    assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
+  }
+
   test("Get input files via old Hadoop API") {
     sc = new SparkContext("local", "test")
     val outDir = new File(tempDir, "output").getAbsolutePath

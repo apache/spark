@@ -339,7 +339,8 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
 
   override def createCommitter(jobId: Int): HadoopMapReduceCommitProtocol = {
     FileCommitProtocol.instantiate(
-      className = classOf[HadoopMapReduceCommitProtocol].getName,
+      className = getConf.get("mapreduce.sources.commitProtocolClass",
+        classOf[HadoopMapReduceCommitProtocol].getName),
       jobId = jobId.toString,
       outputPath = getConf.get("mapreduce.output.fileoutputformat.outputdir")
     ).asInstanceOf[HadoopMapReduceCommitProtocol]
