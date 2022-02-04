@@ -451,10 +451,10 @@ object ParquetReadSupport extends Logging {
             clipParquetType(parquetTypes.head, f.dataType, useFieldId, caseSensitive)
           }
         }.getOrElse {
-        // When there is no ID match, we use a fake name to avoid a name match by accident
-        // We need this name to be unique as well, otherwise there will be type conflicts
-        toParquet.convertField(f.copy(name = generateFakeColumnName))
-      }
+          // When there is no ID match, we use a fake name to avoid a name match by accident
+          // We need this name to be unique as well, otherwise there will be type conflicts
+          toParquet.convertField(f.copy(name = generateFakeColumnName))
+        }
     }
 
     if (useFieldId && ParquetUtils.hasFieldIds(structType)) {

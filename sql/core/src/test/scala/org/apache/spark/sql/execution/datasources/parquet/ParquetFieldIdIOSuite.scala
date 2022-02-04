@@ -31,14 +31,14 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
 
   /**
-   * Field id is supported in OSS vectorized reader at the moment.
+   * Field id is supported in vectorized reader at the moment.
    * parquet-mr support is coming soon.
    */
   private def withAllSupportedReaders(code: => Unit): Unit = {
-   withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 
-  test("general test") {
+  test("Parquet reads infer fields using field ids correctly") {
     withTempDir { dir =>
       val readSchema =
         new StructType().add(
@@ -56,11 +56,16 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
       withAllSupportedReaders {
+        // read with schema
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), readData)
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
           .where("b < 50"), Seq.empty)
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
           .where("a >= 'oh'"), Row("text", 100) :: Nil)
+        // schema inference should pull into the schema with ids
+        val reader = spark.read.parquet(dir.getCanonicalPath)
+        assert(reader.schema == writeSchema)
+        checkAnswer(reader.where("name >= 'oh'"), Row(100, "text") :: Nil)
       }
 
       // blocked for Parquet-mr reader
