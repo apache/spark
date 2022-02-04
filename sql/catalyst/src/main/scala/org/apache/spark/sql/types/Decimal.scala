@@ -261,14 +261,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toByte) {
         actualLongVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "byte")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, ByteType.catalogString)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
         doubleVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "byte")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, ByteType.catalogString)
       }
     }
   }
@@ -283,14 +283,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toShort) {
         actualLongVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "short")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, ShortType.catalogString)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
         doubleVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "short")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, ShortType.catalogString)
       }
     }
   }
@@ -305,14 +305,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toInt) {
         actualLongVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "int")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, IntegerType.catalogString)
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
         doubleVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "int")
+        throw QueryExecutionErrors.castingCauseOverflowError(this, IntegerType.catalogString)
       }
     }
   }
@@ -332,7 +332,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         decimalVal.bigDecimal.toBigInteger.longValueExact()
       } catch {
         case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(this, "long")
+          throw QueryExecutionErrors.castingCauseOverflowError(this, LongType.catalogString)
       }
     }
   }
