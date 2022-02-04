@@ -85,15 +85,15 @@
   "INVALID_FROM_TO_UNIT_VALUE" : {
     "message" : [ "The value of from-to unit must be a string" ]
   },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
+    "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
+    "sqlState" : "42000"
+  },
   "INVALID_INTERVAL_FORM" : {
     "message" : [ "Can only use numbers in the interval value part for multiple unit value pairs interval form, but got invalid value: %s" ]
   },
   "INVALID_INTERVAL_LITERAL" : {
     "message" : [ "at least one time unit should be given for interval literal" ]
-  },
-  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
-    "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
-    "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
