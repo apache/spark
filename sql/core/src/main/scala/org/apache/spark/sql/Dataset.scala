@@ -2486,7 +2486,7 @@ class Dataset[T] private[sql](
    * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
    *
    * @group untypedrel
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def withColumns(colsMap: Map[String, Column]): DataFrame = {
     val (colNames, newCols) = colsMap.toSeq.unzip
@@ -2501,7 +2501,7 @@ class Dataset[T] private[sql](
    * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
    *
    * @group untypedrel
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def withColumns(colsMap: java.util.Map[String, Column]): DataFrame = withColumns(
     colsMap.asScala.toMap

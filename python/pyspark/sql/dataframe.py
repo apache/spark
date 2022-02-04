@@ -2911,7 +2911,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
-    def withColumns(self, colsMap):
+    def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
         existing columns that has the same names.
@@ -2919,7 +2919,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The colsMap is a map of column name and column, the column must only refer to attributes
         supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
 
-        .. versionadded:: 3.2.0
+        .. versionadded:: 3.3.0
            Added support for multiple columns adding
 
         Parameters
@@ -2939,8 +2939,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols = list(colsMap.values())
 
         return DataFrame(
-            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(cols)),
-            self.sql_ctx
+            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(*cols)), self.sql_ctx
         )
 
     def withColumn(self, colName: str, col: Column) -> "DataFrame":
