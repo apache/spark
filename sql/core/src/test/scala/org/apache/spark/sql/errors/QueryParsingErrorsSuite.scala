@@ -116,7 +116,16 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   // Moved from ExpressionParserSuite
   test("UNSUPPORTED_FEATURE: Unsupported month to second interval") {
     val e = intercept[ParseException] {
-      spark.sql("SELECT interval '10' month to second)")
+      spark.sql("SELECT interval '10' month to second")
+    }
+    assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
+    assert(e.getSqlState === "0A000")
+    assert(e.getMessage.contains("The feature is not supported"))
+  }
+  // Moved from Interval.sql
+  test("UNSUPPORTED_FEATURE: Unsupported month to second interval") {
+    val e = intercept[ParseException] {
+      spark.sql("select interval '1' year to second")
     }
     assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e.getSqlState === "0A000")

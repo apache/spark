@@ -167,7 +167,8 @@ SELECT interval '2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 m
 select interval;
 select interval 1 fake_unit;
 select interval 1 year to month;
-select interval '1' year to second;
+-- SPARK-37936: moving this query test into 'QueryParsingErrorsSuite'
+-- select interval '1' year to second;
 select interval '10-9' year to month '2-1' year to month;
 select interval '10-9' year to month '12:11:10' hour to second;
 select interval '1 15:11' day to minute '12:11:10' hour to second;
