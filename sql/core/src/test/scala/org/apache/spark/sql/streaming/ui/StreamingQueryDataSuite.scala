@@ -31,6 +31,7 @@ class StreamingQueryDataSuite extends SparkFunSuite {
   }
 
   test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
+    assume(!Utils.isMacOnAppleSilicon)
     val testDir = Utils.createTempDir()
     try {
       val kvStore = KVUtils.open(testDir, getClass.getName)
