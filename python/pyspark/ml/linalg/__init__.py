@@ -337,7 +337,7 @@ class DenseVector(Vector):
         self.array = ar_
 
     def __reduce__(self) -> Tuple[Type["DenseVector"], Tuple[bytes]]:
-        return DenseVector, (self.array.tostring(),)  # type: ignore[attr-defined, union-attr]
+        return DenseVector, (self.array.tobytes(),)
 
     def numNonzeros(self) -> int:
         """
@@ -659,14 +659,7 @@ class SparseVector(Vector):
         return np.linalg.norm(self.values, p)
 
     def __reduce__(self) -> Tuple[Type["SparseVector"], Tuple[int, bytes, bytes]]:
-        return (
-            SparseVector,
-            (
-                self.size,
-                self.indices.tostring(),  # type: ignore[attr-defined]
-                self.values.tostring(),  # type: ignore[attr-defined]
-            ),
-        )
+        return (SparseVector, (self.size, self.indices.tobytes(), self.values.tobytes()))
 
     def dot(self, other: Iterable[float]) -> np.float64:
         """
@@ -1080,7 +1073,7 @@ class DenseMatrix(Matrix):
         return DenseMatrix, (
             self.numRows,
             self.numCols,
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
@@ -1299,9 +1292,9 @@ class SparseMatrix(Matrix):
         return SparseMatrix, (
             self.numRows,
             self.numCols,
-            self.colPtrs.tostring(),  # type: ignore[attr-defined]
-            self.rowIndices.tostring(),  # type: ignore[attr-defined]
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.colPtrs.tobytes(),
+            self.rowIndices.tobytes(),
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 

@@ -390,7 +390,7 @@ class DenseVector(Vector):
         return DenseVector(values)
 
     def __reduce__(self) -> Tuple[Type["DenseVector"], Tuple[bytes]]:
-        return DenseVector, (self.array.tostring(),)  # type: ignore[attr-defined]
+        return DenseVector, (self.array.tobytes(),)
 
     def numNonzeros(self) -> int:
         """
@@ -712,8 +712,8 @@ class SparseVector(Vector):
             SparseVector,
             (
                 self.size,
-                self.indices.tostring(),  # type: ignore[attr-defined]
-                self.values.tostring(),  # type: ignore[attr-defined]
+                self.indices.tobytes(),
+                self.values.tobytes(),
             ),
         )
 
@@ -1256,7 +1256,7 @@ class DenseMatrix(Matrix):
         return DenseMatrix, (
             self.numRows,
             self.numCols,
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
@@ -1489,9 +1489,9 @@ class SparseMatrix(Matrix):
         return SparseMatrix, (
             self.numRows,
             self.numCols,
-            self.colPtrs.tostring(),  # type: ignore[attr-defined]
-            self.rowIndices.tostring(),  # type: ignore[attr-defined]
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.colPtrs.tobytes(),
+            self.rowIndices.tobytes(),
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
