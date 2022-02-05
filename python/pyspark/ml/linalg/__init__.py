@@ -303,7 +303,7 @@ class DenseVector(Vector):
         self.array = ar
 
     def __reduce__(self):
-        return DenseVector, (self.array.tostring(),)
+        return DenseVector, (self.array.tobytes(),)
 
     def numNonzeros(self):
         """
@@ -591,7 +591,7 @@ class SparseVector(Vector):
         return np.linalg.norm(self.values, p)
 
     def __reduce__(self):
-        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))
+        return (SparseVector, (self.size, self.indices.tobytes(), self.values.tobytes()))
 
     def dot(self, other):
         """
@@ -949,7 +949,7 @@ class DenseMatrix(Matrix):
         return DenseMatrix, (
             self.numRows,
             self.numCols,
-            self.values.tostring(),
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
@@ -1160,9 +1160,9 @@ class SparseMatrix(Matrix):
         return SparseMatrix, (
             self.numRows,
             self.numCols,
-            self.colPtrs.tostring(),
-            self.rowIndices.tostring(),
-            self.values.tostring(),
+            self.colPtrs.tobytes(),
+            self.rowIndices.tobytes(),
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
