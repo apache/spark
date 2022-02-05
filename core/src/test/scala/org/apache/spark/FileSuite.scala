@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
@@ -473,7 +474,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
 
-  test ("save Hadoop Dataset through new Hadoop API with PathOutputCommitProtocol") {
+  class TestOutputCommitProtocol(jobId: String, path: String,
+                                 dynamicPartitionOverwrite: Boolean = false)
+    extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+
+  test ("SPARK-38102 save Hadoop Dataset through new Hadoop API with PathOutputCommitProtocol") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
@@ -485,7 +490,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
       tempDir.getPath + "/outputDataset_new")
     jobConfig.set("mapreduce.sources.commitProtocolClass",
-      "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
+      "org.apache.spark.FileSuite.TestOutputCommitProtocol")
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
