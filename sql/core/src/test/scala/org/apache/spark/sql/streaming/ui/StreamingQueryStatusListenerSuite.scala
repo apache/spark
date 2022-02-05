@@ -28,7 +28,8 @@ import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryProgress, StreamTest}
 import org.apache.spark.sql.streaming
-import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.status.{ElementTrackingStore, KVUtils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
@@ -212,5 +213,35 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
     checkQueryProcessData(5)
     addQueryProgress()
     checkQueryProcessData(5)
+  }
+
+  test("SPARK-38056: test writing StreamingQueryData to an in-memory store") {
+    val store = new ElementTrackingStore(new InMemoryStore(), sparkConf)
+    store.write(testStreamingQueryData)
+  }
+
+  test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
+    assume(!Utils.isMacOnAppleSilicon)
+    val testDir = Utils.createTempDir()
+    try {
+      val kvStore = KVUtils.open(testDir, getClass.getName)
+      val store = new ElementTrackingStore(kvStore, sparkConf)
+      store.write(testStreamingQueryData)
+    } finally {
+      Utils.deleteRecursively(testDir)
+    }
+  }
+
+  private def testStreamingQueryData: StreamingQueryData = {
+    val id = UUID.randomUUID()
+    new StreamingQueryData(
+      "some-query",
+      id,
+      id.toString,
+      isActive = false,
+      None,
+      1L,
+      None
+    )
   }
 }
