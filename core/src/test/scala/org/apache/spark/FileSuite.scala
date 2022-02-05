@@ -474,11 +474,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
 
-  class TestOutputCommitProtocol(jobId: String, path: String,
-                                 dynamicPartitionOverwrite: Boolean = false)
-    extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
-
   test ("SPARK-38102 save Hadoop Dataset through new Hadoop API with custom commitProtocolClass") {
+    class TestOutputCommitProtocol(jobId: String, path: String,
+                                   dynamicPartitionOverwrite: Boolean = false)
+      extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
@@ -490,7 +490,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
       tempDir.getPath + "/outputDataset_new")
     jobConfig.set("mapreduce.sources.commitProtocolClass",
-      "org.apache.spark.FileSuite.TestOutputCommitProtocol")
+      classOf[TestOutputCommitProtocol].getName)
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists())
   }
