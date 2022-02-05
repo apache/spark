@@ -1213,7 +1213,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Intervals FROM year TO second are not supported.(line 1, pos 16)
+The feature is not supported: Intervals FROM year TO second are not supported(line 1, pos 16)
 
 == SQL ==
 select interval '1' year to second
