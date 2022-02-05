@@ -945,8 +945,8 @@ object SQLConf {
 
   val IGNORE_MISSING_PARQUET_FIELD_ID =
     buildConf("spark.sql.parquet.fieldId.ignoreMissing")
-      .doc("When the Parquet file does't have any field IDs but the" +
-        " Spark read schema is using field IDs to read, we will return silently return nulls" +
+      .doc("When the Parquet file doesn't have any field IDs but the" +
+        " Spark read schema is using field IDs to read, we will silently return nulls" +
         "when this flag is enabled, or error otherwise.")
       .booleanConf
       .createWithDefault(false)
@@ -4269,6 +4269,8 @@ class SQLConf extends Serializable with Logging {
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
   def parquetFieldIdEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_ENABLED)
+
+  def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
