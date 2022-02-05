@@ -653,7 +653,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       outputPartitioning = HashPartitioning(exprB :: exprC :: Nil, 5))
     val smjExec1 = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-    new EnsureRequirements(disableShuffle = false).apply(smjExec1) match {
+    new EnsureRequirements(disableShuffle = true).apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
       SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
       SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
