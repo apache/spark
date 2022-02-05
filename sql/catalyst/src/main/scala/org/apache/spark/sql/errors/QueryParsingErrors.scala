@@ -190,31 +190,31 @@ object QueryParsingErrors {
   }
 
   def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL", Array.empty, ctx)
+    new ParseException("MORE_THAN_ONE_FROM_TO_UNIT_IN_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(s"INVALID_INTERVAL_LITERAL", Array.empty, ctx)
+    new ParseException("INVALID_INTERVAL_LITERAL", Array.empty, ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
-    new ParseException(s"INVALID_INTERVAL_FORM", Array(value), ctx)
+    new ParseException("INVALID_INTERVAL_FORM", Array(value), ctx)
   }
 
   def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
-    new ParseException(s"INVALID_FROM_TO_UNIT_VALUE", Array.empty, ctx)
+    new ParseException("INVALID_FROM_TO_UNIT_VALUE", Array.empty, ctx)
   }
 
   def fromToIntervalUnsupportedError(
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = s"UNSUPPORTED_FEATURE",
+      errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(s"Intervals FROM $from TO $to are not supported"),
       ctx)
   }
 
   def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"MIXED_INTERVAL_UNITS", Array(literal), ctx)
+    new ParseException("MIXED_INTERVAL_UNITS", Array(literal), ctx)
   }
 
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {

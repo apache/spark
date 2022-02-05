@@ -111,7 +111,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e.getSqlState === "0A000")
-    assert(e.getMessage.contains("The feature is not supported"))
+    assert(e.getMessage.contains(
+      "The feature is not supported: Intervals FROM year TO day are not supported"))
   }
 
   // Moved from ExpressionParserSuite
@@ -121,7 +122,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e.getSqlState === "0A000")
-    assert(e.getMessage.contains("The feature is not supported"))
+    assert(e.getMessage.contains(
+      "The feature is not supported: Intervals FROM month TO second are not supported"))
   }
 
   test("MIXED_INTERVAL_UNITS: Cannot mix year-month and day-time fields") {
@@ -129,7 +131,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       spark.sql("SELECT INTERVAL 1 MONTH 2 HOUR")
     }
     assert(e.getErrorClass === "MIXED_INTERVAL_UNITS")
-
     assert(e.getMessage.contains(
       "Cannot mix year-month and day-time fields"))
   }
