@@ -68,11 +68,6 @@ import org.apache.spark.util.CircularBuffer
  */
 object QueryExecutionErrors {
 
-  def columnChangeUnsupportedError(): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_CHANGE_COLUMN",
-      messageParameters = Array.empty)
-  }
-
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
@@ -131,20 +126,10 @@ object QueryExecutionErrors {
       messageParameters = Array.empty)
   }
 
-  def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID",
-      messageParameters = Array(nodeName))
-  }
-
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
     new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
-  }
-
-  def dataTypeUnsupportedError(dt: DataType): Throwable = {
-    new SparkException(errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Array(dt.typeName), null)
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
@@ -257,8 +242,9 @@ object QueryExecutionErrors {
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
-    new SparkRuntimeException("UNSUPPORTED_LITERAL_TYPE",
-      Array(v.getClass.toString, v.toString))
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -669,7 +655,7 @@ object QueryExecutionErrors {
 
   def unsupportedPartitionTransformError(transform: Transform): Throwable = {
     new UnsupportedOperationException(
-      s"SessionCatalog does not support partition transform: $transform")
+      s"Unsupported partition transform: $transform")
   }
 
   def missingDatabaseLocationError(): Throwable = {
@@ -784,8 +770,10 @@ object QueryExecutionErrors {
   }
 
   def transactionUnsupportedByJdbcServerError(): Throwable = {
-    new SparkSQLFeatureNotSupportedException(errorClass = "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER",
-      Array.empty)
+    new SparkSQLFeatureNotSupportedException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("the target JDBC server does not support transaction and " +
+        "can only support ALTER TABLE with a single action."))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -1951,5 +1939,9 @@ object QueryExecutionErrors {
   def invalidNumberFormatError(input: UTF8String, format: String): Throwable = {
     new IllegalArgumentException(
       s"The input string '$input' does not match the given number format: '$format'")
+  }
+
+  def MultipleBucketTransformsError(): Throwable = {
+    new UnsupportedOperationException("Multiple bucket transforms are not supported.")
   }
 }

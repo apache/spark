@@ -1420,7 +1420,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra driver pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature step
+    can implement `KubernetesDriverCustomFeatureConfigStep` where the driver config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1430,7 +1432,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra executor pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature step
+    can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>

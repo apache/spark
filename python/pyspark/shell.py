@@ -46,7 +46,7 @@ except Exception:
 
 sc = spark.sparkContext
 sql = spark.sql
-atexit.register(lambda: sc.stop())
+atexit.register((lambda sc: lambda: sc.stop())(sc))
 
 # for compatibility
 sqlContext = spark._wrapped
