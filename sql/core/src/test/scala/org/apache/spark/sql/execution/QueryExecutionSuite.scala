@@ -20,10 +20,14 @@ import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, FastOperator}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
-import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -260,5 +264,44 @@ class QueryExecutionSuite extends SharedSparkSession {
     assert(projectQe.executedPlan.isInstanceOf[CommandResultExec])
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
+  }
+
+  test("SPARK-37536: remove shuffle from requirements if " +
+    "shuffle is disabled and spark is in local mode") {
+
+    withSQLConf(SQLConf.LOCAL_MODE_SHUFFLE_ENABLED.key -> "false") {
+
+      val exprA = Literal(1)
+      val exprB = Literal(2)
+      val exprC = Literal(3)
+
+      val plan1 = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprA :: exprB :: exprC :: Nil, 5))
+
+      val plan2 = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprB :: exprC :: Nil, 5))
+      val smjExec1 = SortMergeJoinExec(
+        exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+
+      val resultPlan = QueryExecution.prepareExecutedPlan(spark, smjExec1)
+
+      def containsShufflePlan(plan: SparkPlan): Boolean = {
+        if (plan.isInstanceOf[ShuffleExchangeExec]) {
+          true
+        } else if (plan.children.size == 0) {
+          false
+        } else {
+          plan.children.foreach(childPlan => {
+            val isShuffle = containsShufflePlan(childPlan)
+            if (isShuffle) {
+              return isShuffle
+            }
+          })
+          false
+        }
+      }
+
+      assert(containsShufflePlan(resultPlan) == false)
+    }
   }
 }

@@ -645,4 +645,22 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-37536: EnsureRequirements remove shuffle if shuffle is disabled in local mode") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: exprB :: exprC :: Nil, 5))
+    val plan2 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprB :: exprC :: Nil, 5))
+    val smjExec1 = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+    new EnsureRequirements(disableShuffle = false).apply(smjExec1) match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
+        assert(leftKeys === Seq(exprB, exprA))
+        assert(rightKeys === Seq(exprB, exprC))
+      case other =>
+        fail(other.toString)
+    }
+  }
 }

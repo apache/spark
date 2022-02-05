@@ -3521,6 +3521,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val LOCAL_MODE_SHUFFLE_ENABLED =
+    buildConf("spark.sql.localMode.shuffle.enabled")
+      .doc("When false, will disable shuffling plans, when running in local mode. " +
+        "It will improve the JVM's performance, by avoiding unnecessary " +
+        "shuffling, since there is only one process.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

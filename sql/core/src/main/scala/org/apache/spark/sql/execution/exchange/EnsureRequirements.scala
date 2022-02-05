@@ -38,12 +38,15 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
  *                               but can be false in AQE when AQE optimization may change the plan
  *                               output partitioning and need to retain the user-specified
  *                               repartition shuffles in the plan.
- * @param requiredDistribution The root required distribution we should ensure. This value is used
- *                             in AQE in case we change final stage output partitioning.
+ * @param requiredDistribution   The root required distribution we should ensure. This value is used
+ *                               in AQE in case we change final stage output partitioning.
+ * @param disableShuffle Disables shuffling plans. Increases performance while running spark with
+ *                                one executor or in local mode.
  */
 case class EnsureRequirements(
-    optimizeOutRepartition: Boolean = true,
-    requiredDistribution: Option[Distribution] = None)
+  optimizeOutRepartition: Boolean = true,
+  requiredDistribution: Option[Distribution] = None,
+  disableShuffle : Boolean = false)
   extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(
@@ -54,17 +57,26 @@ case class EnsureRequirements(
     assert(requiredChildDistributions.length == originalChildren.length)
     assert(requiredChildOrderings.length == originalChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
-    var children = originalChildren.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
-      case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
-      case (child, distribution) =>
-        val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
-    }
 
+    var children =
+      if (disableShuffle) {
+        originalChildren.zip(requiredChildDistributions).map(plan => {
+          plan._1
+        })
+      }
+      else {
+        originalChildren.zip(requiredChildDistributions).map {
+          case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+            child
+          case (child, BroadcastDistribution(mode)) =>
+            BroadcastExchangeExec(mode, child)
+          case (child, distribution) =>
+            val numPartitions = distribution.requiredNumPartitions
+              .getOrElse(conf.numShufflePartitions)
+            ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child,
+              shuffleOrigin)
+        }
+      }
     // Get the indexes of children which have specified distribution requirements and need to be
     // co-partitioned.
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
@@ -156,9 +168,15 @@ case class EnsureRequirements(
               dist.createPartitioning(numPartitions)
             }
 
-            child match {
-              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
-              case _ => ShuffleExchangeExec(newPartitioning, child)
+            if (disableShuffle) {
+              child
+            }
+            else {
+              child match {
+                case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
+                case _ =>
+                  ShuffleExchangeExec(newPartitioning, child)
+              }
             }
           }
       }

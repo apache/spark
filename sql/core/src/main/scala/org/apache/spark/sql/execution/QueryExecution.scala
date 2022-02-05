@@ -25,7 +25,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -416,13 +416,16 @@ object QueryExecution {
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+    // skips shuffling execution if in local mode, and shuffling is disabled
+    val disableLocalShuffling = sparkSession.sparkContext.isLocal &&
+      !sparkSession.conf.get(SQLConf.LOCAL_MODE_SHUFFLE_ENABLED)
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
-      EnsureRequirements(),
+      EnsureRequirements(disableShuffle = disableLocalShuffling),
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
