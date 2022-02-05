@@ -174,7 +174,7 @@ class NotPropagationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(('a === 'b) =!= ('c in(1, 2, 3)), ('a === 'b) =!= ('c in(1, 2, 3)))
   }
 
-  test("[SPARK-36665] Do not simplify Not(InSubquery)") {
+  test("SPARK-36665: Do not simplify Not(InSubquery)") {
     object Optimize extends RuleExecutor[LogicalPlan] {
       val batches = Batch("AnalysisNodes", Once, EliminateSubqueryAliases) ::
         Batch("Not Propagation", FixedPoint(50), NotPropagation, BooleanSimplification) :: Nil
