@@ -478,7 +478,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
                                  dynamicPartitionOverwrite: Boolean = false)
     extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
 
-  test ("SPARK-38102 save Hadoop Dataset through new Hadoop API with PathOutputCommitProtocol") {
+  test ("SPARK-38102 save Hadoop Dataset through new Hadoop API with custom commitProtocolClass") {
     sc = new SparkContext("local", "test")
     val randomRDD = sc.parallelize(
       Seq(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
