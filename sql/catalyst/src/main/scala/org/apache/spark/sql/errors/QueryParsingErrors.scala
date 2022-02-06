@@ -130,11 +130,14 @@ object QueryParsingErrors {
   }
 
   def joinCriteriaUnimplementedError(join: JoinCriteriaContext, ctx: RelationContext): Throwable = {
-    new ParseException(s"Unimplemented joinCriteria: $join", ctx)
+    new ParseException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Array(s"Internal error: Unimplemented joinCriteria, $join"),
+      ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
