@@ -30,7 +30,7 @@ import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryPro
 import org.apache.spark.sql.streaming
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.InMemoryStore
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, RocksDB}
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
@@ -216,32 +216,50 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("SPARK-38056: test writing StreamingQueryData to an in-memory store") {
-    val store = new ElementTrackingStore(new InMemoryStore(), sparkConf)
-    store.write(testStreamingQueryData)
+    testStreamingQueryData(new InMemoryStore())
   }
 
   test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
     assume(!Utils.isMacOnAppleSilicon)
     val testDir = Utils.createTempDir()
     try {
-      val kvStore = KVUtils.open(testDir, getClass.getName)
-      val store = new ElementTrackingStore(kvStore, sparkConf)
-      store.write(testStreamingQueryData)
+      testStreamingQueryData(KVUtils.open(testDir, getClass.getName))
     } finally {
       Utils.deleteRecursively(testDir)
     }
   }
 
-  private def testStreamingQueryData: StreamingQueryData = {
-    val id = UUID.randomUUID()
-    new StreamingQueryData(
-      "some-query",
-      id,
-      id.toString,
-      isActive = false,
-      None,
-      1L,
-      None
-    )
+  test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
+    assume(!Utils.isMacOnAppleSilicon)
+    val testDir = Utils.createTempDir()
+    try {
+      testStreamingQueryData(new RocksDB(testDir))
+    } finally {
+      Utils.deleteRecursively(testDir)
+    }
   }
-}
+
+  private def testStreamingQueryData(kvStoreFn: => KVStore): Unit = {
+    var kvStore: Option[KVStore] = None
+    try {
+      kvStore = Some(kvStoreFn)
+      val id = UUID.randomUUID()
+      val testData = new StreamingQueryData(
+        "some-query",
+        id,
+        id.toString,
+        isActive = false,
+        None,
+        1L,
+        None
+      )
+      val store = new ElementTrackingStore(kvStore.get, sparkConf)
+      try {
+        store.write(testData)
+      } finally {
+        store.close()
+      }
+    } finally {
+      kvStore.foreach(_.close())
+    }
+  }}
