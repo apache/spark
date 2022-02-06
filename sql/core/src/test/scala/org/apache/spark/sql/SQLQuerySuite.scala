@@ -4294,6 +4294,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(3, 2, 6) :: Nil)
     }
   }
+
+  test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
+    Seq("mean", "abs").foreach { func =>
+      val e1 = intercept[AnalysisException](
+        sql(
+          s"""
+             |WITH t as (SELECT true c)
+             |SELECT t.c
+             |FROM t
+             |GROUP BY t.c
+             |HAVING ${func}(t.c) > 0d""".stripMargin))
+
+      assert(e1.message.contains(s"cannot resolve '$func(t.c)' due to data type mismatch"))
+
+      val e2 = intercept[AnalysisException](
+        sql(
+          s"""
+             |WITH t as (SELECT true c, false d)
+             |SELECT (t.c AND t.d) c
+             |FROM t
+             |GROUP BY t.c
+             |HAVING ${func}(c) > 0d""".stripMargin))
+      assert(e2.message.contains(s"cannot resolve '$func(t.c)' due to data type mismatch"))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -645,4 +645,9 @@ case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends
   override def dataType: DataType = child.dataType
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"$childrenSQL"
+  }
 }
