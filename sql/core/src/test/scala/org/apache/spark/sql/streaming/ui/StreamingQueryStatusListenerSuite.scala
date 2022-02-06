@@ -222,9 +222,11 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
     assume(!Utils.isMacOnAppleSilicon)
     val testDir = Utils.createTempDir()
+    val kvStore = KVUtils.open(testDir, getClass.getName)
     try {
-      testStreamingQueryData(KVUtils.open(testDir, getClass.getName))
+      testStreamingQueryData(kvStore)
     } finally {
+      kvStore.close()
       Utils.deleteRecursively(testDir)
     }
   }
@@ -232,34 +234,28 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
     assume(!Utils.isMacOnAppleSilicon)
     val testDir = Utils.createTempDir()
+    val kvStore = new RocksDB(testDir)
     try {
-      testStreamingQueryData(new RocksDB(testDir))
+      testStreamingQueryData(kvStore)
     } finally {
+      kvStore.close()
       Utils.deleteRecursively(testDir)
     }
   }
 
-  private def testStreamingQueryData(kvStoreFn: => KVStore): Unit = {
-    var kvStore: Option[KVStore] = None
-    try {
-      kvStore = Some(kvStoreFn)
-      val id = UUID.randomUUID()
-      val testData = new StreamingQueryData(
-        "some-query",
-        id,
-        id.toString,
-        isActive = false,
-        None,
-        1L,
-        None
-      )
-      val store = new ElementTrackingStore(kvStore.get, sparkConf)
-      try {
-        store.write(testData)
-      } finally {
-        store.close()
-      }
-    } finally {
-      kvStore.foreach(_.close())
-    }
-  }}
+  private def testStreamingQueryData(kvStore: KVStore): Unit = {
+    val id = UUID.randomUUID()
+    val testData = new StreamingQueryData(
+      "some-query",
+      id,
+      id.toString,
+      isActive = false,
+      None,
+      1L,
+      None
+    )
+    val store = new ElementTrackingStore(kvStore, sparkConf)
+    store.write(testData)
+    store.close(closeParent = false)
+  }
+}
