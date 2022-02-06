@@ -30,8 +30,9 @@ from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
-    from pyspark.ml._typing import ParamMap, PipelineStage
+    from pyspark.ml._typing import PipelineStage
 
+    from pyspark.ml.param import Param
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
 
@@ -428,7 +429,7 @@ class DefaultParamsWriter(MLWriter):
         path: str,
         sc: SparkContext,
         extraMetadata: Optional[Dict[str, Any]] = None,
-        paramMap: Optional["ParamMap"] = None,
+        paramMap: Optional[Dict[str, "Param"]] = None,
     ) -> None:
         """
         Saves metadata + Params to: path + "/metadata"
@@ -459,7 +460,7 @@ class DefaultParamsWriter(MLWriter):
         instance: "Params",
         sc: SparkContext,
         extraMetadata: Optional[Dict[str, Any]] = None,
-        paramMap: Optional["ParamMap"] = None,
+        paramMap: Optional[Dict[str, "Param"]] = None,
     ) -> str:
         """
         Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
@@ -479,7 +480,7 @@ class DefaultParamsWriter(MLWriter):
             jsonParams = paramMap
         else:
             for p in params:
-                jsonParams[p.name] = params[p]  # type: ignore[index]
+                jsonParams[p.name] = params[p]
 
         # Default param values
         jsonDefaultParams = {}
