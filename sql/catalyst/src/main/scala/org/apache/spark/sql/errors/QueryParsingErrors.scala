@@ -129,13 +129,6 @@ object QueryParsingErrors {
     new ParseException(s"Cannot resolve window reference '$name'", ctx)
   }
 
-  def joinCriteriaUnimplementedError(join: JoinCriteriaContext, ctx: RelationContext): Throwable = {
-    new ParseException(
-      errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(s"Internal error: Unimplemented joinCriteria, $join"),
-      ctx)
-  }
-
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
     new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
   }
