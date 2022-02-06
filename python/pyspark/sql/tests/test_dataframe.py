@@ -1107,6 +1107,27 @@ class DataFrameTests(ReusedSQLTestCase):
                 pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
                 self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_to_pandas_for_array_of_struct(self):
+        # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
+        import numpy as np
+        import pandas as pd
+
+        df = self.spark.createDataFrame(
+            [[[("a", 2, 3.0), ("a", 2, 3.0)]], [[("b", 5, 6.0), ("b", 5, 6.0)]]],
+            "array_struct_col Array<struct<col1:string, col2:long, col3:double>>",
+        )
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                pdf = df.toPandas()
+                self.assertEqual(type(pdf), pd.DataFrame)
+                self.assertEqual(type(pdf["array_struct_col"]), pd.Series)
+                if value:
+                    self.assertEqual(type(pdf["array_struct_col"][0]), np.ndarray)
+                else:
+                    self.assertEqual(type(pdf["array_struct_col"][0]), list)
+
     def test_create_dataframe_from_array_of_long(self):
         import array
 

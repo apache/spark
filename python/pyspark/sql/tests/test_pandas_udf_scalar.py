@@ -135,8 +135,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEqual([Row(hi=[["hi", "boo"]]), Row(hi=[["bye", "boo"]])], result.collect())
 
     def test_pandas_array_struct(self):
+        # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
+        import numpy as np
+
         @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
         def return_cols(cols):
+            self.assertEqual(type(cols), pd.Series)
+            self.assertEqual(type(cols[0]), np.ndarray)
+            self.assertEqual(type(cols[0][0]), dict)
             return cols
 
         df = self.spark.createDataFrame(
