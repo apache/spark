@@ -209,7 +209,7 @@ object QueryParsingErrors {
       from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"Intervals FROM $from TO $to are not supported"),
+      messageParameters = Array(s"Intervals FROM $from TO $to are not supported."),
       ctx)
   }
 
