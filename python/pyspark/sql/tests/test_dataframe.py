@@ -1107,7 +1107,10 @@ class DataFrameTests(ReusedSQLTestCase):
                 pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
                 self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
     def test_to_pandas_for_array_of_struct(self):
         # SPARK-38098: Support Array of Struct for Pandas UDFs and toPandas
         import numpy as np
