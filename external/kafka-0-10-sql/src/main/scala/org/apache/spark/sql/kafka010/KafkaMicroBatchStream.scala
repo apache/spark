@@ -356,7 +356,6 @@ object KafkaMicroBatchStream extends Logging {
   }
 }
 
-
 /**
  * To return a mocked system clock for testing purposes
  */
