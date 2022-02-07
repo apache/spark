@@ -25,6 +25,7 @@ import scala.collection.mutable.ListBuffer
 import org.mockito.Mockito._
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
@@ -1438,6 +1439,29 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             }.size == 1)
           }
       }
+    }
+  }
+
+  test("Join by rand should generate indeterminate mapPartitionRDD") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = sql(
+        """
+          |SELECT
+          |  t1.key, t2.randkey, t2.a
+          |FROM
+          |  testData t1
+          |LEFT JOIN
+          |  (select rand() as randkey, a from testData2) t2
+          |ON
+          |  t1.key = t2.randkey
+       """.stripMargin)
+
+      val shuffleDeps = collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec => s.shuffleDependency
+      }
+      assert(shuffleDeps.size == 2)
+      assert(shuffleDeps.filter(
+        _.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE).size == 1)
     }
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression, NamedExpression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -167,7 +167,7 @@ case class ShuffleExchangeExec(
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val dep = ShuffleExchangeExec.prepareShuffleDependency(
       inputRDD,
-      child.output,
+      child,
       outputPartitioning,
       serializer,
       writeMetrics)
@@ -260,11 +260,12 @@ object ShuffleExchangeExec {
    */
   def prepareShuffleDependency(
       rdd: RDD[InternalRow],
-      outputAttributes: Seq[Attribute],
+      child: SparkPlan,
       newPartitioning: Partitioning,
       serializer: Serializer,
       writeMetrics: Map[String, SQLMetric])
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    val outputAttributes = child.output
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -373,18 +374,21 @@ object ShuffleExchangeExec {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      val isOrderSensitive = (isRoundRobin && !SQLConf.get.sortBeforeRepartition)
+      val isPartitionKeyIndeterminate = isPartitioningIndeterminate(newPartitioning, child)
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
-        }, isOrderSensitive = isOrderSensitive)
+        }, isOrderSensitive = isOrderSensitive,
+           isPartitionKeyIndeterminate = isPartitionKeyIndeterminate)
       } else {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
-        }, isOrderSensitive = isOrderSensitive)
+        }, isOrderSensitive = isOrderSensitive,
+           isPartitionKeyIndeterminate = isPartitionKeyIndeterminate)
       }
     }
 
@@ -399,6 +403,29 @@ object ShuffleExchangeExec {
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
 
     dependency
+  }
+
+  /**
+   * Checks if the shuffle partitioning contains indeterminate expression/reference.
+   */
+  private def isPartitioningIndeterminate(partitioning: Partitioning, plan: SparkPlan): Boolean = {
+    val indeterminateAttrs = plan.flatMap(_.expressions).collect {
+      case e: NamedExpression if !e.deterministic => e.exprId
+    }.toSet
+
+    def hasIndeterminateReference(e: Expression): Boolean = {
+      indeterminateAttrs.size > 0 &&
+        e.find {
+          case a: AttributeReference if indeterminateAttrs.contains(a.exprId) => true
+          case _ => false
+        }.nonEmpty
+    }
+
+    partitioning match {
+      case HashPartitioning(exprs, _)
+        if exprs.exists(e => !e.deterministic || hasIndeterminateReference(e)) => true
+      case _ => false
+    }
   }
 
   /**

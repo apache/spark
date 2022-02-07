@@ -64,7 +64,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             locallyLimited,
-            child.output,
+            child,
             SinglePartition,
             serializer,
             writeMetrics),
@@ -233,7 +233,7 @@ case class TakeOrderedAndProjectExec(
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             localTopK,
-            child.output,
+            child,
             SinglePartition,
             serializer,
             writeMetrics),

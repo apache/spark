@@ -867,16 +867,21 @@ abstract class RDD[T: ClassTag](
    * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
    *                         sensitive, it may return totally different result when the input order
    *                         is changed. Mostly stateful functions are order-sensitive.
+   * @param isPartitionKeyIndeterminate whether or not the partition key is indeterminate.
+   *                                    If not, it may return different result event though
+   *                                    [[org.apache.spark.Partitioner]] is deterministic.
    */
   private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
-      isOrderSensitive: Boolean = false): RDD[U] = withScope {
+      isOrderSensitive: Boolean = false,
+      isPartitionKeyIndeterminate: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
-      isOrderSensitive = isOrderSensitive)
+      isOrderSensitive = isOrderSensitive,
+      isPartitionKeyIndeterminate = isPartitionKeyIndeterminate)
   }
 
   /**
