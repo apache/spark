@@ -57,6 +57,20 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
 
     // Encryption failure - invalid key length
     checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
+    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
+
+    // Decryption failure - invalid key length
+    Seq("value16", "value24", "value32").foreach { colName =>
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), '')"))
+      checkInvalidKeyLength(df2.selectExpr(
+        s"aes_decrypt(unbase64($colName), binary(''))"))
+    }
   }
 
   test("INVALID_PARAMETER_VALUE: AES decrypt failure - key mismatch") {
