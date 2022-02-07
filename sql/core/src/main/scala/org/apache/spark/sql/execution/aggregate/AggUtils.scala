@@ -304,7 +304,8 @@ object AggUtils {
         child = child)
     }
 
-    // This is only used to pick up the required child distribution for the stateful operator
+    // This is used temporarily to pick up the required child distribution for the stateful
+    // operator.
     val tempRestored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
       partialAggregate)
 
@@ -322,7 +323,8 @@ object AggUtils {
         child = partialAggregate)
     }
 
-    val restored = tempRestored.copy(child = partialMerged1)
+    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
+      partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
