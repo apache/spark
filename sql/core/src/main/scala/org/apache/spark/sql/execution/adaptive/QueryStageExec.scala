@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
 import org.apache.spark.broadcast.Broadcast
@@ -28,9 +29,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A query stage is an independent subgraph of the query plan. Query stage materializes its output
@@ -218,8 +221,37 @@ case class BroadcastQueryStageExec(
       throw new IllegalStateException(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
+  @transient private lazy val broadcastFuture = broadcast.submitBroadcastJob
+  @transient private lazy val materializeWithTimeout = {
+    val timeout = conf.broadcastTimeout
+    val promise = Promise[Any]()
+    val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
+      override def run(): Unit = {
+        promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout, None))
+      }
+    }, timeout, TimeUnit.SECONDS)
+    broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)
+    Future.firstCompletedOf(
+      Seq(broadcastFuture, promise.future))(AdaptiveSparkPlanExec.executionContext)
+  }
+
+  /**
+   * Check if the underlying plan has ShuffleQueryStages.
+   */
+  private def hasShuffleQueryStage: Boolean = plan.collectFirst {
+    case s: ShuffleQueryStageExec => s
+  }.isDefined
+
   override def doMaterialize(): Future[Any] = {
-    broadcast.submitBroadcastJob
+    // Note that, we should disable timeout for BroadcastQueryStageExec when it comes from shuffle
+    // query stages which runtime statistics are usually correct in AQE, but should enable
+    // timeout for it when it comes from others which statistics may be incorrect, and keep it the
+    // same as non-AQE.
+    if (hasShuffleQueryStage) {
+      broadcastFuture
+    } else {
+      materializeWithTimeout
+    }
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
@@ -239,4 +271,9 @@ case class BroadcastQueryStageExec(
   }
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
+}
+
+object BroadcastQueryStageExec {
+  private val scheduledExecutor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("BroadcastStageTimeout")
 }

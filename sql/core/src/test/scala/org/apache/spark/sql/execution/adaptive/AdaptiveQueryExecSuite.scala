@@ -187,6 +187,19 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Change merge join to broadcast join without timeout") {
+    val slowUDF = udf({ x: String => Thread.sleep(1 * 1000); x })
+    Seq(0, 300).foreach { broadcastTimeoutS =>
+      withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> broadcastTimeoutS.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val df = sql("SELECT value FROM testData join testData2 ON key = a")
+          .where(slowUDF($"value") === "1")
+        checkAnswer(df, Seq(Row("1"), Row("1")))
+      }
+    }
+  }
+
   test("Change broadcast join to merge join") {
     withTable("t1", "t2") {
       withSQLConf(
