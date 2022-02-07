@@ -48,7 +48,7 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{MockedSystemClock, Utils}
+import org.apache.spark.util.Utils
 
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.util.MockedSystemClock.currentMockSystemTime
-
 /**
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */

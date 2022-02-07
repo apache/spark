@@ -23,8 +23,8 @@ import java.util.Optional
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.common.TopicPartition
-import org.apache.spark.SparkEnv
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.MockedSystemClock.currentMockSystemTime
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{Clock, ManualClock, MockedSystemClock, SystemClock, UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, UninterruptibleThread, Utils}
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
@@ -360,13 +360,13 @@ object KafkaMicroBatchStream extends Logging {
 /**
  * To return a mocked system clock for testing purposes
  */
-private[spark] class MockedSystemClock extends ManualClock {
+private[kafka010] class MockedSystemClock extends ManualClock {
   override def getTimeMillis(): Long = {
     currentMockSystemTime
   }
 }
 
-object MockedSystemClock {
+private[kafka010] object MockedSystemClock {
   var currentMockSystemTime = 0L
 
   def advanceCurrentSystemTime(advanceByMillis: Long): Unit = {

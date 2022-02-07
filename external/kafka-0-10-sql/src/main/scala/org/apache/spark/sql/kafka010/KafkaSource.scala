@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{Clock, MockedSystemClock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
