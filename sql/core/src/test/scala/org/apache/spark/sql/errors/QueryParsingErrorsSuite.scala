@@ -78,4 +78,12 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         message = "Invalid SQL syntax: LATERAL can only be used with subquery.")
     }
   }
+
+  test("UNSUPPORTED_FEATURE: NATURAL CROSS JOIN is not supported") {
+    validateParsingError(
+      sqlText = "SELECT * FROM a NATURAL CROSS JOIN b",
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = "0A000",
+      message = "The feature is not supported: NATURAL CROSS JOIN.")
+  }
 }

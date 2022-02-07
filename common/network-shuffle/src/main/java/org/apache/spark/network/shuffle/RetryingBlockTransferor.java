@@ -191,7 +191,7 @@ public class RetryingBlockTransferor {
    */
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException
-      || (e.getCause() != null && e.getCause() instanceof IOException);
+      || e.getCause() instanceof IOException;
     boolean hasRemainingRetries = retryCount < maxRetries;
     return isIOException && hasRemainingRetries && errorHandler.shouldRetryError(e);
   }
