@@ -458,6 +458,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("compositeReadLimit") {
+    MockedSystemClock.reset()
+
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     testUtils.sendMessages(topic, (100 to 120).map(_.toString).toArray, Some(0))

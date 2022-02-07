@@ -101,20 +101,3 @@ private[spark] class SystemClock extends Clock {
     -1
   }
 }
-
-/**
- * To return a mocked system clock for testing purposes
- */
-private[spark] class MockedSystemClock extends ManualClock {
-  override def getTimeMillis(): Long = {
-    currentMockSystemTime
-  }
-}
-
-object MockedSystemClock {
-  var currentMockSystemTime = 0L
-
-  def advanceCurrentSystemTime(advanceByMillis: Long): Unit = {
-    currentMockSystemTime += advanceByMillis
-  }
-}
