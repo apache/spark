@@ -343,11 +343,10 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row(Array(2.5), Array(3.0)))
   }
 
-  test("isfixedlength issue") {
+  test("SPARK-38133: Grouping by TIMESTAMP_NTZ should not corrupt results") {
     checkAnswer(
       courseSales.withColumn("ts", $"year".cast("string").cast("timestamp_ntz"))
         .groupBy("ts")
-        // pivot with extra columns to trigger optimization
         .pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings"))
         .select("ts", "dotNET", "Java"),
