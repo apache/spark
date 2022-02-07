@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Sequence, List, cast
+from typing import List, Sequence, cast
 
 from pyspark import since
 from pyspark.ml._typing import P, T
