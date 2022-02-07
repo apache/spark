@@ -1956,7 +1956,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!nonDeterministicQueryPlan.deterministic)
   }
 
-  test("SPARK-38132: Avoid optimizing Not IN subquery") {
+  test("SPARK-38132: Not IN subquery correctness checks") {
     val t = "test_table"
     withTable(t) {
       Seq[(Integer, Integer)](
