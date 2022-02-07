@@ -2911,7 +2911,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
-    def withColumns(self, colsMap: Dict[str, Column]) -> "DataFrame":
+    def withColumns(self, *colsMap: Dict[str, Column]) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
         existing columns that has the same names.
@@ -2932,6 +2932,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.withColumns({'age2': df.age + 2, 'age3': df.age + 3}).collect()
         [Row(age=2, name='Alice', age2=4, age3=5), Row(age=5, name='Bob', age2=7, age3=8)]
         """
+        # Below code is to help enable kwargs in future.
+        assert len(colsMap) == 1
+        colsMap = colsMap[0]  # type: ignore[assignment]
+
         if not isinstance(colsMap, dict):
             raise TypeError("colsMap must be dict of column name and column.")
 
