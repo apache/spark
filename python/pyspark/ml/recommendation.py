@@ -16,6 +16,7 @@
 #
 
 import sys
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import (
@@ -30,6 +31,10 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Params, TypeConverters, Param
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.sql import DataFrame
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 __all__ = ["ALS", "ALSModel"]
@@ -43,19 +48,19 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
     .. versionadded:: 3.0.0
     """
 
-    userCol = Param(
+    userCol: Param[str] = Param(
         Params._dummy(),
         "userCol",
         "column name for user ids. Ids must be within " + "the integer value range.",
         typeConverter=TypeConverters.toString,
     )
-    itemCol = Param(
+    itemCol: Param[str] = Param(
         Params._dummy(),
         "itemCol",
         "column name for item ids. Ids must be within " + "the integer value range.",
         typeConverter=TypeConverters.toString,
     )
-    coldStartStrategy = Param(
+    coldStartStrategy: Param[str] = Param(
         Params._dummy(),
         "coldStartStrategy",
         "strategy for dealing with "
@@ -66,26 +71,26 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super(_ALSModelParams, self).__init__(*args)
         self._setDefault(blockSize=4096)
 
     @since("1.4.0")
-    def getUserCol(self):
+    def getUserCol(self) -> str:
         """
         Gets the value of userCol or its default value.
         """
         return self.getOrDefault(self.userCol)
 
     @since("1.4.0")
-    def getItemCol(self):
+    def getItemCol(self) -> str:
         """
         Gets the value of itemCol or its default value.
         """
         return self.getOrDefault(self.itemCol)
 
     @since("2.2.0")
-    def getColdStartStrategy(self):
+    def getColdStartStrategy(self) -> str:
         """
         Gets the value of coldStartStrategy or its default value.
         """
@@ -100,60 +105,60 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     .. versionadded:: 3.0.0
     """
 
-    rank = Param(
+    rank: Param[int] = Param(
         Params._dummy(), "rank", "rank of the factorization", typeConverter=TypeConverters.toInt
     )
-    numUserBlocks = Param(
+    numUserBlocks: Param[int] = Param(
         Params._dummy(),
         "numUserBlocks",
         "number of user blocks",
         typeConverter=TypeConverters.toInt,
     )
-    numItemBlocks = Param(
+    numItemBlocks: Param[int] = Param(
         Params._dummy(),
         "numItemBlocks",
         "number of item blocks",
         typeConverter=TypeConverters.toInt,
     )
-    implicitPrefs = Param(
+    implicitPrefs: Param[bool] = Param(
         Params._dummy(),
         "implicitPrefs",
         "whether to use implicit preference",
         typeConverter=TypeConverters.toBoolean,
     )
-    alpha = Param(
+    alpha: Param[float] = Param(
         Params._dummy(),
         "alpha",
         "alpha for implicit preference",
         typeConverter=TypeConverters.toFloat,
     )
 
-    ratingCol = Param(
+    ratingCol: Param[str] = Param(
         Params._dummy(),
         "ratingCol",
         "column name for ratings",
         typeConverter=TypeConverters.toString,
     )
-    nonnegative = Param(
+    nonnegative: Param[bool] = Param(
         Params._dummy(),
         "nonnegative",
         "whether to use nonnegative constraint for least squares",
         typeConverter=TypeConverters.toBoolean,
     )
-    intermediateStorageLevel = Param(
+    intermediateStorageLevel: Param[str] = Param(
         Params._dummy(),
         "intermediateStorageLevel",
         "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
         typeConverter=TypeConverters.toString,
     )
-    finalStorageLevel = Param(
+    finalStorageLevel: Param[str] = Param(
         Params._dummy(),
         "finalStorageLevel",
         "StorageLevel for ALS model factors.",
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         super(_ALSParams, self).__init__(*args)
         self._setDefault(
             rank=10,
@@ -174,63 +179,63 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
         )
 
     @since("1.4.0")
-    def getRank(self):
+    def getRank(self) -> int:
         """
         Gets the value of rank or its default value.
         """
         return self.getOrDefault(self.rank)
 
     @since("1.4.0")
-    def getNumUserBlocks(self):
+    def getNumUserBlocks(self) -> int:
         """
         Gets the value of numUserBlocks or its default value.
         """
         return self.getOrDefault(self.numUserBlocks)
 
     @since("1.4.0")
-    def getNumItemBlocks(self):
+    def getNumItemBlocks(self) -> int:
         """
         Gets the value of numItemBlocks or its default value.
         """
         return self.getOrDefault(self.numItemBlocks)
 
     @since("1.4.0")
-    def getImplicitPrefs(self):
+    def getImplicitPrefs(self) -> bool:
         """
         Gets the value of implicitPrefs or its default value.
         """
         return self.getOrDefault(self.implicitPrefs)
 
     @since("1.4.0")
-    def getAlpha(self):
+    def getAlpha(self) -> float:
         """
         Gets the value of alpha or its default value.
         """
         return self.getOrDefault(self.alpha)
 
     @since("1.4.0")
-    def getRatingCol(self):
+    def getRatingCol(self) -> str:
         """
         Gets the value of ratingCol or its default value.
         """
         return self.getOrDefault(self.ratingCol)
 
     @since("1.4.0")
-    def getNonnegative(self):
+    def getNonnegative(self) -> bool:
         """
         Gets the value of nonnegative or its default value.
         """
         return self.getOrDefault(self.nonnegative)
 
     @since("2.0.0")
-    def getIntermediateStorageLevel(self):
+    def getIntermediateStorageLevel(self) -> str:
         """
         Gets the value of intermediateStorageLevel or its default value.
         """
         return self.getOrDefault(self.intermediateStorageLevel)
 
     @since("2.0.0")
-    def getFinalStorageLevel(self):
+    def getFinalStorageLevel(self) -> str:
         """
         Gets the value of finalStorageLevel or its default value.
         """
@@ -238,7 +243,7 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
 
 
 @inherit_doc
-class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
+class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable["ALS"]):
     """
     Alternating Least Squares (ALS) matrix factorization.
 
@@ -359,27 +364,29 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        rank=10,
-        maxIter=10,
-        regParam=0.1,
-        numUserBlocks=10,
-        numItemBlocks=10,
-        implicitPrefs=False,
-        alpha=1.0,
-        userCol="user",
-        itemCol="item",
-        seed=None,
-        ratingCol="rating",
-        nonnegative=False,
-        checkpointInterval=10,
-        intermediateStorageLevel="MEMORY_AND_DISK",
-        finalStorageLevel="MEMORY_AND_DISK",
-        coldStartStrategy="nan",
-        blockSize=4096,
+        rank: int = 10,
+        maxIter: int = 10,
+        regParam: float = 0.1,
+        numUserBlocks: int = 10,
+        numItemBlocks: int = 10,
+        implicitPrefs: bool = False,
+        alpha: float = 1.0,
+        userCol: str = "user",
+        itemCol: str = "item",
+        seed: Optional[int] = None,
+        ratingCol: str = "rating",
+        nonnegative: bool = False,
+        checkpointInterval: int = 10,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
+        finalStorageLevel: str = "MEMORY_AND_DISK",
+        coldStartStrategy: str = "nan",
+        blockSize: int = 4096,
     ):
         """
         __init__(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
@@ -398,24 +405,24 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     def setParams(
         self,
         *,
-        rank=10,
-        maxIter=10,
-        regParam=0.1,
-        numUserBlocks=10,
-        numItemBlocks=10,
-        implicitPrefs=False,
-        alpha=1.0,
-        userCol="user",
-        itemCol="item",
-        seed=None,
-        ratingCol="rating",
-        nonnegative=False,
-        checkpointInterval=10,
-        intermediateStorageLevel="MEMORY_AND_DISK",
-        finalStorageLevel="MEMORY_AND_DISK",
-        coldStartStrategy="nan",
-        blockSize=4096,
-    ):
+        rank: int = 10,
+        maxIter: int = 10,
+        regParam: float = 0.1,
+        numUserBlocks: int = 10,
+        numItemBlocks: int = 10,
+        implicitPrefs: bool = False,
+        alpha: float = 1.0,
+        userCol: str = "user",
+        itemCol: str = "item",
+        seed: Optional[int] = None,
+        ratingCol: str = "rating",
+        nonnegative: bool = False,
+        checkpointInterval: int = 10,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
+        finalStorageLevel: str = "MEMORY_AND_DISK",
+        coldStartStrategy: str = "nan",
+        blockSize: int = 4096,
+    ) -> "ALS":
         """
         setParams(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, \
                  numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
@@ -427,32 +434,32 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    def _create_model(self, java_model):
+    def _create_model(self, java_model: "JavaObject") -> "ALSModel":
         return ALSModel(java_model)
 
     @since("1.4.0")
-    def setRank(self, value):
+    def setRank(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`rank`.
         """
         return self._set(rank=value)
 
     @since("1.4.0")
-    def setNumUserBlocks(self, value):
+    def setNumUserBlocks(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`numUserBlocks`.
         """
         return self._set(numUserBlocks=value)
 
     @since("1.4.0")
-    def setNumItemBlocks(self, value):
+    def setNumItemBlocks(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`numItemBlocks`.
         """
         return self._set(numItemBlocks=value)
 
     @since("1.4.0")
-    def setNumBlocks(self, value):
+    def setNumBlocks(self, value: int) -> "ALS":
         """
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
@@ -460,107 +467,107 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
         return self._set(numItemBlocks=value)
 
     @since("1.4.0")
-    def setImplicitPrefs(self, value):
+    def setImplicitPrefs(self, value: bool) -> "ALS":
         """
         Sets the value of :py:attr:`implicitPrefs`.
         """
         return self._set(implicitPrefs=value)
 
     @since("1.4.0")
-    def setAlpha(self, value):
+    def setAlpha(self, value: float) -> "ALS":
         """
         Sets the value of :py:attr:`alpha`.
         """
         return self._set(alpha=value)
 
     @since("1.4.0")
-    def setUserCol(self, value):
+    def setUserCol(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`userCol`.
         """
         return self._set(userCol=value)
 
     @since("1.4.0")
-    def setItemCol(self, value):
+    def setItemCol(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`itemCol`.
         """
         return self._set(itemCol=value)
 
     @since("1.4.0")
-    def setRatingCol(self, value):
+    def setRatingCol(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`ratingCol`.
         """
         return self._set(ratingCol=value)
 
     @since("1.4.0")
-    def setNonnegative(self, value):
+    def setNonnegative(self, value: bool) -> "ALS":
         """
         Sets the value of :py:attr:`nonnegative`.
         """
         return self._set(nonnegative=value)
 
     @since("2.0.0")
-    def setIntermediateStorageLevel(self, value):
+    def setIntermediateStorageLevel(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.
         """
         return self._set(intermediateStorageLevel=value)
 
     @since("2.0.0")
-    def setFinalStorageLevel(self, value):
+    def setFinalStorageLevel(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`finalStorageLevel`.
         """
         return self._set(finalStorageLevel=value)
 
     @since("2.2.0")
-    def setColdStartStrategy(self, value):
+    def setColdStartStrategy(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`coldStartStrategy`.
         """
         return self._set(coldStartStrategy=value)
 
-    def setMaxIter(self, value):
+    def setMaxIter(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`maxIter`.
         """
         return self._set(maxIter=value)
 
-    def setRegParam(self, value):
+    def setRegParam(self, value: float) -> "ALS":
         """
         Sets the value of :py:attr:`regParam`.
         """
         return self._set(regParam=value)
 
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "ALS":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
-    def setCheckpointInterval(self, value):
+    def setCheckpointInterval(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
-    def setSeed(self, value):
+    def setSeed(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`seed`.
         """
         return self._set(seed=value)
 
     @since("3.0.0")
-    def setBlockSize(self, value):
+    def setBlockSize(self, value: int) -> "ALS":
         """
         Sets the value of :py:attr:`blockSize`.
         """
         return self._set(blockSize=value)
 
 
-class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
+class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSModel"]):
     """
     Model fitted by ALS.
 
@@ -568,65 +575,65 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
     """
 
     @since("3.0.0")
-    def setUserCol(self, value):
+    def setUserCol(self, value: str) -> "ALSModel":
         """
         Sets the value of :py:attr:`userCol`.
         """
         return self._set(userCol=value)
 
     @since("3.0.0")
-    def setItemCol(self, value):
+    def setItemCol(self, value: str) -> "ALSModel":
         """
         Sets the value of :py:attr:`itemCol`.
         """
         return self._set(itemCol=value)
 
     @since("3.0.0")
-    def setColdStartStrategy(self, value):
+    def setColdStartStrategy(self, value: str) -> "ALSModel":
         """
         Sets the value of :py:attr:`coldStartStrategy`.
         """
         return self._set(coldStartStrategy=value)
 
     @since("3.0.0")
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "ALSModel":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
     @since("3.0.0")
-    def setBlockSize(self, value):
+    def setBlockSize(self, value: int) -> "ALSModel":
         """
         Sets the value of :py:attr:`blockSize`.
         """
         return self._set(blockSize=value)
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.4.0")
-    def rank(self):
+    def rank(self) -> int:
         """rank of the matrix factorization model"""
         return self._call_java("rank")
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.4.0")
-    def userFactors(self):
+    def userFactors(self) -> DataFrame:
         """
         a DataFrame that stores user factors in two columns: `id` and
         `features`
         """
         return self._call_java("userFactors")
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.4.0")
-    def itemFactors(self):
+    def itemFactors(self) -> DataFrame:
         """
         a DataFrame that stores item factors in two columns: `id` and
         `features`
         """
         return self._call_java("itemFactors")
 
-    def recommendForAllUsers(self, numItems):
+    def recommendForAllUsers(self, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user, for all users.
 
@@ -645,7 +652,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForAllUsers", numItems)
 
-    def recommendForAllItems(self, numUsers):
+    def recommendForAllItems(self, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item, for all items.
 
@@ -664,7 +671,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForAllItems", numUsers)
 
-    def recommendForUserSubset(self, dataset, numItems):
+    def recommendForUserSubset(self, dataset: DataFrame, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
@@ -687,7 +694,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
-    def recommendForItemSubset(self, dataset, numUsers):
+    def recommendForItemSubset(self, dataset: DataFrame, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
