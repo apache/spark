@@ -93,6 +93,13 @@ class SparkSessionTestCase(PySparkTestCase):
         cls.spark = SparkSession(cls.sc)
 
     @classmethod
+    def conf(cls):
+        conf = super(SparkSessionTestCase, cls).SparkConf()
+        conf.set("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled", "false")
+        conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
+        return conf
+
+    @classmethod
     def tearDownClass(cls):
         PySparkTestCase.tearDownClass()
         cls.spark.stop()
