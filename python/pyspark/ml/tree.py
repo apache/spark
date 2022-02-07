@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+
 @inherit_doc
 class _DecisionTreeModel(JavaPredictionModel[T]):
     """
