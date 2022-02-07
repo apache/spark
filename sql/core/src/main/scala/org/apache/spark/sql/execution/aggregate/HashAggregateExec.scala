@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
@@ -44,6 +45,7 @@ import org.apache.spark.util.Utils
  * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
  */
 case class HashAggregateExec(
+    requiredChildDistributionOption: Option[Seq[Distribution]],
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],

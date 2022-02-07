@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtil
  */
 trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning {
   def requiredChildDistributionExpressions: Option[Seq[Expression]]
+  def requiredChildDistributionOption: Option[Seq[Distribution]]
   def groupingExpressions: Seq[NamedExpression]
   def aggregateExpressions: Seq[AggregateExpression]
   def aggregateAttributes: Seq[Attribute]
@@ -90,10 +91,14 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
   override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
 
   override def requiredChildDistribution: List[Distribution] = {
-    requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) => ClusteredDistribution(exprs) :: Nil
-      case None => UnspecifiedDistribution :: Nil
+    requiredChildDistributionOption match {
+      case Some(dist) => dist.toList
+      case _ =>
+        requiredChildDistributionExpressions match {
+          case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
+          case Some(exprs) => ClusteredDistribution(exprs) :: Nil
+          case None => UnspecifiedDistribution :: Nil
+        }
     }
   }
 
@@ -102,7 +107,8 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
    */
   def toSortAggregate: SortAggregateExec = {
     SortAggregateExec(
-      requiredChildDistributionExpressions, groupingExpressions, aggregateExpressions,
-      aggregateAttributes, initialInputBufferOffset, resultExpressions, child)
+      requiredChildDistributionOption, requiredChildDistributionExpressions, groupingExpressions,
+      aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
+      child)
   }
 }

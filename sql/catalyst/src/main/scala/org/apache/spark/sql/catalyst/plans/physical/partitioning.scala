@@ -91,6 +91,34 @@ case class ClusteredDistribution(
 }
 
 /**
+ * Represents the requirement of distribution on the stateful operator.
+ *
+ * Each partition in stateful operator initializes state store(s), which are independent with state
+ * store(s) in other partitions. Since it is not possible to repartition the data in state store,
+ * Spark should make sure the physical partitioning of the stateful operator is unchanged across
+ * Spark versions. Violation of this requirement may bring silent correctness issue.
+ *
+ * Since this distribution relies on [[StatefulOpPartitioning]] on the physical partitioning of the
+ * stateful operator, only [[StatefulOpPartitioning]] can satisfy this distribution.
+ */
+case class StatefulOpClusteredDistribution(
+    expressions: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
+  require(
+    expressions != Nil,
+    "The expressions for hash of a StatefulOpClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+
+  override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This StatefulOpClusteredDistribution requires ${requiredNumPartitions.get} " +
+        s"partitions, but the actual number of partitions is $numPartitions.")
+    StatefulOpPartitioning(expressions, numPartitions)
+  }
+}
+
+/**
  * Represents data where tuples have been ordered according to the `ordering`
  * [[Expression Expressions]]. Its requirement is defined as the following:
  *   - Given any 2 adjacent partitions, all the rows of the second partition must be larger than or
@@ -229,6 +257,53 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
+}
+
+/**
+ * Represents the partitioning of stateful operator.
+ *
+ * This is basically hash partitioning, where rows are split up across partitions based on the hash
+ * of `expressions`. All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition.
+ *
+ * Since we require stateful operator to retain the same physical partitioning during the lifetime
+ * of the query (including restart), the implementation of `partitionIdExpression` must be unchanged
+ * across Spark versions.
+ */
+case class StatefulOpPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends Expression with Partitioning with Unevaluable {
+
+  override def children: Seq[Expression] = expressions
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case h: StatefulOpClusteredDistribution =>
+          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
+            case (l, r) => l.semanticEquals(r)
+          }
+        case ClusteredDistribution(requiredClustering, _) =>
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case _ => false
+      }
+    }
+  }
+
+  /**
+   * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
+   * than numPartitions) based on hashing expressions.
+   *
+   * NOTE: Spark must ensure this expression with specific tuple evaluates to the same value
+   * across Spark versions.
+   */
+  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StatefulOpPartitioning = {
+    copy(expressions = newChildren)
+  }
 }
 
 /**

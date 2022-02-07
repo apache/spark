@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning, StatefulOpClusteredDistribution}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
@@ -337,7 +337,7 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOpClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -496,7 +496,7 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      StatefulOpClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -573,7 +573,8 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOpClusteredDistribution(keyWithoutSessionExpressions,
+      stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -684,7 +685,7 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOpClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
@@ -742,7 +743,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOpClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

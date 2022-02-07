@@ -274,6 +274,13 @@ object ShuffleExchangeExec {
           // `HashPartitioning.partitionIdExpression` to produce partitioning key.
           override def getPartition(key: Any): Int = key.asInstanceOf[Int]
         }
+      case StatefulOpPartitioning(_, n) =>
+        new Partitioner {
+          override def numPartitions: Int = n
+          // For StatefulOpPartitioning, the partitioning key is already a valid partition ID, as
+          // we use `StatefulOpPartitioning.partitionIdExpression` to produce partitioning key.
+          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+        }
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -313,6 +320,9 @@ object ShuffleExchangeExec {
           position
         }
       case h: HashPartitioning =>
+        val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
+        row => projection(row).getInt(0)
+      case h: StatefulOpPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(sortingExpressions, _) =>

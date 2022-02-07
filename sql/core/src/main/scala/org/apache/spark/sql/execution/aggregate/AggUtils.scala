@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +47,7 @@ object AggUtils {
   }
 
   private def createAggregate(
+      requiredChildDistributionOption: Option[Seq[Distribution]] = None,
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
@@ -59,6 +61,7 @@ object AggUtils {
 
     if (useHash && !forceSortAggregate) {
       HashAggregateExec(
+        requiredChildDistributionOption = requiredChildDistributionOption,
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -72,6 +75,7 @@ object AggUtils {
 
       if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
+          requiredChildDistributionOption = requiredChildDistributionOption,
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -81,6 +85,7 @@ object AggUtils {
           child = child)
       } else {
         SortAggregateExec(
+          requiredChildDistributionOption = requiredChildDistributionOption,
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -299,12 +304,15 @@ object AggUtils {
         child = child)
     }
 
+    // This is only used to pick up the required child distribution for the stateful operator
+    val tempRestored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
+      partialAggregate)
+
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
-        requiredChildDistributionExpressions =
-            Some(groupingAttributes),
+        requiredChildDistributionOption = Some(tempRestored.requiredChildDistribution),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -314,15 +322,13 @@ object AggUtils {
         child = partialAggregate)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
-      partialMerged1)
+    val restored = tempRestored.copy(child = partialMerged1)
 
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
-        requiredChildDistributionExpressions =
-            Some(groupingAttributes),
+        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -349,7 +355,7 @@ object AggUtils {
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
       createAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
+        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
         aggregateAttributes = finalAggregateAttributes,

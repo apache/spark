@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.StatefulOpPartitioning
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
@@ -595,8 +595,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _,
-            ShuffleExchangeExec(opA: HashPartitioning, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _))
+            ShuffleExchangeExec(opA: StatefulOpPartitioning, _, _),
+            ShuffleExchangeExec(opB: StatefulOpPartitioning, _, _))
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j
