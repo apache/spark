@@ -37,7 +37,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     val msg1 = intercept[AnalysisException] {
       sql("select 'value1' as a, 1L as b").as[StringIntClass]
     }.message
-    assert(msg1 ==
+    assert(msg1 ===
       s"""
          |Cannot up cast b from bigint to int.
          |The type path of the target object is:
@@ -51,7 +51,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         " named_struct('a', 'value1', 'b', cast(1.0 as decimal(38,18))) as b")
         .as[ComplexClass]
     }.message
-    assert(msg2 ==
+    assert(msg2 ===
       s"""
          |Cannot up cast b.`b` from decimal(38,18) to bigint.
          |The type path of the target object is:
@@ -72,9 +72,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
       Dataset.ofRows(spark, plan)
     }.message
-    assert(msg.contains("The feature is not supported: " +
+    assert(msg.matches("The feature is not supported: " +
       "UpCast only support DecimalType as AbstractDataType yet," +
-      " but got: org.apache.spark.sql.types.NumericType"))
+      """ but got: org.apache.spark.sql.types.NumericType\$\@\w+"""))
   }
-
 }
