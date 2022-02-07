@@ -24,7 +24,7 @@ class NotInSubqueryEndToEndSuite extends QueryTest with SharedSparkSession {
 
   val t = "test_table"
 
-  test("SPARK-38132: Avoid Optimizing Not(InSubquery)") {
+  test("SPARK-38132: Avoid optimizing Not IN subquery") {
     withTable(t) {
       Seq[(Integer, Integer)](
         (1, 1),
