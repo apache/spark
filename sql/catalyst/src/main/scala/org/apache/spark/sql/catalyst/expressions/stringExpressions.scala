@@ -2547,6 +2547,20 @@ object ToBinary {
   }
 }
 
+/**
+ * Converts the input expression to a binary value based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, fmt) - Converts the input `str` to a binary value based on the supplied `fmt`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
 case class ToBinary(expr: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
