@@ -282,4 +282,5 @@ object JDBCOptions {
   val JDBC_TABLE_COMMENT = newOption("tableComment")
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
+  val JDBC_AUTO_COMMIT = newOption("autoCommit")
 }

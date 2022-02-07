@@ -176,8 +176,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     //
     // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
     //
-    if (properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt > 0) {
-      connection.setAutoCommit(false)
+    properties.get(JDBCOptions.JDBC_AUTO_COMMIT) match {
+      case Some("true") => connection.setAutoCommit(true)
+      case _ => connection.setAutoCommit(false)
     }
   }
 
