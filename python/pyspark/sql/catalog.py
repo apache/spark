@@ -345,7 +345,7 @@ class Catalog:
         if path is not None:
             options["path"] = path
         if source is None:
-            c = self._sparkSession._wrapped._conf
+            c = self._sparkSession._jconf
             source = c.defaultDataSourceName()  # type: ignore[attr-defined]
         if description is None:
             description = ""
@@ -356,7 +356,7 @@ class Catalog:
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
-        return DataFrame(df, self._sparkSession._wrapped)
+        return DataFrame(df, self._sparkSession)
 
     def dropTempView(self, viewName: str) -> None:
         """Drops the local temporary view with the given view name in the catalog.

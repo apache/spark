@@ -906,7 +906,7 @@ class InternalFrame:
         if len(sdf.columns) > 0:
             return SparkDataFrame(
                 sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
-                sdf.sql_ctx,
+                sdf.sparkSession,
             )
         else:
             cnt = sdf.count()

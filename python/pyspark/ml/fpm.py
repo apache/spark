@@ -500,7 +500,7 @@ class PrefixSpan(JavaParams):
 
         self._transfer_params_to_java()
         jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
-        return DataFrame(jdf, dataset.sql_ctx)
+        return DataFrame(jdf, dataset.sparkSession)
 
 
 if __name__ == "__main__":

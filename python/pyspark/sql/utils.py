@@ -30,7 +30,7 @@ from pyspark import SparkContext
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:
-    from pyspark.sql.context import SQLContext
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
 
 
@@ -258,15 +258,15 @@ class ForeachBatchFunction:
     the query is active.
     """
 
-    def __init__(self, sql_ctx: "SQLContext", func: Callable[["DataFrame", int], None]):
-        self.sql_ctx = sql_ctx
+    def __init__(self, session: "SparkSession", func: Callable[["DataFrame", int], None]):
         self.func = func
+        self.session = session
 
     def call(self, jdf: JavaObject, batch_id: int) -> None:
         from pyspark.sql.dataframe import DataFrame
 
         try:
-            self.func(DataFrame(jdf, self.sql_ctx), batch_id)
+            self.func(DataFrame(jdf, self.session), batch_id)
         except Exception as e:
             self.error = e
             raise e

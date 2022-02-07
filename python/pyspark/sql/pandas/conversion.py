@@ -43,6 +43,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 if TYPE_CHECKING:
     import numpy as np
     import pyarrow as pa
+    from py4j.java_gateway import JavaObject
 
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
@@ -88,9 +89,10 @@ class PandasConversionMixin:
         import pandas as pd
         from pandas.core.dtypes.common import is_timedelta64_dtype
 
-        timezone = self.sql_ctx._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
+        jconf = self.sparkSession._jconf
+        timezone = jconf.sessionLocalTimeZone()
 
-        if self.sql_ctx._conf.arrowPySparkEnabled():  # type: ignore[attr-defined]
+        if jconf.arrowPySparkEnabled():  # type: ignore[attr-defined]
             use_arrow = True
             try:
                 from pyspark.sql.pandas.types import to_arrow_schema
@@ -100,7 +102,7 @@ class PandasConversionMixin:
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx._conf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
+                if jconf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -134,7 +136,7 @@ class PandasConversionMixin:
 
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
-                    c = self.sql_ctx._conf
+                    c = self.sparkSession._jconf
                     self_destruct = (
                         c.arrowPySparkSelfDestructEnabled()  # type: ignore[attr-defined]
                     )
@@ -368,6 +370,8 @@ class SparkConversionMixin:
     can use this class.
     """
 
+    _jsparkSession: "JavaObject"
+
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
@@ -398,20 +402,17 @@ class SparkConversionMixin:
 
         require_minimum_pandas_version()
 
-        timezone = self._wrapped._conf.sessionLocalTimeZone()  # type: ignore[attr-defined]
+        timezone = self._jconf.sessionLocalTimeZone()  # type: ignore[attr-defined]
 
         # If no schema supplied by user then get the names of columns only
         if schema is None:
             schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
 
-        if (
-            self._wrapped._conf.arrowPySparkEnabled()  # type: ignore[attr-defined]
-            and len(data) > 0
-        ):
+        if self._jconf.arrowPySparkEnabled() and len(data) > 0:  # type: ignore[attr-defined]
             try:
                 return self._create_from_pandas_with_arrow(data, schema, timezone)
             except Exception as e:
-                if self._wrapped._conf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
+                if self._jconf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -603,25 +604,25 @@ class SparkConversionMixin:
             for pdf_slice in pdf_slices
         ]
 
-        jsqlContext = self._wrapped._jsqlContext  # type: ignore[attr-defined]
+        jsparkSession = self._jsparkSession
 
-        safecheck = self._wrapped._conf.arrowSafeTypeConversion()  # type: ignore[attr-defined]
+        safecheck = self._jconf.arrowSafeTypeConversion()  # type: ignore[attr-defined]
         col_by_name = True  # col by name only applies to StructType columns, can't happen here
         ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
         @no_type_check
         def reader_func(temp_filename):
-            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsparkSession, temp_filename)
 
         @no_type_check
         def create_RDD_server():
-            return self._jvm.ArrowRDDServer(jsqlContext)
+            return self._jvm.ArrowRDDServer(jsparkSession)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
         jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
         assert self._jvm is not None
-        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
-        df = DataFrame(jdf, self._wrapped)
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsparkSession)
+        df = DataFrame(jdf, self)
         df._schema = schema
         return df
 

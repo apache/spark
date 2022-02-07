@@ -224,28 +224,26 @@ class SparkSessionTests5(unittest.TestCase):
     def test_sqlcontext_with_stopped_sparksession(self):
         # SPARK-30856: test that SQLContext.getOrCreate() returns a usable instance after
         # the SparkSession is restarted.
-        sql_context = self.spark._wrapped
+        sql_context = SQLContext.getOrCreate(self.spark.sparkContext)
         self.spark.stop()
-        sc = SparkContext("local[4]", self.sc.appName)
-        spark = SparkSession(sc)  # Instantiate the underlying SQLContext
-        new_sql_context = spark._wrapped
+        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        new_sql_context = SQLContext.getOrCreate(spark.sparkContext)
 
         self.assertIsNot(new_sql_context, sql_context)
-        self.assertIs(SQLContext.getOrCreate(sc).sparkSession, spark)
+        self.assertIs(SQLContext.getOrCreate(spark.sparkContext).sparkSession, spark)
         try:
             df = spark.createDataFrame([(1, 2)], ["c", "c"])
             df.collect()
         finally:
             spark.stop()
             self.assertIsNone(SQLContext._instantiatedContext)
-            sc.stop()
 
     def test_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test initialization via SparkSession when only the SparkContext is stopped
         self.sc.stop()
-        self.sc = SparkContext("local[4]", self.sc.appName)
-        self.spark = SparkSession(self.sc)
-        self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, self.spark)
+        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        self.sc = spark.sparkContext
+        self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, spark)
 
     def test_get_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test initialization via SQLContext.getOrCreate() when only the SparkContext
