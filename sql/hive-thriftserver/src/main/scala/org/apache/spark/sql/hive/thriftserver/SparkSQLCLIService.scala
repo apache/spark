@@ -147,7 +147,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
       case NonFatal(e) =>
       logError(s"Error starting services $getName", e)
       invoke(classOf[CompositeService], this, "stop",
-        classOf[Int] -> new Integer(serviceStartCount))
+        classOf[Int] -> Integer.valueOf(serviceStartCount))
       throw HiveThriftServerErrors.failedToStartServiceError(getName, e)
     }
   }
