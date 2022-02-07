@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Sequence, cast
+from typing import cast, List, Sequence, TYPE_CHECKING, TypeVar
 
 from pyspark import since
-from pyspark.ml._typing import P, T
 from pyspark.ml.linalg import Vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
@@ -33,6 +32,10 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.wrapper import JavaPredictionModel
 from pyspark.ml.common import inherit_doc
 
+if TYPE_CHECKING:
+    from pyspark.ml._typing import P
+
+T = TypeVar("T")
 
 @inherit_doc
 class _DecisionTreeModel(JavaPredictionModel[T]):
@@ -152,7 +155,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     def __init__(self) -> None:
         super(_DecisionTreeParams, self).__init__()
 
-    def setLeafCol(self: P, value: str) -> P:
+    def setLeafCol(self: "P", value: str) -> "P":
         """
         Sets the value of :py:attr:`leafCol`.
         """
