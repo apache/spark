@@ -187,6 +187,29 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Change broadcast join to merge join") {
+    withTable("t1", "t2") {
+      withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        sql("CREATE TABLE t1 USING PARQUET AS SELECT 1 c1")
+        sql("CREATE TABLE t2 USING PARQUET AS SELECT 1 c1")
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM (
+            | SELECT distinct c1 from t1
+            | ) tmp1 JOIN (
+            |  SELECT distinct c1 from t2
+            | ) tmp2 ON tmp1.c1 = tmp2.c1
+            |""".stripMargin)
+        assert(findTopLevelBroadcastHashJoin(plan).size == 1)
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan).isEmpty)
+        assert(findTopLevelSortMergeJoin(adaptivePlan).size == 1)
+      }
+    }
+  }
+
   test("Reuse the parallelism of coalesced shuffle in local shuffle read") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -2243,6 +2266,15 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+
+        // The strategy of Eliminate Limits batch should be fixedPoint
+        val (origin3, adaptive3) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM (SELECT c1 + c2 FROM (SELECT DISTINCT * FROM v LIMIT 10086)) LIMIT 20
+          """.stripMargin
+        )
+        assert(findTopLevelLimit(origin3).size == 1)
+        assert(findTopLevelLimit(adaptive3).isEmpty)
       }
     }
   }

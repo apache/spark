@@ -219,8 +219,8 @@ show create table char_view
 struct<createtab_stmt:string>
 -- !query output
 CREATE VIEW default.char_view (
-  `c`,
-  `v`)
+  c,
+  v)
 AS select * from char_tbl
 
 
