@@ -455,7 +455,7 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val intVector = columnVector.getValueVector.asInstanceOf[IntVector]
     (0 until 10).foreach { i =>
       assert(columnVector.getInt(i) === i + 1)
-      intVector.get(i) === i + 1
+      assert(intVector.get(i) === i)
     }
 
     columnVector.close()
