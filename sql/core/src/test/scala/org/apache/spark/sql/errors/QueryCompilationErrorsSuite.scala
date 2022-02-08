@@ -84,24 +84,15 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       (536362, "85123B", 4, 17850),
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-
-    // filter with grouping
-    var errMsg = intercept[AnalysisException] {
-      df.filter("grouping(CustomerId)=17850")
-        .groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    Seq("grouping", "grouping_id").foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+          .filter(s"$grouping(CustomerId)=17850")
+      }
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
     }
-    assert(errMsg.message ===
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-
-    // filter with grouping_id
-    errMsg = intercept[AnalysisException] {
-      df.filter("grouping_id(CustomerId)=17850").
-        groupBy("CustomerId").agg(Map("Quantity" -> "max"))
-    }
-    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-    assert(errMsg.message ===
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
   }
 
   test("UNSUPPORTED_GROUPING_EXPRESSION: Sort with grouping/grouping_Id expression") {
@@ -110,23 +101,14 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       (536362, "85123B", 4, 17850),
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-
-   // Sort with grouping
-    var errMsg = intercept[AnalysisException] {
-      df.sort(grouping("CustomerId"))
-        .groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
     }
-    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-    assert(errMsg.message ===
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-
-    // Sort with grouping_id
-    errMsg = intercept[AnalysisException] {
-      df.sort(grouping_id("CustomerId")).
-        groupBy("CustomerId").agg(Map("Quantity" -> "max"))
-    }
-    assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-    assert(errMsg.message ===
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
   }
 }
