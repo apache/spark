@@ -2543,7 +2543,10 @@ case class Encode(value: Expression, charset: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, fmt) - Converts the input `str` to a binary value based on the supplied `fmt`.",
+  usage = """
+    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
+      By default, the binary format for conversion is "hex" if `fmt` is omitted.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
@@ -2552,10 +2555,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Expression, child: Expression)
+case class ToBinary(expr: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
-  def this(expr: Expression, format: Expression) = this(expr, format,
+  def this(expr: Expression, format: Expression) = this(expr, Option(format),
     format match {
       case Literal("hex", StringType) => Unhex(expr)
       case Literal("utf-8", StringType) => Encode(expr, Literal("UTF-8"))
@@ -2564,14 +2567,16 @@ case class ToBinary(expr: Expression, format: Expression, child: Expression)
     }
   )
 
+  def this(expr: Expression) = this(expr, None, Unhex(expr))
+
   override def flatArguments: Iterator[Any] = Iterator(expr, format)
-  override def exprsReplaced: Seq[Expression] = Seq(expr, format)
+  override def exprsReplaced: Seq[Expression] = expr +: format.toSeq
 
   override def prettyName: String = "to_binary"
   override def dataType: DataType = BinaryType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
+    if (format == None || Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
       .contains(format)) {
       super.checkInputDataTypes()
     } else {
