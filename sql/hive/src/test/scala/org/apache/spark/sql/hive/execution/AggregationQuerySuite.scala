@@ -896,7 +896,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
     // SortAggregate to use a safe row as the aggregation buffer.
-    Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
+    // udaf cannot yet handle TimestampNTZType
+    val mutableFieldTypes = UnsafeRow.mutableFieldTypes
+      .asScala.filterNot(_.isInstanceOf[TimestampNTZType]).toSeq
+    Seq(dataTypes, mutableFieldTypes).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
       }

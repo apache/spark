@@ -102,19 +102,19 @@ object QueryParsingErrors {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with NATURAL join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with NATURAL join."), ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with USING join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with USING join."), ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array(s"LATERAL join type '$joinType'."), ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException(s"LATERAL can only be used with subquery", ctx)
+    new ParseException("INVALID_SQL_SYNTAX", Array("LATERAL can only be used with subquery."), ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
@@ -129,12 +129,8 @@ object QueryParsingErrors {
     new ParseException(s"Cannot resolve window reference '$name'", ctx)
   }
 
-  def joinCriteriaUnimplementedError(join: JoinCriteriaContext, ctx: RelationContext): Throwable = {
-    new ParseException(s"Unimplemented joinCriteria: $join", ctx)
-  }
-
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {

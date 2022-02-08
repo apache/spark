@@ -90,7 +90,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           FloatType,
           DoubleType,
           DateType,
-          TimestampType
+          TimestampType,
+          TimestampNTZType
         })));
   }
 

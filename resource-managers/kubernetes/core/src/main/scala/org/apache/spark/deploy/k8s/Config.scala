@@ -147,7 +147,8 @@ private[spark] object Config extends Logging {
       .createWithDefault(0)
 
   object ExecutorRollPolicy extends Enumeration {
-    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, OUTLIER = Value
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
+      OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -165,7 +166,9 @@ private[spark] object Config extends Logging {
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
-        "If there is no outlier, it works like TOTAL_DURATION policy.")
+        "If there is no outlier it works like TOTAL_DURATION policy. " +
+        "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
+        "If there is no outlier then no executor will be rolled.")
       .version("3.3.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -341,7 +344,9 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
       .doc("Class names of an extra driver pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature " +
+        "step can implement `KubernetesDriverCustomFeatureConfigStep` where the driver " +
+        "config is also available.")
       .version("3.2.0")
       .stringConf
       .toSequence
@@ -351,7 +356,9 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature " +
+        "step can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor " +
+        "config is also available.")
       .version("3.2.0")
       .stringConf
       .toSequence
