@@ -3410,6 +3410,7 @@
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
           <onlyChangedFiles>true</onlyChangedFiles>
+          <branch>amaster</branch>
         </configuration>
         <executions>
           <execution>
