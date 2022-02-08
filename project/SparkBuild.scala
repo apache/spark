@@ -421,6 +421,13 @@ object SparkBuild extends PomBuild {
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
+  if (!profiles.contains("volcano")) {
+    enable(Seq(
+      Compile / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStep.scala",
+      Test / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStepSuite.scala"
+    ))(kubernetes)
+  }
+
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   enable(YARN.settings)(yarn)

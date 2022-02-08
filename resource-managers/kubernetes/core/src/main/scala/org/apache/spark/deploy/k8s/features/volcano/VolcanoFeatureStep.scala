@@ -14,15 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.scheduler
-
-import scala.collection.JavaConverters._
+package org.apache.spark.deploy.k8s.features.volcano
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.volcano.scheduling.v1beta1.PodGroupBuilder
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep}
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
@@ -33,8 +30,6 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
   private val POD_GROUP_ANNOTATION = "scheduling.k8s.io/group-name"
 
   private lazy val podGroupName = s"${kubernetesConf.appId}-podgroup"
-  private lazy val minCpu = kubernetesConf.get(KUBERNETES_JOB_MIN_CPU)
-  private lazy val minMemory = kubernetesConf.get(KUBERNETES_JOB_MIN_MEMORY)
   private lazy val namespace = kubernetesConf.namespace
 
   override def init(config: KubernetesDriverConf): Unit = {
@@ -46,20 +41,11 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
   }
 
   override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
-    val cpuQ = new QuantityBuilder(false)
-      .withAmount(s"${minCpu}")
-      .build()
-    val memoryQ = new QuantityBuilder(false)
-      .withAmount(s"${minMemory}Mi")
-      .build()
     val podGroup = new PodGroupBuilder()
       .editOrNewMetadata()
         .withName(podGroupName)
         .withNamespace(namespace)
       .endMetadata()
-      .editOrNewSpec()
-        .withMinResources(Map("cpu" -> cpuQ, "memory" -> memoryQ).asJava)
-      .endSpec()
       .build()
     Seq(podGroup)
   }

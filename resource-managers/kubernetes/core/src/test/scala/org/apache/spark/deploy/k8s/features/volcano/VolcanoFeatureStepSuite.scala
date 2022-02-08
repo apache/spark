@@ -14,9 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.scheduler
+package org.apache.spark.deploy.k8s.features.volcano
 
-import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -36,8 +35,6 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
     val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
-    assert(podGroup.getSpec.getMinResources.get("cpu") === new Quantity("2.0"))
-    assert(podGroup.getSpec.getMinResources.get("memory") === new Quantity("3072"))
   }
 
   test("SPARK-36061: Executor Pod with Volcano PodGroup") {
