@@ -427,7 +427,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  lazy val subqueries: Seq[PlanType] = {
+  @transient lazy val subqueries: Seq[PlanType] = {
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
