@@ -230,12 +230,12 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Check namespace exists or not.
+   * Check schema exists or not.
    */
-  def namespacesExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
-    val rs = conn.getMetaData.getSchemas(null, namespace)
+  def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val rs = conn.getMetaData.getSchemas(null, schema)
     while (rs.next()) {
-      if (rs.getString(1) == namespace) return true;
+      if (rs.getString(1) == schema) return true;
     }
     false
   }
@@ -243,7 +243,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Lists all the schemas in this table.
    */
-  def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
     val schemaBuilder = ArrayBuilder.make[Array[String]]
     val rs = conn.getMetaData.getSchemas()
     while (rs.next()) {

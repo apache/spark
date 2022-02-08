@@ -78,12 +78,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     s"`$colName`"
   }
 
-  override def namespacesExists(
-      conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
-    listNamespaces(conn, options).exists(_.head == namespace)
+  override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    listSchemas(conn, options).exists(_.head == schema)
   }
 
-  override def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+  override def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
     val schemaBuilder = ArrayBuilder.make[Array[String]]
     try {
       JdbcUtils.executeQuery(conn, options, "SHOW SCHEMAS") { rs =>

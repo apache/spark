@@ -990,12 +990,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.namespacesExists(conn, options, namespace)
+    dialect.schemasExists(conn, options, namespace)
   }
 
   def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.listNamespaces(conn, options)
+    dialect.listSchemas(conn, options)
   }
 
   def createNamespaceComment(
