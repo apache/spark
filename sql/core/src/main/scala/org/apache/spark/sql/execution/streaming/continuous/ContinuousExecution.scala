@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStre
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -85,9 +86,15 @@ class ContinuousExecution(
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-    val (streamingWrite, customMetrics) = createStreamingWrite(
-      plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
-    WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
+    val write = createWrite(plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+    write match {
+      case _: RequiresDistributionAndOrdering =>
+        throw QueryCompilationErrors.writeDistributionAndOrderingNotSupportedInContinuousExecution()
+      case _ =>
+        val streamingWrite = write.toStreaming
+        val customMetrics = write.supportedCustomMetrics.toSeq
+        WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
+    }
   }
 
   private val triggerExecutor = trigger match {

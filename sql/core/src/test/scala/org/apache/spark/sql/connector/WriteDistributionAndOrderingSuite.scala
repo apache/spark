@@ -34,8 +34,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -82,6 +83,10 @@ class WriteDistributionAndOrderingSuite
     checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "append")
   }
 
+  test("ordered distribution and sort with same exprs: micro-batch update") {
+    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "update")
+  }
+
   test("ordered distribution and sort with same exprs: micro-batch complete") {
     checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "complete")
   }
@@ -100,6 +105,10 @@ class WriteDistributionAndOrderingSuite
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch append") {
     checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "append", Some(10))
+  }
+
+  test("ordered distribution and sort with same exprs with numPartitions: micro-batch update") {
+    checkOrderedDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("ordered distribution and sort with same exprs with numPartitions: micro-batch complete") {
@@ -153,6 +162,10 @@ class WriteDistributionAndOrderingSuite
     checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "append")
   }
 
+  test("clustered distribution and sort with same exprs: micro-batch update") {
+    checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "update")
+  }
+
   test("clustered distribution and sort with same exprs: micro-batch complete") {
     checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "complete")
   }
@@ -171,6 +184,10 @@ class WriteDistributionAndOrderingSuite
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch append") {
     checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "append", Some(10))
+  }
+
+  test("clustered distribution and sort with same exprs with numPartitions: micro-batch update") {
+    checkClusteredDistributionAndSortWithSameExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("clustered distribution and sort with same exprs with numPartitions: micro-batch complete") {
@@ -233,6 +250,10 @@ class WriteDistributionAndOrderingSuite
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append")
   }
 
+  test("clustered distribution and sort with extended exprs: micro-batch update") {
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update")
+  }
+
   test("clustered distribution and sort with extended exprs: micro-batch complete") {
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "complete")
   }
@@ -253,6 +274,11 @@ class WriteDistributionAndOrderingSuite
   test("clustered distribution and sort with extended exprs with numPartitions: " +
     "micro-batch append") {
     checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "append", Some(10))
+  }
+
+  test("clustered distribution and sort with extended exprs with numPartitions: " +
+    "micro-batch update") {
+    checkClusteredDistributionAndSortWithExtendedExprs(microBatchPrefix + "update", Some(10))
   }
 
   test("clustered distribution and sort with extended exprs with numPartitions: " +
@@ -316,6 +342,10 @@ class WriteDistributionAndOrderingSuite
     checkUnspecifiedDistributionAndLocalSort(microBatchPrefix + "append")
   }
 
+  test("unspecified distribution and local sort: micro-batch update") {
+    checkUnspecifiedDistributionAndLocalSort(microBatchPrefix + "update")
+  }
+
   test("unspecified distribution and local sort: micro-batch complete") {
     checkUnspecifiedDistributionAndLocalSort(microBatchPrefix + "complete")
   }
@@ -334,6 +364,10 @@ class WriteDistributionAndOrderingSuite
 
   test("unspecified distribution and local sort with numPartitions: micro-batch append") {
     checkUnspecifiedDistributionAndLocalSort(microBatchPrefix + "append", Some(10))
+  }
+
+  test("unspecified distribution and local sort with numPartitions: micro-batch update") {
+    checkUnspecifiedDistributionAndLocalSort(microBatchPrefix + "update", Some(10))
   }
 
   test("unspecified distribution and local sort with numPartitions: micro-batch complete") {
@@ -390,6 +424,10 @@ class WriteDistributionAndOrderingSuite
     checkUnspecifiedDistributionAndNoSort(microBatchPrefix + "append")
   }
 
+  test("unspecified distribution and no sort: micro-batch update") {
+    checkUnspecifiedDistributionAndNoSort(microBatchPrefix + "update")
+  }
+
   test("unspecified distribution and no sort: micro-batch complete") {
     checkUnspecifiedDistributionAndNoSort(microBatchPrefix + "complete")
   }
@@ -408,6 +446,10 @@ class WriteDistributionAndOrderingSuite
 
   test("unspecified distribution and no sort with numPartitions: micro-batch append") {
     checkUnspecifiedDistributionAndNoSort(microBatchPrefix + "append", Some(10))
+  }
+
+  test("unspecified distribution and no sort with numPartitions: micro-batch update") {
+    checkUnspecifiedDistributionAndNoSort(microBatchPrefix + "update", Some(10))
   }
 
   test("unspecified distribution and no sort with numPartitions: micro-batch complete") {
@@ -763,6 +805,37 @@ class WriteDistributionAndOrderingSuite
       writeCommand = command)
   }
 
+  test("continuous mode does not support write distribution and ordering") {
+    val ordering = Array[SortOrder](
+      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    )
+    val distribution = Distributions.ordered(ordering)
+
+    catalog.createTable(ident, schema, Array.empty, emptyProps, distribution, ordering, None)
+
+    withTempDir { checkpointDir =>
+      val inputData = ContinuousMemoryStream[(Long, String)]
+      val inputDF = inputData.toDF().toDF("id", "data")
+
+      val writer = inputDF
+        .writeStream
+        .trigger(Trigger.Continuous(100))
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .outputMode("append")
+
+      val analysisException = intercept[AnalysisException] {
+        val query = writer.toTable(tableNameAsString)
+
+        inputData.addData((1, "a"), (2, "b"))
+
+        query.processAllAvailable()
+        query.stop()
+      }
+
+      assert(analysisException.message.contains("Sinks cannot request distribution and ordering"))
+    }
+  }
+
   private def checkWriteRequirements(
       tableDistribution: Distribution,
       tableOrdering: Array[SortOrder],
@@ -849,7 +922,7 @@ class WriteDistributionAndOrderingSuite
       val inputDF = inputData.toDF().toDF("id", "data")
 
       val queryDF = outputMode match {
-        case "append" =>
+        case "append" | "update" =>
           inputDF
         case "complete" =>
           // add an aggregate for complete mode
@@ -888,10 +961,10 @@ class WriteDistributionAndOrderingSuite
           expectedWritePartitioning,
           expectedWriteOrdering,
           // there is an extra shuffle for groupBy in complete mode
-          maxNumShuffles = if (outputMode == "append") 1 else 2)
+          maxNumShuffles = if (outputMode != "complete") 1 else 2)
 
         val expectedRows = outputMode match {
-          case "append" => Row(1, "a") :: Row(2, "b") :: Nil
+          case "append" | "update" => Row(1, "a") :: Row(2, "b") :: Nil
           case "complete" => Row(1, "1") :: Row(2, "1") :: Nil
         }
         checkAnswer(spark.table(tableNameAsString), expectedRows)
