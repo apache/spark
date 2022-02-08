@@ -934,12 +934,19 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-   val PARQUET_FIELD_ID_ENABLED =
-    buildConf("spark.sql.parquet.fieldId.enabled")
+   val PARQUET_FIELD_ID_WRITE_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.write.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled," +
+        " Parquet writers will populate the field Id" +
+        " metadata (if present) in the Spark schema to the Parquet schema.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARQUET_FIELD_ID_READ_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers" +
         " will use field IDs (if present) in the requested Spark schema to look up Parquet" +
-        " fields instead of using column names; Parquet writers will also populate the field Id" +
-        " metadata (if present) in the Spark schema to the Parquet schema.")
+        " fields instead of using column names")
       .booleanConf
       .createWithDefault(true)
 
@@ -4268,7 +4275,9 @@ class SQLConf extends Serializable with Logging {
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
-  def parquetFieldIdEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_ENABLED)
+  def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
+
+  def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 

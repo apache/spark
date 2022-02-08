@@ -2259,8 +2259,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
-        useFieldId = false,
-        caseSensitive)
+        caseSensitive,
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2826,8 +2826,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         ParquetReadSupport.clipParquetSchema(
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
-          useFieldId = false,
-          caseSensitive = false)
+          caseSensitive = false,
+          useFieldId = false)
       }
     }
 }

@@ -356,8 +356,7 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
 
-        if (SQLConf.get.parquetFieldIdEnabled &&
-            ParquetUtils.hasFieldIds(requiredSchema)) {
+        if (SQLConf.get.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(requiredSchema)) {
           throw new IOException("Parquet-mr reader does not support schema with field IDs." +
             s" Please choose a different Parquet reader. Read schema: ${requiredSchema.json}")
         }

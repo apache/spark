@@ -41,8 +41,18 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
   test("Parquet reads infer fields using field ids correctly") {
     withTempDir { dir =>
       val readSchema =
-        new StructType().add(
-          "a", StringType, true, withId(0))
+        new StructType()
+          .add("a", StringType, true, withId(0))
+          .add("b", IntegerType, true, withId(1))
+
+      val readSchemaMixed =
+        new StructType()
+          .add("name", StringType, true)
+          .add("b", IntegerType, true, withId(1))
+
+      val readSchemaMixedHalfMatched =
+        new StructType()
+          .add("unmatched", StringType, true)
           .add("b", IntegerType, true, withId(1))
 
       val writeSchema =
@@ -51,6 +61,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           .add("name", StringType, true, withId(0))
 
       val readData = Seq(Row("text", 100), Row("more", 200))
+      val readDataHalfMatched = Seq(Row(null, 100), Row(null, 200))
       val writeData = Seq(Row(100, "text"), Row(200, "more"))
       spark.createDataFrame(writeData.asJava, writeSchema)
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
@@ -62,6 +73,11 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
           .where("b < 50"), Seq.empty)
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
           .where("a >= 'oh'"), Row("text", 100) :: Nil)
+        // read with mixed field-id/name schema
+        checkAnswer(spark.read.schema(readSchemaMixed).parquet(dir.getCanonicalPath), readData)
+        checkAnswer(spark.read.schema(readSchemaMixedHalfMatched)
+          .parquet(dir.getCanonicalPath), readDataHalfMatched)
+
         // schema inference should pull into the schema with ids
         val reader = spark.read.parquet(dir.getCanonicalPath)
         assert(reader.schema == writeSchema)
