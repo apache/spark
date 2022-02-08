@@ -167,4 +167,48 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       }
     }
   }
+
+  test("global read/write flag should work correctly") {
+    withTempDir { dir =>
+      val readSchema =
+        new StructType()
+          .add("some", IntegerType, true, withId(1))
+          .add("other", StringType, true, withId(2))
+          .add("name", StringType, true, withId(3))
+
+      val writeSchema =
+          new StructType()
+            .add("a", IntegerType, true, withId(1))
+            .add("rand1", StringType, true, withId(2))
+            .add("rand2", StringType, true, withId(3))
+
+      val writeData = Seq(Row(100, "text", "txt"), Row(200, "more", "mr"))
+
+      val expectedResult = Seq(Row(null, null, null), Row(null, null, null))
+
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "false",
+        SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
+        withAllParquetReaders {
+          // no field id found exception
+          val cause = intercept[SparkException] {
+            spark.read.schema(readSchema).parquet(dir.getCanonicalPath).collect()
+          }.getCause
+          assert(cause.isInstanceOf[RuntimeException] &&
+            cause.getMessage.contains("Parquet file schema doesn't contain field Ids"))
+        }
+      }
+
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
+        SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
+        withAllParquetReaders {
+          // ids are there, but we don't use id for matching, so no results would be returned
+          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), expectedResult)
+        }
+      }
+    }
+  }
 }

@@ -948,7 +948,7 @@ object SQLConf {
         " will use field IDs (if present) in the requested Spark schema to look up Parquet" +
         " fields instead of using column names")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val IGNORE_MISSING_PARQUET_FIELD_ID =
     buildConf("spark.sql.parquet.fieldId.ignoreMissing")
