@@ -17,19 +17,11 @@
 
 import sys
 
-from typing import Optional, Tuple, TYPE_CHECKING
-
-
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.linalg import Matrix, Vector
-from pyspark.ml.wrapper import JavaWrapper, _jvm  # type: ignore[attr-defined]
+from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
-
-if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 
 class ChiSquareTest:
@@ -45,9 +37,7 @@ class ChiSquareTest:
     """
 
     @staticmethod
-    def test(
-        dataset: DataFrame, featuresCol: str, labelCol: str, flatten: bool = False
-    ) -> DataFrame:
+    def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a Pearson's independence test using dataset.
 
@@ -105,8 +95,6 @@ class ChiSquareTest:
         4.0
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
         args = [_py2java(sc, arg) for arg in (dataset, featuresCol, labelCol, flatten)]
         return _java2py(sc, javaTestObj.test(*args))
@@ -128,7 +116,7 @@ class Correlation:
     """
 
     @staticmethod
-    def corr(dataset: DataFrame, column: str, method: str = "pearson") -> DataFrame:
+    def corr(dataset, column, method="pearson"):
         """
         Compute the correlation matrix with specified method using dataset.
 
@@ -174,8 +162,6 @@ class Correlation:
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-
         javaCorrObj = _jvm().org.apache.spark.ml.stat.Correlation
         args = [_py2java(sc, arg) for arg in (dataset, column, method)]
         return _java2py(sc, javaCorrObj.corr(*args))
@@ -195,7 +181,7 @@ class KolmogorovSmirnovTest:
     """
 
     @staticmethod
-    def test(dataset: DataFrame, sampleCol: str, distName: str, *params: float) -> DataFrame:
+    def test(dataset, sampleCol, distName, *params):
         """
         Conduct a one-sample, two-sided Kolmogorov-Smirnov test for probability distribution
         equality. Currently supports the normal distribution, taking as parameters the mean and
@@ -242,11 +228,9 @@ class KolmogorovSmirnovTest:
         0.175
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
         dataset = _py2java(sc, dataset)
-        params = [float(param) for param in params]  # type: ignore[assignment]
+        params = [float(param) for param in params]
         return _java2py(
             sc, javaTestObj.test(dataset, sampleCol, distName, _jvm().PythonUtils.toSeq(params))
         )
@@ -300,7 +284,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def mean(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def mean(col, weightCol=None):
         """
         return a column of mean summary
         """
@@ -308,7 +292,7 @@ class Summarizer:
 
     @staticmethod
     @since("3.0.0")
-    def sum(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def sum(col, weightCol=None):
         """
         return a column of sum summary
         """
@@ -316,7 +300,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def variance(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def variance(col, weightCol=None):
         """
         return a column of variance summary
         """
@@ -324,7 +308,7 @@ class Summarizer:
 
     @staticmethod
     @since("3.0.0")
-    def std(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def std(col, weightCol=None):
         """
         return a column of std summary
         """
@@ -332,7 +316,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def count(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def count(col, weightCol=None):
         """
         return a column of count summary
         """
@@ -340,7 +324,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def numNonZeros(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def numNonZeros(col, weightCol=None):
         """
         return a column of numNonZero summary
         """
@@ -348,7 +332,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def max(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def max(col, weightCol=None):
         """
         return a column of max summary
         """
@@ -356,7 +340,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def min(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def min(col, weightCol=None):
         """
         return a column of min summary
         """
@@ -364,7 +348,7 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def normL1(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def normL1(col, weightCol=None):
         """
         return a column of normL1 summary
         """
@@ -372,14 +356,14 @@ class Summarizer:
 
     @staticmethod
     @since("2.4.0")
-    def normL2(col: Column, weightCol: Optional[Column] = None) -> Column:
+    def normL2(col, weightCol=None):
         """
         return a column of normL2 summary
         """
         return Summarizer._get_single_metric(col, weightCol, "normL2")
 
     @staticmethod
-    def _check_param(featuresCol: Column, weightCol: Optional[Column]) -> Tuple[Column, Column]:
+    def _check_param(featuresCol, weightCol):
         if weightCol is None:
             weightCol = lit(1.0)
         if not isinstance(featuresCol, Column) or not isinstance(weightCol, Column):
@@ -387,16 +371,16 @@ class Summarizer:
         return featuresCol, weightCol
 
     @staticmethod
-    def _get_single_metric(col: Column, weightCol: Optional[Column], metric: str) -> Column:
+    def _get_single_metric(col, weightCol, metric):
         col, weightCol = Summarizer._check_param(col, weightCol)
         return Column(
-            JavaWrapper._new_java_obj(  # type: ignore[attr-defined]
+            JavaWrapper._new_java_obj(
                 "org.apache.spark.ml.stat.Summarizer." + metric, col._jc, weightCol._jc
             )
         )
 
     @staticmethod
-    def metrics(*metrics: str) -> "SummaryBuilder":
+    def metrics(*metrics):
         """
         Given a list of metrics, provides a builder that it turns computes metrics from a column.
 
@@ -431,9 +415,7 @@ class Summarizer:
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
         sc = SparkContext._active_spark_context
-        assert sc is not None
-
-        js = JavaWrapper._new_java_obj(  # type: ignore[attr-defined]
+        js = JavaWrapper._new_java_obj(
             "org.apache.spark.ml.stat.Summarizer.metrics", _to_seq(sc, metrics)
         )
         return SummaryBuilder(js)
@@ -450,10 +432,10 @@ class SummaryBuilder(JavaWrapper):
 
     """
 
-    def __init__(self, jSummaryBuilder: "JavaObject"):
+    def __init__(self, jSummaryBuilder):
         super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
-    def summary(self, featuresCol: Column, weightCol: Optional[Column] = None) -> Column:
+    def summary(self, featuresCol, weightCol=None):
         """
         Returns an aggregate object that contains the summary of the column with the requested
         metrics.
@@ -474,9 +456,7 @@ class SummaryBuilder(JavaWrapper):
             structure is determined during the creation of the builder.
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
-        return Column(
-            self._java_obj.summary(featuresCol._jc, weightCol._jc)  # type: ignore[attr-defined]
-        )
+        return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
 
 
 class MultivariateGaussian:
@@ -494,7 +474,7 @@ class MultivariateGaussian:
            [ 3.,  2.]]))
     """
 
-    def __init__(self, mean: Vector, cov: Matrix):
+    def __init__(self, mean, cov):
         self.mean = mean
         self.cov = cov
 
