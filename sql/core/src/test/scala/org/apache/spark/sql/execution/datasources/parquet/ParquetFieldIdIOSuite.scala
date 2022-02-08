@@ -30,13 +30,6 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
   private def withId(id: Int): Metadata =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
 
-  /**
-   * Field id is supported in vectorized reader at the moment.
-   * parquet-mr support is coming soon.
-   */
-  private def withAllSupportedReaders(code: => Unit): Unit = {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
-  }
 
   test("Parquet reads infer fields using field ids correctly") {
     withTempDir { dir =>
@@ -66,7 +59,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       spark.createDataFrame(writeData.asJava, writeSchema)
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
-      withAllSupportedReaders {
+      withAllParquetReaders {
         // read with schema
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), readData)
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath)
@@ -83,16 +76,6 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
         assert(reader.schema == writeSchema)
         checkAnswer(reader.where("name >= 'oh'"), Row(100, "text") :: Nil)
       }
-
-      // blocked for Parquet-mr reader
-      val e = intercept[SparkException] {
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-          checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath), readData)
-        }
-      }
-      val cause = e.getCause
-      assert(cause.isInstanceOf[java.io.IOException] &&
-        cause.getMessage.contains("Parquet-mr reader does not support schema with field IDs."))
     }
   }
 
@@ -114,7 +97,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       spark.createDataFrame(writeData.asJava, writeSchema)
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
-      withAllSupportedReaders {
+      withAllParquetReaders {
         checkAnswer(spark.read.schema(readSchema).parquet(dir.getCanonicalPath),
           // 3 different cases for the 3 columns to read:
           //   - a: ID 1 is not found, but there is column with name `a`, still return null
@@ -142,7 +125,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       spark.createDataFrame(writeData.asJava, writeSchema)
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
 
-      withAllSupportedReaders {
+      withAllParquetReaders {
         val cause = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(dir.getCanonicalPath).collect()
         }.getCause
@@ -167,7 +150,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
       val writeData = Seq(Row(100, "text", "txt"), Row(200, "more", "mr"))
       spark.createDataFrame(writeData.asJava, writeSchema)
         .write.mode("overwrite").parquet(dir.getCanonicalPath)
-      withAllSupportedReaders {
+      withAllParquetReaders {
         Seq(readSchema, readSchema.add("b", StringType, true)).foreach { schema =>
           val cause = intercept[SparkException] {
             spark.read.schema(schema).parquet(dir.getCanonicalPath).collect()

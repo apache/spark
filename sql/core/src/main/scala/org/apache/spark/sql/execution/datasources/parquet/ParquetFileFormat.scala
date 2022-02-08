@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
 import java.net.URI
 
 import scala.collection.JavaConverters._
@@ -355,11 +354,6 @@ class ParquetFileFormat
         }
       } else {
         logDebug(s"Falling back to parquet-mr")
-
-        if (SQLConf.get.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(requiredSchema)) {
-          throw new IOException("Parquet-mr reader does not support schema with field IDs." +
-            s" Please choose a different Parquet reader. Read schema: ${requiredSchema.json}")
-        }
 
         // ParquetRecordReader returns InternalRow
         val readSupport = new ParquetReadSupport(
