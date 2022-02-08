@@ -836,6 +836,30 @@ class WriteDistributionAndOrderingSuite
     }
   }
 
+  test("continuous mode allows unspecified distribution and empty ordering") {
+    catalog.createTable(ident, schema, Array.empty, emptyProps)
+
+    withTempDir { checkpointDir =>
+      val inputData = ContinuousMemoryStream[(Long, String)]
+      val inputDF = inputData.toDF().toDF("id", "data")
+
+      val writer = inputDF
+        .writeStream
+        .trigger(Trigger.Continuous(100))
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .outputMode("append")
+
+      val query = writer.toTable(tableNameAsString)
+
+      inputData.addData((1, "a"), (2, "b"))
+
+      query.processAllAvailable()
+      query.stop()
+
+      checkAnswer(spark.table(tableNameAsString), Row(1, "a") :: Row(2, "b") :: Nil)
+    }
+  }
+
   private def checkWriteRequirements(
       tableDistribution: Distribution,
       tableOrdering: Array[SortOrder],
