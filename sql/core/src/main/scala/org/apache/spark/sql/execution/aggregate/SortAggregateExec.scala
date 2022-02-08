@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -32,7 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
  * Sort-based aggregate operator.
  */
 case class SortAggregateExec(
-    requiredChildDistributionOption: Option[Seq[Distribution]],
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],

@@ -23,7 +23,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -59,7 +58,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * }}}
  */
 case class ObjectHashAggregateExec(
-    requiredChildDistributionOption: Option[Seq[Distribution]],
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],

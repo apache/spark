@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
@@ -47,7 +46,6 @@ object AggUtils {
   }
 
   private def createAggregate(
-      requiredChildDistributionOption: Option[Seq[Distribution]] = None,
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
@@ -61,7 +59,6 @@ object AggUtils {
 
     if (useHash && !forceSortAggregate) {
       HashAggregateExec(
-        requiredChildDistributionOption = requiredChildDistributionOption,
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -75,7 +72,6 @@ object AggUtils {
 
       if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
-          requiredChildDistributionOption = requiredChildDistributionOption,
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -85,7 +81,6 @@ object AggUtils {
           child = child)
       } else {
         SortAggregateExec(
-          requiredChildDistributionOption = requiredChildDistributionOption,
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
@@ -304,16 +299,12 @@ object AggUtils {
         child = child)
     }
 
-    // This is used temporarily to pick up the required child distribution for the stateful
-    // operator.
-    val tempRestored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
-      partialAggregate)
-
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
-        requiredChildDistributionOption = Some(tempRestored.requiredChildDistribution),
+        requiredChildDistributionExpressions =
+            Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -330,7 +321,8 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
-        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
+        requiredChildDistributionExpressions =
+            Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -357,7 +349,7 @@ object AggUtils {
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
       createAggregate(
-        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
+        requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
         aggregateAttributes = finalAggregateAttributes,
