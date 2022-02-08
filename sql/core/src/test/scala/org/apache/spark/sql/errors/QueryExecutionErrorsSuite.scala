@@ -134,7 +134,6 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         .collect()
     }
     assert(e2.getMessage === "The feature is not supported: " +
-      "literal for '[dotnet,Dummies]' of class " +
-      "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema.")
+      "the input column is not supported for pivoting.")
   }
 }
