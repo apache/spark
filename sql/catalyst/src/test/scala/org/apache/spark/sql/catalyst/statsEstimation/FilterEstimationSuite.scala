@@ -483,9 +483,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cstring = 'A2'") {
     validateEstimatedStats(
       Filter(EqualTo(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
-      Seq(attrString -> ColumnStat(distinctCount = Some(1), min = None, max = None,
+      Seq(attrString -> ColumnStat(distinctCount = Some(10), min = None, max = None,
         nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))),
-      expectedRowCount = 1)
+      expectedRowCount = 10)
   }
 
   test("cstring < 'A2' - unsupported condition") {
