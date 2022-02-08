@@ -70,6 +70,7 @@ class DataSourceRDD(
       // In case of early stopping before consuming the entire iterator,
       // we need to do one more metric update at the end of the task.
       CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      iter.forceUpdateMetrics()
       reader.close()
     }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
@@ -126,14 +127,9 @@ private class MetricsHandler extends Logging with Serializable {
 private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
   protected val metricsHandler = new MetricsHandler
 
-  override def hasNext: Boolean = {
-    if (iter.hasNext) {
-      true
-    } else {
-      metricsHandler.updateMetrics(0, force = true)
-      false
-    }
-  }
+  override def hasNext: Boolean = iter.hasNext
+
+  def forceUpdateMetrics(): Unit = metricsHandler.updateMetrics(0, force = true)
 }
 
 private class MetricsRowIterator(
