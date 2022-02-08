@@ -2538,15 +2538,6 @@ case class Encode(value: Expression, charset: Expression)
     newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
 }
 
-object ToBinary {
-  def apply(expr: Expression, format: Expression): ToBinary = format match {
-    case Literal("hex", StringType) => this(expr, format, Unhex(expr))
-    case Literal("utf-8", StringType) => this(expr, format, Encode(expr, Literal("UTF-8")))
-    case Literal("base64", StringType) => this(expr, format, Encode(expr, UnBase64(expr)))
-    case Literal("base2", StringType) => this(expr, format, Cast(expr, BinaryType))
-  }
-}
-
 /**
  * Converts the input expression to a binary value based on the supplied format.
  */
@@ -2564,11 +2555,29 @@ object ToBinary {
 case class ToBinary(expr: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
+  def this(expr: Expression, format: Expression) = this(expr, format,
+    format match {
+      case Literal("hex", StringType) => Unhex(expr)
+      case Literal("utf-8", StringType) => Encode(expr, Literal("UTF-8"))
+      case Literal("base64", StringType) => UnBase64(expr)
+      case Literal("base2", StringType) => Cast(expr, BinaryType)
+    }
+  )
+
   override def flatArguments: Iterator[Any] = Iterator(expr, format)
-  override def exprsReplaced: Seq[Expression] = expr +: format.toSeq
+  override def exprsReplaced: Seq[Expression] = Seq(expr, format)
 
   override def prettyName: String = "to_binary"
   override def dataType: DataType = BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
+      .contains(format)) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"Unsupported encoding format")
+    }
+  }
 
   override protected def withNewChildInternal(newChild: Expression): ToBinary =
     copy(child = newChild)
