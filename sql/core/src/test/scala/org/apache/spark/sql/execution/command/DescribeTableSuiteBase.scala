@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
+import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `DESCRIBE TABLE` command that check V1 and V2
@@ -76,21 +79,79 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("describe table extended") {
     withNamespaceAndTable(namespace, "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
-        " PARTITIONED BY (id)")
+        " PARTITIONED BY (id)" +
+        " TBLPROPERTIES ('bar'='baz')" +
+        " COMMENT 'this is a test table'" +
+        " LOCATION 'file:/tmp/table_name'")
       val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED $tbl")
-      descriptionDf.show(false)
-      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+      val cleansedDescriptionDf = descriptionDf
+        .withColumn("data_type", when(descriptionDf("col_name") === "Created Time", "")
+        .otherwise(descriptionDf("data_type")))
+      assert(cleansedDescriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
           ("col_name", StringType),
           ("data_type", StringType),
           ("comment", StringType)))
-      val description = descriptionDf.collect()
-      assert(description === Seq(
-        Row("data", "string", null),
-        Row("id", "bigint", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("id", "bigint", null)).toArray)
+
+      val cleansedDescription = cleansedDescriptionDf.collect
+      if (commandVersion == V1_COMMAND_VERSION) {
+        assert(cleansedDescription === Seq(
+          Row("data", "string", null),
+          Row("id", "bigint", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Database", "db", ""),
+          Row("Table", "table", ""),
+          Row("Created Time", "", ""),
+          Row("Last Access", "UNKNOWN", ""),
+          Row("Created By", s"Spark ${org.apache.spark.SPARK_VERSION}", ""),
+          Row("Type", "EXTERNAL", ""),
+          Row("Provider", "parquet", ""),
+          Row("Comment", "this is a test table", ""),
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Location", "file:/tmp/table_name", ""),
+          Row("Partition Provider", "Catalog", "")).toArray)
+      } else {
+        if (catalogVersion == "V1") {
+          assert(cleansedDescription === Seq(
+            Row("data", "string", null),
+            Row("id", "bigint", null),
+            Row("# Partition Information", "", ""),
+            Row("# col_name", "data_type", "comment"),
+            Row("id", "bigint", null),
+            Row("", "", ""),
+            Row("# Detailed Table Information", "", ""),
+            Row("Name", "db.table", ""),
+            Row("Comment", "this is a test table", ""),
+            Row("Location", "file:/tmp/table_name", ""),
+            Row("Provider", "parquet", ""),
+            Row("Owner", "", ""),
+            Row("External", "true", ""),
+            Row("Table Properties", "[bar=baz]", "")).toArray)
+        } else {
+          assert(cleansedDescription === Seq(
+            Row("data", "string", null),
+            Row("id", "bigint", null),
+            Row("# Partition Information", "", ""),
+            Row("# col_name", "data_type", "comment"),
+            Row("id", "bigint", null),
+            Row("", "", ""),
+            Row("# Metadata Columns", "", ""),
+            Row("index", "int", "Metadata column used to conflict with a data column"),
+            Row("_partition", "string", "Partition key used to store the row"),
+            Row("", "", ""),
+            Row("# Detailed Table Information", "", ""),
+            Row("Name", "test_catalog.ns1.ns2.table", ""),
+            Row("Comment", "this is a test table", ""),
+            Row("Location", "file:/tmp/table_name", ""),
+            Row("Provider", "_", ""),
+            Row("Owner", Utils.getCurrentUserName(), ""),
+            Row("Table Properties", "[bar=baz]", "")).toArray)
+        }
+      }
     }
   }
 }
