@@ -192,7 +192,7 @@ select '2' / interval 2 second
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('2' / INTERVAL '02' SECOND)' due to data type mismatch: differing types in '('2' / INTERVAL '02' SECOND)' (string and interval second).; line 1 pos 7
+cannot resolve '(CAST('2' AS INTERVAL SECOND) / INTERVAL '02' SECOND)' due to data type mismatch: argument 2 requires numeric type, however, 'INTERVAL '02' SECOND' is of interval second type.; line 1 pos 7
 
 
 -- !query
@@ -201,7 +201,7 @@ select '2' / interval 2 year
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('2' / INTERVAL '2' YEAR)' due to data type mismatch: differing types in '('2' / INTERVAL '2' YEAR)' (string and interval year).; line 1 pos 7
+cannot resolve '(CAST('2' AS INTERVAL YEAR) / INTERVAL '2' YEAR)' due to data type mismatch: argument 2 requires numeric type, however, 'INTERVAL '2' YEAR' is of interval year type.; line 1 pos 7
 
 
 -- !query
@@ -1445,8 +1445,8 @@ select
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + '3-3 year to month')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + '3-3 year to month')' (interval year and string).; line 2 pos 2
+java.lang.IllegalArgumentException
+Interval string does not match year-month format of `[+|-]d`, `INTERVAL [+|-]'[+|-]d' DAY` when cast to interval year: 3-3 year to month
 
 
 -- !query
@@ -1470,17 +1470,16 @@ select interval '2' year + '3-3'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + '3-3')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + '3-3')' (interval year and string).; line 1 pos 7
+java.lang.IllegalArgumentException
+Interval string does not match year-month format of `[+|-]d`, `INTERVAL [+|-]'[+|-]d' DAY` when cast to interval year: 3-3
 
 
 -- !query
 select interval '2' year - '4'
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR - 4):interval year>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR - '4')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR - '4')' (interval year and string).; line 1 pos 7
+-2-0
 
 
 -- !query
@@ -1512,19 +1511,17 @@ struct<>
 -- !query
 select interval '2' year + str from interval_view
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR + str):interval year>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR + interval_view.str)' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + interval_view.str)' (interval year and string).; line 1 pos 7
+3-0
 
 
 -- !query
 select interval '2' year - str from interval_view
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR - str):interval year>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '2' YEAR - interval_view.str)' due to data type mismatch: differing types in '(INTERVAL '2' YEAR - interval_view.str)' (interval year and string).; line 1 pos 7
+1-0
 
 
 -- !query
@@ -1532,9 +1529,8 @@ select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + (- INTERVAL '4 22:12' DAY TO MINUTE)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+java.time.DateTimeException
+Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -1542,9 +1538,8 @@ select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + INTERVAL '4 22:12' DAY TO MINUTE' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+java.time.DateTimeException
+Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -2401,109 +2396,97 @@ cannot resolve '(INTERVAL '1' MONTH > INTERVAL '20' DAY)' due to data type misma
 -- !query
 SELECT INTERVAL '1' DAY < '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' DAY < 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY < '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY < '1')' (interval day and string).; line 1 pos 7
+false
 
 
 -- !query
 SELECT INTERVAL '1' DAY = '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' DAY = 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY = '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY = '1')' (interval day and string).; line 1 pos 7
+true
 
 
 -- !query
 SELECT INTERVAL '1' DAY > '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' DAY > 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' DAY > '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY > '1')' (interval day and string).; line 1 pos 7
+false
 
 
 -- !query
 SELECT '1' < INTERVAL '1' DAY
 -- !query schema
-struct<>
+struct<(1 < INTERVAL '1' DAY):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' < INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' < INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+false
 
 
 -- !query
 SELECT '1' = INTERVAL '1' DAY
 -- !query schema
-struct<>
+struct<(1 = INTERVAL '1' DAY):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' = INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' = INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+true
 
 
 -- !query
 SELECT '1' > INTERVAL '1' DAY
 -- !query schema
-struct<>
+struct<(1 > INTERVAL '1' DAY):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' > INTERVAL '1' DAY)' due to data type mismatch: differing types in '('1' > INTERVAL '1' DAY)' (string and interval day).; line 1 pos 7
+false
 
 
 -- !query
 SELECT INTERVAL '1' YEAR < '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' YEAR < 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR < '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR < '1')' (interval year and string).; line 1 pos 7
+false
 
 
 -- !query
 SELECT INTERVAL '1' YEAR = '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' YEAR = 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR = '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR = '1')' (interval year and string).; line 1 pos 7
+true
 
 
 -- !query
 SELECT INTERVAL '1' YEAR > '1'
 -- !query schema
-struct<>
+struct<(INTERVAL '1' YEAR > 1):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(INTERVAL '1' YEAR > '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR > '1')' (interval year and string).; line 1 pos 7
+false
 
 
 -- !query
 SELECT '1' < INTERVAL '1' YEAR
 -- !query schema
-struct<>
+struct<(1 < INTERVAL '1' YEAR):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' < INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' < INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+false
 
 
 -- !query
 SELECT '1' = INTERVAL '1' YEAR
 -- !query schema
-struct<>
+struct<(1 = INTERVAL '1' YEAR):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' = INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' = INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+true
 
 
 -- !query
 SELECT '1' > INTERVAL '1' YEAR
 -- !query schema
-struct<>
+struct<(1 > INTERVAL '1' YEAR):boolean>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('1' > INTERVAL '1' YEAR)' due to data type mismatch: differing types in '('1' > INTERVAL '1' YEAR)' (string and interval year).; line 1 pos 7
+false
 
 
 -- !query

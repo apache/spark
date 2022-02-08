@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -77,7 +78,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
       InConversion ::
-      PromoteStringLiterals ::
+      PromoteStrings ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
       ConcatCoercion ::
@@ -130,7 +131,20 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse(findWiderTypeForString(t1, t2))
       .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
+  }
+
+  /** Promotes StringType to other data types. */
+  private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
+    (dt1, dt2) match {
+      case (StringType, _: IntegralType) => Some(LongType)
+      case (StringType, _: FractionalType) => Some(DoubleType)
+      case (StringType, NullType) => Some(StringType)
+      case (StringType, a: AtomicType) => Some(a)
+      case (other, StringType) if other != StringType => findWiderTypeForString(StringType, other)
+      case _ => None
+    }
   }
 
   override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
@@ -142,7 +156,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-    implicitCast(e.dataType, expectedType, e.foldable).map { dt =>
+    implicitCast(e.dataType, expectedType).map { dt =>
       if (dt == e.dataType) e else Cast(e, dt)
     }
   }
@@ -153,8 +167,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   private def implicitCast(
       inType: DataType,
-      expectedType: AbstractDataType,
-      isInputFoldable: Boolean): Option[DataType] = {
+      expectedType: AbstractDataType): Option[DataType] = {
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
@@ -171,16 +184,22 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // This type coercion system will allow implicit converting String type literals as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType, a: AtomicType) if isInputFoldable =>
+      case (StringType, a: AtomicType) =>
         Some(a)
 
       // If the target type is any Numeric type, convert the String type literal as Double type.
-      case (StringType, NumericType) if isInputFoldable =>
+      case (StringType, NumericType) =>
         Some(DoubleType)
 
-      // If the target type is any Decimal type, convert the String type literal as Double type.
-      case (StringType, DecimalType) if isInputFoldable =>
+      // If the target type is any Decimal type, convert the String type literal as the default
+      // Decimal type.
+      case (StringType, DecimalType) =>
         Some(DecimalType.SYSTEM_DEFAULT)
+
+      // If the target type is any Decimal type, convert the String type literal as the default
+      // Timestamp type.
+      case (StringType, AnyTimestampType) =>
+        Some(AnyTimestampType.defaultConcreteType)
 
       case (_, target: DataType) =>
         if (Cast.canANSIStoreAssign(inType, target)) {
@@ -192,7 +211,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _, isInputFoldable)).headOption
+        types.flatMap(implicitCast(inType, _)).headOption
 
       case _ => None
     }
@@ -200,10 +219,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
-  /**
-   * Promotes string literals that appear in arithmetic, comparison, and datetime expressions.
-   */
-  object PromoteStringLiterals extends TypeCoercionRule {
+  object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       expr.dataType match {
         case NullType => Literal.create(null, targetType)
@@ -212,55 +228,37 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       }
     }
 
-    // Return whether a string literal can be promoted as the give data type in a binary operation.
-    private def canPromoteAsInBinaryOperation(dt: DataType) = dt match {
-      // If a binary operation contains interval type and string literal, we can't decide which
-      // interval type the string literal should be promoted as. There are many possible interval
-      // types, such as year interval, month interval, day interval, hour interval, etc.
-      case _: AnsiIntervalType => false
-      case _: AtomicType => true
-      case _ => false
-    }
-
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left @ StringType(), right)
-        if left.foldable && canPromoteAsInBinaryOperation(right.dataType) =>
-        b.makeCopy(Array(castExpr(left, right.dataType), right))
+      case b @ BinaryOperator(left, right)
+        if findWiderTypeForString(left.dataType, right.dataType).isDefined =>
+        val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
+        b.withNewChildren(Seq(castExpr(left, promoteType), castExpr(right, promoteType)))
 
-      case b @ BinaryOperator(left, right @ StringType())
-        if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
-        b.makeCopy(Array(left, castExpr(right, left.dataType)))
+      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
+      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
+      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
 
-      // Promotes string literals in `In predicate`.
-      case p @ In(a, b)
-        if a.dataType != StringType && b.exists( e => e.foldable && e.dataType == StringType) =>
-        val newList = b.map {
-          case e @ StringType() if e.foldable => Cast(e, a.dataType)
-          case other => other
-        }
-        p.makeCopy(Array(a, newList))
-
-      case d @ DateAdd(left @ StringType(), _) if left.foldable =>
+      case d @ DateAdd(left @ StringType(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
+      case d @ DateAdd(_, right @ StringType()) =>
         d.copy(days = Cast(right, IntegerType))
-      case d @ DateSub(left @ StringType(), _) if left.foldable =>
+      case d @ DateSub(left @ StringType(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(_, right @ StringType()) if right.foldable =>
+      case d @ DateSub(_, right @ StringType()) =>
         d.copy(days = Cast(right, IntegerType))
 
-      case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
+      case s @ SubtractDates(left @ StringType(), _, _) =>
         s.copy(left = Cast(s.left, DateType))
-      case s @ SubtractDates(_, right @ StringType(), _) if right.foldable =>
+      case s @ SubtractDates(_, right @ StringType(), _) =>
         s.copy(right = Cast(s.right, DateType))
-      case t @ TimeAdd(left @ StringType(), _, _) if left.foldable =>
+      case t @ TimeAdd(left @ StringType(), _, _) =>
         t.copy(start = Cast(t.start, TimestampType))
-      case t @ SubtractTimestamps(left @ StringType(), _, _, _) if left.foldable =>
+      case t @ SubtractTimestamps(left @ StringType(), _, _, _) =>
         t.copy(left = Cast(t.left, t.right.dataType))
-      case t @ SubtractTimestamps(_, right @ StringType(), _, _) if right.foldable =>
+      case t @ SubtractTimestamps(_, right @ StringType(), _, _) =>
         t.copy(right = Cast(right, t.left.dataType))
     }
   }
