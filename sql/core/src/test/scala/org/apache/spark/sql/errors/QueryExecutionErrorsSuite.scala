@@ -50,9 +50,9 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       }.getCause.asInstanceOf[SparkRuntimeException]
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
-      assert(e.getMessage.contains(
-        "The value of parameter(s) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
-        "expects a binary value with 16, 24 or 32 bytes, but got"))
+      assert(e.getMessage.matches(
+        "The value of parameter\\(s\\) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
+        "expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
     }
 
     // Encryption failure - invalid key length
@@ -84,9 +84,11 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
       }.getCause.asInstanceOf[SparkRuntimeException]
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
-      assert(e.getMessage.contains(
+      assert(e.getMessage ===
         "The value of parameter(s) 'expr, key' in the aes_encrypt/aes_decrypt function " +
-        "is invalid: Detail message:"))
+        "is invalid: Detail message: " +
+        "Given final block not properly padded. " +
+        "Such issues can arise if a bad key is used during decryption.")
     }
   }
 

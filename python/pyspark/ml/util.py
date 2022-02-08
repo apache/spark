@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
     from pyspark.ml._typing import PipelineStage
 
-    from pyspark.ml.param import Param
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
 
@@ -429,7 +428,7 @@ class DefaultParamsWriter(MLWriter):
         path: str,
         sc: SparkContext,
         extraMetadata: Optional[Dict[str, Any]] = None,
-        paramMap: Optional[Dict[str, "Param"]] = None,
+        paramMap: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Saves metadata + Params to: path + "/metadata"
@@ -460,7 +459,7 @@ class DefaultParamsWriter(MLWriter):
         instance: "Params",
         sc: SparkContext,
         extraMetadata: Optional[Dict[str, Any]] = None,
-        paramMap: Optional[Dict[str, "Param"]] = None,
+        paramMap: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
@@ -696,7 +695,7 @@ class MetaAlgorithmReadWrite:
         if isinstance(pyInstance, Pipeline):
             pySubStages = pyInstance.getStages()
         elif isinstance(pyInstance, PipelineModel):
-            pySubStages = pyInstance.stages
+            pySubStages = cast(List["PipelineStage"], pyInstance.stages)
         elif isinstance(pyInstance, _ValidatorParams):
             raise ValueError("PySpark does not support nested validator.")
         elif isinstance(pyInstance, OneVsRest):

@@ -153,6 +153,9 @@
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_GROUPING_EXPRESSION" : {
+    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
+  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
