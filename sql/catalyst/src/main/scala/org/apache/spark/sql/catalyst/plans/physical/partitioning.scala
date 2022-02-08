@@ -99,7 +99,8 @@ case class ClusteredDistribution(
  * Spark versions. Violation of this requirement may bring silent correctness issue.
  *
  * Since this distribution relies on [[HashPartitioning]] on the physical partitioning of the
- * stateful operator, only [[HashPartitioning]] can satisfy this distribution.
+ * stateful operator, only [[HashPartitioning]] (and HashPartitioning in
+ * [[PartitioningCollection]]) can satisfy this distribution.
  */
 case class StatefulOpClusteredDistribution(
     expressions: Seq[Expression],
