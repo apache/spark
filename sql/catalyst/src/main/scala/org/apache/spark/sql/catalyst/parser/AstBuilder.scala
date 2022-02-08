@@ -1146,7 +1146,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
-            throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
+            throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
           case None if join.NATURAL != null =>
             if (join.LATERAL != null) {
               throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
