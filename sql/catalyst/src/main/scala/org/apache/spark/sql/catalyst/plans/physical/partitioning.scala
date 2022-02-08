@@ -91,7 +91,7 @@ case class ClusteredDistribution(
 }
 
 /**
- * Represents the requirement of distribution on the stateful operator.
+ * Represents the requirement of distribution on the stateful operator in Structured Streaming.
  *
  * Each partition in stateful operator initializes state store(s), which are independent with state
  * store(s) in other partitions. Since it is not possible to repartition the data in state store,
@@ -104,16 +104,18 @@ case class ClusteredDistribution(
  */
 case class StatefulOpClusteredDistribution(
     expressions: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
+    _requiredNumPartitions: Int) extends Distribution {
   require(
     expressions != Nil,
     "The expressions for hash of a StatefulOpClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  override val requiredNumPartitions: Option[Int] = Some(_requiredNumPartitions)
+
   override def createPartitioning(numPartitions: Int): Partitioning = {
-    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
-      s"This StatefulOpClusteredDistribution requires ${requiredNumPartitions.get} " +
+    assert(_requiredNumPartitions == numPartitions,
+      s"This StatefulOpClusteredDistribution requires ${_requiredNumPartitions} " +
         s"partitions, but the actual number of partitions is $numPartitions.")
     HashPartitioning(expressions, numPartitions)
   }
