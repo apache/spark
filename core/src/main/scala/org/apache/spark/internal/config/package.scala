@@ -364,11 +364,6 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
-  private[spark] val STORAGE_SAFETY_FRACTION = ConfigBuilder("spark.storage.safetyFraction")
-    .version("1.1.0")
-    .doubleConf
-    .createWithDefault(0.9)
-
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")
