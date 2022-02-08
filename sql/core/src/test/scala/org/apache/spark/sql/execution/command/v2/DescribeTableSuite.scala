@@ -46,17 +46,20 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         Row("", "", ""),
         Row("# Partitioning", "", ""),
         Row("Part 0", "bucket(3, id)", "")))
+    }
   }
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable(namespace, "table") { tbl =>
-        val e = intercept[AnalysisException] {
-          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-        }
-        assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
+      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        "PARTITIONED BY (id)")
+      val e = intercept[AnalysisException] {
+        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
       }
+      assert(e.message.contains("DESCRIBE does not support partition for v2 tables"))
     }
   }
+
 
   test("DESCRIBE TABLE with v2 catalog when table does not exist.") {
     intercept[AnalysisException] {
@@ -65,8 +68,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
   }
 
   test("DESCRIBE TABLE EXTENDED using v2 catalog") {
-    val tbl = s"$catalog.$namespace.tbl"
-    withTable(tbl) {
+    withNamespaceAndTable(namespace, "table") { tbl =>
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing" +
         " PARTITIONED BY (id)" +
         " TBLPROPERTIES ('bar'='baz')" +
@@ -78,26 +80,24 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase with CommandSuit
         ("col_name", StringType),
         ("data_type", StringType),
         ("comment", StringType)))
-      assert(descriptionDf.collect()
-        .map(_.toSeq)
-        .map(_.toArray.map(_.toString.trim)) === Array(
-        Array("data", "string", ""),
-        Array("id", "bigint", ""),
-        Array("", "", ""),
-        Array("# Partitioning", "", ""),
-        Array("Part 0", "id", ""),
-        Array("", "", ""),
-        Array("# Metadata Columns", "", ""),
-        Array("index", "int", "Metadata column used to conflict with a data column"),
-        Array("_partition", "string", "Partition key used to store the row"),
-        Array("", "", ""),
-        Array("# Detailed Table Information", "", ""),
-        Array("Name", tbl, ""),
-        Array("Comment", "this is a test table", ""),
-        Array("Location", "file:/tmp/testcat/table_name", ""),
-        Array("Provider", defaultProvider, ""),
-        Array(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
-        Array("Table Properties", "[bar=baz]", "")))
+      assert(descriptionDf.collect() === Seq(
+        Row("data", "string", null),
+        Row("id", "bigint", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("id", "bigint", null),
+        Row("", "", ""),
+        Row("# Metadata Columns", "", ""),
+        Row("index", "int", "Metadata column used to conflict with a data column"),
+        Row("_partition", "string", "Partition key used to store the row"),
+        Row("", "", ""),
+        Row("# Detailed Table Information", "", ""),
+        Row("Name", tbl, ""),
+        Row("Comment", "this is a test table", ""),
+        Row("Location", "file:/tmp/testcat/table_name", ""),
+        Row("Provider", defaultProvider, ""),
+        Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
+        Row("Table Properties", "[bar=baz]", "")).toArray)
     }
   }
 
