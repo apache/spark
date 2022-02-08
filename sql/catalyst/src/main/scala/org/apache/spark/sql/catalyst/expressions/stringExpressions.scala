@@ -2576,8 +2576,8 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   override def dataType: DataType = BinaryType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (format == None || Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
-      .contains(format)) {
+    if (format.isEmpty || Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
+      .contains(format.get)) {
       super.checkInputDataTypes()
     } else {
       TypeCheckResult.TypeCheckFailure(s"Unsupported encoding format")
