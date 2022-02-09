@@ -2559,11 +2559,11 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   extends RuntimeReplaceable {
 
   def this(expr: Expression, format: Expression) = this(expr, Option(format),
-    format match {
-      case Literal("hex", StringType) => Unhex(expr)
-      case Literal("utf-8", StringType) => Encode(expr, Literal("UTF-8"))
-      case Literal("base64", StringType) => UnBase64(expr)
-      case Literal("base2", StringType) => Cast(expr, BinaryType)
+    format.toString match {
+      case "hex" => Unhex(expr)
+      case "utf-8" => Encode(expr, Literal("UTF-8"))
+      case "base64" => UnBase64(expr)
+      case "base2" => Cast(expr, BinaryType)
     }
   )
 
