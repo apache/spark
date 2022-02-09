@@ -93,6 +93,7 @@ object QueryExecutionErrors {
     castingCauseOverflowError(t, dataType.catalogString)
   }
 
+  // SPARK-38123: This method is still called by CodeGen in `Cast.scala`. Do not delete it
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
       messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
