@@ -136,9 +136,9 @@ private[storage] class BlockManagerDecommissioner(
                 if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).size < blocks.size) {
                   logWarning(s"Skipping block $shuffleBlockInfo, block deleted.")
                 } else if (fallbackStorage.isDefined
-                  // Confirm peer is not the fallback BM ID because then fallbackStorage would
-                  // already have been used in the try-block above and there's no point trying again
-                  && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
+                    // Confirm peer is not the fallback BM ID because fallbackStorage would already
+                    // have been used in the try-block above so there's no point trying again
+                    && peer != FallbackStorage.FALLBACK_BLOCK_MANAGER_ID) {
                   fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
                 } else {
                   logError(s"Error occurred during migrating $shuffleBlockInfo", e)
