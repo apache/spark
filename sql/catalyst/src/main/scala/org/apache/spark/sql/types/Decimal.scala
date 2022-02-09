@@ -251,9 +251,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toByte: Byte = toLong.toByte
 
-  private def overflowException(dataType: String) =
-    throw QueryExecutionErrors.castingCauseOverflowError(this, dataType)
-
   /**
    * @return the Byte value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Byte type.
@@ -602,7 +599,8 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
         null
       } else {
         Decimal(bigDecimal)
@@ -618,7 +616,8 @@ object Decimal {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
-      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION) {
+      if (numDigitsInIntegralPart(bigDecimal) > DecimalType.MAX_PRECISION &&
+          !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
         throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)

@@ -68,4 +68,41 @@ class SimplifyCastsSuite extends PlanTest {
     // `SimplifyCasts` rule respect the plan.
     comparePlans(optimized, plan, checkAnalysis = false)
   }
+
+  test("SPARK-37922: Combine to one cast if we can safely up-cast two casts") {
+    val input = LocalRelation('a.int, 'b.decimal(18, 2), 'c.date, 'd.timestamp)
+
+    // Combine casts
+    comparePlans(
+      Optimize.execute(
+        input.select('a.cast(DecimalType(18, 1)).cast(DecimalType(19, 1)).as("casted")).analyze),
+      input.select('a.cast(DecimalType(19, 1)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('a.cast(LongType).cast(DecimalType(22, 1)).as("casted")).analyze),
+      input.select('a.cast(DecimalType(22, 1)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('b.cast(DecimalType(20, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select('b.cast(DecimalType(24, 2)).as("casted")).analyze)
+
+    // Can not combine casts
+    comparePlans(
+      Optimize.execute(
+        input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze),
+      input.select('a.cast(DecimalType(2, 1)).cast(DecimalType(3, 1)).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+      input.select('b.cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        input.select('c.cast(TimestampType).cast(StringType).as("casted")).analyze),
+      input.select('c.cast(TimestampType).cast(StringType).as("casted")).analyze)
+    comparePlans(
+      Optimize.execute(
+        input.select('d.cast(LongType).cast(StringType).as("casted")).analyze),
+      input.select('d.cast(LongType).cast(StringType).as("casted")).analyze)
+  }
 }

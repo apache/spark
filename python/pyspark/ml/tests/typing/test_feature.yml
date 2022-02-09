@@ -15,6 +15,17 @@
 # limitations under the License.
 #
 
+
+- case: featureMethodChaining
+  main: |
+    from pyspark.ml.feature import NGram
+
+    reveal_type(NGram().setInputCol("foo").setOutputCol("bar"))
+
+  out: |
+    main:3: note: Revealed type is "pyspark.ml.feature.NGram"
+
+
 - case: stringIndexerOverloads
   main: |
     from pyspark.ml.feature import StringIndexer

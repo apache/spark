@@ -544,7 +544,7 @@ object DateTimeUtils {
   def stringToDate(s: UTF8String): Option[Int] = {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
-      var maxDigitsYear = 7
+      val maxDigitsYear = 7
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
@@ -994,6 +994,23 @@ object DateTimeUtils {
   def convertTz(micros: Long, fromZone: ZoneId, toZone: ZoneId): Long = {
     val rebasedDateTime = getLocalDateTime(micros, toZone).atZone(fromZone)
     instantToMicros(rebasedDateTime.toInstant)
+  }
+
+  /**
+   * Converts a timestamp without time zone from a source to target time zone.
+   *
+   * @param sourceTz The time zone for the input timestamp without time zone.
+   * @param targetTz The time zone to which the input timestamp should be converted.
+   * @param micros The offset in microseconds represents a local timestamp.
+   * @return The timestamp without time zone represents the same moment (physical time) as
+   *         the input timestamp in the input time zone, but in the destination time zone.
+   */
+  def convertTimestampNtzToAnotherTz(sourceTz: String, targetTz: String, micros: Long): Long = {
+    val ldt = microsToLocalDateTime(micros)
+      .atZone(getZoneId(sourceTz))
+      .withZoneSameInstant(getZoneId(targetTz))
+      .toLocalDateTime
+    localDateTimeToMicros(ldt)
   }
 
   /**

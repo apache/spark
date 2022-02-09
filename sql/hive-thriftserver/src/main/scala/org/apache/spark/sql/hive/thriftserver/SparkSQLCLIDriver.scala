@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
@@ -327,7 +326,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   if (!isRemoteMode) {
     SparkSQLEnv.init()
     if (sessionState.getIsSilent) {
-      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+      SparkSQLEnv.sparkContext.setLogLevel("warn")
     }
   } else {
     // Hive 1.2 + not supported in CLI
@@ -371,6 +370,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
           proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ListResourceProcessor] ||
+          proc.isInstanceOf[DeleteResourceProcessor] ||
           proc.isInstanceOf[ResetProcessor] ) {
           val driver = new SparkSQLDriver
 
@@ -527,7 +527,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
   // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
-  private def splitSemiColon(line: String): JList[String] = {
+  private[hive] def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideSimpleComment = false
@@ -600,7 +600,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
           // Decrements `bracketedCommentLevel` at the beginning of the next loop
           leavingBracketedComment = true
-        } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
+        } else if (hasNext && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
         }
       }
@@ -613,7 +613,17 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       isStatement = statementInProgress(index)
     }
-    if (isStatement) {
+    // Check the last char is end of nested bracketed comment.
+    val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
+    // Spark SQL support simple comment and nested bracketed comment in query body.
+    // But if Spark SQL receives a comment alone, it will throw parser exception.
+    // In Spark SQL CLI, if there is a completed comment in the end of whole query,
+    // since Spark SQL CLL use `;` to split the query, CLI will pass the comment
+    // to the backend engine and throw exception. CLI should ignore this comment,
+    // If there is an uncompleted statement or an uncompleted bracketed comment in the end,
+    // CLI should also pass this part to the backend engine, which may throw an exception
+    // with clear error message.
+    if (!endOfBracketedComment && (isStatement || insideBracketedComment)) {
       ret.add(line.substring(beginIndex))
     }
     ret

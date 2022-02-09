@@ -1464,6 +1464,7 @@ case class RebalancePartitions(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)

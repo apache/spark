@@ -1409,7 +1409,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("Scalar subquery name should start with scalar-subquery#") {
     val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
-    var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
+    val subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
     df.queryExecution.executedPlan.transformAllExpressions {
       case s @ ScalarSubquery(p: SubqueryExec, _) =>
         subqueryExecs += p
@@ -1956,4 +1956,30 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!nonDeterministicQueryPlan.deterministic)
   }
 
+  test("SPARK-38132: Not IN subquery correctness checks") {
+    val t = "test_table"
+    withTable(t) {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (2, 2),
+        (3, 3),
+        (4, null),
+        (null, 0))
+        .toDF("c1", "c2").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) = true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) = true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) <=> true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
+        Row(4, null) :: Nil)
+    }
+  }
 }

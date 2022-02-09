@@ -156,11 +156,16 @@ class MicroBatchExecution(
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
-        val (streamingWrite, customMetrics) = createStreamingWrite(s, extraOptions, _logicalPlan)
         val relationOpt = plan.catalogAndIdent.map {
           case (catalog, ident) => DataSourceV2Relation.create(s, Some(catalog), Some(ident))
         }
-        WriteToMicroBatchDataSource(relationOpt, streamingWrite, _logicalPlan, customMetrics)
+        WriteToMicroBatchDataSource(
+          relationOpt,
+          table = s,
+          query = _logicalPlan,
+          queryId = id.toString,
+          extraOptions,
+          outputMode)
 
       case _ => _logicalPlan
     }
@@ -607,7 +612,7 @@ class MicroBatchExecution(
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
       case _: SupportsWrite =>
-        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
+        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].withNewBatchId(currentBatchId)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 

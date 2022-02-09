@@ -373,7 +373,7 @@ class StreamingTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
-    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # Those foreach tests are failed in macOS High Sierra by defined rules
     # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
     # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
@@ -493,7 +493,7 @@ class StreamingTests(ReusedSQLTestCase):
         try:
             tester.run_streaming_query_on_writer(ForeachWriter(), 1)
             self.fail("bad writer did not fail the query")  # this is not expected
-        except StreamingQueryException as e:
+        except StreamingQueryException:
             # TODO: Verify whether original error message is inside the exception
             pass
 

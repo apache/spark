@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -30,7 +30,9 @@ abstract class ReplaceHashWithSortAggSuiteBase
 
   private def checkNumAggs(df: DataFrame, hashAggCount: Int, sortAggCount: Int): Unit = {
     val plan = df.queryExecution.executedPlan
-    assert(collectWithSubqueries(plan) { case s: HashAggregateExec => s }.length == hashAggCount)
+    assert(collectWithSubqueries(plan) {
+      case s @ (_: HashAggregateExec | _: ObjectHashAggregateExec) => s
+    }.length == hashAggCount)
     assert(collectWithSubqueries(plan) { case s: SortAggregateExec => s }.length == sortAggCount)
   }
 
@@ -55,19 +57,21 @@ abstract class ReplaceHashWithSortAggSuiteBase
   test("replace partial hash aggregate with sort aggregate") {
     withTempView("t") {
       spark.range(100).selectExpr("id as key").repartition(10).createOrReplaceTempView("t")
-      val query =
-        """
-          |SELECT key, FIRST(key)
-          |FROM
-          |(
-          |   SELECT key
-          |   FROM t
-          |   WHERE key > 10
-          |   SORT BY key
-          |)
-          |GROUP BY key
-        """.stripMargin
-      checkAggs(query, 1, 1, 2, 0)
+      Seq("FIRST", "COLLECT_LIST").foreach { aggExpr =>
+        val query =
+          s"""
+             |SELECT key, $aggExpr(key)
+             |FROM
+             |(
+             |   SELECT key
+             |   FROM t
+             |   WHERE key > 10
+             |   SORT BY key
+             |)
+             |GROUP BY key
+           """.stripMargin
+        checkAggs(query, 1, 1, 2, 0)
+      }
     }
   }
 
@@ -75,19 +79,21 @@ abstract class ReplaceHashWithSortAggSuiteBase
     withTempView("t1", "t2") {
       spark.range(100).selectExpr("id as key").createOrReplaceTempView("t1")
       spark.range(50).selectExpr("id as key").createOrReplaceTempView("t2")
-      val query =
-        """
-          |SELECT key, COUNT(key)
-          |FROM
-          |(
-          |   SELECT /*+ SHUFFLE_MERGE(t1) */ t1.key AS key
-          |   FROM t1
-          |   JOIN t2
-          |   ON t1.key = t2.key
-          |)
-          |GROUP BY key
-        """.stripMargin
-      checkAggs(query, 0, 1, 2, 0)
+      Seq("COUNT", "COLLECT_LIST").foreach { aggExpr =>
+        val query =
+          s"""
+             |SELECT key, $aggExpr(key)
+             |FROM
+             |(
+             |   SELECT /*+ SHUFFLE_MERGE(t1) */ t1.key AS key
+             |   FROM t1
+             |   JOIN t2
+             |   ON t1.key = t2.key
+             |)
+             |GROUP BY key
+           """.stripMargin
+        checkAggs(query, 0, 1, 2, 0)
+      }
     }
   }
 
@@ -95,31 +101,35 @@ abstract class ReplaceHashWithSortAggSuiteBase
     withTempView("t1", "t2") {
       spark.range(100).selectExpr("id as key").createOrReplaceTempView("t1")
       spark.range(50).selectExpr("id as key").createOrReplaceTempView("t2")
-      val query =
-        """
-          |SELECT key, COUNT(key)
-          |FROM
-          |(
-          |   SELECT /*+ BROADCAST(t1) */ t1.key AS key
-          |   FROM t1
-          |   JOIN t2
-          |   ON t1.key = t2.key
-          |)
-          |GROUP BY key
-        """.stripMargin
-      checkAggs(query, 2, 0, 2, 0)
+      Seq("COUNT", "COLLECT_LIST").foreach { aggExpr =>
+        val query =
+          s"""
+             |SELECT key, $aggExpr(key)
+             |FROM
+             |(
+             |   SELECT /*+ BROADCAST(t1) */ t1.key AS key
+             |   FROM t1
+             |   JOIN t2
+             |   ON t1.key = t2.key
+             |)
+             |GROUP BY key
+           """.stripMargin
+        checkAggs(query, 2, 0, 2, 0)
+      }
     }
   }
 
   test("do not replace hash aggregate if there is no group-by column") {
     withTempView("t1") {
       spark.range(100).selectExpr("id as key").createOrReplaceTempView("t1")
-      val query =
-        """
-          |SELECT COUNT(key)
-          |FROM t1
-        """.stripMargin
-      checkAggs(query, 2, 0, 2, 0)
+      Seq("COUNT", "COLLECT_LIST").foreach { aggExpr =>
+        val query =
+          s"""
+             |SELECT $aggExpr(key)
+             |FROM t1
+           """.stripMargin
+        checkAggs(query, 2, 0, 2, 0)
+      }
     }
   }
 }

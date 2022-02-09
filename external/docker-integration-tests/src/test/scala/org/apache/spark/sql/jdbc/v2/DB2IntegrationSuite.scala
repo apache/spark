@@ -18,13 +18,14 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -36,8 +37,9 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "db2"
+  override val namespaceOpt: Option[String] = Some("DB2INST1")
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
     override val env = Map(
@@ -59,8 +61,13 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.db2.pushDownAggregate", "true")
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def tablePreparation(connection: Connection): Unit = {
+    connection.prepareStatement(
+      "CREATE TABLE employee (dept INTEGER, name VARCHAR(10), salary DECIMAL(20, 2), bonus DOUBLE)")
+      .executeUpdate()
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
@@ -86,4 +93,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
+
+  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  testVarPop()
 }

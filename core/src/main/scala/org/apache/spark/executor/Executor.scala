@@ -746,11 +746,15 @@ private[spark] class Executor(
   }
 
   private def setMDCForTask(taskName: String, mdc: Seq[(String, String)]): Unit = {
-    // make sure we run the task with the user-specified mdc properties only
-    MDC.clear()
-    mdc.foreach { case (key, value) => MDC.put(key, value) }
-    // avoid overriding the takName by the user
-    MDC.put("mdc.taskName", taskName)
+    try {
+      // make sure we run the task with the user-specified mdc properties only
+      MDC.clear()
+      mdc.foreach { case (key, value) => MDC.put(key, value) }
+      // avoid overriding the takName by the user
+      MDC.put("mdc.taskName", taskName)
+    } catch {
+      case _: NoSuchFieldError => logInfo("MDC is not supported.")
+    }
   }
 
   /**
@@ -1043,6 +1047,7 @@ private[spark] object Executor {
    *                     checking only the exception but not the cause, and so on. This is to avoid
    *                     `StackOverflowError` when hitting a cycle in the exception chain.
    */
+  @scala.annotation.tailrec
   def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
     if (depthToCheck <= 0) {
       false

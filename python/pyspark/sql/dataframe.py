@@ -41,6 +41,7 @@ from typing import (
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark import copy_func, since, _NoValue  # type: ignore[attr-defined]
+from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.rdd import (  # type: ignore[attr-defined]
     RDD,
@@ -426,12 +427,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             explain_mode = cast(str, mode)
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
-
-        print(
-            self._sc._jvm.PythonSQLUtils.explainString(  # type: ignore[attr-defined]
-                self._jdf.queryExecution(), explain_mode
-            )
-        )
+        assert self._sc._jvm is not None
+        print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
@@ -767,7 +764,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.collect()
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
         return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
 
@@ -790,7 +787,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> list(df.toLocalIterator())
         [Row(age=2, name='Alice'), Row(age=5, name='Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
+        with SCCallSiteSync(self._sc):
             sock_info = self._jdf.toPythonIterator(prefetchPartitions)
         return _local_iterator_from_socket(sock_info, BatchedSerializer(CPickleSerializer()))
 
@@ -2530,7 +2527,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
         ],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> "DataFrame":
         """Returns a new :class:`DataFrame` replacing a value with another value.
@@ -2673,7 +2672,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         else:
             if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]
-            rep_dict = dict(zip(to_replace, value))
+            rep_dict = dict(zip(to_replace, cast("Iterable[Optional[Union[float, str]]]", value)))
 
         if isinstance(subset, str):
             subset = [subset]
@@ -2986,7 +2985,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(metadata, dict):
             raise TypeError("metadata should be a dict")
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sql_ctx)
 
@@ -3058,7 +3058,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
-    def transform(self, func: Callable[["DataFrame"], "DataFrame"]) -> "DataFrame":
+    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
@@ -3067,6 +3067,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         func : function
             a function that takes and returns a :class:`DataFrame`.
+        *args
+            Positional arguments to pass to func.
+
+            .. versionadded:: 3.3.0
+        **kwargs
+            Keyword arguments to pass to func.
+
+            .. versionadded:: 3.3.0
 
         Examples
         --------
@@ -3083,8 +3091,18 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    1|  1|
         |    2|  2|
         +-----+---+
+        >>> def add_n(input_df, n):
+        ...     return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                             for col_name in input_df.columns])
+        >>> df.transform(add_n, 1).transform(add_n, n=10).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
         """
-        result = func(self)
+        result = func(self, *args, **kwargs)
         assert isinstance(
             result, DataFrame
         ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
@@ -3278,10 +3296,11 @@ def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
     """
     Convert a dict into a JVM Map.
     """
-    return sc._jvm.PythonUtils.toScalaMap(jm)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
-class DataFrameNaFunctions(object):
+class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
 
     .. versionadded:: 1.4
@@ -3291,7 +3310,10 @@ class DataFrameNaFunctions(object):
         self.df = df
 
     def drop(
-        self, how: str = "any", thresh: Optional[int] = None, subset: Optional[List[str]] = None
+        self,
+        how: str = "any",
+        thresh: Optional[int] = None,
+        subset: Optional[Union[str, Tuple[str, ...], List[str]]] = None,
     ) -> DataFrame:
         return self.df.dropna(how=how, thresh=thresh, subset=subset)
 
@@ -3343,7 +3365,9 @@ class DataFrameNaFunctions(object):
     def replace(  # type: ignore[misc]
         self,
         to_replace: Union[List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]],
-        value: Optional[Union["OptionalPrimitiveType", List["OptionalPrimitiveType"]]] = _NoValue,
+        value: Optional[
+            Union["OptionalPrimitiveType", List["OptionalPrimitiveType"], _NoValueType]
+        ] = _NoValue,
         subset: Optional[List[str]] = None,
     ) -> DataFrame:
         return self.df.replace(to_replace, value, subset)  # type: ignore[arg-type]
@@ -3351,7 +3375,7 @@ class DataFrameNaFunctions(object):
     replace.__doc__ = DataFrame.replace.__doc__
 
 
-class DataFrameStatFunctions(object):
+class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 
     .. versionadded:: 1.4

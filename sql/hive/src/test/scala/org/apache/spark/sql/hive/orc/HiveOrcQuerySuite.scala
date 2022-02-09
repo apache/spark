@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import com.google.common.io.Files
+import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf
 
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -51,13 +52,8 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
           emptyDF.createOrReplaceTempView("empty")
 
-          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
-          // Spark SQL ORC data source always avoids write empty ORC files.
-          spark.sql(
-            s"""INSERT INTO TABLE empty_orc
-               |SELECT key, value FROM empty
-             """.stripMargin)
-
+          val zeroPath = new Path(path, "zero.orc")
+          zeroPath.getFileSystem(spark.sessionState.newHadoopConf()).create(zeroPath)
           val errorMessage = intercept[AnalysisException] {
             spark.read.orc(path)
           }.getMessage

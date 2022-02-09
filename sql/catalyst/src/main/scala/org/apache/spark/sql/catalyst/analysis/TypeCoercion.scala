@@ -959,15 +959,13 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: NumericType, target: NumericType) => target
 
       // Implicit cast between date time types
-      case (DateType, TimestampType) => TimestampType
-      case (DateType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (TimestampType | TimestampNTZType, DateType) => DateType
+      case (_: DatetimeType, d: DatetimeType) => d
+      case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
       case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
       case (StringType, target: NumericType) => target
-      case (StringType, DateType) => DateType
-      case (StringType, TimestampType) => TimestampType
+      case (StringType, datetime: DatetimeType) => datetime
       case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
@@ -1047,6 +1045,7 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Whether the data type contains StringType.
    */
+  @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
     case StringType => true
     case ArrayType(et, _) => hasStringType(et)
@@ -1088,24 +1087,6 @@ object TypeCoercion extends TypeCoercionBase {
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-
-      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case Sum(e @ StringType(), _) => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType(), _) => Average(Cast(e, DoubleType))
-      case s @ StddevPop(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ StddevSamp(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case v @ VariancePop(e @ StringType(), _) =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case v @ VarianceSamp(e @ StringType(), _) =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ Skewness(e @ StringType(), _) =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case k @ Kurtosis(e @ StringType(), _) =>
-        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 

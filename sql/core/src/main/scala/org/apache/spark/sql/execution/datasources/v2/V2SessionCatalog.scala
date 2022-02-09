@@ -23,14 +23,16 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -38,7 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
 class V2SessionCatalog(catalog: SessionCatalog)
-  extends TableCatalog with SupportsNamespaces with SQLConfHelper {
+  extends TableCatalog with FunctionCatalog with SupportsNamespaces with SQLConfHelper {
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")
@@ -61,14 +63,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadTable(ident: Identifier): Table = {
-    val catalogTable = try {
-      catalog.getTableMetadata(ident.asTableIdentifier)
-    } catch {
-      case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
-    }
-
-    V1Table(catalogTable)
+    V1Table(catalog.getTableMetadata(ident.asTableIdentifier))
   }
 
   override def loadTable(ident: Identifier, timestamp: Long): Table = {
@@ -83,8 +78,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     t match {
       case V1Table(catalogTable) =>
         if (catalogTable.tableType == CatalogTableType.VIEW) {
-          throw QueryCompilationErrors.viewNotSupportTimeTravelError(
-            ident.namespace() :+ ident.name())
+          throw QueryCompilationErrors.timeTravelUnsupportedError("views")
         } else {
           throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident)
         }
@@ -102,8 +96,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-
-    val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TransformHelper
+    val (partitionColumns, maybeBucketSpec) = partitions.toSeq.convertTransforms
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
@@ -214,6 +208,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
           throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
       }
     }
+
+    def asFunctionIdentifier: FunctionIdentifier = {
+      ident.namespace match {
+        case Array(db) =>
+          FunctionIdentifier(ident.name, Some(db))
+        case other =>
+          throw QueryCompilationErrors.requiresSinglePartNamespaceError(other)
+      }
+    }
   }
 
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
@@ -283,12 +286,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = namespace match {
+  override def dropNamespace(
+      namespace: Array[String],
+      cascade: Boolean): Boolean = namespace match {
     case Array(db) if catalog.databaseExists(db) =>
-      if (catalog.listTables(db).nonEmpty) {
-        throw QueryExecutionErrors.namespaceNotEmptyError(namespace)
-      }
-      catalog.dropDatabase(db, ignoreIfNotExists = false, cascade = false)
+      catalog.dropDatabase(db, ignoreIfNotExists = false, cascade)
       true
 
     case Array(_) =>
@@ -303,31 +305,30 @@ class V2SessionCatalog(catalog: SessionCatalog)
     catalog.isTempView(ident.namespace() :+ ident.name())
   }
 
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    namespace match {
+      case Array(db) =>
+        catalog.listFunctions(db).filter(_._2 == "USER").map { case (funcIdent, _) =>
+          assert(funcIdent.database.isDefined)
+          Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
+        }.toArray
+      case _ =>
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+    }
+  }
+
+  override def functionExists(ident: Identifier): Boolean = {
+    catalog.isPersistentFunction(ident.asFunctionIdentifier)
+  }
+
   override def toString: String = s"V2SessionCatalog($name)"
 }
 
 private[sql] object V2SessionCatalog {
-
-  /**
-   * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
-   */
-  private def convertTransforms(partitions: Seq[Transform]): (Seq[String], Option[BucketSpec]) = {
-    val identityCols = new mutable.ArrayBuffer[String]
-    var bucketSpec = Option.empty[BucketSpec]
-
-    partitions.map {
-      case IdentityTransform(FieldReference(Seq(col))) =>
-        identityCols += col
-
-      case BucketTransform(numBuckets, FieldReference(Seq(col))) =>
-        bucketSpec = Some(BucketSpec(numBuckets, col :: Nil, Nil))
-
-      case transform =>
-        throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
-    }
-
-    (identityCols.toSeq, bucketSpec)
-  }
 
   private def toCatalogDatabase(
       db: String,

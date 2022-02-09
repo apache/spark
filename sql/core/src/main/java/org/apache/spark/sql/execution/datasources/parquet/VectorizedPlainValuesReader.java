@@ -206,7 +206,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   // if rebase is not needed.
   @Override
   public final void readLongsWithRebase(
-      int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone) {
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
     boolean rebase = false;
@@ -218,7 +222,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
         throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
       } else {
         for (int i = 0; i < total; i += 1) {
-          c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(buffer.getLong()));
+          c.putLong(
+            rowId + i,
+            RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, buffer.getLong()));
         }
       }
     } else {

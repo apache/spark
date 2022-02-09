@@ -19,10 +19,8 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -119,25 +117,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         intAccum.add(fileReader.getRowGroups().size());
       }
     }
-  }
-
-  /**
-   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
-   * by MapReduce.
-   */
-  public static List<String> listDirectory(File path) {
-    List<String> result = new ArrayList<>();
-    if (path.isDirectory()) {
-      for (File f: path.listFiles()) {
-        result.addAll(listDirectory(f));
-      }
-    } else {
-      char c = path.getName().charAt(0);
-      if (c != '.' && c != '_') {
-        result.add(path.getAbsolutePath());
-      }
-    }
-    return result;
   }
 
   /**

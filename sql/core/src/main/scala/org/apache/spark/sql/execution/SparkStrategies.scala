@@ -266,11 +266,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
-          .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
-          .orElse(createShuffleHashJoin(true))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastHashJoin(true)
+            .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
+            .orElse(createShuffleHashJoin(true))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
@@ -339,10 +343,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
-
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil

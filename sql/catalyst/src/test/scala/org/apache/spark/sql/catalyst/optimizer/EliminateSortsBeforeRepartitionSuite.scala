@@ -196,3 +196,19 @@ class EliminateSortsBeforeRepartitionByExprsSuite extends EliminateSortsBeforeRe
 class EliminateSortsBeforeCoalesceSuite extends EliminateSortsBeforeRepartitionSuite {
   override def repartition(plan: LogicalPlan): LogicalPlan = plan.coalesce(1)
 }
+
+class EliminateSortsBeforeRebalanceSuite extends EliminateSortsBeforeRepartitionSuite {
+  override def repartition(plan: LogicalPlan): LogicalPlan = plan.rebalance($"a")
+
+  test("sortBy before rebalance with non-deterministic expressions") {
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).limit(10)
+    val planWithRepartition = plan.rebalance(rand(1).asc, $"a".asc)
+    checkRepartitionCases(plan = planWithRepartition, optimizedPlan = planWithRepartition)
+  }
+
+  test("orderBy before rebalance with non-deterministic expressions") {
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).limit(10)
+    val planWithRebalance = plan.rebalance(rand(1).asc, $"a".asc)
+    checkRepartitionCases(plan = planWithRebalance, optimizedPlan = planWithRebalance)
+  }
+}

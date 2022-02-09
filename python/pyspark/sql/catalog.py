@@ -59,7 +59,7 @@ class Function(NamedTuple):
     isTemporary: bool
 
 
-class Catalog(object):
+class Catalog:
     """User-facing catalog API, accessible through `SparkSession.catalog`.
 
     This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.
@@ -345,9 +345,8 @@ class Catalog(object):
         if path is not None:
             options["path"] = path
         if source is None:
-            source = (
-                self._sparkSession._wrapped._conf.defaultDataSourceName()  # type: ignore[attr-defined]
-            )
+            c = self._sparkSession._wrapped._conf
+            source = c.defaultDataSourceName()  # type: ignore[attr-defined]
         if description is None:
             description = ""
         if schema is None:
