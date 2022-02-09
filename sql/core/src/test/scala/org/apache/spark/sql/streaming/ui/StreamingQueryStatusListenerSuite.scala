@@ -30,7 +30,7 @@ import org.apache.spark.sql.streaming.{StreamingQueryListener, StreamingQueryPro
 import org.apache.spark.sql.streaming
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, RocksDB}
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 class StreamingQueryStatusListenerSuite extends StreamTest {
 
@@ -220,21 +220,8 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
   }
 
   test("SPARK-38056: test writing StreamingQueryData to a LevelDB store") {
-    assume(!Utils.isMacOnAppleSilicon)
     val testDir = Utils.createTempDir()
     val kvStore = KVUtils.open(testDir, getClass.getName)
-    try {
-      testStreamingQueryData(kvStore)
-    } finally {
-      kvStore.close()
-      Utils.deleteRecursively(testDir)
-    }
-  }
-
-  test("SPARK-38056: test writing StreamingQueryData to a RocksDB store") {
-    assume(!Utils.isMacOnAppleSilicon)
-    val testDir = Utils.createTempDir()
-    val kvStore = new RocksDB(testDir)
     try {
       testStreamingQueryData(kvStore)
     } finally {
