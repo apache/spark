@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionI
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, FSNamespaceUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -501,7 +501,8 @@ class SessionCatalog(
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val t = getTableRawMetadata(name)
     val l = conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
-    t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
+    t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema),
+      storage = FSNamespaceUtils.replaceLocationWithSpecialPrefix(l, t.storage))
   }
 
   /**
