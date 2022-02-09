@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -136,5 +136,30 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage === "The feature is not supported: " +
       "literal for '[dotnet,Dummies]' of class " +
       "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema.")
+  }
+
+  test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
+    val e1 = intercept[SparkUnsupportedOperationException] {
+      trainingSales
+        .groupBy($"sales.year")
+        .pivot($"sales.course")
+        .pivot($"training")
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
+    assert(e1.getSqlState === "0A000")
+    assert(e1.getMessage === "The feature is not supported: Repeated pivots.")
+
+    val e2 = intercept[SparkUnsupportedOperationException] {
+      trainingSales
+        .rollup($"sales.year")
+        .pivot($"training")
+        .agg(sum($"sales.earnings"))
+        .collect()
+    }
+    assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
+    assert(e2.getSqlState === "0A000")
+    assert(e2.getMessage === "The feature is not supported: Pivot not after a groupBy.")
   }
 }
