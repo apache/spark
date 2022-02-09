@@ -873,8 +873,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df3.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [SUM(CASE WHEN SALARY > 0.00 THEN 0.00 ELSE SALARY END), " +
-            "SUM(CASE WHEN SALARY >= 0.00 THEN 0.00 E..., " +
+          "PushedAggregates: [SUM(CASE WHEN (SALARY) > (0.00) THEN 0.00 ELSE SALARY END), " +
+            "SUM(CASE WHEN (SALARY) >= (0.00) THE..., " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df3, expected_plan_fragment)
@@ -903,8 +903,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df4.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [COUNT(CASE WHEN SALARY > 8000.00 AND SALARY < 10000.00 " +
-            "THEN SALARY ELSE 0.00 END), COUNT(CASE WH..., " +
+          "PushedAggregates: [COUNT(CASE WHEN ((SALARY) > (8000.00)) AND ((SALARY) < (10000.00))" +
+            " THEN SALARY ELSE 0.00 END), C..., " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df4, expected_plan_fragment)

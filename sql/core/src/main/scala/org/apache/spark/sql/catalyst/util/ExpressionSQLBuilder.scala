@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 
 /**
- * The builder to build expression and generate sql string.
+ * The builder to generate SQL string from catalyst expressions.
  */
 class ExpressionSQLBuilder(e: Expression) {
 
@@ -36,18 +36,11 @@ class ExpressionSQLBuilder(e: Expression) {
       val l = generateSQL(b.left)
       val r = generateSQL(b.right)
       if (l.isDefined && r.isDefined) {
-        Some(s"${l.get} ${b.sqlOperator} ${r.get}")
+        Some(s"(${l.get}) ${b.sqlOperator} (${r.get})")
       } else {
         None
       }
-    case Not(EqualTo(left, right)) =>
-      val l = generateSQL(left)
-      val r = generateSQL(right)
-      if (l.isDefined && r.isDefined) {
-        Some(s"${l.get} != ${r.get}")
-      } else {
-        None
-      }
+    case Not(child) => generateSQL(child).map(v => s"NOT $v")
     case CaseWhen(branches, elseValue) =>
       val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
       val valuesSQL = branches.map(_._2).flatMap(generateSQL)
