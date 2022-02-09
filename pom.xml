@@ -2608,6 +2608,12 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- the following tomcat-embed-core is set for "org.apache.thrift -> libthrift" above-->
+      <dependency>
+        <groupId>org.apache.tomcat.embed</groupId>
+        <artifactId>tomcat-embed-core</artifactId>
+        <version>8.5.75</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
