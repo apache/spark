@@ -2378,4 +2378,9 @@ object QueryCompilationErrors {
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
   }
+
+  def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
+    new AnalysisException(
+      "Sinks cannot request distribution and ordering in continuous execution mode")
+  }
 }
