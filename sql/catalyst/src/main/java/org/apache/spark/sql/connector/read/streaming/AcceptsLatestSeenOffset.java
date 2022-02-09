@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read.streaming;
 
 /**
- * Indicates that the source accepts latest seen offset, which requires streaming execution
+ * Indicates that the source accepts the latest seen offset, which requires streaming execution
  * to provide the latest seen offset when restarting the streaming query from checkpoint.
  *
  * Note that this interface aims to only support DSv2 streaming sources. Spark may throw error

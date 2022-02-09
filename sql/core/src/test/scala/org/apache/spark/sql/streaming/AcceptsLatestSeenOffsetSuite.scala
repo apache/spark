@@ -247,10 +247,8 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     }
 
     override def initialOffset: streaming.Offset = {
-      if (assertInitialOffsetIsCalledAfterLatestOffsetSeen) {
-        if (latestSeenOffset == null) {
-          fail("Expected the latest seen offset to be set.")
-        }
+      if (assertInitialOffsetIsCalledAfterLatestOffsetSeen && latestSeenOffset == null) {
+        fail("Expected the latest seen offset to be set.")
       }
       super.initialOffset
     }
