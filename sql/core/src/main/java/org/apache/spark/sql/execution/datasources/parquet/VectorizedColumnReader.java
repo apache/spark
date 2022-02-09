@@ -180,7 +180,7 @@ public class VectorizedColumnReader {
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
-        descriptor.getPrimitiveType().getPrimitiveTypeName();
+          descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
         int startOffset = readState.offset;
@@ -307,13 +307,13 @@ public class VectorizedColumnReader {
         return new VectorizedDeltaBinaryPackedReader();
       case RLE:
         PrimitiveType.PrimitiveTypeName typeName =
-            this.descriptor.getPrimitiveType().getPrimitiveTypeName();
+          this.descriptor.getPrimitiveType().getPrimitiveTypeName();
         // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
         if (typeName == BOOLEAN) {
           return new VectorizedRleValuesReader(1);
         } else {
           throw new UnsupportedOperationException(
-              "RLE encoding is not supported for values of type: " + typeName);
+            "RLE encoding is not supported for values of type: " + typeName);
         }
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + encoding);

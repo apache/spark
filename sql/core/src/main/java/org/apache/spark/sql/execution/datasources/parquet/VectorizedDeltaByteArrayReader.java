@@ -36,18 +36,18 @@ import java.nio.ByteBuffer;
 public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     implements VectorizedValuesReader, RequiresPreviousReader {
 
-  private final VectorizedDeltaBinaryPackedReader prefixLengthReader =
-      new VectorizedDeltaBinaryPackedReader();
+  private final VectorizedDeltaBinaryPackedReader prefixLengthReader;
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
   private WritableColumnVector prefixLengthVector;
   private WritableColumnVector suffixVector;
   private byte[] previous = new byte[0];
   private int currentRow = 0;
 
-  //temporary variable used by getBinary
+  // temporary variable used by getBinary
   private final WritableColumnVector binaryValVector;
 
   VectorizedDeltaByteArrayReader() {
+    this.prefixLengthReader = new VectorizedDeltaBinaryPackedReader();
     this.suffixReader = new VectorizedDeltaLengthByteArrayReader();
     binaryValVector = new OnHeapColumnVector(1, BinaryType);
   }
@@ -60,7 +60,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
         prefixLengthVector, 0);
     suffixReader.initFromPage(valueCount, in);
-    suffixReader.readBinary(valueCount, suffixVector, 0);
+    suffixReader.readBinary(prefixLengthReader.getTotalValueCount(), suffixVector, 0);
   }
 
   @Override
@@ -76,16 +76,14 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     }
 
     for (int i = 0; i < total; i++) {
-      int prefixLength = prefixLengthVector.getInt(currentRow);
-      byte[] suffix = suffixVector.getBinary(currentRow);
-      // This does not copy bytes
-      int length = prefixLength + suffix.length;
-
       // NOTE: due to PARQUET-246, it is important that we
       // respect prefixLength which was read from prefixLengthReader,
       // even for the *first* value of a page. Even though the first
       // value of the page should have an empty prefix, it may not
       // because of PARQUET-246.
+      int prefixLength = prefixLengthVector.getInt(currentRow);
+      byte[] suffix = suffixVector.getBinary(currentRow);
+      int length = prefixLength + suffix.length;
 
       // We have to do this to materialize the output
       if (prefixLength != 0) {

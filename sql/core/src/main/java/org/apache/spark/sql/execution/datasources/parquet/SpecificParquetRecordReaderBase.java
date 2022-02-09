@@ -71,6 +71,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  // Keep track of the version of the parquet writer. An older version wrote
+  // corrupt delta byte arrays, and the version check is needed to detect that.
   protected ParsedVersion writerVersion;
 
   /**

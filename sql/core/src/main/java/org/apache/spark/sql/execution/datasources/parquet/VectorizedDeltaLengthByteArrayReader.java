@@ -33,13 +33,13 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase implements
     VectorizedValuesReader {
 
-  private final VectorizedDeltaBinaryPackedReader lengthReader =
-      new VectorizedDeltaBinaryPackedReader();
+  private final VectorizedDeltaBinaryPackedReader lengthReader;
   private ByteBufferInputStream in;
   private WritableColumnVector lengthsVector;
   private int currentRow = 0;
 
   VectorizedDeltaLengthByteArrayReader() {
+    lengthReader = new VectorizedDeltaBinaryPackedReader();
   }
 
   @Override
@@ -82,7 +82,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       length = lengthsVector.getInt(currentRow + i);
       int remaining = length;
       while (remaining > 0) {
-        remaining -= in.skip(length);
+        remaining -= in.skip(remaining);
       }
     }
     currentRow += total;
