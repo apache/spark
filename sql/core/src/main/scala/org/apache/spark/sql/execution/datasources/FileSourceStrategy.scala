@@ -219,7 +219,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val metadataColumns = metadataStructOpt.map { metadataStruct =>
         metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          MetadataAttribute(field.name, field.dataType)
+          AttributeReference(field.name, field.dataType)()
         }.toSeq
       }.getOrElse(Seq.empty)
 
@@ -235,7 +235,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           bucketSet,
           None,
           dataFilters,
-          table.map(_.identifier))
+          table.map(_.identifier),
+          metadataColumns = metadataColumns)
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
