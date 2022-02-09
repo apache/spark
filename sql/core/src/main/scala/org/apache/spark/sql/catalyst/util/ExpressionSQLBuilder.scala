@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, Expression, IsNotNull, IsNull, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.LiteralValue
 
 /**
@@ -37,6 +37,14 @@ class ExpressionSQLBuilder(e: Expression) {
       val r = generateSQL(b.right)
       if (l.isDefined && r.isDefined) {
         Some(s"(${l.get}) ${b.sqlOperator} (${r.get})")
+      } else {
+        None
+      }
+    case Not(EqualTo(left, right)) =>
+      val l = generateSQL(left)
+      val r = generateSQL(right)
+      if (l.isDefined && r.isDefined) {
+        Some(s"${l.get} != ${r.get}")
       } else {
         None
       }

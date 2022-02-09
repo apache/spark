@@ -544,10 +544,3 @@ object OrcUtils extends Logging {
     result
   }
 }
-
-object V2Column {
-  def unapply(e: org.apache.spark.sql.connector.expressions.Expression): Option[String] = e match {
-    case r: NamedReference if r. fieldNames.length == 1 => Some(r.fieldNames.head)
-    case _ => None
-  }
-}

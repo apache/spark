@@ -858,7 +858,7 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
 }
 
 /**
- * Get the SQL string of an expression that can be pushed down.
+ * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
  */
 object PushableExpression {
   def unapply(e: Expression): Option[ExpressionV2] = e match {
