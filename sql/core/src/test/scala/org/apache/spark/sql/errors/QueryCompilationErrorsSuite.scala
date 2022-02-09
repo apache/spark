@@ -111,4 +111,13 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
     }
   }
+
+  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+    val e = intercept[AnalysisException] {
+      sql("select format_string('%0$s', 'Hello')")
+    }
+    assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
+    assert(e.message ===
+      "The argument_index of string format cannot contain position 0$.")
+  }
 }
