@@ -1643,7 +1643,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     if (ansiEnabled) {
       val longValue = ctx.freshName("longValue")
       val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
-      (c, evPrim, evNull) =>
+      (c, evPrim, _) =>
         code"""
           long $longValue = ${timestampToLongCode(c)};
           if ($longValue == ($integralType) $longValue) {
@@ -1653,7 +1653,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           }
         """
     } else {
-      (c, evPrim, evNull) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
+      (c, evPrim, _) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
     }
   }
 
@@ -1695,7 +1695,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       integralType: String,
       dataType: DataType): CastFunction = {
     assert(ansiEnabled)
-    (c, evPrim, evNull) =>
+    (c, evPrim, _) =>
       val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
       code"""
         if ($c == ($integralType) $c) {
@@ -1705,6 +1705,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         }
       """
   }
+
 
   private[this] def lowerAndUpperBound(integralType: String): (String, String) = {
     val (min, max, typeIndicator) = integralType.toLowerCase(Locale.ROOT) match {
@@ -1728,7 +1729,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     // for negative floating values, it is equivalent to `Math.ceil`.
     // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
     // to check if the floating value x is in the range of an integral type after rounding.
-    (c, evPrim, evNull) =>
+    (c, evPrim, _) =>
       val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
       code"""
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
