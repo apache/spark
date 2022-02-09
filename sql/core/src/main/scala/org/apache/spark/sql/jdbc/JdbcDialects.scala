@@ -230,7 +230,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Create schema with comment.
+   * Create schema with an optional comment. Empty string means no comment.
    */
   def createSchema(
       conn: Connection, options: JDBCOptions, schema: String, comment: String): Unit = {
