@@ -680,41 +680,49 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
  * pattern.
  */
 object LikeSimplification extends Rule[LogicalPlan] {
-  // if guards below protect from escapes on trailing %.
-  // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
-  private val equalTo = "([^_%]*)".r
-
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
-    if (pattern.contains(escapeChar)) {
-      // There are three different situations when pattern containing escapeChar:
-      // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
-      // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
-      // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
-      // Although there are patterns can be optimized if we handle the escape first, we just
-      // skip this rule if pattern contains any escapeChar for simplicity.
-      None
-    } else {
-      pattern match {
-        case startsWith(prefix) =>
-          Some(StartsWith(input, Literal(prefix)))
-        case endsWith(postfix) =>
-          Some(EndsWith(input, Literal(postfix)))
-        // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix)))))
-        case contains(infix) =>
-          Some(Contains(input, Literal(infix)))
-        case equalTo(str) =>
-          Some(EqualTo(input, Literal(str)))
-        case _ => None
+    val builders = Array(new StringBuilder(), null)
+    var builderIndex = 0
+    val in = pattern.toIterator
+    var endsWithPercent = false
+    while (in.hasNext) {
+      in.next match {
+        case c1 if c1 == escapeChar && in.hasNext =>
+          val c = in.next
+          c match {
+            case '_' | '%' => builders(builderIndex) += c
+            case c if c == escapeChar => builders(builderIndex) += c
+            case _ => return None
+          }
+        case c if c == escapeChar => return None
+        case '_' => return None
+        case '%' if builderIndex == 1 && in.hasNext => return None
+        case '%' if builderIndex == 1 && builders(0).nonEmpty => return None
+        case '%' if builderIndex == 1 => endsWithPercent = true
+        case '%' =>
+          builderIndex = 1
+          builders(builderIndex) = new StringBuilder()
+        case c => builders(builderIndex) += c
       }
+    }
+
+    // 1. % or %% : Like
+    // 2. left : EqualTo(input, left)
+    // 3. %right : EndsWith(input, right)
+    // 4. %right% : Contains(input, right)
+    // 5. left% : StartsWith
+    // 6. left%right : GreaterThanOrEqual(Length(input), left.length + right.length) And
+    //                    StartsWith(input, left) And EndsWith(input, right)
+    (builders(0), builders(1)) match {
+      case (l, r) if l.isEmpty && r != null && r.isEmpty => None
+      case (l, r) if r == null => Some(EqualTo(input, Literal(l.result())))
+      case (l, r) if l.isEmpty && !endsWithPercent => Some(EndsWith(input, Literal(r.result())))
+      case (l, r) if l.isEmpty => Some(Contains(input, Literal(r.result())))
+      case (l, r) if r.isEmpty => Some(StartsWith(input, Literal(l.result())))
+      case (l, r) =>
+        Some(And(GreaterThanOrEqual(Length(input), Literal(l.length + r.length)),
+          And(StartsWith(input, Literal(l.result())), EndsWith(input, Literal(r.result())))))
     }
   }
 

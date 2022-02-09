@@ -38,11 +38,11 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify Like into StartsWith") {
     val originalQuery =
       testRelation
-        .where(('a like "abc%") || ('a like "abc\\%"))
+        .where(('a like "abc%") || ('a like "abc\\%%"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(StartsWith('a, "abc") || ('a like "abc\\%"))
+      .where(StartsWith('a, "abc") || StartsWith('a, "abc%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -64,11 +64,11 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify Like into startsWith and EndsWith") {
     val originalQuery =
       testRelation
-        .where(('a like "abc\\%def") || ('a like "abc%def"))
+        .where(('a like "abc\\%%def") || ('a like "abc%def"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(('a like "abc\\%def") ||
+      .where((Length('a) >= 7 && (StartsWith('a, "abc%") && EndsWith('a, "def"))) ||
         (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
       .analyze
 
@@ -78,11 +78,11 @@ class LikeSimplificationSuite extends PlanTest {
   test("simplify Like into Contains") {
     val originalQuery =
       testRelation
-        .where(('a like "%mn%") || ('a like "%mn\\%"))
+        .where(('a like "%mn%") || ('a like "%mn\\%%"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(Contains('a, "mn") || ('a like "%mn\\%"))
+      .where(Contains('a, "mn") || Contains('a, "mn%"))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -110,14 +110,16 @@ class LikeSimplificationSuite extends PlanTest {
   test("test like escape syntax") {
     val originalQuery1 = testRelation.where('a.like("abc#%", '#'))
     val optimized1 = Optimize.execute(originalQuery1.analyze)
-    comparePlans(optimized1, originalQuery1.analyze)
+    val correctAnswer1 = testRelation.where(EqualTo('a, "abc%")).analyze
+    comparePlans(optimized1, correctAnswer1)
 
     val originalQuery2 = testRelation.where('a.like("abc#%abc", '#'))
     val optimized2 = Optimize.execute(originalQuery2.analyze)
-    comparePlans(optimized2, originalQuery2.analyze)
+    val correctAnswer2 = testRelation.where(EqualTo('a, "abc%abc")).analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 
-  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+  test("Do not simplify if escapeChar is not followed by wildcard or escapeChar") {
     val originalQuery1 =
       testRelation
         .where(('a like "abc%") || ('a like "\\abc%"))
@@ -154,29 +156,31 @@ class LikeSimplificationSuite extends PlanTest {
       .where(Contains('a, "mn") || ('a like ("%mn%", '%')))
       .analyze
     comparePlans(optimized4, correctAnswer4)
+  }
 
-    val originalQuery5 =
+  test("test escapeChar is followed by escapeChar") {
+    val originalQuery =
       testRelation
-        .where(('a like "abc") || ('a like ("abbc", 'b')))
-    val optimized5 = Optimize.execute(originalQuery5.analyze)
-    val correctAnswer5 = testRelation
-      .where(('a === "abc") || ('a like ("abbc", 'b')))
+        .where(('a like "abc") || ('a like("abbc", 'b')))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(('a === "abc") || ('a === "abc"))
       .analyze
-    comparePlans(optimized5, correctAnswer5)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("simplify LikeAll") {
     val originalQuery =
       testRelation
         .where(('a likeAll(
-    "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+    "abc\\_%", "abc_", "%xyz", "abc_def", "abc\\_%def", "%mn\\_%", "%mn_", "", "abc")))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((StartsWith('a, "abc") && EndsWith('a, "xyz")) &&
-        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) &&
-        Contains('a, "mn")) && ('a === "")) && ('a === "abc")) &&
-        ('a likeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .where((((((StartsWith('a, "abc_") && EndsWith('a, "xyz")) &&
+        (Length('a) >= 7 && (StartsWith('a, "abc_") && EndsWith('a, "def")))) &&
+        Contains('a, "mn_")) && ('a === "")) && ('a === "abc")) &&
+        ('a likeAll("abc_", "abc_def", "%mn_")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -186,14 +190,14 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(('a notLikeAll(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+          "abc\\_%", "abc_", "%xyz", "abc_def", "abc\\_%def", "%mn\\_%", "%mn_", "", "abc")))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((Not(StartsWith('a, "abc")) && Not(EndsWith('a, "xyz"))) &&
-        Not(Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) &&
-        Not(Contains('a, "mn"))) && Not('a === "")) && Not('a === "abc")) &&
-        ('a notLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
+      .where((((((Not(StartsWith('a, "abc_")) && Not(EndsWith('a, "xyz"))) &&
+        Not(Length('a) >= 7 && (StartsWith('a, "abc_") && EndsWith('a, "def")))) &&
+        Not(Contains('a, "mn_"))) && Not('a === "")) && Not('a === "abc")) &&
+        ('a notLikeAll("abc_", "abc_def", "%mn_")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -203,14 +207,14 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(('a likeAny(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+          "abc\\_%", "abc_", "%xyz", "abc_def", "abc\\_%def", "%mn\\_%", "%mn_", "", "abc")))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((StartsWith('a, "abc") || EndsWith('a, "xyz")) ||
-        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) ||
-        Contains('a, "mn")) || ('a === "")) || ('a === "abc")) ||
-        ('a likeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .where((((((StartsWith('a, "abc_") || EndsWith('a, "xyz")) ||
+        (Length('a) >= 7 && (StartsWith('a, "abc_") && EndsWith('a, "def")))) ||
+        Contains('a, "mn_")) || ('a === "")) || ('a === "abc")) ||
+        ('a likeAny("abc_", "abc_def", "%mn_")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -220,14 +224,14 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(('a notLikeAny(
-          "abc%", "abc\\%", "%xyz", "abc\\%def", "abc%def", "%mn%", "%mn\\%", "", "abc")))
+          "abc\\_%", "abc_", "%xyz", "abc_def", "abc\\_%def", "%mn\\_%", "%mn_", "", "abc")))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where((((((Not(StartsWith('a, "abc")) || Not(EndsWith('a, "xyz"))) ||
-        Not(Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def")))) ||
-        Not(Contains('a, "mn"))) || Not('a === "")) || Not('a === "abc")) ||
-        ('a notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
+      .where((((((Not(StartsWith('a, "abc_")) || Not(EndsWith('a, "xyz"))) ||
+        Not(Length('a) >= 7 && (StartsWith('a, "abc_") && EndsWith('a, "def")))) ||
+        Not(Contains('a, "mn_"))) || Not('a === "")) || Not('a === "abc")) ||
+        ('a notLikeAny("abc_", "abc_def", "%mn_")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
