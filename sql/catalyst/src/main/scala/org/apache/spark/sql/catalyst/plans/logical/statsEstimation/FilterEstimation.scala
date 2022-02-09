@@ -307,10 +307,21 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attr: Attribute,
       literal: Literal,
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr) || !colStatsMap.hasMinMaxStats(attr)) {
+    if (!colStatsMap.contains(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
+
+    attr.dataType match {
+      case StringType | BinaryType =>
+        None
+      case _: NumericType | DateType | TimestampType | BooleanType =>
+        if (!colStatsMap.hasMinMaxStats(attr)) {
+          logDebug("[CBO] No statistics for " + attr)
+          return None
+        }
+    }
+
     val colStat = colStatsMap(attr)
 
     // decide if the value is in [min, max] of the column.

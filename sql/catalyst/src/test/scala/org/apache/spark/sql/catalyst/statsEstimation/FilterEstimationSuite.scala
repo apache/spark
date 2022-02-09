@@ -114,6 +114,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatIntSkewHgm = ColumnStat(distinctCount = Some(5), min = Some(1), max = Some(10),
     nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = Some(hgmIntSkew))
 
+  val attrInt5 = AttributeReference("cint5", IntegerType)()
+  val colStatInt5 = ColumnStat(avgLen = Some(4))
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -125,7 +128,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrInt3 -> colStatInt3,
     attrInt4 -> colStatInt4,
     attrIntHgm -> colStatIntHgm,
-    attrIntSkewHgm -> colStatIntSkewHgm
+    attrIntSkewHgm -> colStatIntSkewHgm,
+    attrInt5 -> colStatInt5
   ))
 
   test("true") {
@@ -209,6 +213,13 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrInt -> ColumnStat(distinctCount = Some(1), min = Some(2), max = Some(2),
         nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))),
       expectedRowCount = 1)
+  }
+
+  test("cint5 = 2") {
+    validateEstimatedStats(
+      Filter(EqualTo(attrInt5, Literal(2)), childStatsTestPlan(Seq(attrInt5), 10L)),
+      Seq(attrInt5 -> ColumnStat(avgLen = Some(4))),
+      expectedRowCount = 10)
   }
 
   test("cint <=> 2") {
@@ -483,9 +494,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   test("cstring = 'A2'") {
     validateEstimatedStats(
       Filter(EqualTo(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
-      Seq(attrString -> ColumnStat(distinctCount = Some(10), min = None, max = None,
+      Seq(attrString -> ColumnStat(distinctCount = Some(1), min = None, max = None,
         nullCount = Some(0), avgLen = Some(2), maxLen = Some(2))),
-      expectedRowCount = 10)
+      expectedRowCount = 1)
   }
 
   test("cstring < 'A2' - unsupported condition") {
