@@ -230,6 +230,16 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Create schema with comment.
+   */
+  def createSchemaWithComment(schema: String, comment: String): Array[String] = {
+    val clauses = ArrayBuilder.make[String]
+    clauses += s"CREATE SCHEMA ${quoteIdentifier(schema)}"
+    clauses += getSchemaCommentQuery(schema, comment)
+    clauses.result()
+  }
+
+  /**
    * Check schema exists or not.
    */
   def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {

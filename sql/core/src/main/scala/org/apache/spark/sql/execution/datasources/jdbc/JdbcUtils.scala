@@ -979,13 +979,31 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    val schemaCommentQuery = if (comment.isEmpty) {
-      comment
+    if (comment.isEmpty) {
+      executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
     } else {
-      dialect.getSchemaCommentQuery(namespace, comment)
+      val metaData = conn.getMetaData
+      if (!metaData.supportsTransactions) {
+        throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
+      } else {
+        conn.setAutoCommit(false)
+        val statement = conn.createStatement
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          for (sql <- dialect.createSchemaWithComment(namespace, comment)) {
+            statement.executeUpdate(sql)
+          }
+          conn.commit()
+        } catch {
+          case e: Exception =>
+            if (conn != null) conn.rollback()
+            throw e
+        } finally {
+          statement.close()
+          conn.setAutoCommit(true)
+        }
+      }
     }
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (comment.nonEmpty) executeStatement(conn, options, schemaCommentQuery)
   }
 
   def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
@@ -998,7 +1016,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     dialect.listSchemas(conn, options)
   }
 
-  def createNamespaceComment(
+  def alterNamespaceComment(
       conn: Connection,
       options: JDBCOptions,
       namespace: String,

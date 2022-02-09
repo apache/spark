@@ -245,7 +245,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(s"Failed create comment on name space: $db", dialect) {
-                  JdbcUtils.createNamespaceComment(conn, options, db, set.value)
+                  JdbcUtils.alterNamespaceComment(conn, options, db, set.value)
                 }
               }
             } else {
