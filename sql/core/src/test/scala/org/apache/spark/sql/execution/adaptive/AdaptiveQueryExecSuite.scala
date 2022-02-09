@@ -25,7 +25,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, ConvertToLocalRelation, PropagateEmptyRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -39,7 +39,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
@@ -1500,6 +1500,26 @@ class AdaptiveQueryExecSuite
         // here we only need to make sure this query can run
         runAdaptiveAndVerifyResult(query)
       }
+    }
+  }
+
+  test("SPARK-38030: Query with cast containing non-nullable columns should succeed with AQE") {
+    import scala.collection.JavaConverters._
+    withSQLConf(
+      // disable some optimizer rules which prevent repro with an empty DataFrame
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        (ConvertToLocalRelation.ruleName + "," + PropagateEmptyRelation.ruleName),
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val nameType = StructType(Seq(StructField("firstName", StringType, nullable = false)))
+      val schema = StructType(Seq(StructField("name", nameType, nullable = false)))
+      // only change column name so that it is a valid cast
+      val newNameType = StructType(Seq(StructField("fname", StringType, nullable = false)))
+
+      val df = spark.createDataFrame(List.empty[Row].asJava, schema)
+      val df1 = df.withColumn("newName", 'name.cast(newNameType))
+      // required to trigger the issue observed in SPARK-38030
+      val df2 = df1.union(df1).repartition(1)
+      assert(df2.collect().length == 0)
     }
   }
 }

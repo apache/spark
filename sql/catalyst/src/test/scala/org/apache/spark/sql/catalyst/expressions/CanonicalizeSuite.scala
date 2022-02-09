@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -169,5 +169,18 @@ class CanonicalizeSuite extends SparkFunSuite {
       assert(nestedExpr1.canonicalized != nestedExpr3.canonicalized)
       assert(nestedExpr2.canonicalized != nestedExpr3.canonicalized)
     }
+  }
+
+  test("SPARK-38030: Canonicalization should not remove nullability of AttributeReference" +
+    " dataType") {
+    val structType = StructType(Seq(StructField("name", StringType, nullable = false)))
+    val attr = AttributeReference("col", structType)()
+    // AttributeReference dataType should not be converted to nullable
+    assert(attr.canonicalized.dataType === structType)
+
+    val cast = Cast(attr, structType)
+    assert(cast.resolved)
+    // canonicalization should not converted resolved cast to unresolved
+    assert(cast.canonicalized.resolved)
   }
 }
