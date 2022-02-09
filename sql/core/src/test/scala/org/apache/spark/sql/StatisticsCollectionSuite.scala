@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -489,18 +489,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(extractColumnStatsFromDesc("max", descTsCol) == expectedMaxTimestamp)
   }
 
-  test("describe column stats (min, max) for timestamp column: desc results should be consistent " +
-    "with the written value if writing and desc happen in the same time zone") {
+  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc results should " +
+    "be consistent with the written value if writing and desc happen in the same time zone") {
 
-    val original = TimeZone.getDefault
-    try {
-      Seq("UTC", "PST", "Asia/Hong_Kong").foreach { timeZoneId =>
+    Seq(UTC, PST, getZoneId("Asia/Hong_Kong")).foreach { zoneId =>
+      withDefaultTimeZone(zoneId) {
         val table = "insert_desc_same_time_zone"
         val tsCol = "timestamp_typed_col"
         withTable(table) {
-
-          TimeZone.setDefault(DateTimeUtils.getTimeZone(timeZoneId))
-
           val minTimestamp = "make_timestamp(2022, 1, 1, 0, 0, 1.123456)"
           val maxTimestamp = "make_timestamp(2022, 1, 3, 0, 0, 2.987654)"
           sql(s"CREATE TABLE $table ($tsCol Timestamp) USING parquet")
@@ -514,13 +510,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
         }
       }
-    } finally {
-      TimeZone.setDefault(original)
     }
   }
 
-  test("describe column stats (min, max) for timestamp column: desc should show different " +
-    "results if writing in UTC and desc in other time zones") {
+  test("SPARK-38140: describe column stats (min, max) for timestamp column: desc should show " +
+    "different results if writing in UTC and desc in other time zones") {
 
     val table = "insert_desc_diff_time_zones"
     val tsCol = "timestamp_typed_col"
