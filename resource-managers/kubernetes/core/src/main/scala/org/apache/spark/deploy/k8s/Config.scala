@@ -276,4 +276,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
   val KUBERNETES_EXECUTOR_TOLERATION_PREFIX = "spark.kubernetes.executor.toleration."
   val KUBERNETES_DRIVER_TOLERATION_PREFIX = "spark.kubernetes.driver.toleration."
+
+  val KUBERNETES_EXECUTOR_POD_AFFINITY_PREFIX = "spark.kubernetes.executor.pod.affinity."
+  val KUBERNETES_DRIVER_POD_AFFINITY_PREFIX = "spark.kubernetes.executor.pod.affinity."
 }

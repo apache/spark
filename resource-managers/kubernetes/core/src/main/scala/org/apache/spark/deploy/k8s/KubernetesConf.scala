@@ -62,6 +62,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
     tolerations: Iterable[KubernetesTolerationSpec[_ <: KubernetesTolerationSpecificConf]],
+    affinity: KubernetesPodAffinitySpec[_ <: KubernetesPodAffinitySpecificConf],
     sparkFiles: Seq[String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
@@ -180,6 +181,9 @@ private[spark] object KubernetesConf {
     val tolerations = KubernetesTolerationsUtils.parseTolerationsWithPrefix(
       sparkConf, KUBERNETES_DRIVER_TOLERATION_PREFIX).map(_.get)
 
+    val affinity = KubernetesPodAffinityUtils.parsePodAffinityWithPrefix(
+      sparkConf, KUBERNETES_DRIVER_POD_AFFINITY_PREFIX)
+
     KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -192,6 +196,7 @@ private[spark] object KubernetesConf {
       driverEnvs,
       driverVolumes,
       tolerations,
+      affinity,
       sparkFiles)
   }
 
@@ -240,6 +245,8 @@ private[spark] object KubernetesConf {
     val tolerations = KubernetesTolerationsUtils.parseTolerationsWithPrefix(
       sparkConf, KUBERNETES_EXECUTOR_TOLERATION_PREFIX).map(_.get)
 
+    var affinity = KubernetesPodAffinityUtils.parsePodAffinityWithPrefix(
+      sparkConf, KUBERNETES_EXECUTOR_POD_AFFINITY_PREFIX)
 
     KubernetesConf(
       sparkConf.clone(),
@@ -253,6 +260,7 @@ private[spark] object KubernetesConf {
       executorEnv,
       executorVolumes,
       tolerations,
+      affinity,
       Seq.empty[String])
   }
 }

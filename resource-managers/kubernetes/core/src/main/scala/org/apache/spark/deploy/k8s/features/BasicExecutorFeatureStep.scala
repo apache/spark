@@ -221,6 +221,43 @@ private[spark] class BasicExecutorFeatureStep(
     executorPodBuilder = executorPodBuilder
       .withDnsConfig(podDNSConfig)
 
+
+    var affinityConf = kubernetesConf.affinity
+
+    if (affinityConf != null ) {
+
+      if ((affinityConf.key != null ) && (affinityConf.value != null )) {
+        val labelSelectorRequirement = new LabelSelectorRequirementBuilder()
+          .withKey(affinityConf.key)
+          .withOperator(affinityConf.operator)
+          .withValues(affinityConf.value)
+          .build()
+
+        val labelSelector = new LabelSelectorBuilder()
+          .withMatchExpressions(labelSelectorRequirement)
+          .build()
+        val podAffinityTerm = new PodAffinityTermBuilder()
+          .withLabelSelector(labelSelector)
+          .withTopologyKey(affinityConf.topology)
+          .build()
+
+        val weightedPodAffinityTerm = new WeightedPodAffinityTermBuilder()
+          .withPodAffinityTerm(podAffinityTerm)
+          .withWeight(100)
+          .build()
+
+        val podAffinity = new PodAffinityBuilder()
+          .withPreferredDuringSchedulingIgnoredDuringExecution(weightedPodAffinityTerm)
+          .build()
+
+        val affinity = new AffinityBuilder()
+          .withPodAffinity(podAffinity)
+          .build()
+
+        executorPodBuilder.withAffinity(affinity)
+      }
+    }
+
     val executorPod = executorPodBuilder.endSpec().build()
 
     SparkPod(executorPod, containerWithLimitCores)

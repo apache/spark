@@ -17,16 +17,16 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
-
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesPodAffinitySpec, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
 import org.apache.spark.ui.SparkUI
+
+import scala.util.Try
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -78,6 +78,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
@@ -157,6 +158,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
@@ -174,6 +176,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
@@ -202,6 +205,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_ENVS,
       Nil,
       Nil,
+      null,
       allFiles)
 
     val step = new BasicDriverFeatureStep(kubernetesConf)

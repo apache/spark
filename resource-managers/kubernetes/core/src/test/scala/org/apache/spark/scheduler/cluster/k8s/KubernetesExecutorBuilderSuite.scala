@@ -61,6 +61,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
@@ -80,6 +81,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -108,6 +110,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       volumeSpec :: Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),

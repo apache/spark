@@ -95,6 +95,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -122,6 +123,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -151,6 +153,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -178,6 +181,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -210,6 +214,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       volumeSpec :: Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -238,6 +243,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       Nil,
+      null,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
