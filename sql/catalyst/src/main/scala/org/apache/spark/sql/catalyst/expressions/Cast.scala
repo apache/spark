@@ -1695,8 +1695,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       integralType: String,
       dataType: DataType): CastFunction = {
     assert(ansiEnabled)
+    val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
     (c, evPrim, _) =>
-      val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
       code"""
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
@@ -1724,13 +1724,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     assert(ansiEnabled)
     val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
+    val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
     // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
     // for negative floating values, it is equivalent to `Math.ceil`.
     // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
     // to check if the floating value x is in the range of an integral type after rounding.
     (c, evPrim, _) =>
-      val dt = ctx.addReferenceObj("dataType", dataType, dataType.getClass.getName)
       code"""
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
