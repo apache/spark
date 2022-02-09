@@ -133,7 +133,7 @@ select * from values ("one", random_not_exist_func(1)), ("two", 2) as data(a, b)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Undefined function: 'random_not_exist_func'. This function is neither a registered temporary function nor a permanent function registered in the database 'default'.; line 1 pos 29
+Undefined function: random_not_exist_func. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.random_not_exist_func.; line 1 pos 29
 
 
 -- !query

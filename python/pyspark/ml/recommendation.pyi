@@ -36,6 +36,8 @@ from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 
 from pyspark.sql.dataframe import DataFrame
 
+from py4j.java_gateway import JavaObject  # type: ignore[import]
+
 class _ALSModelParams(HasPredictionCol, HasBlockSize):
     userCol: Param[str]
     itemCol: Param[str]
@@ -127,6 +129,7 @@ class ALS(JavaEstimator[ALSModel], _ALSParams, JavaMLWritable, JavaMLReadable[AL
     def setCheckpointInterval(self, value: int) -> ALS: ...
     def setSeed(self, value: int) -> ALS: ...
     def setBlockSize(self, value: int) -> ALS: ...
+    def _create_model(self, java_model: JavaObject) -> ALSModel: ...
 
 class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable[ALSModel]):
     def setUserCol(self, value: str) -> ALSModel: ...

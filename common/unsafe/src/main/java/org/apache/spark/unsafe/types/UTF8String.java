@@ -20,7 +20,6 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
@@ -95,9 +94,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     4, 4, 4, 4, 4, // 0xF0..0xF4
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 0xF5..0xFF - disallowed in UTF-8
   };
-
-  private static final boolean IS_LITTLE_ENDIAN =
-      ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");

@@ -2,27 +2,27 @@
 Benchmark Kryo Unsafe vs safe Serialization
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Benchmark Kryo Unsafe vs safe Serialization:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-basicTypes: Int with unsafe:true                       286            295           6          3.5         285.6       1.0X
-basicTypes: Long with unsafe:true                      320            327           5          3.1         319.8       0.9X
-basicTypes: Float with unsafe:true                     314            318           2          3.2         313.5       0.9X
-basicTypes: Double with unsafe:true                    310            319           6          3.2         309.9       0.9X
-Array: Int with unsafe:true                              5              6           1        217.9           4.6      62.2X
-Array: Long with unsafe:true                             8              9           1        121.5           8.2      34.7X
-Array: Float with unsafe:true                            5              6           0        217.5           4.6      62.1X
-Array: Double with unsafe:true                           9              9           1        117.3           8.5      33.5X
-Map of string->Double  with unsafe:true                 51             52           1         19.7          50.9       5.6X
-basicTypes: Int with unsafe:false                      373            384          12          2.7         373.3       0.8X
-basicTypes: Long with unsafe:false                     373            391           9          2.7         372.6       0.8X
-basicTypes: Float with unsafe:false                    349            362          11          2.9         349.2       0.8X
-basicTypes: Double with unsafe:false                   358            372          10          2.8         358.0       0.8X
-Array: Int with unsafe:false                            25             29           1         40.0          25.0      11.4X
-Array: Long with unsafe:false                           35             39           1         28.2          35.5       8.1X
-Array: Float with unsafe:false                          10             12           1        100.2          10.0      28.6X
-Array: Double with unsafe:false                         17             20           1         58.3          17.1      16.7X
-Map of string->Double  with unsafe:false                48             53           2         20.6          48.5       5.9X
+basicTypes: Int with unsafe:true                       276            281           6          3.6         276.0       1.0X
+basicTypes: Long with unsafe:true                      309            320           8          3.2         309.4       0.9X
+basicTypes: Float with unsafe:true                     301            305           5          3.3         300.6       0.9X
+basicTypes: Double with unsafe:true                    304            307           3          3.3         303.7       0.9X
+Array: Int with unsafe:true                              4              5           1        225.2           4.4      62.2X
+Array: Long with unsafe:true                             7              7           1        140.7           7.1      38.8X
+Array: Float with unsafe:true                            4              4           0        235.0           4.3      64.9X
+Array: Double with unsafe:true                           7              8           1        137.2           7.3      37.9X
+Map of string->Double  with unsafe:true                 52             52           1         19.2          52.1       5.3X
+basicTypes: Int with unsafe:false                      313            317           4          3.2         312.9       0.9X
+basicTypes: Long with unsafe:false                     342            348           4          2.9         342.3       0.8X
+basicTypes: Float with unsafe:false                    306            310           4          3.3         306.1       0.9X
+basicTypes: Double with unsafe:false                   319            323           6          3.1         318.8       0.9X
+Array: Int with unsafe:false                            27             27           1         37.7          26.5      10.4X
+Array: Long with unsafe:false                           41             41           1         24.6          40.7       6.8X
+Array: Float with unsafe:false                          12             12           0         83.7          11.9      23.1X
+Array: Double with unsafe:false                         19             19           1         52.6          19.0      14.5X
+Map of string->Double  with unsafe:false                54             54           1         18.6          53.8       5.1X
 
 

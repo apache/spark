@@ -24,7 +24,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
-import okhttp3.Response
+import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.utils.IOUtils
@@ -62,7 +62,7 @@ object Utils extends Logging {
       val openLatch: CountDownLatch = new CountDownLatch(1)
       val closeLatch: CountDownLatch = new CountDownLatch(1)
 
-      override def onOpen(response: Response): Unit = {
+      override def onOpen(): Unit = {
         openLatch.countDown()
       }
 

@@ -570,7 +570,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
-        class F(object):
+        class F:
             """Identity"""
 
             def __call__(self, x):
@@ -747,7 +747,8 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(r.first()[0], "success")
 
     def test_udf_cache(self):
-        func = lambda x: x
+        def func(x):
+            return x
 
         df = self.spark.range(1)
         df.select(udf(func)("id")).cache()

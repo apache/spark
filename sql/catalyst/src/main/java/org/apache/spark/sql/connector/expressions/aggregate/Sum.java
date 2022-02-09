@@ -46,7 +46,4 @@ public final class Sum implements AggregateFunc {
       return "SUM(" + column.describe() + ")";
     }
   }
-
-  @Override
-  public String describe() { return this.toString(); }
 }

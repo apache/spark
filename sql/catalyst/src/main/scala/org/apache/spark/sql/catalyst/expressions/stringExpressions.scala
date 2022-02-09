@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.net.{URI, URISyntaxException}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
+import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
@@ -296,7 +295,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
+          throw QueryExecutionErrors.invalidInputIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -348,11 +347,13 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      // scalastyle:off line.size.limit
       s"""
          |if (!$indexMatched) {
-         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidInputIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
+      // scalastyle:on line.size.limit
     } else {
       ""
     }
@@ -467,8 +468,8 @@ abstract class StringPredicate extends BinaryExpression
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns a boolean value if expr2 is found inside expr1.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
   """,
   examples = """
     Examples:
@@ -2343,13 +2344,13 @@ case class Base64(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(CommonsBase64.encodeBase64(bytes.asInstanceOf[Array[Byte]]))
+    UTF8String.fromBytes(JBase64.getMimeEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""${ev.value} = UTF8String.fromBytes(
-            ${classOf[CommonsBase64].getName}.encodeBase64($child));
+            ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
        """})
   }
 
@@ -2375,12 +2376,12 @@ case class UnBase64(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
   protected override def nullSafeEval(string: Any): Any =
-    CommonsBase64.decodeBase64(string.asInstanceOf[UTF8String].toString)
+    JBase64.getMimeDecoder.decode(string.asInstanceOf[UTF8String].toString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""
-         ${ev.value} = ${classOf[CommonsBase64].getName}.decodeBase64($child.toString());
+         ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder().decode($child.toString());
        """})
   }
 

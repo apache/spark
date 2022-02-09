@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -846,7 +846,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         assert(logAppender.loggingEvents.size == count)
         assert(logAppender.loggingEvents.exists(
           e => e.getLevel == Level.WARN &&
-            e.getRenderedMessage.contains(message)))
+            e.getMessage.getFormattedMessage.contains(message)))
       }
 
       withLogAppender(logAppender) {

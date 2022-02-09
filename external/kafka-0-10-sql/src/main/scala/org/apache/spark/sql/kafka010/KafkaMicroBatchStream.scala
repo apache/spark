@@ -31,8 +31,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
+import org.apache.spark.sql.kafka010.MockedSystemClock.currentMockSystemTime
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, UninterruptibleThread, Utils}
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
@@ -57,7 +58,7 @@ private[kafka010] class KafkaMicroBatchStream(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsAdmissionControl with ReportsSourceMetrics with MicroBatchStream with Logging {
+  extends SupportsTriggerAvailableNow with ReportsSourceMetrics with MicroBatchStream with Logging {
 
   private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
@@ -73,6 +74,13 @@ private[kafka010] class KafkaMicroBatchStream(
     Utils.timeStringAsMs(Option(options.get(
       KafkaSourceProvider.MAX_TRIGGER_DELAY)).getOrElse(DEFAULT_MAX_TRIGGER_DELAY))
 
+  // this allows us to mock system clock for testing purposes
+  private[kafka010] val clock: Clock = if (options.containsKey(MOCK_SYSTEM_TIME)) {
+    new MockedSystemClock
+  } else {
+    new SystemClock
+  }
+
   private var lastTriggerMillis = 0L
 
   private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
@@ -80,6 +88,8 @@ private[kafka010] class KafkaMicroBatchStream(
   private var endPartitionOffsets: KafkaSourceOffset = _
 
   private var latestPartitionOffsets: PartitionOffsetMap = _
+
+  private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -98,7 +108,8 @@ private[kafka010] class KafkaMicroBatchStream(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+      // TODO (SPARK-37973) Directly call super.getDefaultReadLimit when scala issue 12523 is fixed
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }
 
@@ -113,7 +124,13 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+
+    // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
+    latestPartitionOffsets = if (allDataForTriggerAvailableNow != null) {
+      allDataForTriggerAvailableNow
+    } else {
+      kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+    }
 
     val limits: Seq[ReadLimit] = readLimit match {
       case rows: CompositeReadLimit => rows.getReadLimits
@@ -157,9 +174,9 @@ private[kafka010] class KafkaMicroBatchStream(
       currentOffsets: Map[TopicPartition, Long],
       maxTriggerDelayMs: Long): Boolean = {
     // Checking first if the maxbatchDelay time has passed
-    if ((System.currentTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
+    if ((clock.getTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
       logDebug("Maximum wait time is passed, triggering batch")
-      lastTriggerMillis = System.currentTimeMillis()
+      lastTriggerMillis = clock.getTimeMillis()
       false
     } else {
       val newRecords = latestOffsets.flatMap {
@@ -167,7 +184,7 @@ private[kafka010] class KafkaMicroBatchStream(
           Some(topic -> (offset - currentOffsets.getOrElse(topic, 0L)))
       }.values.sum.toDouble
       if (newRecords < minLimit) true else {
-        lastTriggerMillis = System.currentTimeMillis()
+        lastTriggerMillis = clock.getTimeMillis()
         false
       }
     }
@@ -298,6 +315,11 @@ private[kafka010] class KafkaMicroBatchStream(
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
   }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allDataForTriggerAvailableNow = kafkaOffsetReader.fetchLatestOffsets(
+      Some(getOrCreateInitialPartitionOffsets()))
+  }
 }
 
 object KafkaMicroBatchStream extends Logging {
@@ -331,5 +353,26 @@ object KafkaMicroBatchStream extends Logging {
       }
     }
     ju.Collections.emptyMap()
+  }
+}
+
+/**
+ * To return a mocked system clock for testing purposes
+ */
+private[kafka010] class MockedSystemClock extends ManualClock {
+  override def getTimeMillis(): Long = {
+    currentMockSystemTime
+  }
+}
+
+private[kafka010] object MockedSystemClock {
+  var currentMockSystemTime = 0L
+
+  def advanceCurrentSystemTime(advanceByMillis: Long): Unit = {
+    currentMockSystemTime += advanceByMillis
+  }
+
+  def reset(): Unit = {
+    currentMockSystemTime = 0L
   }
 }

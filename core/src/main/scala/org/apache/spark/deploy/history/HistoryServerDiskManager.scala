@@ -28,6 +28,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend.LEVELDB
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.kvstore.KVStore
@@ -55,6 +56,8 @@ private class HistoryServerDiskManager(
   if (!appStoreDir.isDirectory() && !appStoreDir.mkdir()) {
     throw new IllegalArgumentException(s"Failed to create app directory ($appStoreDir).")
   }
+  private val extension =
+    if (conf.get(HYBRID_STORE_DISK_BACKEND) == LEVELDB.toString) ".ldb" else ".rdb"
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {
@@ -87,7 +90,7 @@ private class HistoryServerDiskManager(
       listing.delete(info.getClass(), info.path)
     }
 
-    // Reading level db would trigger table file compaction, then it may cause size of level db
+    // Reading disk-based KVStore may trigger table file compaction, then it may cause size of
     // directory changed. When service restarts, "currentUsage" is calculated from real directory
     // size. Update "ApplicationStoreInfo.size" to ensure "currentUsage" equals
     // sum of "ApplicationStoreInfo.size".
@@ -162,8 +165,8 @@ private class HistoryServerDiskManager(
    * @param delete Whether to delete the store from disk.
    */
   def release(appId: String, attemptId: Option[String], delete: Boolean = false): Unit = {
-    // Because LevelDB may modify the structure of the store files even when just reading, update
-    // the accounting for this application when it's closed.
+    // Because disk-based stores may modify the structure of the store files even when just reading,
+    // update the accounting for this application when it's closed.
     val oldSizeOpt = active.synchronized {
       active.remove(appId -> attemptId)
     }
@@ -251,7 +254,7 @@ private class HistoryServerDiskManager(
   }
 
   private[history] def appStorePath(appId: String, attemptId: Option[String]): File = {
-    val fileName = appId + attemptId.map("_" + _).getOrElse("") + ".ldb"
+    val fileName = appId + attemptId.map("_" + _).getOrElse("") + extension
     new File(appStoreDir, fileName)
   }
 

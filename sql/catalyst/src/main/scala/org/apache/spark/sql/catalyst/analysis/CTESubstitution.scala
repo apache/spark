@@ -178,7 +178,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteDefs: mutable.ArrayBuffer[CTERelationDef]): (LogicalPlan, Option[LogicalPlan]) = {
     var lastSubstituted: Option[LogicalPlan] = None
     val newPlan = plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
+        _.containsAnyPattern(UNRESOLVED_WITH, PLAN_EXPRESSION)) {
       case UnresolvedWith(child: LogicalPlan, relations) =>
         val resolvedCTERelations =
           resolveCTERelations(relations, isLegacy = false, isCommand, cteDefs)
@@ -226,7 +226,12 @@ object CTESubstitution extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan =
-    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
+    plan.resolveOperatorsUpWithPruning(
+        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
+      case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
+        if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
+        throw QueryCompilationErrors.timeTravelUnsupportedError("subqueries from WITH clause")
+
       case u @ UnresolvedRelation(Seq(table), _, _) =>
         cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
           if (alwaysInline) {

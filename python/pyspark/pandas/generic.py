@@ -24,6 +24,7 @@ from functools import reduce
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterable,
     IO,
     List,
@@ -38,7 +39,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
@@ -905,6 +906,9 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: output JSON format is different from pandas'. It always use `orient='records'`
             for its output. This behaviour might have to change in the near future.
 
+        .. note:: Set `ignoreNullFields` keyword argument to `True` to omit `None` or `NaN` values
+            when writing JSON objects. It works only when `path` is provided.
+
         Note NaN's and None will be converted to null and datetime objects
         will be converted to UNIX timestamps.
 
@@ -980,6 +984,9 @@ class Frame(object, metaclass=ABCMeta):
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
+
+        default_options: Dict[str, Any] = {"ignoreNullFields": False}
+        options = {**default_options, **options}
 
         if not lines:
             raise NotImplementedError("lines=False is not implemented yet.")
@@ -2927,17 +2934,21 @@ class Frame(object, metaclass=ABCMeta):
 
         if isinstance(self, ps.Series):
             if indexes_increasing:
-                result = first_series(self.to_frame().loc[before:after]).rename(self.name)
+                result = first_series(
+                    self.to_frame().loc[before:after]  # type: ignore[arg-type, assignment]
+                ).rename(self.name)
             else:
-                result = first_series(self.to_frame().loc[after:before]).rename(self.name)
+                result = first_series(
+                    self.to_frame().loc[after:before]  # type: ignore[arg-type,assignment]
+                ).rename(self.name)
         elif isinstance(self, ps.DataFrame):
             if axis == 0:
                 if indexes_increasing:
-                    result = self.loc[before:after]
+                    result = self.loc[before:after]  # type: ignore[assignment]
                 else:
-                    result = self.loc[after:before]
+                    result = self.loc[after:before]  # type: ignore[assignment]
             elif axis == 1:
-                result = self.loc[:, before:after]
+                result = self.loc[:, before:after]  # type: ignore[assignment]
 
         return cast(DataFrameOrSeries, result.copy() if copy else result)
 

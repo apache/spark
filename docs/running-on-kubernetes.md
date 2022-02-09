@@ -44,8 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A runnable distribution of Spark 2.3 or above.
-* A running Kubernetes cluster at version >= 1.6 with access configured to it using
+* A running Kubernetes cluster at version >= 1.20 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -1142,7 +1141,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
   <td><code>0.1</code></td>
   <td>
-    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, and various systems processes. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs<code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
     This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
   </td>
   <td>2.4.0</td>
@@ -1421,7 +1420,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra driver pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature step
+    can implement `KubernetesDriverCustomFeatureConfigStep` where the driver config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1431,7 +1432,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra executor pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature step
+    can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1486,7 +1489,46 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.3.0</td>
 </tr>
-
+<tr>
+  <td><code>spark.kubernetes.executor.rollInterval</code></td>
+  <td><code>0s</code></td>
+  <td>
+    Interval between executor roll operations. It's disabled by default with `0s`.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.minTasksPerExecutorBeforeRolling</code></td>
+  <td><code>0</code></td>
+  <td>
+    The minimum number of tasks per executor before rolling.
+    Spark will not roll executors whose total number of tasks is smaller
+    than this configuration. The default value is zero.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.rollPolicy</code></td>
+  <td><code>OUTLIER</code></td>
+  <td>
+    Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, 
+    TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default).
+    When executor roll happens, Spark uses this policy to choose
+    an executor and decommission it. The built-in policies are based on executor summary
+    and newly started executors are protected by spark.kubernetes.executor.minTasksPerExecutorBeforeRolling.
+    ID policy chooses an executor with the smallest executor ID.
+    ADD_TIME policy chooses an executor with the smallest add-time.
+    TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time.
+    TOTAL_DURATION policy chooses an executor with the biggest total task time.
+    AVERAGE_DURATION policy chooses an executor with the biggest average task time.
+    FAILED_TASKS policy chooses an executor with the most number of failed tasks.
+    OUTLIER policy chooses an executor with outstanding statistics which is bigger than
+    at least two standard deviation from the mean in average task time,
+    total task time, total task GC time, and the number of failed tasks if exists.
+    If there is no outlier, it works like TOTAL_DURATION policy.
+  </td>
+  <td>3.3.0</td>
+</tr>
 </table>
 
 #### Pod template properties

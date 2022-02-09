@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -196,7 +196,7 @@ abstract class JdbcDialect extends Serializable with Logging{
 
   /**
    * Converts aggregate function to String representing a SQL expression.
-   * @param aggregate The aggregate function to be converted.
+   * @param aggFunction The aggregate function to be converted.
    * @return Converted value.
    */
   @Since("3.3.0")
@@ -219,7 +219,12 @@ abstract class JdbcDialect extends Serializable with Logging{
         val column = quoteIdentifier(sum.column.fieldNames.head)
         Some(s"SUM($distinct$column)")
       case _: CountStar =>
-        Some(s"COUNT(*)")
+        Some("COUNT(*)")
+      case avg: Avg =>
+        if (avg.column.fieldNames.length != 1) return None
+        val distinct = if (avg.isDistinct) "DISTINCT " else ""
+        val column = quoteIdentifier(avg.column.fieldNames.head)
+        Some(s"AVG($distinct$column)")
       case _ => None
     }
   }
@@ -322,6 +327,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
+  def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    }
+  }
+
   /**
    * Build a create index SQL statement.
    *
@@ -395,11 +408,6 @@ abstract class JdbcDialect extends Serializable with Logging{
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
-
-  /**
-   * returns whether the dialect supports limit or not
-   */
-  def supportsLimit(): Boolean = true
 
   def supportsTableSample: Boolean = false
 

@@ -45,10 +45,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       viewName: String,
       sqlText: String,
       columnNames: Seq[String] = Seq.empty,
+      others: Seq[String] = Seq.empty,
       replace: Boolean = false): String = {
     val replaceString = if (replace) "OR REPLACE" else ""
     val columnString = if (columnNames.nonEmpty) columnNames.mkString("(", ",", ")") else ""
-    sql(s"CREATE $replaceString $viewTypeString $viewName $columnString AS $sqlText")
+    val othersString = if (others.nonEmpty) others.mkString(" ") else ""
+    sql(s"CREATE $replaceString $viewTypeString $viewName $columnString $othersString AS $sqlText")
     formattedViewName(viewName)
   }
 
@@ -385,12 +387,22 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       val e1 = intercept[AnalysisException](
         sql(s"SELECT * FROM $viewName VERSION AS OF 1").collect()
       )
-      assert(e1.message.contains(s"$viewName is a view which does not support time travel"))
+      assert(e1.message.contains("Cannot time travel views"))
 
       val e2 = intercept[AnalysisException](
         sql(s"SELECT * FROM $viewName TIMESTAMP AS OF '2000-10-10'").collect()
       )
-      assert(e2.message.contains(s"$viewName is a view which does not support time travel"))
+      assert(e2.message.contains("Cannot time travel views"))
+    }
+  }
+
+  test("SPARK-37569: view should report correct nullability information for nested fields") {
+    val sql = "SELECT id, named_struct('a', id) AS nested FROM RANGE(10)"
+    val viewName = createView("testView", sql)
+    withView(viewName) {
+      val df = spark.sql(sql)
+      val dfFromView = spark.table(viewName)
+      assert(df.schema == dfFromView.schema)
     }
   }
 }
@@ -409,6 +421,18 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
       withView(viewName) {
         checkViewOutput(viewName, sql(query).collect())
       }
+    }
+  }
+
+  test("show create table does not support temp view") {
+    val viewName = "spark_28383"
+    withView(viewName) {
+      createView(viewName, "SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE ${formattedViewName(viewName)}")
+      }
+      assert(ex.getMessage.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
     }
   }
 }
@@ -580,5 +604,53 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       assert(message.contains(s"Invalid view text: $dropView." +
         s" The view ${table.qualifiedName} may have been tampered with"))
     }
+  }
+
+  test("show create table for persisted simple view") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS a")
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( a) AS SELECT 1 AS a"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("show create table for persisted view with output columns") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS a, 2 AS b", Seq("a", "b COMMENT 'b column'"))
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)}" +
+          s" ( a, b COMMENT 'b column') AS SELECT 1 AS a, 2 AS b"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("show create table for persisted simple view with table comment and properties") {
+    val viewName = "v1"
+    Seq(true, false).foreach { serde =>
+      withView(viewName) {
+        createView(viewName, "SELECT 1 AS c1, '2' AS c2", Seq("c1 COMMENT 'bla'", "c2"),
+          Seq("COMMENT 'table comment'", "TBLPROPERTIES ( 'prop2' = 'value2', 'prop1' = 'value1')"))
+
+        val expected = s"CREATE VIEW ${formattedViewName(viewName)} ( c1 COMMENT 'bla', c2)" +
+          " COMMENT 'table comment'" +
+          " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
+          " AS SELECT 1 AS c1, '2' AS c2"
+        assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  def getShowCreateDDL(view: String, serde: Boolean = false): String = {
+    val result = if (serde) {
+      sql(s"SHOW CREATE TABLE $view AS SERDE")
+    } else {
+      sql(s"SHOW CREATE TABLE $view")
+    }
+    result.head().getString(0).split("\n").map(_.trim).mkString(" ")
   }
 }

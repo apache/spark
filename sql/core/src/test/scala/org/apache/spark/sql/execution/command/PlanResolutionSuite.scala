@@ -249,9 +249,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create table - partitioned by transforms") {
-    val transforms = Seq(
-        "bucket(16, b)", "years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)",
-        "bucket(32, b), days(ts)")
+    val transforms = Seq("years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)")
     transforms.foreach { transform =>
       val query =
         s"""
@@ -259,12 +257,30 @@ class PlanResolutionSuite extends AnalysisTest {
            |PARTITIONED BY ($transform)
            """.stripMargin
 
-      val ae = intercept[AnalysisException] {
+      val ae = intercept[UnsupportedOperationException] {
         parseAndResolve(query)
       }
 
-      assert(ae.message
-          .contains(s"Transforms cannot be converted to partition columns: $transform"))
+      assert(ae.getMessage
+        .contains(s"Unsupported partition transform: $transform"))
+    }
+  }
+
+  test("create table - partitioned by multiple bucket transforms") {
+    val transforms = Seq("bucket(32, b), sorted_bucket(b, 32, c)")
+    transforms.foreach { transform =>
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING, c String) USING parquet
+           |PARTITIONED BY ($transform)
+           """.stripMargin
+
+      val ae = intercept[UnsupportedOperationException] {
+        parseAndResolve(query)
+      }
+
+      assert(ae.getMessage
+        .contains("Multiple bucket transforms are not supported."))
     }
   }
 
