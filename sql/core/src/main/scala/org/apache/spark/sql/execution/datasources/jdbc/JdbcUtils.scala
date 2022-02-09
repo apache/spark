@@ -978,28 +978,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       options: JDBCOptions,
       namespace: String,
       comment: String): Unit = {
-    val metaData = conn.getMetaData
-    if (!metaData.supportsTransactions) {
-      throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
-    } else {
-      conn.setAutoCommit(false)
-      val statement = conn.createStatement
-      try {
-        statement.setQueryTimeout(options.queryTimeout)
-        val dialect = JdbcDialects.get(options.url)
-        for (sql <- dialect.createSchemaWithComment(namespace, comment)) {
-          statement.executeUpdate(sql)
-        }
-        conn.commit()
-      } catch {
-        case e: Exception =>
-          if (conn != null) conn.rollback()
-          throw e
-      } finally {
-        statement.close()
-        conn.setAutoCommit(true)
-      }
-    }
+    val dialect = JdbcDialects.get(options.url)
+    dialect.createSchemaWithComment(conn, options, namespace, comment)
   }
 
   def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
