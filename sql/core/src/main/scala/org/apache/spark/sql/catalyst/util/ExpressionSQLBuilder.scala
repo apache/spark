@@ -48,7 +48,7 @@ class ExpressionSQLBuilder(e: Expression) {
       } else {
         None
       }
-    case Not(child) => generateSQL(child).map(v => s"NOT $v")
+    case Not(child) => generateSQL(child).map(v => s"NOT ($v)")
     case CaseWhen(branches, elseValue) =>
       val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
       val valuesSQL = branches.map(_._2).flatMap(generateSQL)
