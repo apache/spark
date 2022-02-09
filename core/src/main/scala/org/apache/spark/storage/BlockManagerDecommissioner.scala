@@ -19,11 +19,9 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -31,6 +29,8 @@ import org.apache.spark.internal.config
 import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.ThreadUtils
+
+import java.nio.file.Paths
 
 /**
  * Class to handle block manager decommissioning retries.
@@ -149,6 +149,7 @@ private[storage] class BlockManagerDecommissioner(
                 keepRunning = false
             }
           }
+          Paths.get("").toString
           if (keepRunning) {
             numMigratedShuffles.incrementAndGet()
           } else {
