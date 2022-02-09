@@ -2559,11 +2559,12 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   extends RuntimeReplaceable {
 
   def this(expr: Expression, format: Expression) = this(expr, Option(format),
-    format.toString match {
-      case "hex" => Unhex(expr)
-      case "utf-8" => Encode(expr, Literal("UTF-8"))
-      case "base64" => UnBase64(expr)
-      case "base2" => Cast(expr, BinaryType)
+    format match {
+      case Literal("hex", StringType) => Unhex(expr)
+      case Literal("utf-8", StringType) => Encode(expr, Literal("UTF-8"))
+      case Literal("base64", StringType) => UnBase64(expr)
+      case Literal("base2", StringType) => Cast(expr, BinaryType)
+      case other => other
     }
   )
 
@@ -2576,11 +2577,13 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   override def dataType: DataType = BinaryType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (format.isEmpty || Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2"))
-      .contains(format.get)) {
+    if (format.forall(
+      Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2")).contains)) {
       super.checkInputDataTypes()
     } else {
-      TypeCheckResult.TypeCheckFailure(s"Unsupported encoding format")
+      TypeCheckResult.TypeCheckFailure(
+        s"Unsupported encoding format: $format. " +
+          "The format has to be a string literal of 'hex', 'utf-8', 'base2', or 'base64'")
     }
   }
 
