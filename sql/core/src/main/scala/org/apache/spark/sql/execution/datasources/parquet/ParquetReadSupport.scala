@@ -137,9 +137,11 @@ object ParquetReadSupport extends Logging {
         !containsFieldIds(parquetFileSchema) &&
         ParquetUtils.hasFieldIds(catalystRequestedSchema)) {
       throw new RuntimeException(
+        "Spark read schema expects field Ids, " +
+          "but Parquet file schema doesn't contain any field Ids.\n" +
+        "Please remove the field ids from Spark schema or ignore missing ids by " +
+          "setting `spark.sql.parquet.fieldId.ignoreMissing = true`\n" +
         s"""
-           |Spark read schema expects field Ids, but Parquet file schema doesn't contain field Ids.
-           |
            |Spark read schema:
            |${catalystRequestedSchema.prettyJson}
            |
@@ -181,6 +183,17 @@ object ParquetReadSupport extends Logging {
        """.stripMargin)
 
     parquetRequestedSchema
+  }
+
+  /**
+   * Overloaded method for backward compatibility with
+   * `caseSensitive` default to `true` and `useFieldId` default to `false`
+   */
+  def clipParquetSchema(
+      parquetSchema: MessageType,
+      catalystSchema: StructType,
+      caseSensitive: Boolean = true): MessageType = {
+    clipParquetSchema(parquetSchema, catalystSchema, caseSensitive, useFieldId = false)
   }
 
   /**

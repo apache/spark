@@ -138,6 +138,33 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
     assert(!ParquetUtils.hasFieldIds(new StructType()));
   }
 
+  test("check getFieldId for schema") {
+    val schema = new StructType()
+      .add("overflowId", DoubleType, nullable = true,
+        new MetadataBuilder()
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 12345678987654321L).build())
+      .add("stringId", StringType, nullable = true,
+        new MetadataBuilder()
+          .putString(ParquetUtils.FIELD_ID_METADATA_KEY, "lol").build())
+      .add("negativeId", LongType, nullable = true, withId(-20))
+      .add("noId", LongType, nullable = true)
+
+    assert(intercept[IllegalArgumentException] {
+      ParquetUtils.getFieldId(schema.findNestedField(Seq("noId")).get._2)
+    }.getMessage.contains("doesn't exist"))
+
+    intercept[ArithmeticException] {
+      ParquetUtils.getFieldId(schema.findNestedField(Seq("overflowId")).get._2)
+    }
+
+    intercept[ClassCastException] {
+      ParquetUtils.getFieldId(schema.findNestedField(Seq("stringId")).get._2)
+    }
+
+    // negative id allowed
+    assert(ParquetUtils.getFieldId(schema.findNestedField(Seq("negativeId")).get._2) == -20)
+  }
+
   test("check containsFieldIds for parquet schema") {
 
     // empty Parquet schema fails too

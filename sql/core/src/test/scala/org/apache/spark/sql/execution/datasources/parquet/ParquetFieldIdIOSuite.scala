@@ -156,7 +156,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
             spark.read.schema(schema).parquet(dir.getCanonicalPath).collect()
           }.getCause
           assert(cause.isInstanceOf[RuntimeException] &&
-            cause.getMessage.contains("Parquet file schema doesn't contain field Ids"))
+            cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
           val expectedValues = (1 to schema.length).map(_ => null)
           withSQLConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key -> "true") {
             checkAnswer(
@@ -196,7 +196,7 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
             spark.read.schema(readSchema).parquet(dir.getCanonicalPath).collect()
           }.getCause
           assert(cause.isInstanceOf[RuntimeException] &&
-            cause.getMessage.contains("Parquet file schema doesn't contain field Ids"))
+            cause.getMessage.contains("Parquet file schema doesn't contain any field Ids"))
         }
       }
 
