@@ -117,6 +117,17 @@ private[spark] abstract class DistanceMeasure extends Serializable {
     packedValues
   }
 
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Option[Array[Double]],
+      point: VectorWithNorm): (Int, Double) = {
+    if (statistics.nonEmpty) {
+      findClosest(centers, statistics.get, point)
+    } else {
+      findClosest(centers, point)
+    }
+  }
+
   /**
    * @return the index of the closest center to the given point, as well as the cost.
    */
@@ -253,6 +264,11 @@ object DistanceMeasure {
       case _ => false
     }
   }
+
+  private[clustering] def shouldComputeStatistics(k: Int): Boolean = k < 1000
+
+  private[clustering] def shouldComputeStatisticsLocally(k: Int, numFeatures: Int): Boolean =
+    k.toLong * k * numFeatures < 1000000
 }
 
 private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
