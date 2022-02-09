@@ -127,7 +127,14 @@ private class MetricsHandler extends Logging with Serializable {
 private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
   protected val metricsHandler = new MetricsHandler
 
-  override def hasNext: Boolean = iter.hasNext
+  override def hasNext: Boolean = {
+    if (iter.hasNext) {
+      true
+    } else {
+      forceUpdateMetrics()
+      false
+    }
+  }
 
   def forceUpdateMetrics(): Unit = metricsHandler.updateMetrics(0, force = true)
 }
