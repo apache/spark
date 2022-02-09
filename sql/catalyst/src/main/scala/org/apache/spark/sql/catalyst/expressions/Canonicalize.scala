@@ -25,8 +25,7 @@ package org.apache.spark.sql.catalyst.expressions
  * return the same answer given any input (i.e. false negatives are possible).
  *
  * The following rules are applied:
- *  - Names and nullability hints for [[org.apache.spark.sql.types.DataType]]s are stripped.
- *  - Names for [[GetStructField]] are stripped.
+ *  - Names for [[org.apache.spark.sql.types.DataType]]s and [[GetStructField]] are stripped.
  *  - TimeZoneId for [[Cast]] and [[AnsiCast]] are stripped if `needsTimeZone` is false.
  *  - Commutative and associative operations ([[Add]] and [[Multiply]]) have their children ordered
  *    by `hashCode`.
@@ -39,10 +38,10 @@ object Canonicalize {
     expressionReorder(ignoreTimeZone(ignoreNamesTypes(e)))
   }
 
-  /** Remove names and nullability from types, and names from `GetStructField`. */
+  /** Remove names from types and `GetStructField`. */
   private[expressions] def ignoreNamesTypes(e: Expression): Expression = e match {
     case a: AttributeReference =>
-      AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
+      AttributeReference("none", a.dataType)(exprId = a.exprId)
     case GetStructField(child, ordinal, Some(_)) => GetStructField(child, ordinal, None)
     case _ => e
   }
