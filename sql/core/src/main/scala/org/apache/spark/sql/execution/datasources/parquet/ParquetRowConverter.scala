@@ -203,10 +203,7 @@ private[parquet] class ParquetRowConverter(
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
     // to prevent throwing IllegalArgumentException when searching catalyst type's field index
-    def nameToIndex =
-      catalystType.fields.zipWithIndex.map { case (f, idx) =>
-          (f.name, idx)
-        }.toMap
+    def nameToIndex: Map[String, Int] = catalystType.fieldNames.zipWithIndex.toMap
 
     val catalystFieldIdxByName = if (SQLConf.get.caseSensitiveAnalysis) {
       nameToIndex

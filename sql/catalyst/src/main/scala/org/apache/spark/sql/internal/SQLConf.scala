@@ -939,6 +939,7 @@ object SQLConf {
       .doc("Field ID is a native field of the Parquet schema spec. When enabled," +
         " Parquet writers will populate the field Id" +
         " metadata (if present) in the Spark schema to the Parquet schema.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -947,6 +948,7 @@ object SQLConf {
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers" +
         " will use field IDs (if present) in the requested Spark schema to look up Parquet" +
         " fields instead of using column names")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -954,7 +956,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.fieldId.ignoreMissing")
       .doc("When the Parquet file doesn't have any field IDs but the" +
         " Spark read schema is using field IDs to read, we will silently return nulls" +
-        "when this flag is enabled, or error otherwise.")
+        " when this flag is enabled, or error otherwise.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 

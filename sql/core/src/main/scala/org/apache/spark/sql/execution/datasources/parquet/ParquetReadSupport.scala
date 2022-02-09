@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.time.ZoneId
+import java.util
 import java.util.{Locale, Map => JMap, UUID}
 
 import scala.collection.JavaConverters._
@@ -87,7 +88,7 @@ class ParquetReadSupport(
 
     val parquetRequestedSchema = ParquetReadSupport.getRequestedSchema(
       context.getFileSchema, catalystRequestedSchema, conf, enableVectorizedReader)
-    new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
+    new ReadContext(parquetRequestedSchema, new util.HashMap[String, String]())
   }
 
   /**
