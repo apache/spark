@@ -789,21 +789,24 @@ case class DescribeColumnCommand(
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
-    buffer
+    buffer.toSeq
   }
 
-  private def toZoneAwareExternalString(s: String, name: String, dataType: DataType): String = {
+  private def toZoneAwareExternalString(
+      valueStr: String,
+      name: String,
+      dataType: DataType): String = {
     dataType match {
       case TimestampType =>
         // When writing to metastore, we always format timestamp value in the default UTC time zone.
         // So here we need to first convert to internal value, then format it using the current
         // time zone.
         val internalValue =
-          CatalogColumnStat.fromExternalString(s, name, dataType, CatalogColumnStat.VERSION)
+          CatalogColumnStat.fromExternalString(valueStr, name, dataType, CatalogColumnStat.VERSION)
         val timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
         CatalogColumnStat.toExternalString(internalValue, name, dataType, timeZoneId)
       case _ =>
-        s
+        valueStr
     }
   }
 
