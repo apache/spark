@@ -2926,16 +2926,18 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-33844: Insert overwrite directory should check schema too") {
+  test("SPARK-33844, 37969: Insert overwrite directory should check schema too") {
     withView("v") {
       spark.range(1).createTempView("v")
       withTempPath { path =>
-        val e = intercept[SparkException] {
-          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
-            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-        }.getCause.getCause.getMessage
-        assert(e.contains(
-          "field ended by ';': expected ';' but got 'IF' at line 2:   optional int32 (IF"))
+        Seq("PARQUET", "ORC").foreach { format =>
+          val e = intercept[SparkException] {
+            spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+              s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+          }.getCause.getMessage
+          assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
+            " invalid character(s). Please use alias to rename it."))
+        }
       }
     }
   }
@@ -2953,9 +2955,9 @@ class HiveDDLSuite
                |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
                |FROM v
                """.stripMargin)
-        }.getCause.getCause.getMessage
-        assert(e.contains("expected at the position 19 of " +
-          "'struct<ID:bigint,IF(ID=1,ID,0):bigint,B:bigint>' but '(' is found."))
+        }.getCause.getMessage
+        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains invalid character(s). " +
+          "Please use alias to rename it."))
       }
     }
   }
