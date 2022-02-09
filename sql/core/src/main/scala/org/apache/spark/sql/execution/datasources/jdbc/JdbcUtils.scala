@@ -979,7 +979,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       namespace: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.createSchemaWithComment(conn, options, namespace, comment)
+    dialect.createSchema(conn, options, namespace, comment)
   }
 
   def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
