@@ -476,4 +476,9 @@ class SparkSqlParserSuite extends AnalysisTest {
         "reserved")
     }
   }
+
+  test("CREATE TABLE LIKE COMMAND should reject external table without location spec") {
+    intercept("create external table target like source",
+      "CREATE EXTERNAL TABLE LIKE without the LOCATION clause")
+  }
 }

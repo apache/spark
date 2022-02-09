@@ -671,6 +671,9 @@ class SparkSqlAstBuilder extends AstBuilder {
     val location = visitLocationSpecList(ctx.locationSpec())
     val serdeInfo = getSerdeInfo(
       ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
+    if (ctx.EXTERNAL() != null && location.isEmpty) {
+      operationNotAllowed(s"CREATE EXTERNAL TABLE LIKE without the LOCATION clause", ctx)
+    }
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
