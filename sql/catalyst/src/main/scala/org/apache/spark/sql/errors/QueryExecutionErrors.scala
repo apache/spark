@@ -89,6 +89,10 @@ object QueryExecutionErrors {
       messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
+  def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
+    castingCauseOverflowError(t, dataType.catalogString)
+  }
+
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
       messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))

@@ -671,7 +671,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toInt) {
           longValue.toInt
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, IntegerType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, IntegerType)
         }
       })
     case TimestampType =>
@@ -707,7 +707,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, ShortType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, ShortType)
         }
       })
     case TimestampType =>
@@ -718,12 +718,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType)
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -754,7 +754,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, ByteType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, ByteType)
         }
       })
     case TimestampType =>
@@ -765,12 +765,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType)
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
