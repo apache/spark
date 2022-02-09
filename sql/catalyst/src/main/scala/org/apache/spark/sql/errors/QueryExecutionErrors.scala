@@ -247,10 +247,11 @@ object QueryExecutionErrors {
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
-  def pivotColumnUnsupportedError(): RuntimeException = {
+  def pivotColumnUnsupportedError(v: Any, str: String): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("the input column is not supported for pivoting."))
+      messageParameters = Array(
+        s"pivoting by values of the column '${v.toString}' of the type '${str}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {

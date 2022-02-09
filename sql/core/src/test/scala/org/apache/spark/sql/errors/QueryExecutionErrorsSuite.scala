@@ -133,7 +133,8 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getMessage === "The feature is not supported: " +
-      "the input column is not supported for pivoting.")
+    assert(e2.getMessage ===
+      "The feature is not supported: pivoting by values of the column " +
+      """'[dotnet,Dummies]' of the type 'struct(lower(sales.course), training)'.""")
   }
 }
