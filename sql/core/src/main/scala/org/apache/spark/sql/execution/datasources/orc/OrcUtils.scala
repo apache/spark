@@ -41,10 +41,10 @@ import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -542,12 +542,5 @@ object OrcUtils extends Logging {
     val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
     result.setNanos(nanos.toInt)
     result
-  }
-}
-
-object V2ColumnUtils {
-  def extractV2Column(expr: V2Expression): Option[String] = expr match {
-    case r: NamedReference if r. fieldNames.length == 1 => Some(r.fieldNames.head)
-    case _ => None
   }
 }

@@ -33,9 +33,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
 import org.apache.spark.sql.types.StructType
 
@@ -249,33 +249,33 @@ object ParquetUtils {
       blocks.forEach { block =>
         val blockMetaData = block.getColumns
         agg match {
-          case max: Max if max.column.isInstanceOf[NamedReference] =>
-            val colName = max.column.asInstanceOf[NamedReference].fieldNames.head
+          case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(max.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
-          case min: Min if min.column.isInstanceOf[NamedReference] =>
-            val colName = min.column.asInstanceOf[NamedReference].fieldNames.head
+          case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(min.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
-          case count: Count if count.column.isInstanceOf[NamedReference] =>
-            val reference = count.column.asInstanceOf[NamedReference]
-            schemaName = "count(" + reference.fieldNames.head + ")"
+          case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(count.column).get
+            schemaName = "count(" + colName + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
-            if (partitionSchema.fields.map(_.name).toSet.contains(reference.fieldNames.head)) {
+            if (partitionSchema.fields.map(_.name).toSet.contains(colName)) {
               isPartitionCol = true
             }
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.fieldNames.toList.indexOf(reference.fieldNames.head)
+              index = dataSchema.fieldNames.toList.indexOf(colName)
               // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(filePath, blockMetaData, index)
             }
