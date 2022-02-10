@@ -833,34 +833,30 @@ struct<to_binary(abc):binary>
 -- !query
 select to_binary('abc', 'utf-8')
 -- !query schema
-struct<>
+struct<to_binary(abc, utf-8):binary>
 -- !query output
-java.lang.RuntimeException
-After applying rule org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions in batch Finish Analysis, the structural integrity of the plan is broken.
+abc
 
 
 -- !query
 select to_binary('abc', 'base64')
 -- !query schema
-struct<>
+struct<to_binary(abc, base64):binary>
 -- !query output
-java.lang.RuntimeException
-After applying rule org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions in batch Finish Analysis, the structural integrity of the plan is broken.
+i�
 
 
 -- !query
 select to_binary('abc', 'base2')
 -- !query schema
-struct<>
+struct<to_binary(abc, base2):binary>
 -- !query output
-java.lang.RuntimeException
-After applying rule org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions in batch Finish Analysis, the structural integrity of the plan is broken.
+abc
 
 
 -- !query
 select to_binary('abc', 'hex')
 -- !query schema
-struct<>
+struct<to_binary(abc, hex):binary>
 -- !query output
-java.lang.RuntimeException
-After applying rule org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions in batch Finish Analysis, the structural integrity of the plan is broken.
+� 
