@@ -684,8 +684,8 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
     } else {
       putNotNull(elementsAppended);
+      putStruct(elementsAppended, elementsAppended);
     }
-    putStruct(elementsAppended, elementsAppended);
     elementsAppended++;
     return elementsAppended;
   }
