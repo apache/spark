@@ -71,6 +71,8 @@ MultilabelClassificationEvaluatorMetricType = Union[
     Literal["microF1Measure"],
 ]
 ClusteringEvaluatorMetricType = Literal["silhouette"]
+ClusteringEvaluatorDistanceMeasureType = Union[Literal["squaredEuclidean"], Literal["cosine"]]
+
 RankingEvaluatorMetricType = Union[
     Literal["meanAveragePrecision"],
     Literal["meanAveragePrecisionAtK"],

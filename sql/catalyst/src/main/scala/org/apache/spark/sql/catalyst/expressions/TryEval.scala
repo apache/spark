@@ -124,3 +124,67 @@ case class TryDivide(left: Expression, right: Expression, child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(child = newChild)
 }
+
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `-` operator.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2, 1);
+       1
+      > SELECT _FUNC_(-2147483648, 1);
+       NULL
+      > SELECT _FUNC_(date'2021-01-02', 1);
+       2021-01-01
+      > SELECT _FUNC_(date'2021-01-01', interval 1 year);
+       2020-01-01
+      > SELECT _FUNC_(timestamp'2021-01-02 00:00:00', interval 1 day);
+       2021-01-01 00:00:00
+      > SELECT _FUNC_(interval 2 year, interval 1 year);
+       1-0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class TrySubtract(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Subtract(left, right, failOnError = true)))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "try_subtract"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `*` operator.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2, 3);
+       6
+      > SELECT _FUNC_(-2147483648, 10);
+       NULL
+      > SELECT _FUNC_(interval 2 year, 3);
+       6-0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class TryMultiply(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Multiply(left, right, failOnError = true)))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override def prettyName: String = "try_multiply"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(child = newChild)
+}

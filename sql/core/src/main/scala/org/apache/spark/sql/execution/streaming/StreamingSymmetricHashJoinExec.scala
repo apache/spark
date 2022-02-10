@@ -185,8 +185,8 @@ case class StreamingSymmetricHashJoinExec(
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys, stateInfo.map(_.numPartitions)) ::
-      ClusteredDistribution(rightKeys, stateInfo.map(_.numPartitions)) :: Nil
+    StatefulOpClusteredDistribution(leftKeys, getStateInfo.numPartitions) ::
+      StatefulOpClusteredDistribution(rightKeys, getStateInfo.numPartitions) :: Nil
 
   override def output: Seq[Attribute] = joinType match {
     case _: InnerLike => left.output ++ right.output

@@ -18,6 +18,8 @@
 import sys
 from abc import abstractmethod, ABCMeta
 
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
 from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -31,6 +33,20 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.sql.dataframe import DataFrame
+
+if TYPE_CHECKING:
+    from pyspark.ml._typing import (
+        ParamMap,
+        BinaryClassificationEvaluatorMetricType,
+        ClusteringEvaluatorDistanceMeasureType,
+        ClusteringEvaluatorMetricType,
+        MulticlassClassificationEvaluatorMetricType,
+        MultilabelClassificationEvaluatorMetricType,
+        RankingEvaluatorMetricType,
+        RegressionEvaluatorMetricType,
+    )
+
 
 __all__ = [
     "Evaluator",
@@ -54,7 +70,7 @@ class Evaluator(Params, metaclass=ABCMeta):
     pass
 
     @abstractmethod
-    def _evaluate(self, dataset):
+    def _evaluate(self, dataset: DataFrame) -> float:
         """
         Evaluates the output.
 
@@ -70,7 +86,7 @@ class Evaluator(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def evaluate(self, dataset, params=None):
+    def evaluate(self, dataset: DataFrame, params: Optional["ParamMap"] = None) -> float:
         """
         Evaluates the output with optional parameters.
 
@@ -99,7 +115,7 @@ class Evaluator(Params, metaclass=ABCMeta):
             raise TypeError("Params must be a param map but got %s." % type(params))
 
     @since("1.5.0")
-    def isLargerBetter(self):
+    def isLargerBetter(self) -> bool:
         """
         Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
         (True, default) or minimized (False).
@@ -115,7 +131,7 @@ class JavaEvaluator(JavaParams, Evaluator, metaclass=ABCMeta):
     implementations.
     """
 
-    def _evaluate(self, dataset):
+    def _evaluate(self, dataset: DataFrame) -> float:
         """
         Evaluates the output.
 
@@ -130,16 +146,23 @@ class JavaEvaluator(JavaParams, Evaluator, metaclass=ABCMeta):
             evaluation metric
         """
         self._transfer_params_to_java()
+        assert self._java_obj is not None
         return self._java_obj.evaluate(dataset._jdf)
 
-    def isLargerBetter(self):
+    def isLargerBetter(self) -> bool:
         self._transfer_params_to_java()
+        assert self._java_obj is not None
         return self._java_obj.isLargerBetter()
 
 
 @inherit_doc
 class BinaryClassificationEvaluator(
-    JavaEvaluator, HasLabelCol, HasRawPredictionCol, HasWeightCol, JavaMLReadable, JavaMLWritable
+    JavaEvaluator,
+    HasLabelCol,
+    HasRawPredictionCol,
+    HasWeightCol,
+    JavaMLReadable["BinaryClassificationEvaluator"],
+    JavaMLWritable,
 ):
     """
     Evaluator for binary classification, which expects input columns rawPrediction, label
@@ -182,14 +205,14 @@ class BinaryClassificationEvaluator(
     1000
     """
 
-    metricName = Param(
+    metricName: Param["BinaryClassificationEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         "metric name in evaluation (areaUnderROC|areaUnderPR)",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
 
-    numBins = Param(
+    numBins: Param[int] = Param(
         Params._dummy(),
         "numBins",
         "Number of bins to down-sample the curves "
@@ -198,15 +221,17 @@ class BinaryClassificationEvaluator(
         typeConverter=TypeConverters.toInt,
     )
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        rawPredictionCol="rawPrediction",
-        labelCol="label",
-        metricName="areaUnderROC",
-        weightCol=None,
-        numBins=1000,
+        rawPredictionCol: str = "rawPrediction",
+        labelCol: str = "label",
+        metricName: "BinaryClassificationEvaluatorMetricType" = "areaUnderROC",
+        weightCol: Optional[str] = None,
+        numBins: int = 1000,
     ):
         """
         __init__(self, \\*, rawPredictionCol="rawPrediction", labelCol="label", \
@@ -221,47 +246,49 @@ class BinaryClassificationEvaluator(
         self._set(**kwargs)
 
     @since("1.4.0")
-    def setMetricName(self, value):
+    def setMetricName(
+        self, value: "BinaryClassificationEvaluatorMetricType"
+    ) -> "BinaryClassificationEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("1.4.0")
-    def getMetricName(self):
+    def getMetricName(self) -> str:
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setNumBins(self, value):
+    def setNumBins(self, value: int) -> "BinaryClassificationEvaluator":
         """
         Sets the value of :py:attr:`numBins`.
         """
         return self._set(numBins=value)
 
     @since("3.0.0")
-    def getNumBins(self):
+    def getNumBins(self) -> int:
         """
         Gets the value of numBins or its default value.
         """
         return self.getOrDefault(self.numBins)
 
-    def setLabelCol(self, value):
+    def setLabelCol(self, value: str) -> "BinaryClassificationEvaluator":
         """
         Sets the value of :py:attr:`labelCol`.
         """
         return self._set(labelCol=value)
 
-    def setRawPredictionCol(self, value):
+    def setRawPredictionCol(self, value: str) -> "BinaryClassificationEvaluator":
         """
         Sets the value of :py:attr:`rawPredictionCol`.
         """
         return self._set(rawPredictionCol=value)
 
     @since("3.0.0")
-    def setWeightCol(self, value):
+    def setWeightCol(self, value: str) -> "BinaryClassificationEvaluator":
         """
         Sets the value of :py:attr:`weightCol`.
         """
@@ -272,12 +299,12 @@ class BinaryClassificationEvaluator(
     def setParams(
         self,
         *,
-        rawPredictionCol="rawPrediction",
-        labelCol="label",
-        metricName="areaUnderROC",
-        weightCol=None,
-        numBins=1000,
-    ):
+        rawPredictionCol: str = "rawPrediction",
+        labelCol: str = "label",
+        metricName: "BinaryClassificationEvaluatorMetricType" = "areaUnderROC",
+        weightCol: Optional[str] = None,
+        numBins: int = 1000,
+    ) -> "BinaryClassificationEvaluator":
         """
         setParams(self, \\*, rawPredictionCol="rawPrediction", labelCol="label", \
                   metricName="areaUnderROC", weightCol=None, numBins=1000)
@@ -289,7 +316,12 @@ class BinaryClassificationEvaluator(
 
 @inherit_doc
 class RegressionEvaluator(
-    JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeightCol, JavaMLReadable, JavaMLWritable
+    JavaEvaluator,
+    HasLabelCol,
+    HasPredictionCol,
+    HasWeightCol,
+    JavaMLReadable["RegressionEvaluator"],
+    JavaMLWritable,
 ):
     """
     Evaluator for Regression, which expects input columns prediction, label
@@ -328,7 +360,7 @@ class RegressionEvaluator(
     False
     """
 
-    metricName = Param(
+    metricName: Param["RegressionEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         """metric name in evaluation - one of:
@@ -337,25 +369,27 @@ class RegressionEvaluator(
                        r2 - r^2 metric
                        mae - mean absolute error
                        var - explained variance.""",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
 
-    throughOrigin = Param(
+    throughOrigin: Param[bool] = Param(
         Params._dummy(),
         "throughOrigin",
         "whether the regression is through the origin.",
         typeConverter=TypeConverters.toBoolean,
     )
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="rmse",
-        weightCol=None,
-        throughOrigin=False,
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "RegressionEvaluatorMetricType" = "rmse",
+        weightCol: Optional[str] = None,
+        throughOrigin: bool = False,
     ):
         """
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
@@ -370,47 +404,47 @@ class RegressionEvaluator(
         self._set(**kwargs)
 
     @since("1.4.0")
-    def setMetricName(self, value):
+    def setMetricName(self, value: "RegressionEvaluatorMetricType") -> "RegressionEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("1.4.0")
-    def getMetricName(self):
+    def getMetricName(self) -> "RegressionEvaluatorMetricType":
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setThroughOrigin(self, value):
+    def setThroughOrigin(self, value: bool) -> "RegressionEvaluator":
         """
         Sets the value of :py:attr:`throughOrigin`.
         """
         return self._set(throughOrigin=value)
 
     @since("3.0.0")
-    def getThroughOrigin(self):
+    def getThroughOrigin(self) -> bool:
         """
         Gets the value of throughOrigin or its default value.
         """
         return self.getOrDefault(self.throughOrigin)
 
-    def setLabelCol(self, value):
+    def setLabelCol(self, value: str) -> "RegressionEvaluator":
         """
         Sets the value of :py:attr:`labelCol`.
         """
         return self._set(labelCol=value)
 
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "RegressionEvaluator":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
     @since("3.0.0")
-    def setWeightCol(self, value):
+    def setWeightCol(self, value: str) -> "RegressionEvaluator":
         """
         Sets the value of :py:attr:`weightCol`.
         """
@@ -421,12 +455,12 @@ class RegressionEvaluator(
     def setParams(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="rmse",
-        weightCol=None,
-        throughOrigin=False,
-    ):
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "RegressionEvaluatorMetricType" = "rmse",
+        weightCol: Optional[str] = None,
+        throughOrigin: bool = False,
+    ) -> "RegressionEvaluator":
         """
         setParams(self, \\*, predictionCol="prediction", labelCol="label", \
                   metricName="rmse", weightCol=None, throughOrigin=False)
@@ -443,7 +477,7 @@ class MulticlassClassificationEvaluator(
     HasPredictionCol,
     HasWeightCol,
     HasProbabilityCol,
-    JavaMLReadable,
+    JavaMLReadable["MulticlassClassificationEvaluator"],
     JavaMLWritable,
 ):
     """
@@ -499,7 +533,7 @@ class MulticlassClassificationEvaluator(
     0.9682...
     """
 
-    metricName = Param(
+    metricName: Param["MulticlassClassificationEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         "metric name in evaluation "
@@ -507,9 +541,9 @@ class MulticlassClassificationEvaluator(
         "weightedFalsePositiveRate|weightedFMeasure|truePositiveRateByLabel| "
         "falsePositiveRateByLabel|precisionByLabel|recallByLabel|fMeasureByLabel| "
         "logLoss|hammingLoss)",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
-    metricLabel = Param(
+    metricLabel: Param[float] = Param(
         Params._dummy(),
         "metricLabel",
         "The class whose metric will be computed in truePositiveRateByLabel|"
@@ -517,14 +551,14 @@ class MulticlassClassificationEvaluator(
         " Must be >= 0. The default value is 0.",
         typeConverter=TypeConverters.toFloat,
     )
-    beta = Param(
+    beta: Param[float] = Param(
         Params._dummy(),
         "beta",
         "The beta value used in weightedFMeasure|fMeasureByLabel."
         " Must be > 0. The default value is 1.",
         typeConverter=TypeConverters.toFloat,
     )
-    eps = Param(
+    eps: Param[float] = Param(
         Params._dummy(),
         "eps",
         "log-loss is undefined for p=0 or p=1, so probabilities are clipped to "
@@ -533,18 +567,20 @@ class MulticlassClassificationEvaluator(
         typeConverter=TypeConverters.toFloat,
     )
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="f1",
-        weightCol=None,
-        metricLabel=0.0,
-        beta=1.0,
-        probabilityCol="probability",
-        eps=1e-15,
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "MulticlassClassificationEvaluatorMetricType" = "f1",
+        weightCol: Optional[str] = None,
+        metricLabel: float = 0.0,
+        beta: float = 1.0,
+        probabilityCol: str = "probability",
+        eps: float = 1e-15,
     ):
         """
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
@@ -560,82 +596,84 @@ class MulticlassClassificationEvaluator(
         self._set(**kwargs)
 
     @since("1.5.0")
-    def setMetricName(self, value):
+    def setMetricName(
+        self, value: "MulticlassClassificationEvaluatorMetricType"
+    ) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("1.5.0")
-    def getMetricName(self):
+    def getMetricName(self) -> "MulticlassClassificationEvaluatorMetricType":
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setMetricLabel(self, value):
+    def setMetricLabel(self, value: float) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`metricLabel`.
         """
         return self._set(metricLabel=value)
 
     @since("3.0.0")
-    def getMetricLabel(self):
+    def getMetricLabel(self) -> float:
         """
         Gets the value of metricLabel or its default value.
         """
         return self.getOrDefault(self.metricLabel)
 
     @since("3.0.0")
-    def setBeta(self, value):
+    def setBeta(self, value: float) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`beta`.
         """
         return self._set(beta=value)
 
     @since("3.0.0")
-    def getBeta(self):
+    def getBeta(self) -> float:
         """
         Gets the value of beta or its default value.
         """
         return self.getOrDefault(self.beta)
 
     @since("3.0.0")
-    def setEps(self, value):
+    def setEps(self, value: float) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`eps`.
         """
         return self._set(eps=value)
 
     @since("3.0.0")
-    def getEps(self):
+    def getEps(self) -> float:
         """
         Gets the value of eps or its default value.
         """
         return self.getOrDefault(self.eps)
 
-    def setLabelCol(self, value):
+    def setLabelCol(self, value: str) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`labelCol`.
         """
         return self._set(labelCol=value)
 
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
     @since("3.0.0")
-    def setProbabilityCol(self, value):
+    def setProbabilityCol(self, value: str) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
         return self._set(probabilityCol=value)
 
     @since("3.0.0")
-    def setWeightCol(self, value):
+    def setWeightCol(self, value: str) -> "MulticlassClassificationEvaluator":
         """
         Sets the value of :py:attr:`weightCol`.
         """
@@ -646,15 +684,15 @@ class MulticlassClassificationEvaluator(
     def setParams(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="f1",
-        weightCol=None,
-        metricLabel=0.0,
-        beta=1.0,
-        probabilityCol="probability",
-        eps=1e-15,
-    ):
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "MulticlassClassificationEvaluatorMetricType" = "f1",
+        weightCol: Optional[str] = None,
+        metricLabel: float = 0.0,
+        beta: float = 1.0,
+        probabilityCol: str = "probability",
+        eps: float = 1e-15,
+    ) -> "MulticlassClassificationEvaluator":
         """
         setParams(self, \\*, predictionCol="prediction", labelCol="label", \
                   metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
@@ -667,7 +705,11 @@ class MulticlassClassificationEvaluator(
 
 @inherit_doc
 class MultilabelClassificationEvaluator(
-    JavaEvaluator, HasLabelCol, HasPredictionCol, JavaMLReadable, JavaMLWritable
+    JavaEvaluator,
+    HasLabelCol,
+    HasPredictionCol,
+    JavaMLReadable["MultilabelClassificationEvaluator"],
+    JavaMLWritable,
 ):
     """
     Evaluator for Multilabel Classification, which expects two input
@@ -700,16 +742,16 @@ class MultilabelClassificationEvaluator(
     'prediction'
     """
 
-    metricName = Param(
+    metricName: Param["MultilabelClassificationEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         "metric name in evaluation "
         "(subsetAccuracy|accuracy|hammingLoss|precision|recall|f1Measure|"
         "precisionByLabel|recallByLabel|f1MeasureByLabel|microPrecision|"
         "microRecall|microF1Measure)",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
-    metricLabel = Param(
+    metricLabel: Param[float] = Param(
         Params._dummy(),
         "metricLabel",
         "The class whose metric will be computed in precisionByLabel|"
@@ -718,15 +760,17 @@ class MultilabelClassificationEvaluator(
         typeConverter=TypeConverters.toFloat,
     )
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="f1Measure",
-        metricLabel=0.0,
-    ):
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "MultilabelClassificationEvaluatorMetricType" = "f1Measure",
+        metricLabel: float = 0.0,
+    ) -> None:
         """
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
                  metricName="f1Measure", metricLabel=0.0)
@@ -740,42 +784,44 @@ class MultilabelClassificationEvaluator(
         self._set(**kwargs)
 
     @since("3.0.0")
-    def setMetricName(self, value):
+    def setMetricName(
+        self, value: "MultilabelClassificationEvaluatorMetricType"
+    ) -> "MultilabelClassificationEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("3.0.0")
-    def getMetricName(self):
+    def getMetricName(self) -> "MultilabelClassificationEvaluatorMetricType":
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setMetricLabel(self, value):
+    def setMetricLabel(self, value: float) -> "MultilabelClassificationEvaluator":
         """
         Sets the value of :py:attr:`metricLabel`.
         """
         return self._set(metricLabel=value)
 
     @since("3.0.0")
-    def getMetricLabel(self):
+    def getMetricLabel(self) -> float:
         """
         Gets the value of metricLabel or its default value.
         """
         return self.getOrDefault(self.metricLabel)
 
     @since("3.0.0")
-    def setLabelCol(self, value):
+    def setLabelCol(self, value: str) -> "MultilabelClassificationEvaluator":
         """
         Sets the value of :py:attr:`labelCol`.
         """
         return self._set(labelCol=value)
 
     @since("3.0.0")
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "MultilabelClassificationEvaluator":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
@@ -786,11 +832,11 @@ class MultilabelClassificationEvaluator(
     def setParams(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="f1Measure",
-        metricLabel=0.0,
-    ):
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "MultilabelClassificationEvaluatorMetricType" = "f1Measure",
+        metricLabel: float = 0.0,
+    ) -> "MultilabelClassificationEvaluator":
         """
         setParams(self, \\*, predictionCol="prediction", labelCol="label", \
                   metricName="f1Measure", metricLabel=0.0)
@@ -802,7 +848,12 @@ class MultilabelClassificationEvaluator(
 
 @inherit_doc
 class ClusteringEvaluator(
-    JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWeightCol, JavaMLReadable, JavaMLWritable
+    JavaEvaluator,
+    HasPredictionCol,
+    HasFeaturesCol,
+    HasWeightCol,
+    JavaMLReadable["ClusteringEvaluator"],
+    JavaMLWritable,
 ):
     """
     Evaluator for Clustering results, which expects two input
@@ -848,28 +899,30 @@ class ClusteringEvaluator(
     'prediction'
     """
 
-    metricName = Param(
+    metricName: Param["ClusteringEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         "metric name in evaluation (silhouette)",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
-    distanceMeasure = Param(
+    distanceMeasure: Param["ClusteringEvaluatorDistanceMeasureType"] = Param(
         Params._dummy(),
         "distanceMeasure",
         "The distance measure. " + "Supported options: 'squaredEuclidean' and 'cosine'.",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
+
+    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
         self,
         *,
-        predictionCol="prediction",
-        featuresCol="features",
-        metricName="silhouette",
-        distanceMeasure="squaredEuclidean",
-        weightCol=None,
+        predictionCol: str = "prediction",
+        featuresCol: str = "features",
+        metricName: "ClusteringEvaluatorMetricType" = "silhouette",
+        distanceMeasure: str = "squaredEuclidean",
+        weightCol: Optional[str] = None,
     ):
         """
         __init__(self, \\*, predictionCol="prediction", featuresCol="features", \
@@ -888,12 +941,12 @@ class ClusteringEvaluator(
     def setParams(
         self,
         *,
-        predictionCol="prediction",
-        featuresCol="features",
-        metricName="silhouette",
-        distanceMeasure="squaredEuclidean",
-        weightCol=None,
-    ):
+        predictionCol: str = "prediction",
+        featuresCol: str = "features",
+        metricName: "ClusteringEvaluatorMetricType" = "silhouette",
+        distanceMeasure: str = "squaredEuclidean",
+        weightCol: Optional[str] = None,
+    ) -> "ClusteringEvaluator":
         """
         setParams(self, \\*, predictionCol="prediction", featuresCol="features", \
                   metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
@@ -903,47 +956,49 @@ class ClusteringEvaluator(
         return self._set(**kwargs)
 
     @since("2.3.0")
-    def setMetricName(self, value):
+    def setMetricName(self, value: "ClusteringEvaluatorMetricType") -> "ClusteringEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("2.3.0")
-    def getMetricName(self):
+    def getMetricName(self) -> "ClusteringEvaluatorMetricType":
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("2.4.0")
-    def setDistanceMeasure(self, value):
+    def setDistanceMeasure(
+        self, value: "ClusteringEvaluatorDistanceMeasureType"
+    ) -> "ClusteringEvaluator":
         """
         Sets the value of :py:attr:`distanceMeasure`.
         """
         return self._set(distanceMeasure=value)
 
     @since("2.4.0")
-    def getDistanceMeasure(self):
+    def getDistanceMeasure(self) -> "ClusteringEvaluatorDistanceMeasureType":
         """
         Gets the value of `distanceMeasure`
         """
         return self.getOrDefault(self.distanceMeasure)
 
-    def setFeaturesCol(self, value):
+    def setFeaturesCol(self, value: "str") -> "ClusteringEvaluator":
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "ClusteringEvaluator":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
 
     @since("3.1.0")
-    def setWeightCol(self, value):
+    def setWeightCol(self, value: str) -> "ClusteringEvaluator":
         """
         Sets the value of :py:attr:`weightCol`.
         """
@@ -952,7 +1007,7 @@ class ClusteringEvaluator(
 
 @inherit_doc
 class RankingEvaluator(
-    JavaEvaluator, HasLabelCol, HasPredictionCol, JavaMLReadable, JavaMLWritable
+    JavaEvaluator, HasLabelCol, HasPredictionCol, JavaMLReadable["RankingEvaluator"], JavaMLWritable
 ):
     """
     Evaluator for Ranking, which expects two input
@@ -986,15 +1041,15 @@ class RankingEvaluator(
     'prediction'
     """
 
-    metricName = Param(
+    metricName: Param["RankingEvaluatorMetricType"] = Param(
         Params._dummy(),
         "metricName",
         "metric name in evaluation "
         "(meanAveragePrecision|meanAveragePrecisionAtK|"
         "precisionAtK|ndcgAtK|recallAtK)",
-        typeConverter=TypeConverters.toString,
+        typeConverter=TypeConverters.toString,  # type: ignore[arg-type]
     )
-    k = Param(
+    k: Param[int] = Param(
         Params._dummy(),
         "k",
         "The ranking position value used in meanAveragePrecisionAtK|precisionAtK|"
@@ -1002,14 +1057,16 @@ class RankingEvaluator(
         typeConverter=TypeConverters.toInt,
     )
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="meanAveragePrecision",
-        k=10,
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "RankingEvaluatorMetricType" = "meanAveragePrecision",
+        k: int = 10,
     ):
         """
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
@@ -1024,42 +1081,42 @@ class RankingEvaluator(
         self._set(**kwargs)
 
     @since("3.0.0")
-    def setMetricName(self, value):
+    def setMetricName(self, value: "RankingEvaluatorMetricType") -> "RankingEvaluator":
         """
         Sets the value of :py:attr:`metricName`.
         """
         return self._set(metricName=value)
 
     @since("3.0.0")
-    def getMetricName(self):
+    def getMetricName(self) -> "RankingEvaluatorMetricType":
         """
         Gets the value of metricName or its default value.
         """
         return self.getOrDefault(self.metricName)
 
     @since("3.0.0")
-    def setK(self, value):
+    def setK(self, value: int) -> "RankingEvaluator":
         """
         Sets the value of :py:attr:`k`.
         """
         return self._set(k=value)
 
     @since("3.0.0")
-    def getK(self):
+    def getK(self) -> int:
         """
         Gets the value of k or its default value.
         """
         return self.getOrDefault(self.k)
 
     @since("3.0.0")
-    def setLabelCol(self, value):
+    def setLabelCol(self, value: str) -> "RankingEvaluator":
         """
         Sets the value of :py:attr:`labelCol`.
         """
         return self._set(labelCol=value)
 
     @since("3.0.0")
-    def setPredictionCol(self, value):
+    def setPredictionCol(self, value: str) -> "RankingEvaluator":
         """
         Sets the value of :py:attr:`predictionCol`.
         """
@@ -1070,11 +1127,11 @@ class RankingEvaluator(
     def setParams(
         self,
         *,
-        predictionCol="prediction",
-        labelCol="label",
-        metricName="meanAveragePrecision",
-        k=10,
-    ):
+        predictionCol: str = "prediction",
+        labelCol: str = "label",
+        metricName: "RankingEvaluatorMetricType" = "meanAveragePrecision",
+        k: int = 10,
+    ) -> "RankingEvaluator":
         """
         setParams(self, \\*, predictionCol="prediction", labelCol="label", \
                   metricName="meanAveragePrecision", k=10)

@@ -35,6 +35,11 @@ public interface RequiresDistributionAndOrdering extends Write {
    * Spark will distribute incoming records across partitions to satisfy the required distribution
    * before passing the records to the data source table on write.
    * <p>
+   * Batch and micro-batch writes can request a particular data distribution.
+   * If a distribution is requested in the micro-batch context, incoming records in each micro batch
+   * will satisfy the required distribution (but not across micro batches). The continuous execution
+   * mode continuously processes streaming data and does not support distribution requirements.
+   * <p>
    * Implementations may return {@link UnspecifiedDistribution} if they don't require any specific
    * distribution of data on write.
    *
@@ -60,6 +65,11 @@ public interface RequiresDistributionAndOrdering extends Write {
    * <p>
    * Spark will order incoming records within partitions to satisfy the required ordering
    * before passing those records to the data source table on write.
+   * <p>
+   * Batch and micro-batch writes can request a particular data ordering.
+   * If an ordering is requested in the micro-batch context, incoming records in each micro batch
+   * will satisfy the required ordering (but not across micro batches). The continuous execution
+   * mode continuously processes streaming data and does not support ordering requirements.
    * <p>
    * Implementations may return an empty array if they don't require any specific ordering of data
    * on write.
