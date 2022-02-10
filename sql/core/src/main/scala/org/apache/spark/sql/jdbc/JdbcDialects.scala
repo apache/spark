@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -232,22 +232,15 @@ abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Create schema with comment.
    */
-  def createSchema(
-      conn: Connection, options: JDBCOptions, schema: String, comment: String): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      val schemaCommentQuery = if (comment.nonEmpty) {
-        getSchemaCommentQuery(schema, comment)
-      } else {
-        comment
-      }
-      statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
-      if (comment.nonEmpty) {
-        statement.executeUpdate(schemaCommentQuery)
-      }
-    } finally {
-      statement.close()
+  def createSchema(statement: Statement, schema: String, comment: String): Unit = {
+    val schemaCommentQuery = if (comment.nonEmpty) {
+      getSchemaCommentQuery(schema, comment)
+    } else {
+      comment
+    }
+    statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
+    if (comment.nonEmpty) {
+      statement.executeUpdate(schemaCommentQuery)
     }
   }
 
