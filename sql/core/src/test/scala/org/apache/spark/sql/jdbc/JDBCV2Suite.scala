@@ -822,6 +822,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  MAX(CASE WHEN NOT(SALARY > 8000 AND SALARY > 8000) THEN 0 ELSE SALARY END),
         |  MIN(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NULL) THEN SALARY ELSE 0 END),
         |  SUM(CASE WHEN NOT(SALARY > 8000 AND SALARY IS NOT NULL) THEN SALARY ELSE 0 END),
+        |  SUM(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END),
         |  AVG(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NOT NULL) THEN SALARY ELSE 0 END)
         |FROM h2.test.employee GROUP BY DEPT
       """.stripMargin)
@@ -835,13 +836,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 0d)))
+    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
   }
 
-  test("scan with aggregate push-down: aggregate function with CAST") {
-    val df5 = sql("SELECT AVG(CAST(SALARY AS DOUBLE)) FROM h2.test.employee GROUP BY DEPT")
+  test("scan with aggregate push-down: aggregate function with NVL") {
+    val df5 = sql("SELECT AVG(NVL(SALARY, SALARY)) FROM h2.test.employee GROUP BY DEPT")
     checkAggregateRemoved(df5, false)
     df5.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>

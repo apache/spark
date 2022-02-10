@@ -55,8 +55,11 @@ class ExpressionSQLBuilder(e: Expression) {
       if (conditionsSQL.length == branches.length && valuesSQL.length == branches.length) {
         val branchSQL =
           conditionsSQL.zip(valuesSQL).map { case (c, v) => s" WHEN $c THEN $v" }.mkString
-        val elseSQL = elseValue.flatMap(generateSQL).map(v => s" ELSE $v").getOrElse("")
-        Some(s"CASE$branchSQL$elseSQL END")
+        if (elseValue.isDefined) {
+          elseValue.flatMap(generateSQL).map(v => s"CASE$branchSQL ELSE $v END")
+        } else {
+          Some(s"CASE$branchSQL END")
+        }
       } else {
         None
       }
