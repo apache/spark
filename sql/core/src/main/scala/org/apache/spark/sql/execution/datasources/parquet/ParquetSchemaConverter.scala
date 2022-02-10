@@ -434,6 +434,8 @@ class ParquetToSparkSchemaConverter(
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
  * @param outputTimestampType which parquet timestamp type to use when writing.
+ * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
+ *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,

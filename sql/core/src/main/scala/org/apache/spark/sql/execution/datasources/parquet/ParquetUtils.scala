@@ -177,7 +177,13 @@ object ParquetUtils {
   def getFieldId(field: StructField): Int = {
     require(hasFieldId(field),
       s"The key `$FIELD_ID_METADATA_KEY` doesn't exist in the metadata of " + field)
-    Math.toIntExact(field.metadata.getLong(FIELD_ID_METADATA_KEY))
+    try {
+      Math.toIntExact(field.metadata.getLong(FIELD_ID_METADATA_KEY))
+    } catch {
+      case _: ArithmeticException | _: ClassCastException =>
+        throw new IllegalArgumentException(
+          s"The key `$FIELD_ID_METADATA_KEY` must be a 32-bit integer")
+    }
   }
 
   /**

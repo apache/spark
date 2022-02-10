@@ -224,10 +224,9 @@ private[parquet] class ParquetRowConverter(
       }
 
     parquetType.getFields.asScala.map { parquetField =>
-      val catalystFieldIndex = Option(parquetField.getId).map { fieldId =>
+      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
-        catalystFieldIdxByFieldId
-          .getOrElse(fieldId.intValue(), catalystFieldIdxByName(parquetField.getName))
+        catalystFieldIdxByFieldId.get(fieldId.intValue())
       }.getOrElse {
         // field doesn't have id, just match by name
         catalystFieldIdxByName(parquetField.getName)

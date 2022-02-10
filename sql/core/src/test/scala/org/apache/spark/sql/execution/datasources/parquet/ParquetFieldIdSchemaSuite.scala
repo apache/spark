@@ -30,6 +30,12 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
   private val UUID_REGEX =
     "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}".r
 
+  protected def test(testName: String)(testFun: => Any): Unit = {
+    withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+      super.test(testName, ParquetUseDefaultFieldIdConfigs())(testFun)
+    }
+  }
+
   private def withId(id: Int) =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
 
@@ -153,13 +159,13 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       ParquetUtils.getFieldId(schema.findNestedField(Seq("noId")).get._2)
     }.getMessage.contains("doesn't exist"))
 
-    intercept[ArithmeticException] {
+    assert(intercept[IllegalArgumentException] {
       ParquetUtils.getFieldId(schema.findNestedField(Seq("overflowId")).get._2)
-    }
+    }.getMessage.contains("must be a 32-bit integer"))
 
-    intercept[ClassCastException] {
+    assert(intercept[IllegalArgumentException] {
       ParquetUtils.getFieldId(schema.findNestedField(Seq("stringId")).get._2)
-    }
+    }.getMessage.contains("must be a 32-bit integer"))
 
     // negative id allowed
     assert(ParquetUtils.getFieldId(schema.findNestedField(Seq("negativeId")).get._2) == -20)

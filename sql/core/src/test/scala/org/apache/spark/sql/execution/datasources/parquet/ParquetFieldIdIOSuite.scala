@@ -30,6 +30,13 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
   private def withId(id: Int): Metadata =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
 
+  protected def test(testName: String)(testFun: => Any): Unit = {
+    super.test(testName, ParquetUseDefaultFieldIdConfigs()) {
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+        testFun
+      }
+    }
+  }
 
   test("Parquet reads infer fields using field ids correctly") {
     withTempDir { dir =>

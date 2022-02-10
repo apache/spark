@@ -358,7 +358,6 @@ class ParquetFileFormat
         }
       } else {
         logDebug(s"Falling back to parquet-mr")
-
         // ParquetRecordReader returns InternalRow
         val readSupport = new ParquetReadSupport(
           convertTz,
