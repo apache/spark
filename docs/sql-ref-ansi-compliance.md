@@ -188,28 +188,30 @@ java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses several rules that govern how conflicts between data types are resolved.
 At the heart of this conflict resolution is the Type Precedence List which defines whether values of a given data type can be promoted to another data type implicitly.
 
-| Data type | precedence list(from narrowest to widest)                            |
-|-----------|----------------------------------------------------------------------|
-| Byte      | Byte -> Short -> Int -> Long -> Decimal -> Float* -> Double          |
-| Short     | Short -> Int -> Long -> Decimal-> Float* -> Double                   |
-| Int       | Int -> Long -> Decimal -> Float* -> Double                           |
-| Long      | Long -> Decimal -> Float* -> Double                                  |
-| Decimal   | Decimal -> Float* -> Double                                          |
-| Float     | Float -> Double                                                      |
-| Double    | Double                                                               |
-| Date      | Date -> Timestamp                                                    |
-| Timestamp | Timestamp                                                            |
-| String    | String, Long -> Double, Date -> Timestamp, Boolean, Interval, Binary |
-| Binary    | Binary                                                               |
-| Boolean   | Boolean                                                              |
-| Interval  | Interval                                                             |
-| Map       | Map**                                                                |
-| Array     | Array**                                                              |
-| Struct    | Struct**                                                             |
+| Data type | precedence list(from narrowest to widest)                     |
+|-----------|---------------------------------------------------------------|
+| Byte      | Byte -> Short -> Int -> Long -> Decimal -> Float* -> Double   |
+| Short     | Short -> Int -> Long -> Decimal-> Float* -> Double            |
+| Int       | Int -> Long -> Decimal -> Float* -> Double                    |
+| Long      | Long -> Decimal -> Float* -> Double                           |
+| Decimal   | Decimal -> Float* -> Double                                   |
+| Float     | Float -> Double                                               |
+| Double    | Double                                                        |
+| Date      | Date -> Timestamp                                             |
+| Timestamp | Timestamp                                                     |
+| String    | String, Long -> Double, Date -> Timestamp, Boolean, Binary ** |
+| Binary    | Binary                                                        |
+| Boolean   | Boolean                                                       |
+| Interval  | Interval                                                      |
+| Map       | Map***                                                        |
+| Array     | Array***                                                      |
+| Struct    | Struct***                                                     |
 
 \* For least common type resolution float is skipped to avoid loss of precision.
 
-\*\* For a complex type, the precedence rule applies recursively to its component elements.
+\*\* String can be promoted to multiple kinds of data types. Note that Byte/Short/Int/Decimal/Float is not on this precedent list. The least common type between Byte/Short/Int and String is Long, while the least common type between Decimal/Float is Double.
+
+\*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
 Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
@@ -256,7 +258,7 @@ DATE
 #### Function invocation
 Under ANSI mode(spark.sql.ansi.enabled=true), the function invocation of Spark SQL:
 - In general, it follows the `Store assignment` rules as storing the input values as the declared parameter type of the SQL functions
-- Special rules apply for string literals and untyped NULL. A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
+- Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 ```sql
 > SET spark.sql.ansi.enabled=true;
@@ -267,10 +269,10 @@ total number: 1
 > select datediff(now(), current_date);
 0
 
--- specialrule: implicitly cast String literal to Double type
+-- implicitly cast String to Double type
 > SELECT ceil('0.1');
 1
--- specialrule: implicitly cast NULL to Date type
+-- special rule: implicitly cast NULL to Date type
 > SELECT year(null);
 NULL
 
