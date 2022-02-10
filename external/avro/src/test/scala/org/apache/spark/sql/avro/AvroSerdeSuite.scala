@@ -48,8 +48,8 @@ class AvroSerdeSuite extends SparkFunSuite {
       }
       val avro = createNestedAvroSchemaWithFields(top, _.optionalInt(nest))
       val record = new GenericRecordBuilder(avro)
-        .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, 42).build())
-        .build()
+          .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, 42).build())
+          .build()
       val serializer = Serializer.create(CATALYST_STRUCT, avro, fieldMatch)
       val deserializer = Deserializer.create(CATALYST_STRUCT, avro, fieldMatch)
       assert(serializer.serialize(deserializer.deserialize(record).get) === record)

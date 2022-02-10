@@ -23,12 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.LogicalTypes
-import org.apache.avro.LogicalTypes.{
-  LocalTimestampMicros,
-  LocalTimestampMillis,
-  TimestampMicros,
-  TimestampMillis
-}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type
 import org.apache.avro.Schema.Type._
@@ -142,7 +137,7 @@ private[sql] class AvroSerializer(
       case (DoubleType, DOUBLE) =>
         (getter, ordinal) => getter.getDouble(ordinal)
       case (d: DecimalType, FIXED)
-          if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
+        if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
           val decimal = extractDecimal(getter, ordinal, d)
           decimalConversions.toFixed(
@@ -151,7 +146,7 @@ private[sql] class AvroSerializer(
             LogicalTypes.decimal(d.precision, d.scale))
 
       case (d: DecimalType, BYTES)
-          if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
+        if avroType.getLogicalType == LogicalTypes.decimal(d.precision, d.scale) =>
         (getter, ordinal) =>
           val decimal = extractDecimal(getter, ordinal, d)
           decimalConversions.toBytes(
