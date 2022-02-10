@@ -435,46 +435,50 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("list partition names") {
     val catalog = newBasicCatalog()
-    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "%="), storageFormat)
+    val newPart = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "%="), storageFormat)
     catalog.createPartitions("db2", "tbl2", Seq(newPart), ignoreIfExists = false)
 
     val partitionNames = catalog.listPartitionNames("db2", "tbl2")
-    assert(partitionNames == Seq("a=1/b=%25%3D", "a=1/b=2", "a=3/b=4"))
+    assert(partitionNames
+      ==
+      Seq("partCol1=1/partCol2=%25%3D", "partCol1=1/partCol2=2", "partCol1=3/partCol2=4"))
   }
 
   test("list partition names with partial partition spec") {
     val catalog = newBasicCatalog()
-    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "%="), storageFormat)
+    val newPart = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "%="), storageFormat)
     catalog.createPartitions("db2", "tbl2", Seq(newPart), ignoreIfExists = false)
 
-    val partitionNames1 = catalog.listPartitionNames("db2", "tbl2", Some(Map("a" -> "1")))
-    assert(partitionNames1 == Seq("a=1/b=%25%3D", "a=1/b=2"))
+    val partitionNames1 = catalog.listPartitionNames("db2", "tbl2", Some(Map("partCol1" -> "1")))
+    assert(partitionNames1 == Seq("partCol1=1/partCol2=%25%3D", "partCol1=1/partCol2=2"))
 
     // Partial partition specs including "weird" partition values should use the unescaped values
-    val partitionNames2 = catalog.listPartitionNames("db2", "tbl2", Some(Map("b" -> "%=")))
-    assert(partitionNames2 == Seq("a=1/b=%25%3D"))
+    val partitionNames2 = catalog.listPartitionNames("db2", "tbl2", Some(Map("partCol2" -> "%=")))
+    assert(partitionNames2 == Seq("partCol1=1/partCol2=%25%3D"))
 
-    val partitionNames3 = catalog.listPartitionNames("db2", "tbl2", Some(Map("b" -> "%25%3D")))
+    val partitionNames3 = catalog.listPartitionNames("db2", "tbl2",
+      Some(Map("partCol2" -> "%25%3D")))
     assert(partitionNames3.isEmpty)
   }
 
   test("list partitions with partial partition spec") {
     val catalog = newBasicCatalog()
-    val parts = catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "1")))
+    val parts = catalog.listPartitions("db2", "tbl2", Some(Map("partCol1" -> "1")))
     assert(parts.length == 1)
     assert(parts.head.spec == part1.spec)
 
     // if no partition is matched for the given partition spec, an empty list should be returned.
-    assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
-    assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+    assert(catalog.listPartitions("db2", "tbl2",
+      Some(Map("partCol1" -> "unknown", "partCol2" -> "1"))).isEmpty)
+    assert(catalog.listPartitions("db2", "tbl2", Some(Map("partCol1" -> "unknown"))).isEmpty)
   }
 
   test("SPARK-21457: list partitions with special chars") {
     val catalog = newBasicCatalog()
     assert(catalog.listPartitions("db2", "tbl1").isEmpty)
 
-    val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "i+j"), storageFormat)
-    val part2 = CatalogTablePartition(Map("a" -> "1", "b" -> "i.j"), storageFormat)
+    val part1 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i.j"), storageFormat)
     catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
 
     assert(catalog.listPartitions("db2", "tbl1", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
@@ -483,25 +487,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("SPARK-38120: list partitions with special chars and mixed case column name") {
     val catalog = newBasicCatalog()
-    val table = CatalogTable(
-      identifier = TableIdentifier("tbl", Some("db1")),
-      tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string")
-        .add("partCol1", "int")
-        .add("partCol2", "string"),
-      provider = Some(defaultProvider),
-      partitionColumnNames = Seq("partCol1", "partCol2"))
-    catalog.createTable(table, ignoreIfExists = false)
-
     val part1 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i+j"), storageFormat)
     val part2 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "i.j"), storageFormat)
-    catalog.createPartitions("db1", "tbl", Seq(part1, part2), ignoreIfExists = false)
+    catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
 
-    assert(catalog.listPartitions("db1", "tbl", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
-    assert(catalog.listPartitions("db1", "tbl", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
+    assert(catalog.listPartitions("db2", "tbl2", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db2", "tbl2", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
   }
 
   test("list partitions by filter") {
@@ -521,18 +512,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val tbl2 = catalog.getTable("db2", "tbl2")
 
     checkAnswer(tbl2, Seq.empty, Set(part1, part2))
-    checkAnswer(tbl2, Seq('a.int <= 1), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 2), Set.empty)
-    checkAnswer(tbl2, Seq(In('a.int * 10, Seq(30))), Set(part2))
-    checkAnswer(tbl2, Seq(Not(In('a.int, Seq(4)))), Set(part1, part2))
-    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 1 && 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "x"), Set.empty)
-    checkAnswer(tbl2, Seq('a.int === 1 || 'b.string === "x"), Set(part1))
+    checkAnswer(tbl2, Seq('partCol1.int <= 1), Set(part1))
+    checkAnswer(tbl2, Seq('partCol1.int === 2), Set.empty)
+    checkAnswer(tbl2, Seq(In('partCol1.int * 10, Seq(30))), Set(part2))
+    checkAnswer(tbl2, Seq(Not(In('partCol1.int, Seq(4)))), Set(part1, part2))
+    checkAnswer(tbl2, Seq('partCol1.int === 1, 'partCol2.string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq('partCol1.int === 1 && 'partCol2.string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq('partCol1.int === 1, 'partCol2.string === "x"), Set.empty)
+    checkAnswer(tbl2, Seq('partCol1.int === 1 || 'partCol2.string === "x"), Set(part1))
 
     intercept[AnalysisException] {
       try {
-        checkAnswer(tbl2, Seq('a.int > 0 && 'col1.int > 0), Set.empty)
+        checkAnswer(tbl2, Seq('partCol1.int > 0 && 'col1.int > 0), Set.empty)
       } catch {
         // HiveExternalCatalog may be the first one to notice and throw an exception, which will
         // then be caught and converted to a RuntimeException with a descriptive message.
@@ -603,8 +594,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("rename partitions") {
     val catalog = newBasicCatalog()
-    val newPart1 = part1.copy(spec = Map("a" -> "100", "b" -> "101"))
-    val newPart2 = part2.copy(spec = Map("a" -> "200", "b" -> "201"))
+    val newPart1 = part1.copy(spec = Map("partCol1" -> "100", "partCol2" -> "101"))
+    val newPart2 = part2.copy(spec = Map("partCol1" -> "200", "partCol2" -> "201"))
     val newSpecs = Seq(newPart1.spec, newPart2.spec)
     catalog.renamePartitions("db2", "tbl2", Seq(part1.spec, part2.spec), newSpecs)
     assert(catalog.getPartition("db2", "tbl2", newPart1.spec).spec === newPart1.spec)
@@ -698,8 +689,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       assert(newPart1b.storage.serde == Some(newSerde))
       assert(newPart2b.storage.properties == newSerdeProps)
       // alter but change spec, should fail because new partition specs do not exist yet
-      val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
-      val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
+      val badPart1 = part1.copy(spec = Map("partCol1" -> "v1", "partCol2" -> "v2"))
+      val badPart2 = part2.copy(spec = Map("partCol1" -> "v3", "partCol2" -> "v4"))
       intercept[AnalysisException] {
         catalog.alterPartitions("db2", "tbl2", Seq(badPart1, badPart2))
       }
@@ -968,17 +959,19 @@ abstract class CatalogTestUtils {
     serde = None,
     compressed = false,
     properties = Map.empty)
-  lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
-  lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
-  lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
-  lazy val partWithMixedOrder = CatalogTablePartition(Map("b" -> "6", "a" -> "6"), storageFormat)
-  lazy val partWithLessColumns = CatalogTablePartition(Map("a" -> "1"), storageFormat)
+  lazy val part1 = CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"), storageFormat)
+  lazy val part2 = CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"), storageFormat)
+  lazy val part3 = CatalogTablePartition(Map("partCol1" -> "5", "partCol2" -> "6"), storageFormat)
+  lazy val partWithMixedOrder = CatalogTablePartition(
+    Map("partCol2" -> "6", "partCol1" -> "6"), storageFormat)
+  lazy val partWithLessColumns = CatalogTablePartition(Map("partCol1" -> "1"), storageFormat)
   lazy val partWithMoreColumns =
-    CatalogTablePartition(Map("a" -> "5", "b" -> "6", "c" -> "7"), storageFormat)
+    CatalogTablePartition(Map("partCol1" -> "5", "partCol2" -> "6", "partCol3" -> "7"),
+      storageFormat)
   lazy val partWithUnknownColumns =
-    CatalogTablePartition(Map("a" -> "5", "unknown" -> "6"), storageFormat)
+    CatalogTablePartition(Map("partCol1" -> "5", "unknown" -> "6"), storageFormat)
   lazy val partWithEmptyValue =
-    CatalogTablePartition(Map("a" -> "3", "b" -> ""), storageFormat)
+    CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> ""), storageFormat)
   lazy val funcClass = "org.apache.spark.myFunc"
   lazy val newFuncClass = "org.apache.spark.myNewFunc"
 
@@ -1033,10 +1026,10 @@ abstract class CatalogTestUtils {
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")
-        .add("a", "int")
-        .add("b", "string"),
+        .add("partCol1", "int")
+        .add("partCol2", "string"),
       provider = Some(defaultProvider),
-      partitionColumnNames = Seq("a", "b"),
+      partitionColumnNames = Seq("partCol1", "partCol2"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
@@ -1051,8 +1044,8 @@ abstract class CatalogTestUtils {
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")
-        .add("a", "int")
-        .add("b", "string"),
+        .add("partCol1", "int")
+        .add("partCol2", "string"),
       viewText = Some("SELECT * FROM tbl1"),
       properties = props)
   }

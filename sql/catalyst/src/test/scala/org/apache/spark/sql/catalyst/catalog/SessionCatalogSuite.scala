@@ -881,29 +881,31 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl2", Some("db2")),
           Seq(part1, partWithLessColumns), ignoreIfExists = false)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1) must match " +
+        "the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(part1, partWithMoreColumns), ignoreIfExists = true)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, unknown) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl2", Some("db2")),
           Seq(partWithEmptyValue, part1), ignoreIfExists = true)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "([partCol1=3, partCol2=]) contains an empty partition column value"))
     }
   }
 
@@ -994,8 +996,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           retainData = false)
       }
       assert(e.getMessage.contains(
-        "Partition spec is invalid. The spec (a, b, c) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "Partition spec is invalid. The spec (partCol1, partCol2, partCol3) " +
+          "must be contained within the partition spec " +
+          "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("tbl2", Some("db2")),
@@ -1005,8 +1008,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           retainData = false)
       }
       assert(e.getMessage.contains(
-        "Partition spec is invalid. The spec (a, unknown) must be contained within " +
-          "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+        "Partition spec is invalid. The spec (partCol1, unknown) must be contained within " +
+          "the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("tbl2", Some("db2")),
@@ -1015,8 +1018,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           purge = false,
           retainData = false)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "([partCol1=3, partCol2=]) contains an empty partition column value"))
     }
   }
 
@@ -1053,30 +1056,32 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       var e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1) must match " +
+        "the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, unknown) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "([partCol1=3, partCol2=]) contains an empty partition column value"))
     }
   }
 
   test("rename partitions") {
     withBasicCatalog { catalog =>
-      val newPart1 = part1.copy(spec = Map("a" -> "100", "b" -> "101"))
-      val newPart2 = part2.copy(spec = Map("a" -> "200", "b" -> "201"))
+      val newPart1 = part1.copy(spec = Map("partCol1" -> "100", "partCol2" -> "101"))
+      val newPart2 = part2.copy(spec = Map("partCol1" -> "200", "partCol2" -> "201"))
       val newSpecs = Seq(newPart1.spec, newPart2.spec)
       catalog.renamePartitions(
         TableIdentifier("tbl2", Some("db2")), Seq(part1.spec, part2.spec), newSpecs)
@@ -1124,29 +1129,31 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithLessColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1) must match " +
+        "the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithMoreColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithUnknownColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, unknown) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("db2")),
           Seq(part1.spec), Seq(partWithEmptyValue.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (" +
+        "[partCol1=3, partCol2=]) contains an empty partition column value"))
     }
   }
 
@@ -1173,8 +1180,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(oldPart1.storage.locationUri == newerPart1.storage.locationUri)
       assert(oldPart2.storage.locationUri == newerPart2.storage.locationUri)
       // Alter but change spec, should fail because new partition specs do not exist yet
-      val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
-      val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
+      val badPart1 = part1.copy(spec = Map("partCol1" -> "v1", "partCol2" -> "v2"))
+      val badPart2 = part2.copy(spec = Map("partCol1" -> "v3", "partCol2" -> "v4"))
       intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl2", Some("db2")), Seq(badPart1, badPart2))
       }
@@ -1197,29 +1204,30 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       var e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1) must match " +
+        "the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must match the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-        "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1, unknown)" +
+        " must match the partition spec (partCol1, partCol2) defined in table '`db2`.`tbl1`'"))
       e = intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec ([partCol1=3, partCol2=])" +
+        " contains an empty partition column value"))
     }
   }
 
   test("list partition names") {
     withBasicCatalog { catalog =>
-      val expectedPartitionNames = Seq("a=1/b=2", "a=3/b=4")
+      val expectedPartitionNames = Seq("partCol1=1/partCol2=2", "partCol1=3/partCol2=4")
       assert(catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2"))) ==
         expectedPartitionNames)
       // List partition names without explicitly specifying database
@@ -1231,8 +1239,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list partition names with partial partition spec") {
     withBasicCatalog { catalog =>
       assert(
-        catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))) ==
-          Seq("a=1/b=2"))
+        catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
+          Some(Map("partCol1" -> "1"))) == Seq("partCol1=1/partCol2=2"))
     }
   }
 
@@ -1242,20 +1250,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
           Some(partWithMoreColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must be contained within the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
           Some(partWithUnknownColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, unknown) must be contained within the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
           Some(partWithEmptyValue.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "([partCol1=3, partCol2=]) contains an empty partition column value"))
     }
   }
 
@@ -1272,7 +1282,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list partitions with partial partition spec") {
     withBasicCatalog { catalog =>
       assert(catalogPartitionsEqual(
-        catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(Map("a" -> "1"))), part1))
+        catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
+          Some(Map("partCol1" -> "1"))), part1))
     }
   }
 
@@ -1281,19 +1292,21 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       var e = intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithMoreColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec " +
+        "(partCol1, partCol2, partCol3) must be contained within the partition spec " +
+        "(partCol1, partCol2) defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
           Some(partWithUnknownColumns.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must be " +
-        "contained within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec (partCol1, unknown)" +
+        " must be contained within the partition spec (partCol1, partCol2)" +
+        " defined in table '`db2`.`tbl2`'"))
       e = intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl2", Some("db2")), Some(partWithEmptyValue.spec))
       }
-      assert(e.getMessage.contains("Partition spec is invalid. The spec ([a=3, b=]) contains an " +
-        "empty partition column value"))
+      assert(e.getMessage.contains("Partition spec is invalid. The spec ([partCol1=3, partCol2=])" +
+        " contains an empty partition column value"))
     }
   }
 
