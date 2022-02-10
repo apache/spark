@@ -414,5 +414,4 @@ private[sql] class AvroSerializer(
         "schema will throw runtime exception if there is a record with null value.")
     }
   }
-
 }
