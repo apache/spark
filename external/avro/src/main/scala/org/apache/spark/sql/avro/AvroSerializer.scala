@@ -95,7 +95,6 @@ private[sql] class AvroSerializer(
     }
   }
 
-
   private type Converter = (SpecializedGetters, Int) => Any
 
   private lazy val decimalConversions = new DecimalConversion()
