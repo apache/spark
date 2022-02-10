@@ -61,11 +61,11 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val sessionHandle = client.openSession(user, "")
 
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
       val e = intercept[HiveSQLException] {
-        client.executeStatement(
-          sessionHandle,
-          sql,
-          confOverlay)
+        exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+        exec(sql)
       }
 
       assert(e.getMessage
@@ -73,10 +73,21 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(!e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
       assert(e.getSQLState == "22023")
+
+
+      val e1 = intercept[HiveSQLException] {
+        exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+        exec(sql)
+      }
+
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getSQLState == "22023")
     }
 
     withJdbcStatement { statement =>
       val e = intercept[SQLException] {
+        statement.execute(s"set ${SQLConf.ANSI_ENABLED.key}=false")
         statement.executeQuery(sql)
       }
       assert(e.getMessage
