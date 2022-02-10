@@ -219,13 +219,17 @@ final class ParquetColumnVector {
     int maxDefinitionLevel = column.definitionLevel();
     int maxElementRepetitionLevel = column.repetitionLevel();
 
+    ParquetColumn child = column.children().apply(0);
+    int maxElementDefinitionLevel = child.definitionLevel();
+    if (!child.required()) maxElementDefinitionLevel -= 1;
+
     // There are 4 cases when calculating definition levels:
     //   1. definitionLevel == maxDefinitionLevel
     //     ==> value is defined and not null
     //   2. definitionLevel == maxDefinitionLevel - 1
     //     ==> value is null
     //   3. definitionLevel < maxDefinitionLevel - 1
-    //     ==> value doesn't exist since one of its optional parent is null
+    //     ==> value doesn't exist since one of its optional parents is null
     //   4. definitionLevel > maxDefinitionLevel
     //     ==> value is a nested element within an array or map
     //
@@ -236,8 +240,27 @@ final class ParquetColumnVector {
          i = getNextCollectionStart(maxElementRepetitionLevel, i)) {
       vector.reserve(rowId + 1);
       int definitionLevel = definitionLevels.getInt(i);
-      if (definitionLevel == maxDefinitionLevel - 1) {
-        // Collection is null
+      if (definitionLevel < maxElementDefinitionLevel) {
+        // This means the collection is null, and it is not an array element. In this case, we
+        // should increase offset to skip it when returning an array starting from the offset.
+        //
+        // For instance, considering an array of strings with 2 elements like the following:
+        //  null, [a, b, c]
+        // the child array (which is of String type) in this case will be:
+        //  null:   1 0 0 0
+        //  length: 0 1 1 1
+        //  offset: 0 0 1 2
+        // and the array itself will be:
+        //  null:   1 0
+        //  length: 0 3
+        //  offset: 0 1
+        //
+        // It's important that for the second element `[a, b, c]`, the offset starts from 1
+        // since otherwise we'd include the first null element from child array in the result.
+        offset += 1;
+      }
+      if (definitionLevel <= maxDefinitionLevel - 1) {
+        // Collection is null or one of its optional parents is null
         vector.putNull(rowId++);
       } else if (definitionLevel == maxDefinitionLevel) {
         // Collection is defined but empty
@@ -264,22 +287,19 @@ final class ParquetColumnVector {
     vector.reserve(definitionLevels.getElementsAppended());
 
     int rowId = 0;
-    int nonnullRowId = 0;
     boolean hasRepetitionLevels = repetitionLevels.getElementsAppended() > 0;
     for (int i = 0; i < definitionLevels.getElementsAppended(); i++) {
       // If repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
       // element in struct<array<int>>), and we should skip the definition level since it doesn't
       // represent with the struct.
       if (!hasRepetitionLevels || repetitionLevels.getInt(i) <= maxRepetitionLevel) {
-        if (definitionLevels.getInt(i) == maxDefinitionLevel - 1) {
+        if (definitionLevels.getInt(i) <= maxDefinitionLevel - 1) {
           // Struct is null
           vector.putNull(rowId);
           rowId++;
         } else if (definitionLevels.getInt(i) >= maxDefinitionLevel) {
           vector.putNotNull(rowId);
-          vector.putStruct(rowId, nonnullRowId);
           rowId++;
-          nonnullRowId++;
         }
       }
     }

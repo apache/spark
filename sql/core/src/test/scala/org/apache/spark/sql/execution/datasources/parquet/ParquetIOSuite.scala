@@ -412,7 +412,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("vectorized reader: array of struct") {
+  test("vectorized reader: struct of array") {
     val data = Seq(
       Tuple1(Tuple2("a", null)),
       Tuple1(null),
@@ -431,6 +431,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
   }
+
+  test("vectorized reader: array of struct") {
+    val data = Seq(
+      Tuple1(null),
+      Tuple1(Seq(Tuple2("a", null), Tuple2(null, "b"))),
+      Tuple1(Seq(null)),
+      Tuple1(Seq(Tuple2(null, null), Tuple2("c", null), null)),
+      Tuple1(Seq())
+    )
+
+    withParquetFile(data) { file =>
+      readParquetFile(file) { df =>
+        checkAnswer(df,
+          Row(null) ::
+              Row(Seq(Row("a", null), Row(null, "b"))) ::
+              Row(Seq(null)) ::
+              Row(Seq(Row(null, null), Row("c", null), null)) ::
+              Row(Seq()) ::
+              Nil)
+      }
+    }
+  }
+
 
   test("vectorized reader: array of nested struct") {
     val data = Seq(

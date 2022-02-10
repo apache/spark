@@ -27,7 +27,6 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
-import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -381,14 +380,6 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putArray(int rowId, int offset, int length);
 
   /**
-   * Puts a new non-null struct at 'rowId' of this vector, which is backed by elements at
-   * 'offset' of child vectors.
-   *
-   * NOTE: this MUST be called after new elements are appended to child vectors of a struct vector.
-   */
-  public abstract void putStruct(int rowId, int offset);
-
-  /**
    * Sets values from [value + offset, value + offset + count) to the values at rowId.
    */
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
@@ -477,7 +468,6 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNotNull() {
-    assert (!(dataType() instanceof StructType)); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNotNull(elementsAppended);
     return elementsAppended++;
@@ -682,22 +672,21 @@ public abstract class WritableColumnVector extends ColumnVector {
    * common non-struct case.
    */
   public final int appendStruct(boolean isNull) {
-    reserve(elementsAppended + 1);
     if (isNull) {
       // This is the same as appendNull but without the assertion for struct types
+      reserve(elementsAppended + 1);
       putNull(elementsAppended);
+      elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.isStruct()) {
+        if (c.type instanceof StructType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
         }
       }
     } else {
-      putNotNull(elementsAppended);
+      appendNotNull();
     }
-    putStruct(elementsAppended, elementsAppended);
-    elementsAppended++;
     return elementsAppended;
   }
 
@@ -717,12 +706,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     return new ColumnarMap(getChild(0), getChild(1), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
-  @Override
-  public final ColumnarRow getStruct(int rowId) {
-    if (isNullAt(rowId)) return null;
-    return new ColumnarRow(this, getStructOffset(rowId));
-  }
-
   public WritableColumnVector arrayData() {
     return childColumns[0];
   }
@@ -730,11 +713,6 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract int getArrayLength(int rowId);
 
   public abstract int getArrayOffset(int rowId);
-
-  /**
-   * Returns the offset of a struct element at 'rowId' in the child vectors of this.
-   */
-  public abstract int getStructOffset(int rowId);
 
   @Override
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }

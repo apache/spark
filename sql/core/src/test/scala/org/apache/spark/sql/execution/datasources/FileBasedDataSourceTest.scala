@@ -54,9 +54,11 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
       f(spark.read.format(dataSourceName).load(path.toString))
     }
     if (testVectorized) {
-      withSQLConf(vectorizedReaderEnabledKey -> "true",
-          vectorizedReaderNestedEnabledKey -> "true") {
-        f(spark.read.format(dataSourceName).load(path.toString))
+      Seq(true, false).foreach { enableNested =>
+        withSQLConf(vectorizedReaderEnabledKey -> "true",
+            vectorizedReaderNestedEnabledKey -> enableNested.toString) {
+          f(spark.read.format(dataSourceName).load(path))
+        }
       }
     }
   }

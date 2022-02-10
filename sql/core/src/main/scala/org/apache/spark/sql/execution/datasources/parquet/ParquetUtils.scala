@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
 
 object ParquetUtils {
   def inferSchema(
