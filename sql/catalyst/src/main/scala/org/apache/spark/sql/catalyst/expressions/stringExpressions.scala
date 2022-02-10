@@ -2546,6 +2546,7 @@ case class Encode(value: Expression, charset: Expression)
   usage = """
     _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
       By default, the binary format for conversion is "hex" if `fmt` is omitted.
+      The function returns NULL if at least one of the input parameters is NULL.
   """,
   examples = """
     Examples:
