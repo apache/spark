@@ -2560,7 +2560,8 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
 
   def this(expr: Expression, format: Expression) = this(expr, Option(format),
     format match {
-      case lit if lit.foldable => lit.eval() match {
+      case lit if lit.foldable => lit.eval()
+        .asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
         case "hex" => Unhex(expr)
         case "utf-8" => Encode(expr, Literal("UTF-8"))
         case "base64" => UnBase64(expr)
@@ -2580,8 +2581,14 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   override def dataType: DataType = BinaryType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (format.forall(
-      Seq(Literal("hex"), Literal("utf-8"), Literal("base64"), Literal("base2")).contains)) {
+    if (format match {
+      case Some(f) => f match {
+        case lit if lit.foldable => Seq("hex", "utf-8", "base64", "base2").contains(
+          lit.eval().asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
+        case _ => false
+      }
+      case None => true
+    }) {
       super.checkInputDataTypes()
     } else {
       TypeCheckResult.TypeCheckFailure(
