@@ -2560,14 +2560,19 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
 
   def this(expr: Expression, format: Expression) = this(expr, Option(format),
     format match {
-      case lit if lit.foldable => lit.eval()
-        .asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-        case "hex" => Unhex(expr)
-        case "utf-8" => Encode(expr, Literal("UTF-8"))
-        case "base64" => UnBase64(expr)
-        case "base2" => Cast(expr, BinaryType)
-        case _ => lit
-      }
+      case lit if lit.foldable =>
+        val value = lit.eval()
+        if (value == null) lit
+        else {
+          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
+            case "hex" => Unhex(expr)
+            case "utf-8" => Encode(expr, Literal("UTF-8"))
+            case "base64" => UnBase64(expr)
+            case "base2" => Cast(expr, BinaryType)
+            case _ => lit
+          }
+        }
+
       case other => other
     }
   )
