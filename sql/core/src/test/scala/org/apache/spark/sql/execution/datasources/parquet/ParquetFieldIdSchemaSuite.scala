@@ -30,12 +30,6 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
   private val UUID_REGEX =
     "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}".r
 
-  protected def test(testName: String)(testFun: => Any): Unit = {
-    withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
-      super.test(testName, ParquetUseDefaultFieldIdConfigs())(testFun)
-    }
-  }
-
   private def withId(id: Int) =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
 

@@ -32,8 +32,6 @@ import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter, 
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
-import org.scalactic.source.Position
-import org.scalatest.Tag
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.DataFrame
@@ -53,30 +51,6 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   override protected val dataSourceName: String = "parquet"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
-
-  case class ParquetUseDefaultFieldIdConfigs()
-    extends Tag("Use SQLConf default options for setting Parquet field id configs")
-
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
-      (implicit pos: Position): Unit = {
-    if (testTags.exists(_.isInstanceOf[ParquetUseDefaultFieldIdConfigs])) {
-      super.test(testName, testTags: _*)(testFun)
-    } else {
-      // grid test with different combination of parquet field id options
-      super.test(testName, testTags: _*) {
-        Seq(true, false).foreach { enableRead =>
-          Seq(true, false).foreach { enableWrite =>
-            withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> enableRead.toString,
-              SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> enableWrite.toString) {
-              withClue(s"Field ID read enabled: $enableRead, write enabled: $enableWrite") {
-                testFun
-              }
-            }
-          }
-        }
-      }
-    }
-  }
 
   /**
    * Reads the parquet file at `path`
