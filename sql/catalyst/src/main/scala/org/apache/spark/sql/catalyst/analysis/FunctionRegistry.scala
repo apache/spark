@@ -412,6 +412,8 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TrySubtract]("try_subtract"),
+    expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
 
     // aggregate functions
