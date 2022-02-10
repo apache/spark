@@ -2581,14 +2581,15 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
   override def dataType: DataType = BinaryType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (format match {
-      case Some(f) => f match {
-        case lit if lit.foldable => Seq("hex", "utf-8", "base64", "base2").contains(
-          lit.eval().asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
-        case _ => false
-      }
-      case None => true
-    }) {
+    def checkFormat(lit: Expression) = {
+      if (lit.foldable) {
+        val value = lit.eval()
+        value == null || Seq("hex", "utf-8", "base64", "base2").contains(
+          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
+      } else false
+    }
+
+    if (format.forall(checkFormat)) {
       super.checkInputDataTypes()
     } else {
       TypeCheckResult.TypeCheckFailure(
