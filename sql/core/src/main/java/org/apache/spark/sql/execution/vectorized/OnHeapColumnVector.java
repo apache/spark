@@ -137,7 +137,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull || nulls[rowId] == 1;
+    return nulls[rowId] == 1;
   }
 
   //
