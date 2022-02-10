@@ -325,8 +325,8 @@ This file is divided into 3 sections:
   </check>
 
   <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">new Integer\(</parameter></parameters>
-    <customMessage>Use static factory 'valueOf(int)' or 'parseInt(String)' instead of the deprecated constructors.</customMessage>
+    <parameters><parameter name="regex">new (java\.lang\.)?(Byte|Integer|Long|Short)\(</parameter></parameters>
+    <customMessage>Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors.</customMessage>
   </check>
 
   <!-- SPARK-16877: Avoid Java annotations -->
