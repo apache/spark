@@ -48,6 +48,14 @@ class ExpressionSQLBuilder(e: Expression) {
       } else {
         None
       }
+    case EqualTo(left, right) =>
+      val l = generateSQL(left)
+      val r = generateSQL(right)
+      if (l.isDefined && r.isDefined) {
+        Some(s"${l.get} = ${r.get}")
+      } else {
+        None
+      }
     case Not(child) => generateSQL(child).map(v => s"NOT ($v)")
     case CaseWhen(branches, elseValue) =>
       val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
