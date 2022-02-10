@@ -434,14 +434,12 @@ object VirtualColumn {
 }
 
 /**
- * The internal representation of the hidden metadata struct:
- * set `__metadata_col` to `true` in AttributeReference metadata
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
  * - apply() will create a metadata attribute reference
- * - unapply() will check if an attribute reference is the file source metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
-
-  val METADATA_ATTRIBUTE_NAME = "_metadata"
 
   def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
     AttributeReference(name, dataType, nullable,
@@ -449,8 +447,25 @@ object MetadataAttribute {
 
   def unapply(attr: AttributeReference): Option[AttributeReference] = {
     if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
+      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
+      Some(attr)
+    } else None
+  }
+}
+
+/**
+ * The internal representation of the FileSourceMetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata with the attr name `_metadata`
+ * - unapply() will check if an attribute reference is the file source metadata attribute reference
+ */
+object FileSourceMetadataAttribute {
+
+  val ATTRIBUTE_NAME = "_metadata"
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
       && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
-      && attr.name.equalsIgnoreCase(METADATA_ATTRIBUTE_NAME)) {
+      && attr.name.equalsIgnoreCase(ATTRIBUTE_NAME)) {
       Some(attr)
     } else None
   }
