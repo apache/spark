@@ -217,11 +217,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         case FileSourceMetadataAttribute(attr) => attr
       }
 
-      val metadataColumns = metadataStructOpt.map { metadataStruct =>
-        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          AttributeReference(field.name, field.dataType)()
-        }.toSeq
-      }.getOrElse(Seq.empty)
+      val metadataColumns = metadataStructOpt
+        .map(_.dataType.asInstanceOf[StructType].toAttributes)
+        .getOrElse(Seq.empty)
 
       // outputAttributes should also include the metadata columns at the very end
       val outputAttributes = readDataColumns ++ partitionColumns ++ metadataColumns
