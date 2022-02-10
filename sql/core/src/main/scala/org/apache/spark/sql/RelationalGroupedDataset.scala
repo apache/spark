@@ -458,7 +458,8 @@ class RelationalGroupedDataset protected[sql](
               Literal.apply(v)
             } catch {
               case _: SparkRuntimeException =>
-                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.toString)
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(
+                  v, pivotColumn.expr.dataType)
             }
         })
         new RelationalGroupedDataset(
