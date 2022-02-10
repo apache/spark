@@ -68,7 +68,7 @@ import org.apache.spark.sql.types._
  *       * CreateMap
  *   * For complex types (struct, array, map), Spark recursively looks into the element type and
  *     applies the rules above.
- *  Note: this new type coercion system will allow implicit converting String type literals as other
+ *  Note: this new type coercion system will allow implicit converting String type as other
  *  primitive types, in case of breaking too many existing Spark SQL queries. This is a special
  *  rule and it is not from the ANSI SQL standard.
  */
@@ -140,6 +140,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, _: IntegralType) => Some(LongType)
       case (StringType, _: FractionalType) => Some(DoubleType)
       case (StringType, NullType) => Some(StringType)
+      // If a binary operation contains interval type and string, we can't decide which
+      // interval type the string should be promoted as. There are many possible interval
+      // types, such as year interval, month interval, day interval, hour interval, etc.
+      case (StringType, _: AnsiIntervalType) => None
       case (StringType, a: AtomicType) => Some(a)
       case (other, StringType) if other != StringType => findWiderTypeForString(StringType, other)
       case _ => None
@@ -181,21 +185,21 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
         Some(target.defaultConcreteType)
 
-      // This type coercion system will allow implicit converting String type literals as other
+      // This type coercion system will allow implicit converting String type as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
       case (StringType, a: AtomicType) =>
         Some(a)
 
-      // If the target type is any Numeric type, convert the String type literal as Double type.
+      // If the target type is any Numeric type, convert the String type as Double type.
       case (StringType, NumericType) =>
         Some(DoubleType)
 
-      // If the target type is any Decimal type, convert the String type literal as the default
+      // If the target type is any Decimal type, convert the String type as the default
       // Decimal type.
       case (StringType, DecimalType) =>
         Some(DecimalType.SYSTEM_DEFAULT)
 
-      // If the target type is any timestamp type, convert the String type literal as the default
+      // If the target type is any timestamp type, convert the String type as the default
       // Timestamp type.
       case (StringType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
