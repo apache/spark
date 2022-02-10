@@ -1553,16 +1553,22 @@ class SessionCatalog(
 
   /**
    * Look up the `ExpressionInfo` of the given function by name if it's a built-in or temp function.
-   * This supports both scalar and table functions.
+   * This only supports scalar functions.
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
     FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      def lookup(ident: FunctionIdentifier): Option[ExpressionInfo] = {
-        functionRegistry.lookupFunction(ident).orElse(
-          tableFunctionRegistry.lookupFunction(ident))
-      }
-      synchronized(lookupTempFuncWithViewContext(name, isBuiltinFunction, lookup))
+      synchronized(lookupTempFuncWithViewContext(
+        name, FunctionRegistry.builtin.functionExists, functionRegistry.lookupFunction))
     }
+  }
+
+  /**
+   * Look up the `ExpressionInfo` of the given function by name if it's a built-in or
+   * temp table function.
+   */
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
+    lookupTempFuncWithViewContext(
+      name, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry.lookupFunction)
   }
 
   /**
@@ -1709,15 +1715,16 @@ class SessionCatalog(
    */
   def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
     if (name.database.isEmpty) {
-      lookupBuiltinOrTempFunction(name.funcName).getOrElse(lookupPersistentFunction(name))
+      lookupBuiltinOrTempFunction(name.funcName)
+        .orElse(lookupBuiltinOrTempTableFunction(name.funcName))
+        .getOrElse(lookupPersistentFunction(name))
     } else {
       lookupPersistentFunction(name)
     }
   }
 
-  // Test only. The actual function lookup logic looks up temp/built-in function first, then
-  // persistent function from either v1 or v2 catalog. This method only look up v1 catalog and is
-  // no longer valid.
+  // The actual function lookup logic looks up temp/built-in function first, then persistent
+  // function from either v1 or v2 catalog. This method only look up v1 catalog.
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     if (name.database.isEmpty) {
       resolveBuiltinOrTempFunction(name.funcName, children)

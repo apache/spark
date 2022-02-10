@@ -1,7 +1,4 @@
 {
-  "AES_CRYPTO_ERROR" : {
-    "message" : [ "AES crypto operation failed with: %s" ]
-  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
@@ -17,6 +14,9 @@
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
+  },
+  "CANNOT_UP_CAST_DATATYPE" : {
+    "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
@@ -54,9 +54,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than %s" ]
   },
-  "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
-    "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
-  },
   "ILLEGAL_SUBSTRING" : {
     "message" : [ "%s cannot contain %s." ]
   },
@@ -73,10 +70,6 @@
   },
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
-  },
-  "INVALID_AES_KEY_LENGTH" : {
-    "message" : [ "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes, but got: %s" ],
-    "sqlState" : "42000"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [ "Invalid index: %s, numElements: %s. If necessary set %s to false to bypass this error." ]
@@ -98,6 +91,14 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PARAMETER_VALUE" : {
+    "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
+    "sqlState" : "22023"
+  },
+  "INVALID_SQL_SYNTAX" : {
+    "message" : [ "Invalid SQL syntax: %s" ],
+    "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
@@ -129,10 +130,6 @@
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
-  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
-    "message" : [ "Expected one row from CSV parser." ],
-    "sqlState" : "42000"
-  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
@@ -144,28 +141,16 @@
     "message" : [ "Unrecognized SQL type %s" ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_AES_MODE" : {
-    "message" : [ "The AES mode %s with the padding %s is not supported" ],
-    "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_CHANGE_COLUMN" : {
-    "message" : [ "Please add an implementation for a column change here" ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [ "Unsupported data type %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_LITERAL_TYPE" : {
-    "message" : [ "Unsupported literal type %s %s" ],
+  "UNSUPPORTED_FEATURE" : {
+    "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_SIMPLE_STRING_WITH_NODE_ID" : {
-    "message" : [ "%s does not implement simpleStringWithNodeId" ]
-  },
-  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
-    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
-    "sqlState" : "0A000"
+  "UNSUPPORTED_GROUPING_EXPRESSION" : {
+    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

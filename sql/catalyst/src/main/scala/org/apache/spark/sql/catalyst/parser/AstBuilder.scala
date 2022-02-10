@@ -55,6 +55,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -1145,7 +1146,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
-            throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
+            throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
           case None if join.NATURAL != null =>
             if (join.LATERAL != null) {
               throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
@@ -3472,8 +3473,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
@@ -3556,8 +3558,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, false)
 
     Option(ctx.query).map(plan) match {

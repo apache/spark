@@ -1008,14 +1008,16 @@ class JDBCSuite extends QueryTest
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
     val teradataQuery = s"DELETE FROM $table ALL"
+    val db2Query = s"TRUNCATE TABLE $table IMMEDIATE"
 
-    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+    Seq(mysql, h2, derby).foreach{ dialect =>
       assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
     }
 
     assert(postgres.getTruncateQuery(table) == postgresQuery)
     assert(oracle.getTruncateQuery(table) == defaultQuery)
     assert(teradata.getTruncateQuery(table) == teradataQuery)
+    assert(db2.getTruncateQuery(table) == db2Query)
   }
 
   test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
@@ -1034,13 +1036,15 @@ class JDBCSuite extends QueryTest
     val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
     val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
     val teradataQuery = s"DELETE FROM $table ALL"
+    val db2Query = s"TRUNCATE TABLE $table IMMEDIATE"
 
-    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+    Seq(mysql, h2, derby).foreach{ dialect =>
       assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
     }
     assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
     assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
+    assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {

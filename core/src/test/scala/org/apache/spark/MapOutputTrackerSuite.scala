@@ -855,7 +855,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
-  test("SPARK-37023: Avoid fetching merge status when shuffleMergeEnabled is false") {
+  test("SPARK-37023: Avoid fetching merge status when useMergeResult is false") {
     val newConf = new SparkConf
     newConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     newConf.set(IS_TESTING, true)
@@ -909,5 +909,33 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     slaveTracker.stop()
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
+  }
+
+  test("SPARK-34826: Adaptive shuffle mergers") {
+    val newConf = new SparkConf
+    newConf.set("spark.shuffle.push.based.enabled", "true")
+    newConf.set("spark.shuffle.service.enabled", "true")
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+      val worker = new MapOutputTrackerWorker(newConf)
+      worker.trackerEndpoint =
+        rpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+      masterTracker.registerShuffle(20, 100, 100)
+      worker.updateEpoch(masterTracker.getEpoch)
+      val mergerLocs = (1 to 10).map(x => BlockManagerId(s"exec-$x", s"host-$x", 7337))
+      masterTracker.registerShufflePushMergerLocations(20, mergerLocs)
+
+      assert(worker.getShufflePushMergerLocations(20).size == 10)
+      worker.unregisterShuffle(20)
+      assert(worker.shufflePushMergerLocations.isEmpty)
+    }
   }
 }

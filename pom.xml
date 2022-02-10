@@ -133,7 +133,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.8.1</kafka.version>
+    <kafka.version>3.1.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.2</parquet.version>
@@ -147,7 +147,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.2</codahale.metrics.version>
+    <codahale.metrics.version>4.2.7</codahale.metrics.version>
     <avro.version>1.11.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
@@ -184,7 +184,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
-    <joda.version>2.10.12</joda.version>
+    <joda.version>2.10.13</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -204,7 +204,7 @@
     <arrow.version>6.0.1</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.10.2</kubernetes-client.version>
+    <kubernetes-client.version>5.12.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -773,7 +773,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.1-1</version>
+        <version>1.5.2-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1025,6 +1025,11 @@
             <artifactId>commons-math3</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.chuusai</groupId>
+        <artifactId>shapeless_${scala.binary.version}</artifactId>
+        <version>2.3.7</version>
       </dependency>
       <dependency>
         <groupId>org.json4s</groupId>

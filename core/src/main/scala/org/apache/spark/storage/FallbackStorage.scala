@@ -95,7 +95,9 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
 }
 
 private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
+  // scalastyle:off executioncontextglobal
   import scala.concurrent.ExecutionContext.Implicits.global
+  // scalastyle:on executioncontextglobal
   override def address: RpcAddress = null
   override def name: String = "fallback"
   override def send(message: Any): Unit = {}

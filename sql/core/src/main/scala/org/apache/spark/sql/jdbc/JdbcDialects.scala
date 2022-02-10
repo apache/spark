@@ -327,6 +327,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
+  def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    }
+  }
+
   /**
    * Build a create index SQL statement.
    *

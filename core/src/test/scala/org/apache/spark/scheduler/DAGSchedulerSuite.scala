@@ -3613,8 +3613,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
 
-    assert(shuffleStage2.shuffleDep.shuffleMergeFinalized)
-    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
+    assert(shuffleStage2.shuffleDep.isShuffleMergeFinalizedMarked)
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
 
@@ -3671,7 +3671,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeShuffleMapStageSuccessfully(0, 0, parts)
     val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
+    assert(shuffleStage.shuffleDep.mergerLocs.isEmpty)
 
     completeNextResultStageWithSuccess(1, 0)
 
@@ -3686,14 +3686,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeNextStageWithFetchFailure(3, 0, shuffleDep)
     scheduler.resubmitFailedStages()
 
-    // Make sure shuffle merge is disabled for the retry
     val stage2 = scheduler.stageIdToStage(2).asInstanceOf[ShuffleMapStage]
-    assert(!stage2.shuffleDep.shuffleMergeEnabled)
+    assert(stage2.shuffleDep.shuffleMergeEnabled)
 
     // the scheduler now creates a new task set to regenerate the missing map output, but this time
     // using a different stage, the "skipped" one
     assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics != null)
-    completeShuffleMapStageSuccessfully(2, 1, 2)
+    completeShuffleMapStageSuccessfully(2, 1, parts)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
 
     val expected = (0 until parts).map(idx => (idx, idx + 1234))
@@ -3798,7 +3797,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(reduceRdd, (0 until parts).toArray)
     completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(!shuffleMapStage.shuffleDep.shuffleMergeEnabled)
+    assert(!shuffleMapStage.shuffleDep.shuffleMergeAllowed)
   }
 
   test("SPARK-32920: metadata fetch failure should not unregister map status") {
@@ -3926,7 +3925,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val finalizeTask1 = shuffleStage1.shuffleDep.getFinalizeTask.get
       .asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask1.delay == 10 && finalizeTask1.registerMergeResults)
-    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
 
     complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
       case (_, idx) =>
@@ -4051,8 +4050,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(StageCancelled(0, Option("Explicit cancel check")))
     scheduler.handleShuffleMergeFinalized(shuffleStage1, shuffleStage1.shuffleDep.shuffleMergeId)
 
-    assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleStage1.shuffleDep.shuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.mergerLocs.nonEmpty)
+    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     assert(mapOutputTracker.
       getNumAvailableMergeResults(shuffleStage1.shuffleDep.shuffleId) == 0)
 
@@ -4082,7 +4081,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(shuffleIndeterminateStage.isIndeterminate)
     scheduler.handleShuffleMergeFinalized(shuffleIndeterminateStage, 2)
     assert(shuffleIndeterminateStage.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleIndeterminateStage.shuffleDep.shuffleMergeFinalized)
+    assert(!shuffleIndeterminateStage.shuffleDep.isShuffleMergeFinalizedMarked)
   }
 
   // With Adaptive shuffle merge finalization, once minimum shuffle pushes complete after stage
@@ -4130,7 +4129,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     assert(shuffleStage1.shuffleDep.shuffleMergeEnabled)
-    assert(!shuffleStage1.shuffleDep.shuffleMergeFinalized)
+    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     val finalizeTask1 = shuffleStage1.shuffleDep.getFinalizeTask.get.
       asInstanceOf[DummyScheduledFuture]
     assert(finalizeTask1.delay == 10 && finalizeTask1.registerMergeResults)
@@ -4147,7 +4146,206 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(finalizeTask2.delay == 0 && finalizeTask2.registerMergeResults)
   }
 
-    /**
+  test("SPARK-34826: Adaptively fetch shuffle mergers") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 2)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1"))
+    val parts = 2
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0), Success, makeMapStatus("hostA", parts),
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
+
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleStage1.shuffleDep.shuffleMergeEnabled)
+    assert(mapOutputTracker.getShufflePushMergerLocations(0).isEmpty)
+
+    DAGSchedulerSuite.addMergerLocs(Seq("host2", "host3"))
+
+    // host2 executor added event to trigger registering of shuffle merger locations
+    // as shuffle mergers are tracked separately for test
+    runEvent(ExecutorAdded("exec2", "host2"))
+
+    // Check if new shuffle merger locations are available for push or not
+    assert(mapOutputTracker.getShufflePushMergerLocations(0).size == 2)
+    assert(shuffleStage1.shuffleDep.getMergerLocs.size == 2)
+
+    // Complete remaining tasks in ShuffleMapStage 0
+    runEvent(makeCompletionEvent(taskSets(0).tasks(1), Success,
+      makeMapStatus("host1", parts), Seq.empty, Array.empty, createFakeTaskInfoWithId(1)))
+
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-34826: Adaptively fetch shuffle mergers with stage retry") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 2)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1"))
+    val parts = 2
+
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2),
+      tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+
+    val taskResults = taskSets(0).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts))
+    }.toSeq
+
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    DAGSchedulerSuite.addMergerLocs(Seq("host2", "host3"))
+    // host2 executor added event to trigger registering of shuffle merger locations
+    // as shuffle mergers are tracked separately for test
+    runEvent(ExecutorAdded("exec2", "host2"))
+    // Check if new shuffle merger locations are available for push or not
+    assert(mapOutputTracker.getShufflePushMergerLocations(0).size == 2)
+    assert(shuffleStage1.shuffleDep.getMergerLocs.size == 2)
+    val mergerLocsBeforeRetry = shuffleStage1.shuffleDep.getMergerLocs
+
+    // Clear merger locations to check if new mergers are not getting set for the
+    // retry of determinate stage
+    DAGSchedulerSuite.clearMergerLocs()
+
+    // Remove MapStatus on one of the host before the stage ends to trigger
+    // a scenario where stage 0 needs to be resubmitted upon finishing all tasks.
+    // Merge finalization should be scheduled in this case.
+    for ((result, i) <- taskResults.zipWithIndex) {
+      if (i == taskSets(0).tasks.size - 1) {
+        mapOutputTracker.removeOutputsOnHost("host0")
+      }
+      runEvent(makeCompletionEvent(taskSets(0).tasks(i), result._1, result._2))
+    }
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
+
+    DAGSchedulerSuite.addMergerLocs(Seq("host4", "host5"))
+    // host4 executor added event shouldn't reset merger locations given merger locations
+    // are already set
+    runEvent(ExecutorAdded("exec4", "host4"))
+
+    // Successfully completing the retry of stage 0.
+    complete(taskSets(2), taskSets(2).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts))
+    }.toSeq)
+
+    assert(shuffleStage1.shuffleDep.shuffleMergeId == 0)
+    assert(shuffleStage1.shuffleDep.getMergerLocs.size == 2)
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
+    val newMergerLocs =
+      scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs
+    assert(mergerLocsBeforeRetry.sortBy(_.host) === newMergerLocs.sortBy(_.host))
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts, 10))
+    }.toSeq)
+    assert(shuffleStage2.shuffleDep.getMergerLocs.size == 2)
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-34826: Adaptively fetch shuffle mergers with stage retry for indeterminate stage") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 2)
+    DAGSchedulerSuite.clearMergerLocs()
+    DAGSchedulerSuite.addMergerLocs(Seq("host1"))
+    val parts = 2
+
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil, indeterminate = true)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil, indeterminate = true)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2),
+      tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+
+    val taskResults = taskSets(0).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts))
+    }.toSeq
+
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    DAGSchedulerSuite.addMergerLocs(Seq("host2", "host3"))
+    // host2 executor added event to trigger registering of shuffle merger locations
+    // as shuffle mergers are tracked separately for test
+    runEvent(ExecutorAdded("exec2", "host2"))
+    // Check if new shuffle merger locations are available for push or not
+    assert(mapOutputTracker.getShufflePushMergerLocations(0).size == 2)
+    assert(shuffleStage1.shuffleDep.getMergerLocs.size == 2)
+    val mergerLocsBeforeRetry = shuffleStage1.shuffleDep.getMergerLocs
+
+    // Clear merger locations to check if new mergers are getting set for the
+    // retry of indeterminate stage
+    DAGSchedulerSuite.clearMergerLocs()
+
+    // Remove MapStatus on one of the host before the stage ends to trigger
+    // a scenario where stage 0 needs to be resubmitted upon finishing all tasks.
+    // Merge finalization should be scheduled in this case.
+    for ((result, i) <- taskResults.zipWithIndex) {
+      if (i == taskSets(0).tasks.size - 1) {
+        mapOutputTracker.removeOutputsOnHost("host0")
+      }
+      runEvent(makeCompletionEvent(taskSets(0).tasks(i), result._1, result._2))
+    }
+
+    // Indeterminate stage should recompute all partitions, hence
+    // isShuffleMergeFinalizedMarked should be false here
+    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
+
+    DAGSchedulerSuite.addMergerLocs(Seq("host4", "host5"))
+    // host4 executor added event should reset merger locations given merger locations
+    // are already reset
+    runEvent(ExecutorAdded("exec4", "host4"))
+    assert(shuffleStage1.shuffleDep.getMergerLocs.size == 2)
+    // Successfully completing the retry of stage 0.
+    complete(taskSets(2), taskSets(2).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts))
+    }.toSeq)
+
+    assert(shuffleStage1.shuffleDep.shuffleMergeId == 2)
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
+    val newMergerLocs =
+      scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs
+    assert(mergerLocsBeforeRetry.sortBy(_.host) !== newMergerLocs.sortBy(_.host))
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
+      case (_, idx) =>
+        (Success, makeMapStatus("host" + idx, parts, 10))
+    }.toSeq)
+    assert(shuffleStage2.shuffleDep.getMergerLocs.size == 2)
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
    */

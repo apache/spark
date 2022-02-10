@@ -21,11 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -59,7 +59,6 @@ class DDLParserSuite extends AnalysisTest {
         .add("a", IntegerType, nullable = true, "test")
         .add("b", StringType, nullable = false)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -83,7 +82,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("a", IntegerType).add("b", StringType)),
         Seq.empty[Transform],
-        None,
         Map.empty[String, String],
         Some("parquet"),
         Map.empty[String, String],
@@ -104,7 +102,6 @@ class DDLParserSuite extends AnalysisTest {
         .add("a", IntegerType, nullable = true, "test")
         .add("b", StringType)),
       Seq(IdentityTransform(FieldReference("a"))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -159,7 +156,6 @@ class DDLParserSuite extends AnalysisTest {
           FieldReference("a"),
           LiteralValue(UTF8String.fromString("bar"), StringType),
           LiteralValue(34, IntegerType)))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -181,14 +177,14 @@ class DDLParserSuite extends AnalysisTest {
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      Seq.empty[Transform],
-      Some(BucketSpec(5, Seq("a"), Seq("b"))),
+      List(bucket(5, Array(FieldReference.column("a")), Array(FieldReference.column("b")))),
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
       None,
       None,
       None)
+
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
@@ -201,7 +197,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -222,7 +217,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("a", IntegerType).add("b", StringType)),
       Seq.empty[Transform],
-      None,
       Map("test" -> "test"),
       Some("parquet"),
       Map.empty[String, String],
@@ -241,7 +235,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("a", IntegerType).add("b", StringType)),
         Seq.empty[Transform],
-        None,
         Map.empty[String, String],
         Some("parquet"),
         Map.empty[String, String],
@@ -260,7 +253,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("1m", "2g"),
       Some(new StructType().add("a", IntegerType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -279,7 +271,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -298,7 +289,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -317,7 +307,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
@@ -361,7 +350,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -387,7 +375,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("my_tab"),
         Some(new StructType().add("id", LongType).add("part", StringType)),
         Seq(IdentityTransform(FieldReference("part"))),
-        None,
         Map.empty[String, String],
         None,
         Map.empty[String, String],
@@ -430,7 +417,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -469,7 +455,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -493,7 +478,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("my_tab"),
       Some(new StructType().add("id", LongType).add("part", StringType)),
       Seq(IdentityTransform(FieldReference("part"))),
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
@@ -627,7 +611,6 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Some(new StructType),
           Seq.empty[Transform],
-          Option.empty[BucketSpec],
           Map.empty[String, String],
           Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
@@ -683,7 +666,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq("mydb", "page_view"),
         None,
         Seq.empty[Transform],
-        None,
         Map("p1" -> "v1", "p2" -> "v2"),
         Some("parquet"),
         Map.empty[String, String],
@@ -2124,7 +2106,6 @@ class DDLParserSuite extends AnalysisTest {
       name: Seq[String],
       schema: Option[StructType],
       partitioning: Seq[Transform],
-      bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: Option[String],
       options: Map[String, String],
@@ -2141,7 +2122,6 @@ class DDLParserSuite extends AnalysisTest {
             create.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(create.tableSchema),
             create.partitioning,
-            create.tableSpec.bucketSpec,
             create.tableSpec.properties,
             create.tableSpec.provider,
             create.tableSpec.options,
@@ -2154,7 +2134,6 @@ class DDLParserSuite extends AnalysisTest {
             replace.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(replace.tableSchema),
             replace.partitioning,
-            replace.tableSpec.bucketSpec,
             replace.tableSpec.properties,
             replace.tableSpec.provider,
             replace.tableSpec.options,
@@ -2166,7 +2145,6 @@ class DDLParserSuite extends AnalysisTest {
             ctas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(ctas.query).filter(_.resolved).map(_.schema),
             ctas.partitioning,
-            ctas.tableSpec.bucketSpec,
             ctas.tableSpec.properties,
             ctas.tableSpec.provider,
             ctas.tableSpec.options,
@@ -2179,7 +2157,6 @@ class DDLParserSuite extends AnalysisTest {
             rtas.name.asInstanceOf[UnresolvedDBObjectName].nameParts,
             Some(rtas.query).filter(_.resolved).map(_.schema),
             rtas.partitioning,
-            rtas.tableSpec.bucketSpec,
             rtas.tableSpec.properties,
             rtas.tableSpec.provider,
             rtas.tableSpec.options,
@@ -2217,7 +2194,6 @@ class DDLParserSuite extends AnalysisTest {
       Seq("1m", "2g"),
       Some(new StructType().add("a", IntegerType)),
       Seq.empty[Transform],
-      None,
       Map.empty[String, String],
       None,
       Map.empty[String, String],
