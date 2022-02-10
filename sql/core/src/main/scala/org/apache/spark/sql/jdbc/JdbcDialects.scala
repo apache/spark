@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -254,6 +254,45 @@ abstract class JdbcDialect extends Serializable with Logging{
         Some(s"AVG($distinct$sql)")
       case _ => None
     }
+  }
+
+  /**
+   * Create schema with an optional comment. Empty string means no comment.
+   */
+  def createSchema(statement: Statement, schema: String, comment: String): Unit = {
+    val schemaCommentQuery = if (comment.nonEmpty) {
+      // We generate comment query here so that it can fail earlier without creating the schema.
+      getSchemaCommentQuery(schema, comment)
+    } else {
+      comment
+    }
+    statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
+    if (comment.nonEmpty) {
+      statement.executeUpdate(schemaCommentQuery)
+    }
+  }
+
+  /**
+   * Check schema exists or not.
+   */
+  def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val rs = conn.getMetaData.getSchemas(null, schema)
+    while (rs.next()) {
+      if (rs.getString(1) == schema) return true;
+    }
+    false
+  }
+
+  /**
+   * Lists all the schemas in this table.
+   */
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val schemaBuilder = ArrayBuilder.make[Array[String]]
+    val rs = conn.getMetaData.getSchemas()
+    while (rs.next()) {
+      schemaBuilder += Array(rs.getString(1))
+    }
+    schemaBuilder.result
   }
 
   /**
