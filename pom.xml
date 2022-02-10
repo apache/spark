@@ -2608,10 +2608,15 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- the following tomcat-embed-core is set for "org.apache.thrift -> libthrift" above-->
+      <!-- the following tomcat-embed-core and tomcat-annotations-api are set for "org.apache.thrift -> libthrift" above-->
       <dependency>
         <groupId>org.apache.tomcat.embed</groupId>
         <artifactId>tomcat-embed-core</artifactId>
+        <version>8.5.75</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tomcat</groupId>
+        <artifactId>tomcat-annotations-api</artifactId>
         <version>8.5.75</version>
       </dependency>
       <dependency>
