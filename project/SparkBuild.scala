@@ -426,6 +426,9 @@ object SparkBuild extends PomBuild {
       Compile / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStep.scala",
       Test / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStepSuite.scala"
     ))(kubernetes)
+    enable(Seq(
+      Test / unmanagedSources / excludeFilter := HiddenFileFilter || "Volcano*.scala"
+    ))(kubernetesIntegrationTests)
   }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)

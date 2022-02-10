@@ -614,7 +614,7 @@ jobs:
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         export JAVA_VERSION=${{ matrix.java }}
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
@@ -660,7 +660,7 @@ jobs:
     - name: Build with SBT
       run: |
         ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   tpcds-1g:
     needs: [configure-jobs, precondition]

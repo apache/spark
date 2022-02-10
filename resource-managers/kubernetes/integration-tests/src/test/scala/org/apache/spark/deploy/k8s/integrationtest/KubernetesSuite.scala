@@ -181,7 +181,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
-  before {
+  protected def setUpTest(): Unit = {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
     driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
@@ -193,6 +193,10 @@ class KubernetesSuite extends SparkFunSuite
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
+  }
+
+  before {
+    setUpTest()
   }
 
   after {
@@ -598,6 +602,7 @@ private[spark] object KubernetesSuite {
   val localTestTag = Tag("local")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
+  val volcanoTag = Tag("volcano")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_MINI_READ_WRITE_TEST = "org.apache.spark.examples.MiniReadWriteTest"
