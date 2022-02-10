@@ -953,7 +953,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val IGNORE_MISSING_PARQUET_FIELD_ID =
-    buildConf("spark.sql.parquet.fieldId.ignoreMissing")
+    buildConf("spark.sql.parquet.fieldId.read.ignoreMissing")
       .doc("When the Parquet file doesn't have any field IDs but the " +
         "Spark read schema is using field IDs to read, we will silently return nulls " +
         "when this flag is enabled, or error otherwise.")
