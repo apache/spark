@@ -841,16 +841,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
   }
 
-  test("scan with aggregate push-down: aggregate function with NVL") {
-    val df5 = sql("SELECT AVG(NVL(SALARY, SALARY)) FROM h2.test.employee GROUP BY DEPT")
-    checkAggregateRemoved(df5, false)
-    df5.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: aggregate function with UDF") {
+    val df = spark.table("h2.test.employee")
+    val decrease = udf { (x: Double, y: Double) => x - y }
+    val query = df.select(sum(decrease($"SALARY", $"BONUS")).as("value"))
+    checkAggregateRemoved(query, false)
+    query.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedFilters: []"
-        checkKeywordsExistsInExplain(df5, expected_plan_fragment)
+        checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
-    checkAnswer(df5, Seq(Row(11000d), Row(12000d), Row(9500d)))
+    checkAnswer(query, Seq(Row(47100.0)))
   }
 
   test("scan with aggregate push-down: partition columns with multi group by columns") {
