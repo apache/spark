@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, UpCast}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.functions.{grouping, grouping_id}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.NumericType
 
 case class StringLongClass(a: String, b: Long)
 
@@ -61,21 +57,6 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
          |- root class: "org.apache.spark.sql.errors.ComplexClass"
          |You can either add an explicit cast to the input data or choose a higher precision type
        """.stripMargin.trim + " of the field in the target object")
-  }
-
-  test("UNSUPPORTED_FEATURE: UpCast only support DecimalType as AbstractDataType") {
-    val df = sql("select 1 as value")
-
-    val msg = intercept[AnalysisException] {
-      val plan = Project(
-        Seq(Alias(UpCast(UnresolvedAttribute("value"), NumericType), "value")()),
-        df.logicalPlan)
-
-      Dataset.ofRows(spark, plan)
-    }.message
-    assert(msg.matches("The feature is not supported: " +
-      "UpCast only support DecimalType as AbstractDataType yet," +
-      """ but got: org.apache.spark.sql.types.NumericType\$\@\w+"""))
   }
 
   test("UNSUPPORTED_GROUPING_EXPRESSION: filter with grouping/grouping_Id expression") {

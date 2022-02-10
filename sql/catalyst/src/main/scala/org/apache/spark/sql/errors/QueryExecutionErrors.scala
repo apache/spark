@@ -181,11 +181,6 @@ object QueryExecutionErrors {
     }
   }
 
-  def rowFromCSVParserNotExpectedError(): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "ROW_FROM_CSV_PARSER_NOT_EXPECTED",
-      messageParameters = Array.empty)
-  }
-
   def inputTypeUnsupportedError(dataType: DataType): Throwable = {
     new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
   }

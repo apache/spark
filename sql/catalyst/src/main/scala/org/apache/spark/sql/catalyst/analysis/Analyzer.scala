@@ -3591,7 +3591,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
+          throw new IllegalStateException(
+            s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target")
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
