@@ -72,8 +72,7 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
       bucketSpec = Some(BucketSpec(setting.numBuckets, setting.cols.map(_.name), Nil)),
       fileFormat = new ParquetFileFormat(),
       options = Map.empty)(spark)
-    FileSourceScanExec(relation, setting.cols, relation.dataSchema, Nil,
-      None, None, Nil, None, metadataColumns = Seq.empty)
+    FileSourceScanExec(relation, setting.cols, relation.dataSchema, Nil, None, None, Nil, None)
   }
 
   private def run(setting: JoinSetting): Unit = {

@@ -196,9 +196,11 @@ case class FileSourceScanExec(
     optionalNumCoalescedBuckets: Option[Int],
     dataFilters: Seq[Expression],
     tableIdentifier: Option[TableIdentifier],
-    disableBucketedScan: Boolean = false,
-    metadataColumns: Seq[AttributeReference])
+    disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
+
+  lazy val metadataColumns: Seq[AttributeReference] =
+    output.collect { case FileSourceMetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -691,7 +693,6 @@ case class FileSourceScanExec(
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
-      disableBucketedScan,
-      metadataColumns)
+      disableBucketedScan)
   }
 }

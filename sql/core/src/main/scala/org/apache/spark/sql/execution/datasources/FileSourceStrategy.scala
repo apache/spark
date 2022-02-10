@@ -217,9 +217,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         case FileSourceMetadataAttribute(attr) => attr
       }
 
-      val metadataColumns = metadataStructOpt
-        .map(_.dataType.asInstanceOf[StructType].toAttributes)
-        .getOrElse(Seq.empty)
+      val metadataColumns = metadataStructOpt.map { metadataStruct =>
+        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
+          FileSourceMetadataAttribute(field.name, field.dataType)
+        }.toSeq
+      }.getOrElse(Seq.empty)
 
       // outputAttributes should also include the metadata columns at the very end
       val outputAttributes = readDataColumns ++ partitionColumns ++ metadataColumns
@@ -233,8 +235,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           bucketSet,
           None,
           dataFilters,
-          table.map(_.identifier),
-          metadataColumns = metadataColumns)
+          table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
