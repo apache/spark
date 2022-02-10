@@ -2085,10 +2085,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def canApplyRegex(ctx: ParserRuleContext): Boolean = withOrigin(ctx) {
     var parent = ctx.getParent
     while (parent != null) {
-      if (parent.isInstanceOf[NamedExpressionContext]) return true
+      if (parent.isInstanceOf[NamedExpressionContext] && isRegex(ctx.getText)) return true
       parent = parent.getParent
     }
     return false
+  }
+
+  /**
+   * Returns whether the pattern is a regex expression (instead of a normal
+   * string). Normal string is a string with all alphabets/digits and "_".
+   */
+  private def isRegex(pattern: String): Boolean = {
+    for (p <- pattern) {
+      if (!Character.isLetterOrDigit(p) && p != '_') return true
+    }
+    false
   }
 
   /**
