@@ -146,3 +146,4 @@ select to_binary('abc', concat('utf', '-8'));
 select to_binary('abc', concat('base', '64'));
 select to_binary('abc', 'Hex');
 select to_binary('abc', 'UTF-8');
+select to_binary('abc', null);
