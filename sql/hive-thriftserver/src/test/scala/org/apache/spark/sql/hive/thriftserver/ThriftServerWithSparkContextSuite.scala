@@ -74,7 +74,6 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
       assert(e.getSQLState == "22023")
 
-
       val e1 = intercept[HiveSQLException] {
         exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
         exec(sql)
