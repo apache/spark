@@ -115,7 +115,7 @@ private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOr
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, IntegerType)
     }
 }
 
@@ -135,7 +135,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, IntegerType)
     }
   }
 
@@ -143,7 +143,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, LongType)
     }
   }
 
@@ -160,7 +160,7 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, IntegerType)
     }
   }
 
@@ -168,7 +168,7 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      throw QueryExecutionErrors.castingCauseOverflowError(x, "long")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, LongType)
     }
   }
 
