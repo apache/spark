@@ -1021,8 +1021,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // correlation contains only the supported correlated equality predicates.
       // Only block it for lateral subqueries because scalar subqueries must be aggregated
       // and it does not impact the results for IN/EXISTS subqueries.
-      case d: Distinct if isLateral =>
-        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, d)
+      case d: Distinct =>
+        if (isLateral) {
+          failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, d)
+        }
 
       // Join can host correlated expressions.
       case j @ Join(left, right, joinType, _, _) =>
