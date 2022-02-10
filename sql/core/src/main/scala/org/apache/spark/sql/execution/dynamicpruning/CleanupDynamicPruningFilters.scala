@@ -44,7 +44,8 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
   }
 
   /**
-   * Remove DynamicPruningSubquery if the pruning key has equality condition
+   * If a partition key already has equality conditions, then its DPP filter is useless and
+   * can't prune anything. So we should remove it.
    */
   private def removeUnnecessaryDynamicPruningSubquery(plan: LogicalPlan): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
