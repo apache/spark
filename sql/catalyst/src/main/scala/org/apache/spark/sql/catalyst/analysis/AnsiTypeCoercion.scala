@@ -195,7 +195,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, DecimalType) =>
         Some(DecimalType.SYSTEM_DEFAULT)
 
-      // If the target type is any Decimal type, convert the String type literal as the default
+      // If the target type is any timestamp type, convert the String type literal as the default
       // Timestamp type.
       case (StringType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
