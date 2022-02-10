@@ -234,6 +234,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   def createSchema(statement: Statement, schema: String, comment: String): Unit = {
     val schemaCommentQuery = if (comment.nonEmpty) {
+      // We generate comment query here so that it can fail earlier without creating the schema.
       getSchemaCommentQuery(schema, comment)
     } else {
       comment

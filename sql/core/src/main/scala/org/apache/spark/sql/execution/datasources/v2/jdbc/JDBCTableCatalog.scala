@@ -172,14 +172,14 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
-        JdbcUtils.namespaceExists(conn, options, db)
+        JdbcUtils.schemaExists(conn, options, db)
       }
     case _ => false
   }
 
   override def listNamespaces(): Array[Array[String]] = {
     JdbcUtils.withConnection(options) { conn =>
-      JdbcUtils.listNamespaces(conn, options)
+      JdbcUtils.listSchemas(conn, options)
     }
   }
 
@@ -226,7 +226,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       }
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(s"Failed create name space: $db", dialect) {
-          JdbcUtils.createNamespace(conn, options, db, comment)
+          JdbcUtils.createSchema(conn, options, db, comment)
         }
       }
 
@@ -245,7 +245,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(s"Failed create comment on name space: $db", dialect) {
-                  JdbcUtils.alterNamespaceComment(conn, options, db, set.value)
+                  JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
               }
             } else {
@@ -256,7 +256,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
                 JdbcUtils.classifyException(s"Failed remove comment on name space: $db", dialect) {
-                  JdbcUtils.removeNamespaceComment(conn, options, db)
+                  JdbcUtils.removeSchemaComment(conn, options, db)
                 }
               }
             } else {
@@ -278,7 +278,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     case Array(db) if namespaceExists(namespace) =>
       JdbcUtils.withConnection(options) { conn =>
         JdbcUtils.classifyException(s"Failed drop name space: $db", dialect) {
-          JdbcUtils.dropNamespace(conn, options, db, cascade)
+          JdbcUtils.dropSchema(conn, options, db, cascade)
           true
         }
       }

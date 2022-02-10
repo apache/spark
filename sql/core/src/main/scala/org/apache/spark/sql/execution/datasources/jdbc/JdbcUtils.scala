@@ -971,57 +971,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Creates a namespace.
+   * Creates a schema.
    */
-  def createNamespace(
+  def createSchema(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String,
+      schema: String,
       comment: String): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
       val dialect = JdbcDialects.get(options.url)
-      dialect.createSchema(statement, namespace, comment)
+      dialect.createSchema(statement, schema, comment)
     } finally {
       statement.close()
     }
   }
 
-  def namespaceExists(conn: Connection, options: JDBCOptions, namespace: String): Boolean = {
+  def schemaExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
     val dialect = JdbcDialects.get(options.url)
-    dialect.schemasExists(conn, options, namespace)
+    dialect.schemasExists(conn, options, schema)
   }
 
-  def listNamespaces(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
     val dialect = JdbcDialects.get(options.url)
     dialect.listSchemas(conn, options)
   }
 
-  def alterNamespaceComment(
+  def alterSchemaComment(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String,
+      schema: String,
       comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.getSchemaCommentQuery(namespace, comment))
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(schema, comment))
   }
 
-  def removeNamespaceComment(
+  def removeSchemaComment(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String): Unit = {
+      schema: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(schema))
   }
 
   /**
-   * Drops a namespace from the JDBC database.
+   * Drops a schema from the JDBC database.
    */
-  def dropNamespace(
-      conn: Connection, options: JDBCOptions, namespace: String, cascade: Boolean): Unit = {
+  def dropSchema(
+      conn: Connection, options: JDBCOptions, schema: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.dropSchema(namespace, cascade))
+    executeStatement(conn, options, dialect.dropSchema(schema, cascade))
   }
 
   /**
