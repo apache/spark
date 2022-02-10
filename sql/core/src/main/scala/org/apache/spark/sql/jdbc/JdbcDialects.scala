@@ -230,7 +230,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
-   * Create schema with comment.
+   * Create schema with an optional comment. Empty string means no comment.
    */
   def createSchema(statement: Statement, schema: String, comment: String): Unit = {
     val schemaCommentQuery = if (comment.nonEmpty) {
