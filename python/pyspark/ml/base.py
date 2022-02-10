@@ -24,7 +24,6 @@ from typing import (
     Any,
     Callable,
     Generic,
-    Iterable,
     Iterator,
     List,
     Optional,
@@ -104,7 +103,7 @@ class _FitMultipleIterator(Generic[M]):
 
 
 @inherit_doc
-class Estimator(Generic[M], Params, metaclass=ABCMeta):
+class Estimator(Params, Generic[M], metaclass=ABCMeta):
     """
     Abstract class for estimators that fit models to data.
 
@@ -133,7 +132,7 @@ class Estimator(Generic[M], Params, metaclass=ABCMeta):
 
     def fitMultiple(
         self, dataset: DataFrame, paramMaps: Sequence["ParamMap"]
-    ) -> Iterable[Tuple[int, M]]:
+    ) -> Iterator[Tuple[int, M]]:
         """
         Fits a model to the input dataset for each param map in `paramMaps`.
 
@@ -382,7 +381,7 @@ class Predictor(Estimator[M], _PredictorParams, metaclass=ABCMeta):
 
 
 @inherit_doc
-class PredictionModel(Generic[T], Transformer, _PredictorParams, metaclass=ABCMeta):
+class PredictionModel(Model, _PredictorParams, Generic[T], metaclass=ABCMeta):
     """
     Model for prediction tasks (regression and classification).
     """

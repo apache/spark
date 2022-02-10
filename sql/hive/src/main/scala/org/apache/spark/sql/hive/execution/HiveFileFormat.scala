@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -104,6 +105,21 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
           context: TaskAttemptContext): OutputWriter = {
         new HiveOutputWriter(path, fileSinkConfSer, jobConf.value, dataSchema)
       }
+    }
+  }
+
+  override def supportFieldName(name: String): Boolean = {
+    fileSinkConf.getTableInfo.getOutputFileFormatClassName match {
+      case "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat" =>
+        !name.matches(".*[ ,;{}()\n\t=].*")
+      case "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat" =>
+        try {
+          TypeInfoUtils.getTypeInfoFromTypeString(s"struct<$name:int>")
+          true
+        } catch {
+          case _: IllegalArgumentException => false
+        }
+      case _ => true
     }
   }
 }

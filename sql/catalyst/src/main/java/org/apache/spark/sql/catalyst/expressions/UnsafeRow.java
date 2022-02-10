@@ -80,7 +80,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   static {
     mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
-        Arrays.asList(new DataType[] {
+        Arrays.asList(
           NullType,
           BooleanType,
           ByteType,
@@ -90,8 +90,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           FloatType,
           DoubleType,
           DateType,
-          TimestampType
-        })));
+          TimestampType,
+          TimestampNTZType
+        )));
   }
 
   public static boolean isFixedLength(DataType dt) {
