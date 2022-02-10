@@ -302,7 +302,7 @@ class MicroBatchExecution(
               s" and offset ${latestBatchId - 1} doesn't exist. You can try to remove the offset" +
               s" $latestBatchId and start over. If your query aims end-to-end exactly once" +
               s" semantic, and you can also remove the output from the batch ${latestBatchId - 1}" +
-              s" manually if possible before starting.")
+              " manually if possible before starting.")
             throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
           }
           committedOffsets = secondLatestOffsets.toStreamProgress(sources)
