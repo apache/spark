@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -203,28 +203,55 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+        val sql = min.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MIN($sql)")
       case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+        val sql = max.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MAX($sql)")
       case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
+        val sql = count.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(count.column.fieldNames.head)
-        Some(s"COUNT($distinct$column)")
+        Some(s"COUNT($distinct$sql)")
       case sum: Sum =>
-        if (sum.column.fieldNames.length != 1) return None
+        val sql = sum.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(sum.column.fieldNames.head)
-        Some(s"SUM($distinct$column)")
+        Some(s"SUM($distinct$sql)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        if (avg.column.fieldNames.length != 1) return None
+        val sql = avg.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(avg.column.fieldNames.head)
-        Some(s"AVG($distinct$column)")
+        Some(s"AVG($distinct$sql)")
       case _ => None
     }
   }
