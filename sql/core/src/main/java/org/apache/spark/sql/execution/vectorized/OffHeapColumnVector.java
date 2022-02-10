@@ -581,7 +581,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
           Platform.reallocateMemory(offsetData, oldCapacity * 4L, newCapacity * 4L);
     } else if (isStruct()) {
       this.structOffsetData =
-        Platform.reallocateMemory(structOffsetData, oldCapacity * 4L, newCapacity * 4L);
+          Platform.reallocateMemory(structOffsetData, oldCapacity * 4L, newCapacity * 4L);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
     } else if (type instanceof ShortType) {

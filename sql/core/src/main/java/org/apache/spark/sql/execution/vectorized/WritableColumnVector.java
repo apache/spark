@@ -725,6 +725,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public abstract int getStructOffset(int rowId);
 
+  /**
+   * Returns the elements appended.
+   */
+  public final int getElementsAppended() { return elementsAppended; }
+
   @Override
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
