@@ -65,42 +65,50 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
       val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
 
-      val e = intercept[HiveSQLException] {
+      val e1 = intercept[HiveSQLException] {
+        exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
         exec(sql)
       }
 
-      if (ansi) {
-        assert(!e.getMessage
-          .contains("The second argument of 'date_sub' function needs to be an integer."))
-        assert(e.getMessage.contains(
-          "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-        assert(e.getSQLState == "42000")
-      } else {
-        assert(e.getMessage
-          .contains("The second argument of 'date_sub' function needs to be an integer."))
-        assert(!e.getMessage.contains(
-          "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-        assert(e.getSQLState == "22023")
+      assert(e1.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(!e1.getMessage.contains(
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e1.getSQLState == "22023")
+
+      val e2 = intercept[HiveSQLException] {
+        exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+        exec(sql)
       }
+
+      assert(!e2.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e2.getMessage.contains(
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e2.getSQLState == "42000")
     }
 
     withJdbcStatement { statement =>
-      val e = intercept[SQLException] {
+      val e1 = intercept[SQLException] {
+        statement.executeQuery(s"set ${SQLConf.ANSI_ENABLED.key}=true")
         statement.executeQuery(sql)
       }
 
-      if (ansi) {
-        assert(e.getMessage.contains(
-          "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-        assert(e.getSQLState == "42000")
-      } else {
-        assert(e.getMessage
-          .contains("The second argument of 'date_sub' function needs to be an integer."))
-        assert(e.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
-        assert(e.getMessage.contains(
-          "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-        assert(e.getSQLState == "22023")
+      assert(e1.getMessage.contains(
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e1.getSQLState == "42000")
+
+      val e2 = intercept[SQLException] {
+        statement.executeQuery(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+        statement.executeQuery(sql)
       }
+
+      assert(e2.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e2.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
+      assert(e2.getMessage.contains(
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e2.getSQLState == "22023")
     }
   }
 
