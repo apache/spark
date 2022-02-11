@@ -15,35 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.aggregate;
+package org.apache.spark.sql.connector.expressions;
+
+import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * An aggregate function that returns the number of the specific row in a group.
+ * The general SQL string corresponding to expression.
  *
- * @since 3.2.0
+ * @since 3.3.0
  */
 @Evolving
-public final class Count implements AggregateFunc {
-  private final Expression input;
-  private final boolean isDistinct;
+public class GeneralSQLExpression implements Expression, Serializable {
+    private String sql;
 
-  public Count(Expression column, boolean isDistinct) {
-    this.input = column;
-    this.isDistinct = isDistinct;
-  }
-
-  public Expression column() { return input; }
-  public boolean isDistinct() { return isDistinct; }
-
-  @Override
-  public String toString() {
-    if (isDistinct) {
-      return "COUNT(DISTINCT " + input.describe() + ")";
-    } else {
-      return "COUNT(" + input.describe() + ")";
+    public GeneralSQLExpression(String sql) {
+        this.sql = sql;
     }
-  }
+
+    public String sql() { return sql; }
+
+    @Override
+    public String toString() { return sql; }
 }

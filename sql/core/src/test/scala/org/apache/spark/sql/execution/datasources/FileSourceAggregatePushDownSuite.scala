@@ -372,6 +372,34 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
+  test("aggregate not push down - MIN/MAX/COUNT with CASE WHEN") {
+    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
+      (9, "mno", 7), (2, null, 6))
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
+        val selectAgg = sql(
+          """
+            |SELECT
+            |  min(CASE WHEN _1 < 0 THEN 0 ELSE _1 END),
+            |  min(CASE WHEN _3 > 5 THEN 1 ELSE 0 END),
+            |  max(CASE WHEN _1 < 0 THEN 0 ELSE _1 END),
+            |  max(CASE WHEN NOT(_3 > 5) THEN 1 ELSE 0 END),
+            |  count(CASE WHEN _1 < 0 AND _2 IS NOT NULL THEN 0 ELSE _1 END),
+            |  count(CASE WHEN _3 != 5 OR _2 IS NULL THEN 1 ELSE 0 END)
+            |FROM t
+          """.stripMargin)
+        selectAgg.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: []"
+            checkKeywordsExistsInExplain(selectAgg, expected_plan_fragment)
+        }
+
+        checkAnswer(selectAgg, Seq(Row(0, 0, 9, 1, 6, 6)))
+      }
+    }
+  }
+
   private def testPushDownForAllDataTypes(
       inputRows: Seq[Row],
       expectedMinWithAllTypes: Seq[Row],

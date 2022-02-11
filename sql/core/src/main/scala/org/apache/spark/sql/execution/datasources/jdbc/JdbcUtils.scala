@@ -971,53 +971,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Creates a namespace.
+   * Creates a schema.
    */
-  def createNamespace(
+  def createSchema(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String,
+      schema: String,
       comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
-  }
-
-  def createNamespaceComment(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String,
-      comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.createStatement
     try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
+      statement.setQueryTimeout(options.queryTimeout)
+      val dialect = JdbcDialects.get(options.url)
+      dialect.createSchema(statement, schema, comment)
+    } finally {
+      statement.close()
     }
   }
 
-  def removeNamespaceComment(
+  def schemaExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.schemasExists(conn, options, schema)
+  }
+
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listSchemas(conn, options)
+  }
+
+  def alterSchemaComment(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String): Unit = {
+      schema: String,
+      comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(schema, comment))
+  }
+
+  def removeSchemaComment(
+      conn: Connection,
+      options: JDBCOptions,
+      schema: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(schema))
   }
 
   /**
-   * Drops a namespace from the JDBC database.
+   * Drops a schema from the JDBC database.
    */
-  def dropNamespace(
-      conn: Connection, options: JDBCOptions, namespace: String, cascade: Boolean): Unit = {
+  def dropSchema(
+      conn: Connection, options: JDBCOptions, schema: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.dropSchema(namespace, cascade))
+    executeStatement(conn, options, dialect.dropSchema(schema, cascade))
   }
 
   /**
@@ -1148,11 +1152,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
+    f: ResultSet => Unit): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
+      val rs = statement.executeQuery(sql)
+      try {
+        f(rs)
+      } finally {
+        rs.close()
+      }
     } finally {
       statement.close()
     }

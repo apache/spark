@@ -57,5 +57,18 @@ class EliminateDistinctSuite extends PlanTest {
         assert(query != answer)
         comparePlans(Optimize.execute(query), answer)
       }
+
+      test(s"SPARK-38177: Eliminate Distinct in non-root $agg") {
+        val query = testRelation
+          .select(agg.toAggregateExpression(isDistinct = true).as('result))
+          .limit(1)
+          .analyze
+        val answer = testRelation
+          .select(agg.toAggregateExpression(isDistinct = false).as('result))
+          .limit(1)
+          .analyze
+        assert(query != answer)
+        comparePlans(Optimize.execute(query), answer)
+      }
   }
 }
