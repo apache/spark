@@ -151,7 +151,7 @@ Input [9]: [ss_cdemo_sk#1, ss_hdemo_sk#2, ss_quantity#5, ss_sales_price#6, ss_ex
 Output [2]: [hd_demo_sk#23, hd_dep_count#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_demo_sk), Or(Or(EqualTo(hd_dep_count,3),EqualTo(hd_dep_count,1)),EqualTo(hd_dep_count,1))]
+PushedFilters: [IsNotNull(hd_demo_sk), Or(EqualTo(hd_dep_count,3),EqualTo(hd_dep_count,1))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (27) ColumnarToRow [codegen id : 5]
@@ -159,7 +159,7 @@ Input [2]: [hd_demo_sk#23, hd_dep_count#24]
 
 (28) Filter [codegen id : 5]
 Input [2]: [hd_demo_sk#23, hd_dep_count#24]
-Condition : (isnotnull(hd_demo_sk#23) AND (((hd_dep_count#24 = 3) OR (hd_dep_count#24 = 1)) OR (hd_dep_count#24 = 1)))
+Condition : (isnotnull(hd_demo_sk#23) AND ((hd_dep_count#24 = 3) OR (hd_dep_count#24 = 1)))
 
 (29) BroadcastExchange
 Input [2]: [hd_demo_sk#23, hd_dep_count#24]
