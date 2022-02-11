@@ -16,12 +16,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, TypeVar, Union
+from typing import Any, Dict, List, TypeVar, Tuple, Union
 from typing_extensions import Literal
+
+from numpy import ndarray
 
 import pyspark.ml.base
 import pyspark.ml.param
 import pyspark.ml.util
+from pyspark.ml.linalg import Vector
 import pyspark.ml.wrapper
 from py4j.java_gateway import JavaObject
 
@@ -68,6 +71,8 @@ MultilabelClassificationEvaluatorMetricType = Union[
     Literal["microF1Measure"],
 ]
 ClusteringEvaluatorMetricType = Literal["silhouette"]
+ClusteringEvaluatorDistanceMeasureType = Union[Literal["squaredEuclidean"], Literal["cosine"]]
+
 RankingEvaluatorMetricType = Union[
     Literal["meanAveragePrecision"],
     Literal["meanAveragePrecisionAtK"],
@@ -75,3 +80,5 @@ RankingEvaluatorMetricType = Union[
     Literal["ndcgAtK"],
     Literal["recallAtK"],
 ]
+
+VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]

@@ -188,34 +188,35 @@ java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses several rules that govern how conflicts between data types are resolved.
 At the heart of this conflict resolution is the Type Precedence List which defines whether values of a given data type can be promoted to another data type implicitly.
 
-| Data type | precedence list(from narrowest to widest)                        |
-|-----------|------------------------------------------------------------------|
-| Byte      | Byte -> Short -> Int -> Long -> Decimal -> Float* -> Double      |
-| Short     | Short -> Int -> Long -> Decimal-> Float* -> Double               |
-| Int       | Int -> Long -> Decimal -> Float* -> Double                       |
-| Long      | Long -> Decimal -> Float* -> Double                              |
-| Decimal   | Decimal -> Float* -> Double                                      |
-| Float     | Float -> Double                                                  |
-| Double    | Double                                                           |
-| Date      | Date -> Timestamp                                                |
-| Timestamp | Timestamp                                                        |
-| String    | String                                                           |
-| Binary    | Binary                                                           |
-| Boolean   | Boolean                                                          |
-| Interval  | Interval                                                         |
-| Map       | Map**                                                            |
-| Array     | Array**                                                          |
-| Struct    | Struct**                                                         |
+| Data type | precedence list(from narrowest to widest)                     |
+|-----------|---------------------------------------------------------------|
+| Byte      | Byte -> Short -> Int -> Long -> Decimal -> Float* -> Double   |
+| Short     | Short -> Int -> Long -> Decimal-> Float* -> Double            |
+| Int       | Int -> Long -> Decimal -> Float* -> Double                    |
+| Long      | Long -> Decimal -> Float* -> Double                           |
+| Decimal   | Decimal -> Float* -> Double                                   |
+| Float     | Float -> Double                                               |
+| Double    | Double                                                        |
+| Date      | Date -> Timestamp                                             |
+| Timestamp | Timestamp                                                     |
+| String    | String, Long -> Double, Date -> Timestamp, Boolean, Binary ** |
+| Binary    | Binary                                                        |
+| Boolean   | Boolean                                                       |
+| Interval  | Interval                                                      |
+| Map       | Map***                                                        |
+| Array     | Array***                                                      |
+| Struct    | Struct***                                                     |
 
 \* For least common type resolution float is skipped to avoid loss of precision.
 
-\*\* For a complex type, the precedence rule applies recursively to its component elements.
+\*\* String can be promoted to multiple kinds of data types. Note that Byte/Short/Int/Decimal/Float is not on this precedent list. The least common type between Byte/Short/Int and String is Long, while the least common type between Decimal/Float is Double.
 
-Special rules apply for string literals and untyped NULL.
-A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
+\*\*\* For a complex type, the precedence rule applies recursively to its component elements.
+
+Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 This is a graphical depiction of the precedence list as a directed tree:
-<img src="img/type-precedence-list.png" width="80%" title="Type Precedence List" alt="Type Precedence List">
+<img src="img/type-precedence-list.png" width="60%" title="Type Precedence List" alt="Type Precedence List">
 
 #### Least Common Type Resolution
 The least common type from a set of types is the narrowest type reachable from the precedence list by all elements of the set of types.
@@ -245,13 +246,19 @@ DOUBLE
 > SELECT (typeof(coalesce(1BD, 1F)));
 DOUBLE
 
+> SELECT typeof(coalesce(1, '2147483648'))
+BIGINT
+> SELECT typeof(coalesce(1.0, '2147483648'))
+DOUBLE
+> SELECT typeof(coalesce(DATE'2021-01-01', '2022-01-01'))
+DATE
 ```
 
 ### SQL Functions
 #### Function invocation
 Under ANSI mode(spark.sql.ansi.enabled=true), the function invocation of Spark SQL:
 - In general, it follows the `Store assignment` rules as storing the input values as the declared parameter type of the SQL functions
-- Special rules apply for string literals and untyped NULL. A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
+- Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 ```sql
 > SET spark.sql.ansi.enabled=true;
@@ -262,10 +269,10 @@ total number: 1
 > select datediff(now(), current_date);
 0
 
--- specialrule: implicitly cast String literal to Double type
+-- implicitly cast String to Double type
 > SELECT ceil('0.1');
 1
--- specialrule: implicitly cast NULL to Date type
+-- special rule: implicitly cast NULL to Date type
 > SELECT year(null);
 NULL
 
@@ -306,6 +313,8 @@ The behavior of some SQL operators can be different under ANSI mode (`spark.sql.
 When ANSI mode is on, it throws exceptions for invalid operations. You can use the following SQL functions to suppress such exceptions.
   - `try_cast`: identical to `CAST`, except that it returns `NULL` result instead of throwing an exception on runtime error.
   - `try_add`: identical to the add operator `+`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
+  - `try_subtract`: identical to the add operator `-`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
+  - `try_multiply`: identical to the add operator `*`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound or map's key not found.
 

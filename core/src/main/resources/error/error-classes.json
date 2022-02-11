@@ -15,6 +15,9 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
+  "CANNOT_UP_CAST_DATATYPE" : {
+    "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
@@ -93,6 +96,10 @@
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
     "sqlState" : "22023"
   },
+  "INVALID_SQL_SYNTAX" : {
+    "message" : [ "Invalid SQL syntax: %s" ],
+    "sqlState" : "42000"
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
   },
@@ -123,10 +130,6 @@
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
-  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
-    "message" : [ "Expected one row from CSV parser." ],
-    "sqlState" : "42000"
-  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
@@ -145,6 +148,9 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_GROUPING_EXPRESSION" : {
+    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
