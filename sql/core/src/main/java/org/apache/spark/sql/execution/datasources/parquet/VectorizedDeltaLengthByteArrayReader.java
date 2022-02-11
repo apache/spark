@@ -52,9 +52,6 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    if (total == 0) {
-      return;
-    }
     ByteBuffer buffer;
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;

@@ -71,10 +71,6 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   private void readValues(int total, WritableColumnVector c, int rowId,
       ByteBufferOutputWriter outputWriter) {
-    if (total == 0) {
-      return;
-    }
-
     for (int i = 0; i < total; i++) {
       // NOTE: due to PARQUET-246, it is important that we
       // respect prefixLength which was read from prefixLengthReader,
