@@ -467,11 +467,15 @@ def is_testing() -> bool:
 
 def default_session() -> SparkSession:
     spark = SparkSession.getActiveSession()
-    if spark is not None:
-        return spark
+    if spark is None:
+        spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
-    builder = SparkSession.builder.appName("pandas-on-Spark")
-    return builder.getOrCreate()
+    # Turn ANSI off when testing the pandas API on Spark since
+    # the behavior of pandas API on Spark follows pandas, not SQL.
+    if is_testing():
+        spark.conf.set("spark.sql.ansi.enabled", False)
+
+    return spark
 
 
 @contextmanager
