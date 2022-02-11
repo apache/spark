@@ -190,6 +190,10 @@ class ContinuousExecution(
   private def runContinuous(sparkSessionForQuery: SparkSession): Unit = {
     val offsets = getStartOffsets(sparkSessionForQuery)
 
+    if (currentBatchId > 0) {
+      AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(Some(offsets), sources)
+    }
+
     val withNewSources: LogicalPlan = logicalPlan transform {
       case relation: StreamingDataSourceV2Relation =>
         val loggedOffset = offsets.offsets(0)
