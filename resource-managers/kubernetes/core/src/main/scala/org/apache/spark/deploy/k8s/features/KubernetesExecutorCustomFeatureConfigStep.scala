@@ -25,6 +25,39 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  * A base interface to help user extend custom feature step in executor side.
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
+ *
+ * Here is an example of feature step for executor:
+ *
+ * {{{
+ *   class ExecutorExampleFeatureStep extends KubernetesExecutorCustomFeatureConfigStep {
+ *     private var executorConf: KubernetesExecutorConf = _
+ *
+ *     override def init(conf: KubernetesExecutorConf): Unit = {
+ *       executorConf = conf
+ *     }
+ *
+ *     override def configurePod(pod: SparkPod): SparkPod = {}
+ *   }
+ * }}}
+ *
+ * Here is an example of feature step both for driver and executor:
+ *
+ * {{{
+ *   class ExecutorExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep
+ *     with KubernetesExecutorCustomFeatureConfigStep {
+ *     private var kubernetesConf: KubernetesConf = _
+ *
+ *     override def init(conf: KubernetesDriverConf): Unit = {
+ *       kubernetesConf = conf
+ *     }
+ *
+ *     override def init(conf: KubernetesExecutorConf): Unit = {
+ *       kubernetesConf = conf
+ *     }
+ *
+ *     override def configurePod(pod: SparkPod): SparkPod = {}
+ *   }
+ * }}}
  */
 @Unstable
 @DeveloperApi
