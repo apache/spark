@@ -1749,7 +1749,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    min|                 2|
         |    max|                 5|
         +-------+------------------+
-        >>> df.describe().show()
+
+        When "spark.sql.ansi.enabled" is True, it raises excepton if the column type
+        is not numeric or interval (for computing mean), or double (for computing stddev).
+
+        >>> df.describe().show()  # doctest: +SKIP
         +-------+------------------+-----+
         |summary|               age| name|
         +-------+------------------+-----+
@@ -1791,7 +1795,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df.summary().show()
+        When "spark.sql.ansi.enabled" is True, it raises excepton if the column type
+        is not numeric or interval (for computing mean), double (for computing stddev),
+        numeric or date or timestamp or timestamp_ntz or interval year to month or interval day to second
+        (for computing percentiles).
+
+        >>> df.summary().show()  # doctest: +SKIP
         +-------+------------------+-----+
         |summary|               age| name|
         +-------+------------------+-----+
@@ -1805,7 +1814,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |    max|                 5|  Bob|
         +-------+------------------+-----+
 
-        >>> df.summary("count", "min", "25%", "75%", "max").show()
+        >>> df.summary("count", "min", "25%", "75%", "max").show()  # doctest: +SKIP
         +-------+---+-----+
         |summary|age| name|
         +-------+---+-----+

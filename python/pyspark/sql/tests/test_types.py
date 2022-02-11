@@ -118,8 +118,9 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test"):
             df.createOrReplaceTempView("test")
-            result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
         df2 = self.spark.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
@@ -128,8 +129,9 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test2"):
             df2.createOrReplaceTempView("test2")
-            result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
     def test_infer_schema_specification(self):
         from decimal import Decimal
