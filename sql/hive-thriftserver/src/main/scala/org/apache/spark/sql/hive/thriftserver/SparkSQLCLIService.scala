@@ -138,7 +138,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
         serviceStartCount += 1
       }
       // Emulating `AbstractService.start`
-      val startTime = Long.valueOf(System.currentTimeMillis())
+      val startTime = java.lang.Long.valueOf(System.currentTimeMillis())
       setAncestorField(this, 3, "startTime", startTime)
       invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
       invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
