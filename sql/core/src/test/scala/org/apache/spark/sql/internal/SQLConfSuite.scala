@@ -469,7 +469,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       if (i == 0) {
         assert(zone === "Z")
       } else {
-        assert(zone === String.format("%+03d:00", new Integer(i)))
+        assert(zone === String.format("%+03d:00", Integer.valueOf(i)))
       }
     }
     val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
