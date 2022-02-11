@@ -803,8 +803,11 @@ case class DescribeColumnCommand(
         // time zone.
         val internalValue =
           CatalogColumnStat.fromExternalString(valueStr, name, dataType, CatalogColumnStat.VERSION)
-        val timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-        CatalogColumnStat.toExternalString(internalValue, name, dataType, timeZoneId)
+        val curZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+        CatalogColumnStat
+          .getTimestampFormatter(
+            isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSS Z", zoneId = curZoneId)
+          .format(internalValue.asInstanceOf[Long])
       case _ =>
         valueStr
     }

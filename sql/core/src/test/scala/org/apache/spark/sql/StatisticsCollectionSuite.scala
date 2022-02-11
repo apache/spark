@@ -492,7 +492,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-38140: describe column stats (min, max) for timestamp column: desc results should " +
     "be consistent with the written value if writing and desc happen in the same time zone") {
 
-    Seq(UTC, PST, getZoneId("Asia/Hong_Kong")).foreach { zoneId =>
+    val zoneIdAndOffsets =
+      Seq((UTC, "+0000"), (PST, "-0800"), (getZoneId("Asia/Hong_Kong"), "+0800"))
+
+    zoneIdAndOffsets.foreach { case (zoneId, offset) =>
       withDefaultTimeZone(zoneId) {
         val table = "insert_desc_same_time_zone"
         val tsCol = "timestamp_typed_col"
@@ -506,8 +509,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           checkDescTimestampColStatsByZone(
             tableName = table,
             timestampColumn = tsCol,
-            expectedMinTimestamp = "2022-01-01 00:00:01.123456",
-            expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
+            expectedMinTimestamp = "2022-01-01 00:00:01.123456 " + offset,
+            expectedMaxTimestamp = "2022-01-03 00:00:02.987654 " + offset)
         }
       }
     }
@@ -530,22 +533,22 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         checkDescTimestampColStatsByZone(
           tableName = table,
           timestampColumn = tsCol,
-          expectedMinTimestamp = "2022-01-01 00:00:01.123456",
-          expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
+          expectedMinTimestamp = "2022-01-01 00:00:01.123456 +0000",
+          expectedMaxTimestamp = "2022-01-03 00:00:02.987654 +0000")
 
         TimeZone.setDefault(DateTimeUtils.getTimeZone("PST"))
         checkDescTimestampColStatsByZone(
           tableName = table,
           timestampColumn = tsCol,
-          expectedMinTimestamp = "2021-12-31 16:00:01.123456",
-          expectedMaxTimestamp = "2022-01-02 16:00:02.987654")
+          expectedMinTimestamp = "2021-12-31 16:00:01.123456 -0800",
+          expectedMaxTimestamp = "2022-01-02 16:00:02.987654 -0800")
 
         TimeZone.setDefault(DateTimeUtils.getTimeZone("Asia/Hong_Kong"))
         checkDescTimestampColStatsByZone(
           tableName = table,
           timestampColumn = tsCol,
-          expectedMinTimestamp = "2022-01-01 08:00:01.123456",
-          expectedMaxTimestamp = "2022-01-03 08:00:02.987654")
+          expectedMinTimestamp = "2022-01-01 08:00:01.123456 +0800",
+          expectedMaxTimestamp = "2022-01-03 08:00:02.987654 +0800")
       }
     }
   }
