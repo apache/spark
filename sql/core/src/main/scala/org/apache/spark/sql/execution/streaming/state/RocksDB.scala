@@ -336,6 +336,7 @@ class RocksDB(
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
+    val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -369,7 +370,7 @@ class RocksDB(
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
-      readerMemUsage + memTableMemUsage,
+      readerMemUsage + memTableMemUsage + blockCacheUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros.toMap,
       commitLatencyMs,
