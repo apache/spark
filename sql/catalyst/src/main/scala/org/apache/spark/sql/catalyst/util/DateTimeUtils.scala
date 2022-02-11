@@ -1186,6 +1186,8 @@ object DateTimeUtils {
         timestampAddMonths(micros, interval * 3, zoneId)
       case "YEAR" | "SQL_TSI_YEAR" =>
         timestampAddMonths(micros, interval * MONTHS_PER_YEAR, zoneId)
+      case _ =>
+        throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
     }
   }
 }
