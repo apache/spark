@@ -3708,8 +3708,8 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])  # doctest: +SKIP
     [Row(element_at(data, 1)='a'), Row(element_at(data, 1)=None)]
 
-    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])  # doctest: +SKIP
-    >>> df.select(element_at(df.data, lit("a"))).collect()
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
+    >>> df.select(element_at(df.data, lit("a"))).collect()  # doctest: +SKIP
     [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
