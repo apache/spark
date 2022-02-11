@@ -72,7 +72,7 @@ class EliminateAggregateFilterSuite extends PlanTest {
     comparePlans(Optimize.execute(query), answer)
   }
 
-  test("Eliminate Filter in non-root node") {
+  test("SPARK-38177: Eliminate Filter in non-root node") {
     val query = testRelation
       .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), 'a).as('result))
       .limit(1)
