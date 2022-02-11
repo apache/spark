@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalactic.Equality
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
@@ -56,6 +57,9 @@ abstract class SchemaPruningSuite
     depName: String,
     contactId: Int,
     employer: Employer)
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
