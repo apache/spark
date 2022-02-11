@@ -157,7 +157,7 @@ class ContinuousExecution(
    *    Start a new query log
    *  DONE
    */
-  private def getStartOffsets(sparkSessionToRunBatches: SparkSession): OffsetSeq = {
+  private def getStartOffsets(): OffsetSeq = {
     // Note that this will need a slight modification for exactly once. If ending offsets were
     // reported but not committed for any epochs, we must replay exactly to those offsets.
     // For at least once, we can just ignore those reports and risk duplicates.
@@ -188,7 +188,7 @@ class ContinuousExecution(
    * @param sparkSessionForQuery Isolated [[SparkSession]] to run the continuous query with.
    */
   private def runContinuous(sparkSessionForQuery: SparkSession): Unit = {
-    val offsets = getStartOffsets(sparkSessionForQuery)
+    val offsets = getStartOffsets()
 
     if (currentBatchId > 0) {
       AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(Some(offsets), sources)
