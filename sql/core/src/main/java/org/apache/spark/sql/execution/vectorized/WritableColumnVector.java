@@ -419,6 +419,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public void putInterval(int rowId, CalendarInterval value) {
+    putStruct(rowId, rowId - numNulls);
     getChild(0).putInt(rowId, value.months);
     getChild(1).putInt(rowId, value.days);
     getChild(2).putLong(rowId, value.microseconds);
@@ -678,13 +679,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (WritableColumnVector c: childColumns) {
         if (c.isStruct()) {
           c.appendStruct(true);
-        } else {
-          c.appendNull();
         }
       }
     } else {
       putNotNull(elementsAppended);
-      putStruct(elementsAppended, elementsAppended);
+      putStruct(elementsAppended, elementsAppended - numNulls);
     }
     elementsAppended++;
     return elementsAppended;
@@ -710,6 +709,16 @@ public abstract class WritableColumnVector extends ColumnVector {
   public final ColumnarRow getStruct(int rowId) {
     if (isNullAt(rowId)) return null;
     return new ColumnarRow(this, getStructOffset(rowId));
+  }
+
+  @Override
+  public final CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    final int adjustedRowId = getStructOffset(rowId);
+    final int months = getChild(0).getInt(adjustedRowId);
+    final int days = getChild(1).getInt(adjustedRowId);
+    final long microseconds = getChild(2).getLong(adjustedRowId);
+    return new CalendarInterval(months, days, microseconds);
   }
 
   public WritableColumnVector arrayData() {
