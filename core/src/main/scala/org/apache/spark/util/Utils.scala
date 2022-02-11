@@ -3234,10 +3234,9 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get the value of -XX:G1HeapRegionSize if we are using G1 GC,
-   * otherwise just return None
+   * Return whether we are using G1GC or not
    */
-  val maybeG1HeapRegionSize: Option[Long] = {
+  val isG1GC: Boolean = {
     Try {
       val clazz = classForName("com.sun.management.HotSpotDiagnosticMXBean")
         .asInstanceOf[Class[_ <: PlatformManagedObject]]
@@ -3248,14 +3247,8 @@ private[spark] object Utils extends Logging {
 
       val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
       val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
-      if ("true".equals(useG1GC)) {
-        val regionSizeObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "G1HeapRegionSize")
-        val g1HeapRegionSize = valueMethod.invoke(regionSizeObject).asInstanceOf[String].toLong
-        Some(g1HeapRegionSize)
-      } else {
-        None
-      }
-    }.getOrElse(None)
+      "true".equals(useG1GC)
+    }.getOrElse(false)
   }
 }
 

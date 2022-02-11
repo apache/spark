@@ -248,21 +248,23 @@ private[spark] abstract class MemoryManager(
    * into consideration so that the requested memory size is power of 2
    * and can be divided by G1 heap region size to reduce memory waste within one G1 region.
    */
-  private lazy val defaultPageSizeBytes = Utils.maybeG1HeapRegionSize match {
-    case Some(heapRegionSize) if tungstenMemoryMode == MemoryMode.ON_HEAP =>
-      heapRegionSize - Platform.LONG_ARRAY_OFFSET
-    case _ =>
-      val minPageSize = 1L * 1024 * 1024   // 1MB
-      val maxPageSize = 64L * minPageSize  // 64MB
-      val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
-      // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
-      val safetyFactor = 16
-      val maxTungstenMemory: Long = tungstenMemoryMode match {
-        case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
-        case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
-      }
-      val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
-      math.min(maxPageSize, math.max(minPageSize, size))
+  private lazy val defaultPageSizeBytes = {
+    val minPageSize = 1L * 1024 * 1024   // 1MB
+    val maxPageSize = 64L * minPageSize  // 64MB
+    val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
+    // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
+    val safetyFactor = 16
+    val maxTungstenMemory: Long = tungstenMemoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
+    }
+    val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
+    val choosedPageSize = math.min(maxPageSize, math.max(minPageSize, size))
+    if (Utils.isG1GC && tungstenMemoryMode == MemoryMode.ON_HEAP) {
+        choosedPageSize - Platform.LONG_ARRAY_OFFSET
+    } else {
+      choosedPageSize
+    }
   }
 
   val pageSizeBytes: Long = conf.get(BUFFER_PAGESIZE).getOrElse(defaultPageSizeBytes)
