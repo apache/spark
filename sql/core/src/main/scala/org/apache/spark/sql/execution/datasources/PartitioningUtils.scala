@@ -143,7 +143,7 @@ object PartitioningUtils extends SQLConfHelper{
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
-        zoneId, dateFormatter, timestampFormatter)
+        validatePartitionColumns, zoneId, dateFormatter, timestampFormatter)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
