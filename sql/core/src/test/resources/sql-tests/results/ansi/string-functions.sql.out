@@ -901,7 +901,6 @@ abc
 -- !query
 select to_binary('abc', null)
 -- !query schema
-struct<>
+struct<to_binary(abc, NULL):binary>
 -- !query output
-java.lang.RuntimeException
-After applying rule org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions in batch Finish Analysis, the structural integrity of the plan is broken.
+NULL

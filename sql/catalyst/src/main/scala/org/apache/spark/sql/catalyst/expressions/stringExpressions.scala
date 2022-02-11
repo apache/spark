@@ -2565,7 +2565,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
     format match {
       case lit if lit.foldable =>
         val value = lit.eval()
-        if (value == null) lit
+        if (value == null) Literal(null, BinaryType)
         else {
           value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
             case "hex" => Unhex(expr)
