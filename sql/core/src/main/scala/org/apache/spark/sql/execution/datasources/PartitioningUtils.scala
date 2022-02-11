@@ -237,6 +237,7 @@ object PartitioningUtils extends SQLConfHelper{
       typeInference: Boolean,
       basePaths: Set[Path],
       userSpecifiedDataTypes: Map[String, DataType],
+      validatePartitionColumns: Boolean,
       zoneId: ZoneId,
       dateFormatter: DateFormatter,
       timestampFormatter: TimestampFormatter): (Option[PartitionValues], Option[Path]) = {
