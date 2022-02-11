@@ -3078,8 +3078,12 @@ case class ConvertTimezone(
 case class TimestampAdd(
     unit: Expression,
     interval: Expression,
-    timestamp: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    timestamp: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with TimeZoneAwareExpression {
 
   override def first: Expression = unit
   override def second: Expression = interval
@@ -3088,17 +3092,24 @@ case class TimestampAdd(
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
   override def dataType: DataType = timestamp.dataType
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
+
   override def nullSafeEval(u: Any, i: Any, micros: Any): Any = {
     DateTimeUtils.timestampAdd(
       u.asInstanceOf[UTF8String].toString,
       i.asInstanceOf[Int],
-      micros.asInstanceOf[Long])
+      micros.asInstanceOf[Long],
+      zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     defineCodeGen(ctx, ev, (u, i, micros) =>
-      s"""$dtu.timestampAdd($u.toString(), $i, $micros)""")
+      s"""$dtu.timestampAdd($u.toString(), $i, $micros, $zid)""")
   }
 
   override def prettyName: String = "timestampadd"

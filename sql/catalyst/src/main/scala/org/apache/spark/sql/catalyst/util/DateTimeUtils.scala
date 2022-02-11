@@ -1163,4 +1163,29 @@ object DateTimeUtils {
     val localStartTs = getLocalDateTime(startMicros, zoneId)
     ChronoUnit.MICROS.between(localStartTs, localEndTs)
   }
+
+  def timestampAdd(unit: String, interval: Int, micros: Long, zoneId: ZoneId): Long = {
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" =>
+        timestampAddDayTime(micros, interval, zoneId)
+      case "MILLISECOND" | "SQL_TSI_FRAC_SECOND" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_MILLIS, zoneId)
+      case "SECOND" | "SQL_TSI_SECOND" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_SECOND, zoneId)
+      case "MINUTE" | "SQL_TSI_MINUTE" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_MINUTE, zoneId)
+      case "HOUR" | "SQL_TSI_HOUR" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_HOUR, zoneId)
+      case "DAY" | "SQL_TSI_DAY" | "DAYOFYEAR" | "SQL_TSI_DAYOFYEAR" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_DAY, zoneId)
+      case "WEEK" | "SQL_TSI_WEEK" =>
+        timestampAddDayTime(micros, interval * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
+      case "MONTH" | "SQL_TSI_MONTH" =>
+        timestampAddMonths(micros, interval, zoneId)
+      case "QUARTER" | "SQL_TSI_QUARTER" =>
+        timestampAddMonths(micros, interval * 3, zoneId)
+      case "YEAR" | "SQL_TSI_YEAR" =>
+        timestampAddMonths(micros, interval * MONTHS_PER_YEAR, zoneId)
+    }
+  }
 }
