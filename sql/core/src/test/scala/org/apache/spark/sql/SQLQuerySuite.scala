@@ -4282,7 +4282,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-38173: Quoted column cannot be recognized correctly when quotedRegexColumnNames is true") {
+  test("SPARK-38173: Quoted column cannot be recognized correctly " +
+    "when quotedRegexColumnNames is true") {
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
       checkAnswer(
         sql(
