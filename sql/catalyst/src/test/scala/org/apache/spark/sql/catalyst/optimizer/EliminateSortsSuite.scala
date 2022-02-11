@@ -422,14 +422,4 @@ class EliminateSortsSuite extends AnalysisTest {
       comparePlans(optimized, correctAnswer)
     }
   }
-
-  test("SPARK-35906: Remove order by if the maximum number of rows less than or equal to 1") {
-    comparePlans(
-      Optimize.execute(testRelation.groupBy()(count(1).as("cnt")).orderBy('cnt.asc)).analyze,
-      testRelation.groupBy()(count(1).as("cnt")).analyze)
-
-    comparePlans(
-      Optimize.execute(testRelation.limit(Literal(1)).orderBy('a.asc).orderBy('a.asc)).analyze,
-      testRelation.limit(Literal(1)).analyze)
-  }
 }

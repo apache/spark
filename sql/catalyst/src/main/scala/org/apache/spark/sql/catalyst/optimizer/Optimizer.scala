@@ -238,6 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
@@ -451,6 +452,40 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
       val buffer = new SpecificInternalRow(af.aggBufferAttributes.map(_.dataType))
       af.initialize(buffer)
       Literal.create(af.eval(buffer), af.dataType)
+  }
+}
+
+/**
+ * The rule is applied both normal and AQE Optimizer. It optimizes plan using max rows:
+ *   - if the child of sort max rows less than or equal to 1, remove the sort
+ *   - if the child of local sort max rows per partition less than or equal to 1, remove the
+ *     local sort
+ *   - if the child of aggregate max rows less than or equal to 1 and its output is subset of
+ *     its child and it's grouping only(include the rewritten distinct plan), remove the aggregate
+ *   - if the child of aggregate max rows less than or equal to 1, set distinct to false in all
+ *     aggregate expression
+ */
+object OptimizeOneRowPlan extends Rule[LogicalPlan] {
+  private def maxRowNotLargerThanOne(plan: LogicalPlan): Boolean = {
+    plan.maxRows.exists(_ <= 1L)
+  }
+
+  private def maxRowPerPartitionNotLargerThanOne(plan: LogicalPlan): Boolean = {
+    plan.maxRowsPerPartition.exists(_ <= 1L)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithPruning(_.containsAnyPattern(SORT, AGGREGATE), ruleId) {
+      case Sort(_, _, child) if maxRowNotLargerThanOne(child) => child
+      case Sort(_, false, child) if maxRowPerPartitionNotLargerThanOne(child) => child
+      case agg @ Aggregate(_, _, child) if agg.groupOnly &&
+        agg.outputSet.subsetOf(child.outputSet) && maxRowNotLargerThanOne(child) => child
+      case agg: Aggregate if maxRowNotLargerThanOne(agg.child) =>
+        agg.transformExpressions {
+          case aggExpr: AggregateExpression if aggExpr.isDistinct =>
+            aggExpr.copy(isDistinct = false)
+        }
+    }
   }
 }
 
@@ -1390,15 +1425,14 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the child maximum number of rows less than or equal to 1
- * 2) if the sort order is empty or the sort order does not have any reference
- * 3) if the Sort operator is a local sort and the child is already sorted
- * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 1) if the sort order is empty or the sort order does not have any reference
+ * 2) if the Sort operator is a local sort and the child is already sorted
+ * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
- * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the Join condition is deterministic
- * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the aggregate function is order irrelevant
  */
@@ -1407,7 +1441,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => recursiveRemoveSort(child)
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
