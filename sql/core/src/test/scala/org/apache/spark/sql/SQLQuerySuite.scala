@@ -4294,6 +4294,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(3, 2, 6) :: Nil)
     }
   }
+
+  test("SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
+    "references") {
+    withTable("t") {
+      Seq("CREATE TABLE t (c1 int) USING PARQUET",
+        "SET spark.sql.optimizer.excludedRules=" +
+          "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification",
+        "SELECT * FROM t WHERE c1 = 1 AND 2 > 1").foreach { query =>
+        sql(query).collect()
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
