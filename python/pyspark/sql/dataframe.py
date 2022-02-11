@@ -1797,8 +1797,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         When "spark.sql.ansi.enabled" is True, it raises excepton if the column type
         is not numeric or interval (for computing mean), double (for computing stddev),
-        numeric or date or timestamp or timestamp_ntz or interval year to month or interval day to second
-        (for computing percentiles).
+        numeric or date or timestamp or timestamp_ntz or interval year to month or
+        interval day to second (for computing percentiles).
 
         >>> df.summary().show()  # doctest: +SKIP
         +-------+------------------+-----+
