@@ -471,7 +471,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  private def checkDescTimestampColStatsByZone(
+  private def checkDescTimestampColStats(
       tableName: String,
       timestampColumn: String,
       expectedMinTimestamp: String,
@@ -506,7 +506,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
 
-          checkDescTimestampColStatsByZone(
+          checkDescTimestampColStats(
             tableName = table,
             timestampColumn = tsCol,
             expectedMinTimestamp = "2022-01-01 00:00:01.123456 " + offset,
@@ -530,21 +530,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
 
-        checkDescTimestampColStatsByZone(
+        checkDescTimestampColStats(
           tableName = table,
           timestampColumn = tsCol,
           expectedMinTimestamp = "2022-01-01 00:00:01.123456 +0000",
           expectedMaxTimestamp = "2022-01-03 00:00:02.987654 +0000")
 
         TimeZone.setDefault(DateTimeUtils.getTimeZone("PST"))
-        checkDescTimestampColStatsByZone(
+        checkDescTimestampColStats(
           tableName = table,
           timestampColumn = tsCol,
           expectedMinTimestamp = "2021-12-31 16:00:01.123456 -0800",
           expectedMaxTimestamp = "2022-01-02 16:00:02.987654 -0800")
 
         TimeZone.setDefault(DateTimeUtils.getTimeZone("Asia/Hong_Kong"))
-        checkDescTimestampColStatsByZone(
+        checkDescTimestampColStats(
           tableName = table,
           timestampColumn = tsCol,
           expectedMinTimestamp = "2022-01-01 08:00:01.123456 +0800",
