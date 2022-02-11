@@ -14,12 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import overload, Any, Dict, Generic, List, Optional, Tuple, Union
-
-from py4j.java_gateway import JavaObject
+from typing import overload, Any, Dict, Generic, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from pyspark import keyword_only, since, SparkContext
-from pyspark.ml._typing import JM, P
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -44,6 +41,10 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
+
+if TYPE_CHECKING:
+    from pyspark.ml._typing import JM, P
+    from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 __all__ = [
     "Binarizer",
