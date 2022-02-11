@@ -569,7 +569,7 @@ class Params(Identifiable, metaclass=ABCMeta):
                 to._set(**{param.name: paramMap[param]})
         return to
 
-    def _resetUid(self, newUid: Any) -> "Params":
+    def _resetUid(self: P, newUid: Any) -> P:
         """
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.

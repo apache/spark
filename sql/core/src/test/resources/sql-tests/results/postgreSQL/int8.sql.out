@@ -661,7 +661,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 9.223372036854776E20 to long causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting 9.223372036854776E20 to bigint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

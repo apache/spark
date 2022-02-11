@@ -130,10 +130,6 @@
     "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "22023"
   },
-  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
-    "message" : [ "Expected one row from CSV parser." ],
-    "sqlState" : "42000"
-  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
@@ -152,6 +148,9 @@
   "UNSUPPORTED_FEATURE" : {
     "message" : [ "The feature is not supported: %s" ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_GROUPING_EXPRESSION" : {
+    "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

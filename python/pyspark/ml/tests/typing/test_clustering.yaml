@@ -15,13 +15,19 @@
 # limitations under the License.
 #
 
-align = none
-align.openParenDefnSite = false
-align.openParenCallSite = false
-align.tokens = []
-optIn = {
-  configStyleArguments = false
-}
-danglingParentheses = false
-docstrings = JavaDoc
-maxColumn = 98
+- case: InheritedLDAMethods
+  main: |
+    from pyspark.ml.clustering import LDAModel, LocalLDAModel, DistributedLDAModel
+
+    distributed_model = DistributedLDAModel.load("foo")
+    reveal_type(distributed_model)
+    reveal_type(distributed_model.setFeaturesCol("foo"))
+
+    local_model = distributed_model.toLocal()
+    reveal_type(local_model)
+    reveal_type(local_model.setFeaturesCol("foo"))
+  out: |
+    main:4: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel*"
+    main:5: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel*"
+    main:8: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel"
+    main:9: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel*"

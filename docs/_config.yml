@@ -34,7 +34,8 @@ SPARK_GITHUB_URL: https://github.com/apache/spark
 # (https://spark.apache.org/docs/latest/) even when visiting the documentation of previous releases.
 DOCSEARCH_SCRIPT: |
   docsearch({
-      apiKey: 'b18ca3732c502995563043aa17bc6ecb',
+      apiKey: 'd62f962a82bc9abb53471cb7b89da35e',
+      appId: 'RAI69RXRSK',
       indexName: 'apache_spark',
       inputSelector: '#docsearch-input',
       enhancedSearchInput: true,

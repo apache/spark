@@ -1263,7 +1263,7 @@ object IntervalUtils {
           Math.multiplyExact(v, MONTHS_PER_YEAR)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField))
         }
       case MONTH => v
     }
@@ -1272,7 +1272,7 @@ object IntervalUtils {
   def longToYearMonthInterval(v: Long, endField: Byte): Int = {
     val vInt = v.toInt
     if (v != vInt) {
-      throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField).catalogString)
+      throw QueryExecutionErrors.castingCauseOverflowError(v, YM(endField))
     }
     intToYearMonthInterval(vInt, endField)
   }
@@ -1289,7 +1289,7 @@ object IntervalUtils {
     val vShort = vInt.toShort
     if (vInt != vShort) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ShortType.catalogString)
+        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ShortType)
     }
     vShort
   }
@@ -1299,7 +1299,7 @@ object IntervalUtils {
     val vByte = vInt.toByte
     if (vInt != vByte) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ByteType.catalogString)
+        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ByteType)
     }
     vByte
   }
@@ -1311,7 +1311,7 @@ object IntervalUtils {
           Math.multiplyExact(v, MICROS_PER_DAY)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField).catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField))
         }
       case HOUR => v * MICROS_PER_HOUR
       case MINUTE => v * MICROS_PER_MINUTE
@@ -1329,7 +1329,7 @@ object IntervalUtils {
       }
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField).catalogString)
+        throw QueryExecutionErrors.castingCauseOverflowError(v, DT(endField))
     }
   }
 
@@ -1347,7 +1347,7 @@ object IntervalUtils {
     val vInt = vLong.toInt
     if (vLong != vInt) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), IntegerType.catalogString)
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), IntegerType)
     }
     vInt
   }
@@ -1357,7 +1357,7 @@ object IntervalUtils {
     val vShort = vLong.toShort
     if (vLong != vShort) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ShortType.catalogString)
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ShortType)
     }
     vShort
   }
@@ -1367,7 +1367,7 @@ object IntervalUtils {
     val vByte = vLong.toByte
     if (vLong != vByte) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ByteType.catalogString)
+        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ByteType)
     }
     vByte
   }

@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -311,7 +312,9 @@ class InMemoryTable(
     InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
-    new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
+    new WriteBuilder with SupportsTruncate with SupportsOverwrite
+      with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
+
       private var writer: BatchWrite = Append
       private var streamingWriter: StreamingWrite = StreamingAppend
 
