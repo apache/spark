@@ -669,60 +669,40 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       314159260) ++ Seq.fill(7)(314159265)
 
     def doubleResultsFloor(i: Int): Any = {
-      val results = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3,
+      val results = Seq(3, 3, 3, 3, 3, 3, 3,
         3.1, 3.14, 3.141, 3.1415, 3.14159, 3.141592)
-      if (i <= 6) results(i).toLong else results(i)
+      Decimal(results(i))
     }
 
     def doubleResultsCeil(i: Int): Any = {
-      val results = Seq(1000000.0, 100000.0, 10000.0, 1000.0, 100.0, 10.0,
-        4L, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
-      if (i <= 6) results(i).toLong else results(i)
+      val results = Seq(4, 4, 4, 4, 4, 4,
+        4, 3.2, 3.15, 3.142, 3.1416, 3.1416, 3.141593)
+      Decimal(results(i))
     }
 
     def floatResultsFloor(i: Int): Any = {
-      val results = Seq(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3L,
-        3.1d, 3.14d, 3.141d, 3.1414d, 3.14149d, 3.141499d)
-      if (i <= 6) results(i).toLong else results(i)
+      val results = Seq(3, 3, 3, 3, 3, 3, 3,
+        3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
+      Decimal(results(i))
     }
 
     def floatResultsCeil(i: Int): Any = {
-      val results = Seq(1000000.0f, 100000.0f, 10000.0f, 1000.0f, 100.0f, 10.0f,
-        4L, 3.2d, 3.15d, 3.142d, 3.1415d, 3.1415d, 3.1415d)
-      if (i <= 6) results(i).toLong else results(i)
+      val results = Seq(4, 4, 4, 4, 4, 4,
+        4, 3.2, 3.15, 3.142, 3.1415, 3.1415, 3.1415)
+      Decimal(results(i))
     }
 
-    def shortResultsFloor(i: Int): Any = {
-      val results = Seq[Long](0L, 0L, 30000L, 31000L,
-        31400L, 31410L, 31415L) ++ Seq.fill[Long](7)(31415)
-      results(i)
-    }
+    def shortResultsFloor: Seq[Decimal] = Seq.fill(13)(Decimal(31415))
 
-    def shortResultsCeil(i: Int): Any = {
-      val results = Seq[Long](1000000L, 100000L, 40000L, 32000L,
-        31500L, 31420L) ++ Seq.fill[Long](7)(31415)
-      results(i)
-    }
+    val shortResultsCeil: Seq[Decimal] = Seq.fill(13)(Decimal(31415))
 
-    val longResultsFloor: Seq[Long] = Seq(31415926535000000L, 31415926535800000L,
-      31415926535890000L, 31415926535897000L, 31415926535897900L, 31415926535897930L) ++
-      Seq.fill(7)(31415926535897932L)
+    val longResultsFloor: Seq[Decimal] = Seq.fill(13)(Decimal(31415926535897932L))
 
-    val longResultsCeil: Seq[Long] = Seq(31415926536000000L, 31415926535900000L,
-      31415926535900000L, 31415926535898000L, 31415926535898000L, 31415926535897940L) ++
-      Seq.fill(7)(31415926535897932L)
+    val longResultsCeil: Seq[Decimal] = Seq.fill(13)(Decimal(31415926535897932L))
 
-    def intResultsFloor(i: Int): Any = {
-      val results = Seq(314000000, 314100000, 314150000, 314159000, 314159200,
-        314159260) ++ Seq.fill(7)(314159265)
-      results(i).toLong
-    }
+    val intResultsFloor: Seq[Decimal] = Seq.fill(13)(Decimal(314159265))
 
-    def intResultsCeil(i: Int): Any = {
-      val results = Seq(315000000, 314200000, 314160000, 314160000, 314159300,
-        314159270) ++ Seq.fill(7)(314159265)
-      results(i).toLong
-    }
+    val intResultsCeil: Seq[Decimal] = Seq.fill(13)(Decimal(314159265))
 
     scales.zipWithIndex.foreach { case (scale, i) =>
       checkEvaluation(Round(doublePi, scale), doubleResults(i), EmptyRow)
@@ -736,35 +716,25 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
       checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        FloorExpressionBuilder.build(Seq(Literal(doublePi), Literal(scale)))),
-        doubleResultsFloor(i), EmptyRow)
+        RoundFloor(Literal(doublePi), Literal(scale))), doubleResultsFloor(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        FloorExpressionBuilder.build(Seq(Literal(shortPi), Literal(scale)))),
-        shortResultsFloor(i), EmptyRow)
+        RoundFloor(Literal(shortPi), Literal(scale))), shortResultsFloor(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        FloorExpressionBuilder.build(Seq(Literal(intPi), Literal(scale)))),
-        intResultsFloor(i), EmptyRow)
+        RoundFloor(Literal(intPi), Literal(scale))), intResultsFloor(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        FloorExpressionBuilder.build(Seq(Literal(longPi), Literal(scale)))),
-        longResultsFloor(i), EmptyRow)
+        RoundFloor(Literal(longPi), Literal(scale))), longResultsFloor(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        FloorExpressionBuilder.build(Seq(Literal(floatPi), Literal(scale)))),
-        floatResultsFloor(i), EmptyRow)
+        RoundFloor(Literal(floatPi), Literal(scale))), floatResultsFloor(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        CeilExpressionBuilder.build(Seq(Literal(doublePi), Literal(scale)))),
-        doubleResultsCeil(i), EmptyRow)
+        RoundCeil(Literal(doublePi), Literal(scale))), doubleResultsCeil(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        CeilExpressionBuilder.build(Seq(Literal(shortPi), Literal(scale)))),
-        shortResultsCeil(i), EmptyRow)
+        RoundCeil(Literal(shortPi), Literal(scale))), shortResultsCeil(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        CeilExpressionBuilder.build(Seq(Literal(intPi), Literal(scale)))),
-        intResultsCeil(i), EmptyRow)
+        RoundCeil(Literal(intPi), Literal(scale))), intResultsCeil(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        CeilExpressionBuilder.build(Seq(Literal(longPi), Literal(scale)))),
-        longResultsCeil(i), EmptyRow)
+        RoundCeil(Literal(longPi), Literal(scale))), longResultsCeil(i), EmptyRow)
       checkEvaluation(checkDataTypeAndCast(
-        CeilExpressionBuilder.build(Seq(Literal(floatPi), Literal(scale)))),
-        floatResultsCeil(i), EmptyRow)
+        RoundCeil(Literal(floatPi), Literal(scale))), floatResultsCeil(i), EmptyRow)
     }
 
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3), BigDecimal("3.1"), BigDecimal("3.14"),
@@ -818,42 +788,25 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(2.5), Literal(0)))), 2L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(3.5), Literal(0)))), 3L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(-2.5), Literal(0)))), -3L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(-3.5), Literal(0)))), -4L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(-0.35), Literal(1)))), -0.4)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(-35), Literal(-1)))), -40L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(2.5), Literal(0)))), 3L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(3.5), Literal(0)))), 4L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(-2.5), Literal(0)))), -2L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(-3.5), Literal(0)))), -3L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(-0.35), Literal(1)))), -0.3)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(-35), Literal(-1)))), -30L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(-0.1), Literal(0)))), -1L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(5), Literal(0)))), 5L)
-    checkEvaluation(checkDataTypeAndCast(
-      FloorExpressionBuilder.build(Seq(Literal(3.1411), Literal(-3)))), 0L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(-0.1), Literal(0)))), 0L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(5), Literal(0)))), 5L)
-    checkEvaluation(checkDataTypeAndCast(
-      CeilExpressionBuilder.build(Seq(Literal(3.1411), Literal(-3)))), 1000L)
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-2.5), Literal(0))), Decimal(-3L))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-3.5), Literal(0))), Decimal(-4L))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.35), Literal(1))), Decimal(-0.4))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-35), Literal(-1))), Decimal(-35))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(2.5), Literal(0))), Decimal(3))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.5), Literal(0))), Decimal(4L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-2.5), Literal(0))), Decimal(-2L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-3.5), Literal(0))), Decimal(-3L))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.35), Literal(1))), Decimal(-0.3))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-35), Literal(-1))), Decimal(-35))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-0.1), Literal(0))), Decimal(-1))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(5), Literal(0))), Decimal(5))
+    checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.1411), Literal(-3))), Decimal(3))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(-0.1), Literal(0))), Decimal(0))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
+    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(4))
+//    checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
   }
 
   test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
