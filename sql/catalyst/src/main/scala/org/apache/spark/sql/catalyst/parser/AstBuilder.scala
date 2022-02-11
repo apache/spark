@@ -2096,10 +2096,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * string). Normal string is a string with all alphabets/digits and "_".
    */
   private def isRegex(pattern: String): Boolean = {
-    pattern.foreach { p: Char =>
-      if (!Character.isLetterOrDigit(p) && p != '_') return true
-    }
-    false
+    pattern.exists( p => !Character.isLetterOrDigit(p) && p != '_' )
   }
 
   /**
