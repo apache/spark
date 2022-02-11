@@ -29,7 +29,7 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
-    <volcano.exclude>**/volcano/*.scala</volcano.exclude>
+    <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
   </properties>
 
   <profiles>

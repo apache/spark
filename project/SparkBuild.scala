@@ -422,13 +422,8 @@ object SparkBuild extends PomBuild {
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   if (!profiles.contains("volcano")) {
-    enable(Seq(
-      Compile / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStep.scala",
-      Test / unmanagedSources / excludeFilter := HiddenFileFilter || "VolcanoFeatureStepSuite.scala"
-    ))(kubernetes)
-    enable(Seq(
-      Test / unmanagedSources / excludeFilter := HiddenFileFilter || "Volcano*.scala"
-    ))(kubernetesIntegrationTests)
+    enable(Volcano.settings)(kubernetes)
+    enable(Volcano.settings)(kubernetesIntegrationTests)
   }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
@@ -963,6 +958,13 @@ object SparkR {
         c
       }
     }).value
+  )
+}
+
+object Volcano {
+  // Exclude all volcano file for Compile and Test
+  lazy val settings = Seq(
+    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
   )
 }
 

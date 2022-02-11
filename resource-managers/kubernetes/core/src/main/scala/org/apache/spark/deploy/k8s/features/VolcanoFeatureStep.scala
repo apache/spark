@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.volcano
+package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.volcano.scheduling.v1beta1.PodGroupBuilder
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep}
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
   with KubernetesExecutorCustomFeatureConfigStep {

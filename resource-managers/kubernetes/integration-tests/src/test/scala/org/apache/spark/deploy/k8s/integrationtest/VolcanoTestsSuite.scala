@@ -20,11 +20,16 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.volcano.client.VolcanoClient
 
 import org.apache.spark.SparkFunSuite
-
+import org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.k8sTestTag
+import org.apache.spark.deploy.k8s.integrationtest.VolcanoSuite.volcanoTag
 
 private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
   import VolcanoTestsSuite._
-  import KubernetesSuite.volcanoTag
+
+  protected def checkScheduler(pod: Pod): Unit = {
+    assert(pod.getSpec.getSchedulerName === "volcano")
+  }
 
   protected def checkAnnotaion(pod: Pod): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
@@ -40,18 +45,20 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     assert(podGroup.getMetadata.getOwnerReferences.get(0).getName === pod.getMetadata.getName)
   }
 
-  test("Run SparkPi with volcano scheduler", volcanoTag) {
+  test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
       .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
     runSparkPiAndVerifyCompletion(
       driverPodChecker = (driverPod: Pod) => {
         doBasicDriverPodCheck(driverPod)
+        checkScheduler(driverPod)
         checkAnnotaion(driverPod)
         checkPodGroup(driverPod)
       },
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
+        checkScheduler(executorPod)
         checkAnnotaion(executorPod)
       }
     )
@@ -59,5 +66,5 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
 }
 
 private[spark] object VolcanoTestsSuite extends SparkFunSuite {
-  val VOLCANO_FEATURE_STEP = "org.apache.spark.deploy.k8s.features.volcano.VolcanoFeatureStep"
+  val VOLCANO_FEATURE_STEP = classOf[VolcanoFeatureStep].getName
 }

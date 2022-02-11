@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.scalatest.Tag
+
 class VolcanoSuite extends KubernetesSuite with VolcanoTestsSuite {
 
   override protected def setUpTest(): Unit = {
@@ -24,4 +26,8 @@ class VolcanoSuite extends KubernetesSuite with VolcanoTestsSuite {
       .set("spark.kubernetes.driver.scheduler.name", "volcano")
       .set("spark.kubernetes.executor.scheduler.name", "volcano")
   }
+}
+
+private[spark] object VolcanoSuite {
+  val volcanoTag = Tag("volcano")
 }
