@@ -330,15 +330,16 @@ public class RocksDBSuite {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
 
-    RocksIterator it = db.db().newIterator();
-    it.seek(prefix);
+    try (RocksIterator it = db.db().newIterator()) {
+      it.seek(prefix);
 
-    while (it.isValid()) {
-      byte[] key = it.key();
-      if (RocksDBIterator.startsWith(key, prefix)) {
-        count++;
+      while (it.isValid()) {
+        byte[] key = it.key();
+        if (RocksDBIterator.startsWith(key, prefix)) {
+          count++;
+        }
+        it.next();
       }
-      it.next();
     }
 
     return count;
