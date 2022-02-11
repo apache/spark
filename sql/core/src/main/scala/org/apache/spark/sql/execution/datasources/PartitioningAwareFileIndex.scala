@@ -75,7 +75,7 @@ abstract class PartitioningAwareFileIndex(
 
     // retrieve the file metadata filters and reduce to a final filter expression
     val fileMetadataFilterOpt = dataFilters.filter(_.references.forall {
-      case MetadataAttribute(_) => true
+      case FileSourceMetadataAttribute(_) => true
       case _ => false
     }).reduceOption(expressions.And)
 
