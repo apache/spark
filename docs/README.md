@@ -48,23 +48,9 @@ $ bundle install
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
-### R Documentation
+### SQL and Python API Documentation (Optional)
 
-If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
-
-```sh
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-$ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-```
-
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.2, which is updated if the version is mismatched.
-
-### API Documentation
-
-To generate API docs for any language, you'll need to install these libraries:
+To generate SQL and Python API docs, you'll need to install these libraries:
 
 <!--
 TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
@@ -78,6 +64,20 @@ See also https://issues.apache.org/jira/browse/SPARK-35375.
 $ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc sphinx-plotly-directive 'jinja2<3.0.0'
 ```
 
+### R API Documentation (Optional)
+
+If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
+and install these libraries:
+
+```sh
+$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+$ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
+```
+
+Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.2, which is updated if the version is mismatched.
+
 ## Generating the Documentation HTML
 
 We include the Spark documentation as part of the source (as opposed to using a hosted wiki, such as
@@ -89,20 +89,20 @@ you have checked out or downloaded.
 In this directory you will find text files formatted using Markdown, with an ".md" suffix. You can
 read those text files directly if you want. Start with `index.md`.
 
-Execute `bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
+Execute `SKIP_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
 Jekyll will create a directory called `_site` containing `index.html` as well as the rest of the
 compiled files.
 
 ```sh
 $ cd docs
-$ bundle exec jekyll build
-```
-
-You can modify the default Jekyll build as follows:
-
-```sh
 # Skip generating API docs (which takes a while)
 $ SKIP_API=1 bundle exec jekyll build
+```
+
+You can also generate the default Jekyll build with API Docs as follows:
+
+```sh
+$ bundle exec jekyll build
 
 # Serve content locally on port 4000
 $ bundle exec jekyll serve --watch
