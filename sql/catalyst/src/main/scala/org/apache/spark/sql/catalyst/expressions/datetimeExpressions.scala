@@ -3057,3 +3057,56 @@ case class ConvertTimezone(
     copy(sourceTz = newFirst, targetTz = newSecond, sourceTs = newThird)
   }
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(unit, interval, timestamp) - .",
+  arguments = """
+    Arguments:
+      * unit -
+      * interval -
+      * timestamp -
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('SQL_TSI_HOUR', 8, timestamp_ntz'2022-02-11 20:30:00');
+       2022-02-12 04:30:00
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class TimestampAdd(
+    unit: Expression,
+    interval: Expression,
+    timestamp: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def first: Expression = unit
+  override def second: Expression = interval
+  override def third: Expression = timestamp
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
+  override def dataType: DataType = timestamp.dataType
+
+  override def nullSafeEval(u: Any, i: Any, micros: Any): Any = {
+    DateTimeUtils.timestampAdd(
+      u.asInstanceOf[UTF8String].toString,
+      i.asInstanceOf[Int],
+      micros.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (u, i, micros) =>
+      s"""$dtu.timestampAdd($u.toString(), $i, $micros)""")
+  }
+
+  override def prettyName: String = "timestampadd"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): TimestampAdd = {
+    copy(unit = newFirst, interval = newSecond, timestamp = newThird)
+  }
+}
