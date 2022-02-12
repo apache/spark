@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralSQLExpression, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -194,6 +194,66 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  protected final val BINARY_COMPARISON = Set("=", "!=", "<=>", "<", "<=", ">", ">=",
+    "+", "-", "*", "/", "%", "&&", "||", "AND", "OR", "&", "|", "^")
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileExpression(expr: Expression): Option[String] = expr match {
+    case l @ LiteralValue(_, _) => Some(l.toString)
+    case f: FieldReference => Some(f.toString)
+    case e: GeneralSQLExpression if e.name() == "IS NULL" =>
+      assert(e.children().length == 1)
+      compileExpression(e.children()(0)).map(v => s"$v IS NULL")
+    case e: GeneralSQLExpression if e.name() == "IS NOT NULL" =>
+      assert(e.children().length == 1)
+      compileExpression(e.children()(0)).map(v => s"$v IS NOT NULL")
+    case e: GeneralSQLExpression if BINARY_COMPARISON.contains(e.name()) =>
+      assert(e.children().length == 2)
+      val l = compileExpression(e.children()(0))
+      val r = compileExpression(e.children()(1))
+      if (l.isDefined && r.isDefined) {
+        Some(s"(${l.get}) ${e.name()} (${r.get})")
+      } else {
+        None
+      }
+    case e: GeneralSQLExpression if e.name() == "NOT" =>
+      assert(e.children().length == 1)
+      compileExpression(e.children()(0)).map(v => s"NOT ($v)")
+    case e: GeneralSQLExpression if e.name() == "CASE WHEN" =>
+      assert(e.children().length == 1 || e.children().length == 2)
+      assert(e.children()(0).isInstanceOf[GeneralSQLExpression])
+      val branchExpression = e.children()(0).asInstanceOf[GeneralSQLExpression]
+      val branchExpressions = branchExpression.children()
+      val branchSQL = branchExpressions.map {
+        case branch: GeneralSQLExpression =>
+          assert(branch.children().length == 2)
+          val c = compileExpression(branch.children()(0))
+          val v = compileExpression(branch.children()(1))
+          if (c.isDefined && v.isDefined) {
+            s" WHEN ${c.get} THEN ${v.get}"
+          } else {
+            return None
+          }
+        case _ => return None
+      }.mkString
+      if (e.children().length == 2) {
+        val elseSQL = compileExpression(e.children()(1))
+        if (elseSQL.isDefined) {
+          elseSQL.map(v => s"CASE$branchSQL ELSE $v END")
+        } else {
+          None
+        }
+      } else {
+        Some(s"CASE$branchSQL END")
+      }
+    case _ => None
+  }
+
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
@@ -203,30 +263,30 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        val sql = min.column match {
+        min.column match {
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
+            Some(s"MIN(${quoteIdentifier(field.fieldNames.head)})")
           case expr: GeneralSQLExpression =>
-            expr.sql()
+            compileExpression(expr).map(v => s"MIN($v)")
         }
-        Some(s"MIN($sql)")
       case max: Max =>
-        val sql = max.column match {
+        max.column match {
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
+            Some(s"MAX(${quoteIdentifier(field.fieldNames.head)})")
           case expr: GeneralSQLExpression =>
-            expr.sql()
+            compileExpression(expr).map(v => s"MAX($v)")
         }
-        Some(s"MAX($sql)")
       case count: Count =>
         val sql = count.column match {
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
           case expr: GeneralSQLExpression =>
-            expr.sql()
+            val compiledValue = compileExpression(expr)
+            if (compiledValue.isEmpty) return None
+            compiledValue.get
         }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
         Some(s"COUNT($distinct$sql)")
@@ -236,7 +296,9 @@ abstract class JdbcDialect extends Serializable with Logging{
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
           case expr: GeneralSQLExpression =>
-            expr.sql()
+            val compiledValue = compileExpression(expr)
+            if (compiledValue.isEmpty) return None
+            compiledValue.get
         }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
         Some(s"SUM($distinct$sql)")
@@ -248,7 +310,9 @@ abstract class JdbcDialect extends Serializable with Logging{
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
           case expr: GeneralSQLExpression =>
-            expr.sql()
+            val compiledValue = compileExpression(expr)
+            if (compiledValue.isEmpty) return None
+            compiledValue.get
         }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
         Some(s"AVG($distinct$sql)")
