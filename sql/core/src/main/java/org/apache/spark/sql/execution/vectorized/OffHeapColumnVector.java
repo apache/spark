@@ -66,9 +66,10 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   // Only set if type is Struct.
   //
-  // A slot 'structOffsetData[i]' is only defined iff 'nulls[i]' is NOT set. If defined,
+  // A slot 'structOffsetData[i]' should only be set and used iff 'nulls[i]' is NOT set. If set,
   // 'structOffsetData[i] = j' indicates that for struct at slot 'i', its offset in the child
-  // vectors is 'j'.
+  // vectors is 'j'. For those slots that are not set, their values are undefined and should never
+  // be used.
   //
   // This is useful since we don't want to materialize null structs.
   private long structOffsetData;
