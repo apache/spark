@@ -301,7 +301,6 @@ public class LevelDBSuite {
     while (it0.hasNext()) {
       it0.next();
     }
-    System.gc();
     Iterator<CustomType1> it1 = dbForCloseTest
       .view(CustomType1.class).iterator();
     assertEquals("key0", it1.next().key);

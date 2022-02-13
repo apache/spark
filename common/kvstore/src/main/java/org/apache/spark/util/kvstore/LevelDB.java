@@ -20,7 +20,6 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -251,7 +250,6 @@ public class LevelDB implements KVStore {
       public Iterator<T> iterator() {
         try {
           LevelDBIterator<T> it = new LevelDBIterator<>(type, LevelDB.this, this);
-          iteratorTracker.add(new WeakReference<>(it));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);
