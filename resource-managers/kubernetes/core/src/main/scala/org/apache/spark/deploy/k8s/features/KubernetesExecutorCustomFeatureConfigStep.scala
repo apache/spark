@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
  *
- * Here is an example of feature step for executor:
+ * Example of feature step for both driver and executor:
  *
  * {{{
  *   class ExecutorExampleFeatureStep extends KubernetesExecutorCustomFeatureConfigStep {
@@ -36,15 +36,18 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  *       executorConf = conf
  *     }
  *
- *     override def configurePod(pod: SparkPod): SparkPod = {}
+ *     // Implements methods of `KubernetesFeatureConfigStep`, such as `configurePod`
+ *     override def configurePod(pod: SparkPod): SparkPod = {
+ *       // Apply modifications on the given pod in accordance to this feature.
+ *     }
  *   }
  * }}}
  *
- * Here is an example of feature step both for driver and executor:
+ * Example of feature step for both driver and executor:
  *
  * {{{
  *   class ExecutorExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep
- *     with KubernetesExecutorCustomFeatureConfigStep {
+ *       with KubernetesExecutorCustomFeatureConfigStep {
  *     private var kubernetesConf: KubernetesConf = _
  *
  *     override def init(conf: KubernetesDriverConf): Unit = {
@@ -55,7 +58,10 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  *       kubernetesConf = conf
  *     }
  *
- *     override def configurePod(pod: SparkPod): SparkPod = {}
+ *     // Implements methods of `KubernetesFeatureConfigStep`, such as `configurePod`
+ *     override def configurePod(pod: SparkPod): SparkPod = {
+ *       // Apply modifications on the given pod in accordance to this feature.
+ *     }
  *   }
  * }}}
  */
