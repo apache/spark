@@ -136,7 +136,9 @@ private[spark] class KubernetesDriverConf(
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
   }
 
-  override def schedulerName: String = get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse("")
+  override def schedulerName: String = {
+    get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).getOrElse(""))
+  }
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -195,7 +197,9 @@ private[spark] class KubernetesExecutorConf(
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
 
-  override def schedulerName: String = get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse("")
+  override def schedulerName: String = {
+    get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).getOrElse(""))
+  }
 
   private def checkExecutorEnvKey(key: String): Boolean = {
     // Pattern for matching an executorEnv key, which meets certain naming rules.

@@ -206,10 +206,17 @@ class KubernetesConfSuite extends SparkFunSuite {
   test("SPARK-36059: Set driver.scheduler and executor.scheduler") {
     val sparkConf = new SparkConf(false)
     val execUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
-    val driverUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val driverUnsetConf = KubernetesTestConf.createDriverConf(sparkConf)
     assert(execUnsetConf.schedulerName === "")
     assert(driverUnsetConf.schedulerName === "")
 
+    sparkConf.set(KUBERNETES_SCHEDULER_NAME, "sameScheduler")
+    val execCommonConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execCommonConf.schedulerName === "sameScheduler")
+    val driverCommonConf = KubernetesTestConf.createDriverConf(sparkConf)
+    assert(driverCommonConf.schedulerName === "sameScheduler")
+
+    assert(sparkConf.get(KUBERNETES_SCHEDULER_NAME) === Some("sameScheduler"))
     sparkConf.set(KUBERNETES_DRIVER_SCHEDULER_NAME, "driverScheduler")
     sparkConf.set(KUBERNETES_EXECUTOR_SCHEDULER_NAME, "executorScheduler")
     val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
