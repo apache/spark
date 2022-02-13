@@ -3085,6 +3085,9 @@ case class TimestampAdd(
   with NullIntolerant
   with TimeZoneAwareExpression {
 
+  def this(unit: Expression, interval: Expression, timestamp: Expression) =
+    this(unit, interval, timestamp, None)
+
   override def first: Expression = unit
   override def second: Expression = interval
   override def third: Expression = timestamp
