@@ -2539,6 +2539,77 @@ case class Encode(value: Expression, charset: Expression)
 }
 
 /**
+ * Converts the input expression to a binary value based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "base2", or "base64".
+      By default, the binary format for conversion is "hex" if `fmt` is omitted.
+      The function returns NULL if at least one of the input parameters is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class ToBinary(expr: Expression, format: Option[Expression], child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(expr: Expression, format: Expression) = this(expr, Option(format),
+    format match {
+      case lit if lit.foldable =>
+        val value = lit.eval()
+        if (value == null) Literal(null, BinaryType)
+        else {
+          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
+            case "hex" => Unhex(expr)
+            case "utf-8" => Encode(expr, Literal("UTF-8"))
+            case "base64" => UnBase64(expr)
+            case "base2" => Cast(expr, BinaryType)
+            case _ => lit
+          }
+        }
+
+      case other => other
+    }
+  )
+
+  def this(expr: Expression) = this(expr, None, Unhex(expr))
+
+  override def flatArguments: Iterator[Any] = Iterator(expr, format)
+  override def exprsReplaced: Seq[Expression] = expr +: format.toSeq
+
+  override def prettyName: String = "to_binary"
+  override def dataType: DataType = BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def checkFormat(lit: Expression) = {
+      if (lit.foldable) {
+        val value = lit.eval()
+        value == null || Seq("hex", "utf-8", "base64", "base2").contains(
+          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
+      } else false
+    }
+
+    if (format.forall(checkFormat)) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"Unsupported encoding format: $format. The format has to be " +
+          s"a case-insensitive string literal of 'hex', 'utf-8', 'base2', or 'base64'")
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): ToBinary =
+    copy(child = newChild)
+}
+
+/**
  * Formats the number X to a format like '#,###,###.##', rounded to D decimal places,
  * and returns the result as a string. If D is 0, the result has no decimal point or
  * fractional part.
