@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  * Note: If your custom feature step would be used only in driver or both in driver and executor,
  * please use this.
  *
- * Example of feature step for both driver and executor:
+ * Example of executor feature step:
  *
  * {{{
  *   class ExecutorExampleFeatureStep extends KubernetesExecutorCustomFeatureConfigStep {
