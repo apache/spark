@@ -2925,7 +2925,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Parameters
         ----------
         colsMap : dict
-            a dict of column name and :class:`Column`.
+            a dict of column name and :class:`Column`. Currently, only single map is supported.
 
         Examples
         --------
