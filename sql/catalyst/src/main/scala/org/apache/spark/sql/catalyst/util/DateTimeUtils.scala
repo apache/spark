@@ -1164,6 +1164,15 @@ object DateTimeUtils {
     ChronoUnit.MICROS.between(localStartTs, localEndTs)
   }
 
+  /**
+   * Adds the specified number of units to a timestamp.
+   *
+   * @param unit A keyword that specifies the interval to add to the input timestamp.
+   * @param interval The amount of `unit`s to add. It can be positive or negative.
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
   def timestampAdd(unit: String, interval: Int, micros: Long, zoneId: ZoneId): Long = {
     unit.toUpperCase(Locale.ROOT) match {
       case "MICROSECOND" =>
