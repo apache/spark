@@ -90,7 +90,6 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
 
-
     testStream(streamEvent) (
       AddData(inputData, 1, 2, 3, 4, 5, 6),
       StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
