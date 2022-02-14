@@ -1144,7 +1144,7 @@ private[spark] class BlockManager(
           blockId.toString, tempFileManager)
         if (blockSize > 0 && buf.size() == 0) {
           throw new IllegalStateException(s"Empty buffer received for non empty block " +
-            s"when fetch remote block $blockId from $loc ")
+            s"when fetch remote block $blockId from $loc")
         }
         buf
       } catch {
