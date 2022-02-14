@@ -2752,7 +2752,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    new BinaryLPad(str.expr, lit(len).expr, lit(pad).expr)
+    BinaryPad("lpad", str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -2841,7 +2841,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    new BinaryRPad(str.expr, lit(len).expr, lit(pad).expr)
+    BinaryPad("rpad", str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**

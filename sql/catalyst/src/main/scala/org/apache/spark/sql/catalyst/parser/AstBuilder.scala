@@ -1670,7 +1670,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               str.charAt(0)
             }.getOrElse('\\')
             val likeExpr = ctx.kind.getType match {
-              case SqlBaseParser.ILIKE => new ILike(e, expression(ctx.pattern), escapeChar)
+              case SqlBaseParser.ILIKE => ILike(e, expression(ctx.pattern), escapeChar)
               case _ => Like(e, expression(ctx.pattern), escapeChar)
             }
             invertIfNotDefined(likeExpr)

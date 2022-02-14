@@ -925,10 +925,9 @@ NULL
 -- !query
 select to_binary(null, cast(null as int))
 -- !query schema
-struct<>
+struct<to_binary(NULL, CAST(NULL AS INT)):binary>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_binary(NULL, CAST(NULL AS INT))' due to data type mismatch: Unsupported encoding format: Some(ansi_cast(null as int)). The format has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'; line 1 pos 7
+NULL
 
 
 -- !query
@@ -937,7 +936,7 @@ select to_binary('abc', 'invalidFormat')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_binary('abc', 'invalidFormat')' due to data type mismatch: Unsupported encoding format: Some(invalidFormat). The format has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'; line 1 pos 7
+Invalid value for the 'format' parameter of function 'to_binary': invalidformat. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'.
 
 
 -- !query
@@ -946,4 +945,4 @@ select to_binary('abc', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_binary('abc', 1)' due to data type mismatch: Unsupported encoding format: Some(1). The format has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'; line 1 pos 7
+Invalid value for the 'format' parameter of function 'to_binary': 1. The value has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'.
