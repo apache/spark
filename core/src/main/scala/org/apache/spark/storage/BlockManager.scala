@@ -1163,7 +1163,7 @@ private[spark] class BlockManager(
           }
 
           logWarning(s"Failed to fetch remote block $blockId " +
-            s"from [${locations.mkString(", ")}] (failed attempt $runningFailureCount)", e)
+            s"from $loc (failed attempt $runningFailureCount)", e)
 
           // If there is a large number of executors then locations list can contain a
           // large number of stale entries causing a large number of retries that may
