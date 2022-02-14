@@ -204,7 +204,7 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = expr match {
-    case l: LiteralValue[_] => Some(l.toString)
+    case lit: LiteralValue[_] => Some(lit.toString)
     case f: FieldReference => Some(f.toString)
     case e: GeneralSQLExpression if e.name() == "IS NULL" =>
       assert(e.children().length == 1)
