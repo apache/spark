@@ -388,7 +388,7 @@ class SessionCatalog(
   private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
     if (locationUri.isAbsolute) {
       locationUri
-    } else if (locationUri.getPath.startsWith("/")) {
+    } else if (new Path(locationUri).isAbsolute) {
       makeQualifiedPath(locationUri)
     } else {
       val dbName = formatDatabaseName(database)
