@@ -262,6 +262,13 @@ class ExecutorSuite extends SparkFunSuite
     }
   }
 
+  test("Invalid URL in addedJars") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar("http://invalid/library.jar")
+    val ans = sc.range(0, 10).count()
+    assert(ans == 10)
+  }
+
   test("Heartbeat should drop zero accumulator updates") {
     heartbeatZeroAccumulatorUpdateTest(true)
   }

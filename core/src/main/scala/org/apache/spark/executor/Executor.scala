@@ -965,15 +965,20 @@ private[spark] class Executor(
           .getOrElse(-1L)
         if (currentTimeStamp < timestamp) {
           logInfo(s"Fetching $name with timestamp $timestamp")
-          // Fetch file with useCache mode, close cache for local mode.
-          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-            hadoopConf, timestamp, useCache = !isLocal)
-          currentJars(name) = timestamp
-          // Add it to our class loader
-          val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
-          if (!urlClassLoader.getURLs().contains(url)) {
-            logInfo(s"Adding $url to class loader")
-            urlClassLoader.addURL(url)
+          try {
+            // Fetch file with useCache mode, close cache for local mode.
+            Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
+              hadoopConf, timestamp, useCache = !isLocal)
+            currentJars(name) = timestamp
+            // Add it to our class loader
+            val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
+            if (!urlClassLoader.getURLs().contains(url)) {
+              logInfo(s"Adding $url to class loader")
+              urlClassLoader.addURL(url)
+            }
+          } catch {
+            case NonFatal(_) =>
+              logWarning(s"Failed to fetch $name during dependency update")
           }
         }
       }
