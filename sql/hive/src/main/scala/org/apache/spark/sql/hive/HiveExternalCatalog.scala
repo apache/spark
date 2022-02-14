@@ -1260,9 +1260,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
     val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
+    val l = conf.get(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
     val res = client.getPartitions(db, table, metaStoreSpec)
-      .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
-    }
+      .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap),
+        storage = FSNamespaceUtils.replaceLocationWithSpecialPrefix(l, part.storage))
+      }
 
     metaStoreSpec match {
       // This might be a bug of Hive: When the partition value inside the partial partition spec

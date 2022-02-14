@@ -25,7 +25,7 @@ object FSNamespaceUtils {
   def replaceLocationWithSpecialPrefix(
         specificLocation: String,
         storage: CatalogStorageFormat): CatalogStorageFormat = {
-    val uri = if (specificLocation != null && storage.locationUri != null) {
+    val uri = if (specificLocation != null && storage.locationUri.isDefined) {
       val path = storage.locationUri.get
       Option(new URI(path.toString.replaceAll("hdfs://hacluster", specificLocation)))
     } else storage.locationUri
