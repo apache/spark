@@ -344,7 +344,7 @@ object KubernetesUtils extends Logging {
       delSrc : Boolean = false,
       overwrite: Boolean = true): Unit = {
     try {
-      fs.copyFromLocalFile(false, true, src, dest)
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
     } catch {
       case e: IOException =>
         throw new SparkException(s"Error uploading file ${src.getName}", e)
