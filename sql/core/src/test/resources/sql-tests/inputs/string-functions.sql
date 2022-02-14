@@ -135,3 +135,19 @@ select to_number('-454', '-000');
 select to_number('-454', 'S000');
 select to_number('12,454.8-', '00,000.9-');
 select to_number('00,454.8-', '00,000.9-');
+
+-- to_binary
+select to_binary('abc');
+select to_binary('abc', 'utf-8');
+select to_binary('abc', 'base64');
+select to_binary('abc', 'base2');
+select to_binary('abc', 'hex');
+select to_binary('abc', concat('utf', '-8'));
+select to_binary('abc', concat('base', '64'));
+select to_binary('abc', 'Hex');
+select to_binary('abc', 'UTF-8');
+select to_binary('abc', null);
+select to_binary(null, 'utf-8');
+select to_binary(null, null);
+select to_binary(null, cast(null as string));
+select to_binary('abc', 'invalidFormat');
