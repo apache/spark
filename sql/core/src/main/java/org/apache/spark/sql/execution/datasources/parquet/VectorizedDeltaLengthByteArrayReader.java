@@ -57,14 +57,12 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(rowId + i);
-      if (length > 0) {
-        try {
-          buffer = in.slice(length);
-        } catch (EOFException e) {
-          throw new ParquetDecodingException("Failed to read " + length + " bytes");
-        }
-        outputWriter.write(c, rowId + i, buffer, length);
+      try {
+        buffer = in.slice(length);
+      } catch (EOFException e) {
+        throw new ParquetDecodingException("Failed to read " + length + " bytes");
       }
+      outputWriter.write(c, rowId + i, buffer, length);
     }
     currentRow += total;
   }

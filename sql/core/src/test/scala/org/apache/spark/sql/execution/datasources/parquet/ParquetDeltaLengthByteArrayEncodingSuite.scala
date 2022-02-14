@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Random
+
+import org.apache.commons.lang3.RandomStringUtils
 import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.Utils
 import org.apache.parquet.column.values.deltalengthbytearray.DeltaLengthByteArrayValuesWriter
@@ -52,6 +55,12 @@ class ParquetDeltaLengthByteArrayEncodingSuite
 
   test("random strings") {
     val values = Utils.getRandomStringSamples(1000, 32)
+    writeData(writer, values)
+    readAndValidate(reader, writer.getBytes.toInputStream, values.length, values)
+  }
+
+  test("random strings with empty strings") {
+    val values = getRandomStringSamplesWithEmptyStrings(1000, 32)
     writeData(writer, values)
     readAndValidate(reader, writer.getBytes.toInputStream, values.length, values)
   }
@@ -117,4 +126,17 @@ class ParquetDeltaLengthByteArrayEncodingSuite
     }
   }
 
+  def getRandomStringSamplesWithEmptyStrings(numSamples: Int, maxLength: Int): Array[String] = {
+    val randomLen = new Random
+    val randomEmpty = new Random
+    val samples: Array[String] = new Array[String](numSamples)
+    for (i <- 0 until numSamples) {
+      var maxLen: Int = randomLen.nextInt(maxLength)
+      if(randomEmpty.nextInt() % 11 != 0) {
+        maxLen = 0;
+      }
+      samples(i) = RandomStringUtils.randomAlphanumeric(0, maxLen)
+    }
+    samples
+  }
 }
