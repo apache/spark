@@ -185,6 +185,8 @@ license: |
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
     * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
 
+  - In Spark 3.1, when bucket join is enabled(`spark.sql.sources.bucketing.enabled=true`), whether to do bucketed scan on input tables is decided automatically based on query plan. Bucketed scan is not used if 1. query does not have operators to utilize bucketing (e.g. join, group-by) or 2. there's an exchange between these operators and table scan. You can restore old behavior by setting `spark.sql.sources.bucketing.autoBucketedScan.enabled` to `false`.  
+
 ## Upgrading from Spark SQL 3.0.1 to 3.0.2
 
   - In Spark 3.0.2, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
