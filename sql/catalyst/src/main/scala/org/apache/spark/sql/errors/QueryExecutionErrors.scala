@@ -251,7 +251,8 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"pivoting by the value '${v.toString}' of the column data type '$dataType'."))
+        s"pivoting by the value '${v.toString}' of the column data type" +
+          s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
