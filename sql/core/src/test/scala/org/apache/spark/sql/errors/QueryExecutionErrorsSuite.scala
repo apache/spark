@@ -129,13 +129,12 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[SparkRuntimeException] {
       trainingSales
         .groupBy($"sales.year")
-        .pivot(struct(lower($"sales.course"), $"training"))
+        .pivot(struct(lower(trainingSales("sales.course")), trainingSales("training")))
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getMessage === "The feature is not supported: " +
-      "literal for '[dotnet,Dummies]' of class " +
-      "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema.")
+    assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
+      """ '[dotnet,Dummies]' of the column data type 'struct<col1:string,training:string>'.""")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
