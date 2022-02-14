@@ -104,7 +104,7 @@ case class ClusteredDistribution(
  *
  * NOTE: This is applied only stream-stream join as of now. For other stateful operators, we have
  * been using ClusteredDistribution, which could construct the physical partitioning of the state
- * as different way. (ClusteredDistribution requires relaxed condition and multiple
+ * in different way. (ClusteredDistribution requires relaxed condition and multiple
  * partitionings can satisfy the requirement.) We need to construct the way to fix this with
  * minimizing possibility to break the existing checkpoints.
  *
