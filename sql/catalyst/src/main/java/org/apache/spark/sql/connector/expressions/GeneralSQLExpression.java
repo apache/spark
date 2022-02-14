@@ -28,28 +28,28 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public class GeneralSQLExpression implements Expression, Serializable {
-    private String name;
-    private Expression[] children;
-    private String sql;
+  private String name;
+  private Expression[] children;
+  private String sql;
 
-    public GeneralSQLExpression(String name, Expression[] children) {
-        this.name = name;
-        this.children = children;
-    }
+  public GeneralSQLExpression(String name, Expression[] children) {
+    this.name = name;
+    this.children = children;
+  }
 
-    public void setSql(String sql) {
+  public void setSql(String sql) {
         this.sql = sql;
     }
 
-    public String name() { return name; }
-    public Expression[] children() { return children; }
+  public String name() { return name; }
+  public Expression[] children() { return children; }
 
-    @Override
-    public String toString() {
-        if (sql == null) {
-            return name + "(" + children.toString() + ")";
-        } else {
-            return sql;
-        }
+  @Override
+  public String toString() {
+    if (sql == null) {
+      return name + "(" + children.toString() + ")";
+    } else {
+      return sql;
     }
+  }
 }
