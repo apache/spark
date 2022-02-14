@@ -194,7 +194,7 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
-  protected final val BINARY_COMPARISON = Set("=", "!=", "<=>", "<", "<=", ">", ">=",
+  protected final val BINARY_OPERATION = Set("=", "!=", "<=>", "<", "<=", ">", ">=",
     "+", "-", "*", "/", "%", "&&", "||", "AND", "OR", "&", "|", "^")
 
   /**
@@ -212,7 +212,7 @@ abstract class JdbcDialect extends Serializable with Logging{
     case e: GeneralSQLExpression if e.name() == "IS NOT NULL" =>
       assert(e.children().length == 1)
       compileExpression(e.children()(0)).map(v => s"$v IS NOT NULL")
-    case e: GeneralSQLExpression if BINARY_COMPARISON.contains(e.name()) =>
+    case e: GeneralSQLExpression if BINARY_OPERATION.contains(e.name()) =>
       assert(e.children().length == 2)
       val l = compileExpression(e.children()(0))
       val r = compileExpression(e.children()(1))
