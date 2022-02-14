@@ -679,7 +679,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
                 "is Spark installed on it?")
           }
         }
-        executorTerminated(d, agentId, taskId, s"Executor finished with state $state")
+        executorTerminated(agentId, taskId, s"Executor finished with state $state")
         // In case we'd rejected everything before but have now lost a node
         d.reviveOffers()
       }
@@ -740,7 +740,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
    * what tasks are running. It also notifies the driver that an executor was removed.
    */
   private def executorTerminated(
-      d: org.apache.mesos.SchedulerDriver,
       agentId: String,
       taskId: String,
       reason: String): Unit = {
