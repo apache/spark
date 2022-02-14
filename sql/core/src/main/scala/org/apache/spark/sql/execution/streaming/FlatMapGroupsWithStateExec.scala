@@ -95,7 +95,7 @@ case class FlatMapGroupsWithStateExec(
   override def requiredChildDistribution: Seq[Distribution] = {
     // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
     // before making any changes.
-    // TODO: SPARK-38204
+    // TODO(SPARK-38204)
     ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
     ClusteredDistribution(initialStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
       Nil
