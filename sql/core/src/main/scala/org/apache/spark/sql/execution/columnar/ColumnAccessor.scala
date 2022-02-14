@@ -106,7 +106,7 @@ private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer, dataType: CalendarIntervalType)
+private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
   with NullableColumnAccessor
 
