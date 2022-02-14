@@ -2039,8 +2039,8 @@ def hour(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
-    >>> df = df.withColumn('ts', to_timestamp('ts'))
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
 
@@ -2062,8 +2062,8 @@ def minute(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
-    >>> df = df.withColumn('ts', to_timestamp('ts'))
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
 
@@ -2085,8 +2085,8 @@ def second(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
-    >>> df = df.withColumn('ts', to_timestamp('ts'))
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
 
@@ -2596,8 +2596,8 @@ def window(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
-    >>> df = df.withColumn('date', to_timestamp('date'))
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
