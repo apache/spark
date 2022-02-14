@@ -304,7 +304,6 @@ class QueryExecution(
   }
 
   private def stringWithStats(maxFields: Int, append: String => Unit): Unit = {
-    val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
     try {
