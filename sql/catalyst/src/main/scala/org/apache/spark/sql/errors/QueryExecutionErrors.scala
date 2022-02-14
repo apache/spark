@@ -252,7 +252,7 @@ object QueryExecutionErrors {
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
         s"pivoting by the value '${v.toString}' of the column data type" +
-          s" '${dataType.catalogString}'."))
+        s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
