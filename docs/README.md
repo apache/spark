@@ -26,13 +26,20 @@ Read on to learn more about viewing documentation in plain text (i.e., markdown)
 documentation yourself. Why build it yourself? So that you have the docs that correspond to
 whichever version of Spark you currently have checked out of revision control.
 
-## Prerequisites
+## Building documentation
+There are two ways to build Spark documentation, complete and partial. Complete will build a site similar
+to one you can find https://spark.apache.org/documentation.html with all APIs documented and partial
+one can be used to build a language/API specific documentation.
+
+### Prerequisites
 
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
 Python, R and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
+For complete documentation all below tools must be installed **including Optionals**.
+
+You need to have JDK, Scala, [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
+[Python](https://docs.python.org/3.8/using/unix.html#getting-and-installing-the-latest-version-of-python)
 installed. Make sure the `bundle` command is available, if not install the Gem containing it:
 
 ```sh
@@ -66,11 +73,15 @@ $ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsph
 
 ### R API Documentation (Optional)
 
-If you'd like to generate R API documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
+If you'd like to generate R API documentation, you'll need to install these packages and libraries:
 
 ```sh
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo apt install libssl-dev libcurl4-openssl-dev pandoc libfontconfig1-dev libharfbuzz-dev \
+          libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2-dev
+```
+
+```sh
+$ sudo Rscript -e 'install.packages(c("curl", "knitr", "devtools", "testthat", "rmarkdown", "markdown", "e1071"), repos="https://cloud.r-project.org/")'
 $ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
 $ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
 $ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
@@ -89,17 +100,7 @@ you have checked out or downloaded.
 In this directory you will find text files formatted using Markdown, with an ".md" suffix. You can
 read those text files directly if you want. Start with `index.md`.
 
-Execute `SKIP_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
-Jekyll will create a directory called `_site` containing `index.html` as well as the rest of the
-compiled files.
-
-```sh
-$ cd docs
-# Skip generating API docs (which takes a while)
-$ SKIP_API=1 bundle exec jekyll build
-```
-
-You can also generate the default Jekyll build with API Docs as follows:
+You can generate the complete website from the `docs/` directory as follows:
 
 ```sh
 $ bundle exec jekyll build
@@ -111,7 +112,15 @@ $ bundle exec jekyll serve --watch
 $ PRODUCTION=1 bundle exec jekyll build
 ```
 
-## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
+You can optionally skip API build (for partial build) as it takes time
+
+```sh
+$ cd docs
+# Skip generating API docs (which takes a while)
+$ SKIP_API=1 bundle exec jekyll build
+```
+
+## Generating individual API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
 You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.
 
