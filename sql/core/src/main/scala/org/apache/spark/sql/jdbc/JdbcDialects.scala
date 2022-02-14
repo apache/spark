@@ -251,6 +251,7 @@ abstract class JdbcDialect extends Serializable with Logging{
       } else {
         Some(s"CASE$branchSQL END")
       }
+    // TODO supports other expressions
     case _ => None
   }
 
