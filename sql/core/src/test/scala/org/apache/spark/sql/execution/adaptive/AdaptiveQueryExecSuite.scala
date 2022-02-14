@@ -2747,11 +2747,10 @@ class AdaptiveQueryExecSuite
             "UNION ALL SELECT key2 FROM skewData2 GROUP BY key2", 1, 1)
 
         // skewJoin1 union (skewJoin2 join aggregate)
-        // skewJoin2 will lead to extra shuffles, but skew1 cannot be optimized
          checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 UNION ALL " +
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
-            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
+            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 3)
       }
     }
   }
