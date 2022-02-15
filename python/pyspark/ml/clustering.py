@@ -2107,7 +2107,7 @@ class PowerIterationClustering(
         assert self._java_obj is not None
 
         jdf = self._java_obj.assignClusters(dataset._jdf)
-        return DataFrame(jdf, dataset.sql_ctx)
+        return DataFrame(jdf, dataset.sparkSession)
 
 
 if __name__ == "__main__":

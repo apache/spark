@@ -86,7 +86,7 @@ class StreamingTests(ReusedSQLTestCase):
             .load("python/test_support/sql/streaming")
             .withColumn("id", lit(1))
         )
-        for q in self.spark._wrapped.streams.active:
+        for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -117,7 +117,7 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_stream_save_options_overwrite(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        for q in self.spark._wrapped.streams.active:
+        for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -154,7 +154,7 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_stream_status_and_progress(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        for q in self.spark._wrapped.streams.active:
+        for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -198,7 +198,7 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_stream_await_termination(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        for q in self.spark._wrapped.streams.active:
+        for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -267,7 +267,7 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_query_manager_await_termination(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        for q in self.spark._wrapped.streams.active:
+        for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
@@ -280,13 +280,13 @@ class StreamingTests(ReusedSQLTestCase):
         try:
             self.assertTrue(q.isActive)
             try:
-                self.spark._wrapped.streams.awaitAnyTermination("hello")
+                self.spark.streams.awaitAnyTermination("hello")
                 self.fail("Expected a value exception")
             except ValueError:
                 pass
             now = time.time()
             # test should take at least 2 seconds
-            res = self.spark._wrapped.streams.awaitAnyTermination(2.6)
+            res = self.spark.streams.awaitAnyTermination(2.6)
             duration = time.time() - now
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
@@ -347,7 +347,7 @@ class StreamingTests(ReusedSQLTestCase):
                 self.stop_all()
 
         def stop_all(self):
-            for q in self.spark._wrapped.streams.active:
+            for q in self.spark.streams.active:
                 q.stop()
 
         def _reset(self):

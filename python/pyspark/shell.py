@@ -28,6 +28,7 @@ import warnings
 
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
+from pyspark.sql.context import SQLContext
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
@@ -49,7 +50,7 @@ sql = spark.sql
 atexit.register((lambda sc: lambda: sc.stop())(sc))
 
 # for compatibility
-sqlContext = spark._wrapped
+sqlContext = SQLContext._get_or_create(sc)
 sqlCtx = sqlContext
 
 print(

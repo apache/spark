@@ -1105,7 +1105,7 @@ def broadcast(df: DataFrame) -> DataFrame:
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
+    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
 
 
 def coalesce(*cols: "ColumnOrName") -> Column:
