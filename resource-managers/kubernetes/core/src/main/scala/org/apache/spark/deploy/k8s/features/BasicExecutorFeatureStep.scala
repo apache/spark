@@ -178,11 +178,11 @@ private[spark] class BasicExecutorFeatureStep(
             .build()
         }
       } ++ {
-      if (kubernetesConf.get(KUBERNETES_LOG_TO_FILE)) {
-        Seq(new EnvVarBuilder()
-          .withName(ENV_SPARK_LOG_PATH)
-          .withValue(kubernetesConf.get(KUBERNETES_LOG_TO_FILE_PATH))
-          .build())
+        if (kubernetesConf.get(KUBERNETES_LOG_TO_FILE)) {
+          Seq(new EnvVarBuilder()
+            .withName(ENV_SPARK_LOG_PATH)
+            .withValue(kubernetesConf.get(KUBERNETES_LOG_TO_FILE_PATH))
+            .build())
       } else None
     }
     executorEnv.find(_.getName == ENV_EXECUTOR_DIRS).foreach { e =>

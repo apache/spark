@@ -441,7 +441,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ))
   }
 
-  test("container log configs") {
+  test("SPARK-36793: container log configs") {
     val logPath = "/spark/log"
     baseConf.set(KUBERNETES_LOG_TO_FILE, true)
     baseConf.set(KUBERNETES_LOG_TO_FILE_PATH, logPath)
