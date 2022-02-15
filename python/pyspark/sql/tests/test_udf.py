@@ -22,7 +22,7 @@ import tempfile
 import unittest
 import datetime
 
-from pyspark import SparkContext
+from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import udf, assert_true, lit
 from pyspark.sql.udf import UserDefinedFunction
@@ -79,7 +79,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 5)
 
         # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
-        sqlContext = self.spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
         [row] = sqlContext.sql("SELECT oneArg('test')").collect()
         self.assertEqual(row[0], 4)
@@ -372,7 +372,7 @@ class UDFTests(ReusedSQLTestCase):
         )
 
         # This is to check if a 'SQLContext.udf' can call its alias.
-        sqlContext = self.spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
 
         self.assertListEqual(
@@ -419,7 +419,7 @@ class UDFTests(ReusedSQLTestCase):
         )
 
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
-        sqlContext = spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         self.assertRaisesRegex(
             AnalysisException,
             "Can not load class non_existed_udf",

@@ -304,8 +304,6 @@ class QueryExecution(
   }
 
   private def stringWithStats(maxFields: Int, append: String => Unit): Unit = {
-    val maxFields = SQLConf.get.maxToStringFields
-
     // trigger to compute stats for logical plans
     try {
       // This will trigger to compute stats for all the nodes in the plan, including subqueries,

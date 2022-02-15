@@ -334,6 +334,9 @@ case class StateStoreRestoreExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
@@ -493,6 +496,9 @@ case class StateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
@@ -573,6 +579,9 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
   }
 
@@ -684,6 +693,9 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
   }
 
@@ -741,8 +753,12 @@ case class StreamingDeduplicateExec(
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] =
+  override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

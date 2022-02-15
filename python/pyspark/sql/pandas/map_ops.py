@@ -90,7 +90,7 @@ class PandasMapOpsMixin:
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapInPandas(udf_column._jc.expr())  # type: ignore[operator]
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
         self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
@@ -153,7 +153,7 @@ class PandasMapOpsMixin:
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
 
 def _test() -> None:

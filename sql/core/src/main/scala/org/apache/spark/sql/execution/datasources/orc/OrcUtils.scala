@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -487,18 +488,18 @@ object OrcUtils extends Logging {
 
     val aggORCValues: Seq[WritableComparable[_]] =
       aggregation.aggregateExpressions.zipWithIndex.map {
-        case (max: Max, index) =>
-          val columnName = max.column.fieldNames.head
+        case (max: Max, index) if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(max.column).get
           val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
-        case (min: Min, index) =>
-          val columnName = min.column.fieldNames.head
+        case (min: Min, index) if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(min.column).get
           val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy.apply(index).dataType
           getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
-        case (count: Count, _) =>
-          val columnName = count.column.fieldNames.head
+        case (count: Count, _) if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+          val columnName = V2ColumnUtils.extractV2Column(count.column).get
           val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
           // NOTE: Count(columnName) doesn't include null values.
           // org.apache.orc.ColumnStatistics.getNumberOfValues() returns number of non-null values

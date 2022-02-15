@@ -58,7 +58,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
     ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
       .doc("If true, driver service will be deleted on Spark application termination. " +
-        "If false, it will be cleaned up when the driver pod is deletion.")
+        "If false, it will be cleaned up when the driver pod is deleted.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)

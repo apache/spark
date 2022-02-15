@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, UpCast}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.functions.{grouping, grouping_id}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.NumericType
 
 case class StringLongClass(a: String, b: Long)
 
@@ -63,21 +59,6 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
        """.stripMargin.trim + " of the field in the target object")
   }
 
-  test("UNSUPPORTED_FEATURE: UpCast only support DecimalType as AbstractDataType") {
-    val df = sql("select 1 as value")
-
-    val msg = intercept[AnalysisException] {
-      val plan = Project(
-        Seq(Alias(UpCast(UnresolvedAttribute("value"), NumericType), "value")()),
-        df.logicalPlan)
-
-      Dataset.ofRows(spark, plan)
-    }.message
-    assert(msg.matches("The feature is not supported: " +
-      "UpCast only support DecimalType as AbstractDataType yet," +
-      """ but got: org.apache.spark.sql.types.NumericType\$\@\w+"""))
-  }
-
   test("UNSUPPORTED_GROUPING_EXPRESSION: filter with grouping/grouping_Id expression") {
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -110,5 +91,14 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       assert(errMsg.message ===
         "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
     }
+  }
+
+  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+    val e = intercept[AnalysisException] {
+      sql("select format_string('%0$s', 'Hello')")
+    }
+    assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
+    assert(e.message ===
+      "The argument_index of string format cannot contain position 0$.")
   }
 }

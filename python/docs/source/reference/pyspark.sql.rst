@@ -201,6 +201,7 @@ DataFrame APIs
     DataFrame.show
     DataFrame.sort
     DataFrame.sortWithinPartitions
+    DataFrame.sparkSession
     DataFrame.stat
     DataFrame.storageLevel
     DataFrame.subtract

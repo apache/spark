@@ -45,4 +45,30 @@ class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(input, expected)
     }
   }
+
+  test("try_subtract") {
+    Seq(
+      (1, 1, 0),
+      (Int.MaxValue, -1, null),
+      (Int.MinValue, 1, null)
+    ).foreach { case (a, b, expected) =>
+      val left = Literal(a)
+      val right = Literal(b)
+      val input = TryEval(Subtract(left, right, failOnError = true))
+      checkEvaluation(input, expected)
+    }
+  }
+
+  test("try_multiply") {
+    Seq(
+      (2, 3, 6),
+      (Int.MaxValue, -10, null),
+      (Int.MinValue, 10, null)
+    ).foreach { case (a, b, expected) =>
+      val left = Literal(a)
+      val right = Literal(b)
+      val input = TryEval(Multiply(left, right, failOnError = true))
+      checkEvaluation(input, expected)
+    }
+  }
 }

@@ -230,7 +230,7 @@ private[sql] object SQLUtils extends Logging {
   def readArrowStreamFromFile(
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sparkSession.sqlContext, filename)
+    ArrowConverters.readArrowStreamFromFile(sparkSession, filename)
   }
 
   /**
@@ -241,6 +241,6 @@ private[sql] object SQLUtils extends Logging {
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schema: StructType,
       sparkSession: SparkSession): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession.sqlContext)
+    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession)
   }
 }
