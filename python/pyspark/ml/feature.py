@@ -1161,7 +1161,12 @@ class CountVectorizer(
 
 
 @inherit_doc
-class CountVectorizerModel(JavaModel, JavaMLReadable["CountVectorizerModel"], JavaMLWritable):
+class CountVectorizerModel(
+    JavaModel,
+    _CountVectorizerParams,
+    JavaMLReadable["CountVectorizerModel"],
+    JavaMLWritable
+):
     """
     Model fitted by :py:class:`CountVectorizer`.
 
