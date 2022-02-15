@@ -2565,7 +2565,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
       case lit if lit.foldable =>
         val value = lit.eval()
         if (value == null) Literal(null, BinaryType)
-        else {
+        else if (value.isInstanceOf[UTF8String]) {
           value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
             case "hex" => Unhex(expr)
             case "utf-8" => Encode(expr, Literal("UTF-8"))
@@ -2573,7 +2573,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
             case "base2" => Cast(expr, BinaryType)
             case _ => lit
           }
-        }
+        } else lit
 
       case other => other
     }
@@ -2591,8 +2591,9 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
     def checkFormat(lit: Expression) = {
       if (lit.foldable) {
         val value = lit.eval()
-        value == null || Seq("hex", "utf-8", "base64", "base2").contains(
-          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
+        value == null || (value.isInstanceOf[UTF8String] &&
+          Seq("hex", "utf-8", "base64", "base2").contains(
+            value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)))
       } else false
     }
 
