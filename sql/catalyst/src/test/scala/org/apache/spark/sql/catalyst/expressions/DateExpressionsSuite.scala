@@ -1885,4 +1885,50 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-38195: add amount of units to a timestamp") {
+    // Check case-insensitivity
+    checkEvaluation(
+      TimestampAdd(Literal("Hour"), Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      LocalDateTime.of(2022, 2, 15, 13, 57, 0))
+    // Check nulls as input values
+    checkEvaluation(
+      TimestampAdd(
+        Literal.create(null, StringType),
+        Literal(1),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampAdd(
+        Literal("MINUTE"),
+        Literal.create(null, IntegerType),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampAdd(
+        Literal("MINUTE"),
+        Literal(1),
+        Literal.create(null, TimestampType)),
+      null)
+
+    Seq(
+      "YEAR", "QUARTER", "MONTH",
+      "WEEK", "DAY",
+      "HOUR", "MINUTE", "SECOND",
+      "MILLISECOND", "MICROSECOND"
+    ).foreach { unit =>
+      outstandingTimezonesIds.foreach { tz =>
+        Seq(TimestampNTZType, TimestampType).foreach { tsType =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+            (interval: Expression, timestamp: Expression) =>
+              TimestampAdd(
+                Literal(unit),
+                interval,
+                timestamp,
+                Some(tz)),
+            IntegerType, tsType)
+        }
+      }
+    }
+  }
 }
