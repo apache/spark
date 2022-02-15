@@ -37,6 +37,26 @@ private object DB2Dialect extends JdbcDialect {
           assert(f.inputs().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"VARIANCE($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VARIANCE_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+          assert(f.inputs().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVARIANCE($distinct${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          assert(f.inputs().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVARIANCE_SAMP($distinct${f.inputs().head}, ${f.inputs().last})")
         case _ => None
       }
     )
