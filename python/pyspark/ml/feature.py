@@ -622,7 +622,7 @@ class BucketedRandomProjectionLSH(
         """
         return self._set(seed=value)
 
-    def _create_model(self, java_model: JavaObject) -> "BucketedRandomProjectionLSHModel":
+    def _create_model(self, java_model: "JavaObject") -> "BucketedRandomProjectionLSHModel":
         return BucketedRandomProjectionLSHModel(java_model)
 
 
@@ -1156,7 +1156,7 @@ class CountVectorizer(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "CountVectorizerModel":
+    def _create_model(self, java_model: "JavaObject") -> "CountVectorizerModel":
         return CountVectorizerModel(java_model)
 
 
@@ -1858,7 +1858,7 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "IDFModel":
+    def _create_model(self, java_model: "JavaObject") -> "IDFModel":
         return IDFModel(java_model)
 
 
@@ -2210,7 +2210,7 @@ class Imputer(
         """
         return self._set(relativeError=value)
 
-    def _create_model(self, java_model: JavaObject) -> "ImputerModel":
+    def _create_model(self, java_model: "JavaObject") -> "ImputerModel":
         return ImputerModel(java_model)
 
 
@@ -2439,7 +2439,7 @@ class MaxAbsScaler(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "MaxAbsScalerModel":
+    def _create_model(self, java_model: "JavaObject") -> "MaxAbsScalerModel":
         return MaxAbsScalerModel(java_model)
 
 
@@ -2590,7 +2590,7 @@ class MinHashLSH(
         """
         return self._set(seed=value)
 
-    def _create_model(self, java_model: JavaObject) -> "MinHashLSHModel":
+    def _create_model(self, java_model: "JavaObject") -> "MinHashLSHModel":
         return MinHashLSHModel(java_model)
 
 
@@ -2775,7 +2775,7 @@ class MinMaxScaler(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "MinMaxScalerModel":
+    def _create_model(self, java_model: "JavaObject") -> "MinMaxScalerModel":
         return MinMaxScalerModel(java_model)
 
 
@@ -3270,7 +3270,7 @@ class OneHotEncoder(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "OneHotEncoderModel":
+    def _create_model(self, java_model: "JavaObject") -> "OneHotEncoderModel":
         return OneHotEncoderModel(java_model)
 
 
@@ -3739,7 +3739,7 @@ class QuantileDiscretizer(
         """
         return self._set(handleInvalid=value)
 
-    def _create_model(self, java_model: JavaObject) -> Bucketizer:
+    def _create_model(self, java_model: "JavaObject") -> Bucketizer:
         """
         Private method to convert the java_model to a Python model.
         """
@@ -3976,7 +3976,7 @@ class RobustScaler(
         """
         return self._set(relativeError=value)
 
-    def _create_model(self, java_model: JavaObject) -> "RobustScalerModel":
+    def _create_model(self, java_model: "JavaObject") -> "RobustScalerModel":
         return RobustScalerModel(java_model)
 
 
@@ -4427,7 +4427,7 @@ class StandardScaler(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "StandardScalerModel":
+    def _create_model(self, java_model: "JavaObject") -> "StandardScalerModel":
         return StandardScalerModel(java_model)
 
 
@@ -4689,7 +4689,7 @@ class StringIndexer(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    def _create_model(self, java_model: JavaObject) -> "StringIndexerModel":
+    def _create_model(self, java_model: "JavaObject") -> "StringIndexerModel":
         return StringIndexerModel(java_model)
 
     @since("2.3.0")
@@ -5586,7 +5586,7 @@ class VectorIndexer(
         """
         return self._set(handleInvalid=value)
 
-    def _create_model(self, java_model: JavaObject) -> "VectorIndexerModel":
+    def _create_model(self, java_model: "JavaObject") -> "VectorIndexerModel":
         return VectorIndexerModel(java_model)
 
 
@@ -6058,7 +6058,7 @@ class Word2Vec(
         """
         return self._set(stepSize=value)
 
-    def _create_model(self, java_model: JavaObject) -> "Word2VecModel":
+    def _create_model(self, java_model: "JavaObject") -> "Word2VecModel":
         return Word2VecModel(java_model)
 
 
@@ -6250,7 +6250,7 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "PCAModel":
+    def _create_model(self, java_model: "JavaObject") -> "PCAModel":
         return PCAModel(java_model)
 
 
@@ -6524,7 +6524,7 @@ class RFormula(
         """
         return self._set(handleInvalid=value)
 
-    def _create_model(self, java_model: JavaObject) -> "RFormulaModel":
+    def _create_model(self, java_model: "JavaObject") -> "RFormulaModel":
         return RFormulaModel(java_model)
 
     def __str__(self) -> str:
@@ -6867,7 +6867,7 @@ class ChiSqSelector(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    def _create_model(self, java_model: JavaObject) -> "ChiSqSelectorModel":
+    def _create_model(self, java_model: "JavaObject") -> "ChiSqSelectorModel":
         return ChiSqSelectorModel(java_model)
 
 
@@ -7126,7 +7126,7 @@ class VarianceThresholdSelector(
         """
         return self._set(outputCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "VarianceThresholdSelectorModel":
+    def _create_model(self, java_model: "JavaObject") -> "VarianceThresholdSelectorModel":
         return VarianceThresholdSelectorModel(java_model)
 
 
@@ -7401,7 +7401,7 @@ class UnivariateFeatureSelector(
         """
         return self._set(labelCol=value)
 
-    def _create_model(self, java_model: JavaObject) -> "UnivariateFeatureSelectorModel":
+    def _create_model(self, java_model: "JavaObject") -> "UnivariateFeatureSelectorModel":
         return UnivariateFeatureSelectorModel(java_model)
 
 
