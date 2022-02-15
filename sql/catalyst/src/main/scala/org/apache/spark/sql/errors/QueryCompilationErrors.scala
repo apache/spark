@@ -170,14 +170,6 @@ object QueryCompilationErrors {
     )
   }
 
-  def unsupportedAbstractDataTypeForUpCastError(gotType: AbstractDataType): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters =
-        Array(s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
-    )
-  }
-
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
     new AnalysisException(
       s"Unable to generate an encoder for inner class `$className` without " +
@@ -200,7 +192,9 @@ object QueryCompilationErrors {
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
-    new AnalysisException("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+      messageParameters = Array.empty)
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
@@ -2375,5 +2369,10 @@ object QueryCompilationErrors {
 
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
+  }
+
+  def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
+    new AnalysisException(
+      "Sinks cannot request distribution and ordering in continuous execution mode")
   }
 }

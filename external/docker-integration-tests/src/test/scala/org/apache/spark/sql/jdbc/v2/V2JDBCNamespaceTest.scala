@@ -52,6 +52,8 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
 
   def supportsDropSchemaCascade: Boolean = true
 
+  def supportsDropSchemaRestrict: Boolean = true
+
   def testListNamespaces(): Unit = {
     test("listNamespaces: basic behavior") {
       val commentMap = if (supportsSchemaComment) {
@@ -78,7 +80,11 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
         assert(createCommentWarning === false)
       }
 
-      catalog.dropNamespace(Array("foo"), cascade = false)
+      if (supportsDropSchemaRestrict) {
+        catalog.dropNamespace(Array("foo"), cascade = false)
+      } else {
+        catalog.dropNamespace(Array("foo"), cascade = true)
+      }
       assert(catalog.namespaceExists(Array("foo")) === false)
       assert(catalog.listNamespaces() === builtinNamespaces)
       val msg = intercept[AnalysisException] {
@@ -99,15 +105,21 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerInte
       }
       catalog.createNamespace(Array("foo"), commentMap.asJava)
       assert(catalog.namespaceExists(Array("foo")) === true)
-      catalog.dropNamespace(Array("foo"), cascade = false)
+      if (supportsDropSchemaRestrict) {
+        catalog.dropNamespace(Array("foo"), cascade = false)
+      } else {
+        catalog.dropNamespace(Array("foo"), cascade = true)
+      }
       assert(catalog.namespaceExists(Array("foo")) === false)
 
       // Drop non empty namespace without cascade
-      catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
+      catalog.createNamespace(Array("foo"), commentMap.asJava)
       assert(catalog.namespaceExists(Array("foo")) === true)
       catalog.createTable(ident1, schema, Array.empty, emptyProps)
-      intercept[NonEmptyNamespaceException] {
-        catalog.dropNamespace(Array("foo"), cascade = false)
+      if (supportsDropSchemaRestrict) {
+        intercept[NonEmptyNamespaceException] {
+          catalog.dropNamespace(Array("foo"), cascade = false)
+        }
       }
 
       // Drop non empty namespace with cascade

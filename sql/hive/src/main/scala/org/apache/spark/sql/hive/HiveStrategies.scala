@@ -184,6 +184,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * Relation conversion from metastore relations to data source relations for better performance
  *
  * - When writing to non-partitioned Hive-serde Parquet/Orc tables
+ * - When writing to partitioned Hive-serde Parquet/Orc tables when
+ *   `spark.sql.hive.convertInsertingPartitionedTable` is true
  * - When scanning Hive-serde Parquet/ORC tables
  *
  * This rule must be run before all other DDL post-hoc resolution rules, i.e.

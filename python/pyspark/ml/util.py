@@ -31,7 +31,6 @@ from pyspark.util import VersionUtils
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
     from pyspark.ml._typing import PipelineStage
-
     from pyspark.ml.base import Params
     from pyspark.ml.wrapper import JavaWrapper
 
@@ -683,14 +682,14 @@ class MetaAlgorithmReadWrite:
         )
 
     @staticmethod
-    def getAllNestedStages(pyInstance: Any) -> List["PipelineStage"]:
+    def getAllNestedStages(pyInstance: Any) -> List["Params"]:
         from pyspark.ml import Pipeline, PipelineModel
         from pyspark.ml.tuning import _ValidatorParams
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
 
         # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
         #  support pipelineModel property.
-        pySubStages: List["PipelineStage"]
+        pySubStages: Sequence["Params"]
 
         if isinstance(pyInstance, Pipeline):
             pySubStages = pyInstance.getStages()
@@ -714,7 +713,7 @@ class MetaAlgorithmReadWrite:
         return [pyInstance] + nestedStages
 
     @staticmethod
-    def getUidMap(instance: Any) -> Dict[str, "PipelineStage"]:
+    def getUidMap(instance: Any) -> Dict[str, "Params"]:
         nestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance)
         uidMap = {stage.uid: stage for stage in nestedStages}
         if len(nestedStages) != len(uidMap):
