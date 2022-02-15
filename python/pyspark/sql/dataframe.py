@@ -3006,7 +3006,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         cols = list(colsMap.values())
 
         return DataFrame(
-            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(*cols)), self.sql_ctx
+            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(*cols)),
+            self.sparkSession,
         )
 
     def withColumn(self, colName: str, col: Column) -> "DataFrame":
