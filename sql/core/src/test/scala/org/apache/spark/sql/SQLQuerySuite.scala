@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, PartialDistinct, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4279,6 +4279,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
       checkAnswer(df.where("`a.b` > 10"),
         Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
+    }
+  }
+
+  test("SPARK-37989: Push down limit through Aggregate if it is group only") {
+    withTable("t1") {
+      spark.range(100).selectExpr("id % 5 AS a", "id % 5 AS b").write.saveAsTable("t1")
+      val df = sql("SELECT a, b, a AS alias FROM t1 GROUP BY a, b LIMIT 3")
+
+      val partialDistincts = df.queryExecution.optimizedPlan.collect {
+        case p: PartialDistinct => p
+      }
+      assert(partialDistincts.size === 1)
+
+      checkAnswer(df, Row(0, 0, 0) :: Row(1, 1, 1) :: Row(2, 2, 2) :: Nil)
     }
   }
 }
