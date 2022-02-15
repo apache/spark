@@ -105,6 +105,17 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.driver.memoryOverheadFactor")
+      .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
+      "as a fraction of total driver memory. If memory overhead is specified directly, " +
+      "it takes precedence.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(factor => factor >= 0 && factor < 1,
+        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .createWithDefault(0.1)
+
   private[spark] val DRIVER_LOG_DFS_DIR =
     ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
 
@@ -314,6 +325,16 @@ package object config {
     .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.executor.memoryOverheadFactor")
+      .doc("The amount of non-heap memory to be allocated per executor, as a fraction of total " +
+        "executor memory. If memory overhead is specified directly, it takes precedence.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(factor => factor >= 0 && factor < 1,
+        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .createWithDefault(0.1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
     .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +

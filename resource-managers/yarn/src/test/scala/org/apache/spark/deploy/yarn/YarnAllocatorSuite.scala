@@ -706,4 +706,18 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
     }
   }
+
+  test("SPARK-38194: Configurable memory overhead factor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
+    try {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.5)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemory
+      assert(memory == (executorMemory * 1.5).toInt)
+    } finally {
+      sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+    }
+  }
 }
