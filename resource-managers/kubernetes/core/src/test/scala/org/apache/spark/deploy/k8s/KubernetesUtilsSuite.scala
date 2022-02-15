@@ -74,6 +74,14 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("SPARK-38201: check uploadFileToHadoopCompatibleFS with different delSrc and overwrite") {
+
+    def checkUploadFailed(f: () => Unit): Unit = {
+      val message = intercept[SparkException] {
+        f
+      }.getMessage
+      assert(message.contains("Error uploading file"))
+    }
+
     withTempDir { srcDir =>
       withTempDir { destDir =>
         val upload = PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
@@ -83,7 +91,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         val dest = new Path(destDir.getAbsolutePath, fileName)
         val fs = src.getFileSystem(new Configuration())
         // Write a new file, upload file with delSrc = false and overwrite = true.
-        // Upload successful and record the `fileLength.
+        // Upload successful and record the `fileLength`.
         FileUtils.write(srcFile, "init-content", StandardCharsets.UTF_8)
         KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
         val firstLength = fs.getFileStatus(dest).getLen
