@@ -151,3 +151,4 @@ select to_binary(null, 'utf-8');
 select to_binary(null, null);
 select to_binary(null, cast(null as string));
 select to_binary('abc', 'invalidFormat');
+select to_binary('abc', 1);
