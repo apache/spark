@@ -754,10 +754,13 @@ case class StreamingDeduplicateExec(
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
-      // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
-      // is unrelated to the output schema.
-      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>
+      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "true")) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+
+      val watermarkAttr = child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+      val getValueRow = GenerateUnsafeProjection.generate(watermarkAttr.toSeq,
+        child.output)
+
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -777,7 +780,15 @@ case class StreamingDeduplicateExec(
         val key = getKey(row)
         val value = store.get(key)
         if (value == null) {
-          store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
+          // If keys include watermark, simply use it.
+          // If not, we put watermark into state value so we can
+          // remove out-of-watermark states later.
+          val valueRow = if (watermarkExpression.isEmpty || watermarkPredicateForKeys.isDefined) {
+            StreamingDeduplicateExec.EMPTY_ROW
+          } else {
+            getValueRow(row)
+          }
+          store.put(key, valueRow)
           numUpdatedStateRows += 1
           numOutputRows += 1
           true
@@ -795,6 +806,25 @@ case class StreamingDeduplicateExec(
         setStoreMetrics(store)
         setOperatorMetrics()
       })
+    }
+  }
+
+  override protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
+    if (watermarkPredicateForKeys.isDefined) {
+      super.removeKeysOlderThanWatermark(store)
+    } else {
+      val watermarkAttr = child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
+      val watermarkPredicateForValue = watermarkExpression
+        .map(Predicate.create(_, watermarkAttr.toSeq))
+      if (watermarkPredicateForValue.isDefined) {
+        val numRemovedStateRows = longMetric("numRemovedStateRows")
+        store.iterator().foreach { rowPair =>
+          if (watermarkPredicateForValue.get.eval(rowPair.value)) {
+            store.remove(rowPair.key)
+            numRemovedStateRows += 1
+          }
+        }
+      }
     }
   }
 

@@ -288,6 +288,33 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     )
   }
 
+  test("SPARK-38212: dropDuplicates should remove out-of-watermark key even no watermark in key") {
+    val input = MemoryStream[(Int, Int)]
+    val df = input.toDS.toDF("id", "time")
+      .withColumn("time", timestamp_seconds($"time"))
+      .withWatermark("time", "10 seconds")
+      .dropDuplicates("id")
+      .select($"id", $"time".cast("long"))
+
+    testStream(df, Append)(
+      AddData(input, 1 -> 1, 1 -> 2, 2 -> 2),
+      CheckAnswer(1 -> 1, 2 -> 2),
+      assertNumStateRows(total = 2, updated = 2),
+
+      AddData(input, 25 -> 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      CheckNewAnswer(25 -> 25),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(input, 10 -> 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 1),
+
+      AddData(input, 45 -> 45), // Advance watermark to 35 seconds, no-data-batch drops row 25
+      CheckNewAnswer(45 -> 45),
+      assertNumStateRows(total = 1, updated = 1)
+    )
+  }
+
   test("test no-data flag") {
     val flagKey = SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key
 
