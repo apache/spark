@@ -4288,7 +4288,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql(
           """
-            |SELECT `(C3)?+.+`,`C1` * C2
+            |SELECT `(C3)?+.+`,T.`C1` * `C2` AS CC
             |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
             |""".stripMargin),
         Row(3, 2, 6) :: Nil)
