@@ -17,13 +17,21 @@
 
 package org.apache.spark.deploy.k8s
 
+import java.io.File
+import java.nio.charset.Charset
+import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 
-class KubernetesUtilsSuite extends SparkFunSuite {
+class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   private val HOST = "test-host"
   private val POD = new PodBuilder()
     .withNewSpec()
@@ -64,5 +72,50 @@ class KubernetesUtilsSuite extends SparkFunSuite {
       KubernetesUtils.selectSparkContainer(noContainersPod, Option.empty)
     assert(sparkPodWithNoContainerName.pod.getSpec.getHostname == HOST)
     assert(sparkPodWithNoContainerName.container.getName == null)
+  }
+
+  test("SPARK-38201: check uploadFileToHadoopCompatibleFS with different delSrc and overwrite") {
+    val uploadFileToHadoopCompatibleFSMethod =
+      PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
+    withTempDir { srcDir =>
+      val fileName = "test.txt"
+      val srcFile = new File(srcDir, fileName)
+      FileUtils.write(srcFile, "test", Charset.defaultCharset())
+      withTempDir { destDir =>
+        import org.apache.spark.SparkException
+        val src = new Path(srcFile.getAbsolutePath)
+        val dest = new Path(destDir.getAbsolutePath, fileName)
+        val fs = src.getFileSystem(new Configuration())
+        // Scenario 1: delSrc = false and overwrite = true, upload successful
+        KubernetesUtils
+          .invokePrivate(uploadFileToHadoopCompatibleFSMethod(src, dest, fs, false, true))
+        val firstUploadTime = fs.getFileStatus(dest).getModificationTime
+        // sleep 1s to ensure that the `ModificationTime` changes.
+        TimeUnit.SECONDS.sleep(1)
+        // Scenario 2: delSrc = false and overwrite = true,
+        // upload succeeded but `ModificationTime` changed
+        KubernetesUtils
+          .invokePrivate(uploadFileToHadoopCompatibleFSMethod(src, dest, fs, false, true))
+        val secondUploadTime = fs.getFileStatus(dest).getModificationTime
+        assert(firstUploadTime != secondUploadTime)
+
+        // Scenario 3: delSrc = false and overwrite = false,
+        // upload failed because dest exists
+        val message = intercept[SparkException] {
+          KubernetesUtils
+            .invokePrivate(uploadFileToHadoopCompatibleFSMethod(src, dest, fs, false, false))
+        }.getMessage
+        assert(message.contains("Error uploading file"))
+
+        TimeUnit.SECONDS.sleep(1)
+        // Scenario 4: delSrc = true and overwrite = true,
+        // upload succeeded, `ModificationTime` changed and src not exists.
+        KubernetesUtils
+          .invokePrivate(uploadFileToHadoopCompatibleFSMethod(src, dest, fs, true, true))
+        val thirdUploadTime = fs.getFileStatus(dest).getModificationTime
+        assert(secondUploadTime != thirdUploadTime)
+        assert(!fs.exists(src))
+      }
+    }
   }
 }
