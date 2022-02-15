@@ -70,12 +70,17 @@ public class ConstantColumnVector extends ColumnVector {
 
   @Override
   public void close() {
+    stringData = null;
     byteArrayData = null;
-    for (int i = 0; i < childData.length; i++) {
-      childData[i].close();
-      childData[i] = null;
+    if (childData != null) {
+      for (int i = 0; i < childData.length; i++) {
+        if (childData[i] != null) {
+          childData[i].close();
+          childData[i] = null;
+        }
+      }
+      childData = null;
     }
-    childData = null;
     arrayData = null;
     mapData = null;
   }

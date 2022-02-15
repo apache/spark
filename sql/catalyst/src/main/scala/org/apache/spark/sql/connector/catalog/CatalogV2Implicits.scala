@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -49,21 +51,28 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
-    def asPartitionColumns: Seq[String] = {
-      val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
+    def convertTransforms: (Seq[String], Option[BucketSpec]) = {
+      val identityCols = new mutable.ArrayBuffer[String]
+      var bucketSpec = Option.empty[BucketSpec]
 
-      if (nonIdTransforms.nonEmpty) {
-        throw QueryCompilationErrors.cannotConvertTransformsToPartitionColumnsError(nonIdTransforms)
+      transforms.map {
+        case IdentityTransform(FieldReference(Seq(col))) =>
+          identityCols += col
+
+        case BucketTransform(numBuckets, col, sortCol) =>
+          if (bucketSpec.nonEmpty) throw QueryExecutionErrors.MultipleBucketTransformsError
+          if (sortCol.isEmpty) {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
+          } else {
+            bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")),
+              sortCol.map(_.fieldNames.mkString("."))))
+          }
+
+        case transform =>
+          throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
       }
 
-      idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
-        val parts = ref.fieldNames
-        if (parts.size > 1) {
-          throw QueryCompilationErrors.cannotPartitionByNestedColumnError(ref)
-        } else {
-          parts(0)
-        }
-      }
+      (identityCols.toSeq, bucketSpec)
     }
   }
 

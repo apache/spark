@@ -20,7 +20,7 @@ import operator
 import sys
 import uuid
 import warnings
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from multiprocessing.pool import ThreadPool
 
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
@@ -155,7 +155,8 @@ class ClassificationModel(PredictionModel, _ClassifierParams, metaclass=ABCMeta)
         """
         return self._set(rawPredictionCol=value)
 
-    @abstractproperty
+    @property
+    @abstractmethod
     @since("2.1.0")
     def numClasses(self):
         """

@@ -189,6 +189,10 @@
             <property name="format" value="Objects\.toStringHelper"/>
             <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
+            <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
+        </module>
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
         </module>

@@ -933,6 +933,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
             statusStore.executionsList().last.metricValues != null)
         }
 
+        spark.sparkContext.listenerBus.waitUntilEmpty()
         assert(bytesWritten.sum == 246)
         assert(recordsWritten.sum == 20)
       } finally {

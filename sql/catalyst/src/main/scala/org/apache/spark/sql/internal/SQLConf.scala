@@ -2383,7 +2383,8 @@ object SQLConf {
         "and shows a Python-friendly exception only.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      // show full stacktrace in tests but hide in production by default.
+      .createWithDefault(Utils.isTesting)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
@@ -2440,7 +2441,8 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      // show full stacktrace in tests but hide in production by default.
+      .createWithDefault(!Utils.isTesting)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")

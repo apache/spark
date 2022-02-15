@@ -61,8 +61,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import VectorLike
+    from pyspark.mllib._typing import VectorLike, NormType
     from scipy.sparse import spmatrix
+    from numpy.typing import ArrayLike
 
 
 QT = TypeVar("QT")
@@ -389,7 +390,7 @@ class DenseVector(Vector):
         return DenseVector(values)
 
     def __reduce__(self) -> Tuple[Type["DenseVector"], Tuple[bytes]]:
-        return DenseVector, (self.array.tostring(),)  # type: ignore[attr-defined]
+        return DenseVector, (self.array.tobytes(),)
 
     def numNonzeros(self) -> int:
         """
@@ -397,7 +398,7 @@ class DenseVector(Vector):
         """
         return np.count_nonzero(self.array)
 
-    def norm(self, p: Union[float, str]) -> np.float64:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a DenseVector.
 
@@ -454,7 +455,7 @@ class DenseVector(Vector):
             elif isinstance(other, Vector):
                 return np.dot(self.toArray(), other.toArray())
             else:
-                return np.dot(self.toArray(), other)
+                return np.dot(self.toArray(), cast("ArrayLike", other))
 
     def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
@@ -574,8 +575,8 @@ class DenseVector(Vector):
     def __neg__(self) -> "DenseVector":
         return DenseVector(-self.array)
 
-    def _delegate(op: str) -> Callable[["DenseVector", Any], Any]:  # type: ignore[misc]
-        def func(self: "DenseVector", other: Any) -> Any:
+    def _delegate(op: str) -> Callable[["DenseVector", Any], "DenseVector"]:  # type: ignore[misc]
+        def func(self: "DenseVector", other: Any) -> "DenseVector":
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
@@ -692,7 +693,7 @@ class SparseVector(Vector):
         """
         return np.count_nonzero(self.values)
 
-    def norm(self, p: Union[float, str]) -> np.float64:
+    def norm(self, p: "NormType") -> np.float64:
         """
         Calculates the norm of a SparseVector.
 
@@ -711,8 +712,8 @@ class SparseVector(Vector):
             SparseVector,
             (
                 self.size,
-                self.indices.tostring(),  # type: ignore[attr-defined]
-                self.values.tostring(),  # type: ignore[attr-defined]
+                self.indices.tobytes(),
+                self.values.tobytes(),
             ),
         )
 
@@ -767,7 +768,7 @@ class SparseVector(Vector):
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(cast(int, size), indices, values)
 
-    def dot(self, other: Any) -> np.float64:
+    def dot(self, other: Iterable[float]) -> np.float64:
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
@@ -823,9 +824,9 @@ class SparseVector(Vector):
                 return np.dot(self_values, other.values[other_cmind])
 
         else:
-            return self.dot(_convert_to_vector(other))
+            return self.dot(_convert_to_vector(other))  # type: ignore[arg-type]
 
-    def squared_distance(self, other: Any) -> np.float64:
+    def squared_distance(self, other: Iterable[float]) -> np.float64:
         """
         Squared distance from a SparseVector or 1-dimensional NumPy array.
 
@@ -893,7 +894,7 @@ class SparseVector(Vector):
                 j += 1
             return result
         else:
-            return self.squared_distance(_convert_to_vector(other))
+            return self.squared_distance(_convert_to_vector(other))  # type: ignore[arg-type]
 
     def toArray(self) -> np.ndarray:
         """
@@ -1139,7 +1140,7 @@ class Vectors:
         return v1.squared_distance(v2)  # type: ignore[attr-defined]
 
     @staticmethod
-    def norm(vector: Vector, p: Union[float, str]) -> np.float64:
+    def norm(vector: Vector, p: "NormType") -> np.float64:
         """
         Find norm of the given vector.
         """
@@ -1255,7 +1256,7 @@ class DenseMatrix(Matrix):
         return DenseMatrix, (
             self.numRows,
             self.numCols,
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 
@@ -1488,9 +1489,9 @@ class SparseMatrix(Matrix):
         return SparseMatrix, (
             self.numRows,
             self.numCols,
-            self.colPtrs.tostring(),  # type: ignore[attr-defined]
-            self.rowIndices.tostring(),  # type: ignore[attr-defined]
-            self.values.tostring(),  # type: ignore[attr-defined]
+            self.colPtrs.tobytes(),
+            self.rowIndices.tobytes(),
+            self.values.tobytes(),
             int(self.isTransposed),
         )
 

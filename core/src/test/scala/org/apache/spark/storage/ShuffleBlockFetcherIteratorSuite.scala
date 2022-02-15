@@ -24,7 +24,9 @@ import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
 import com.google.common.io.ByteStreams

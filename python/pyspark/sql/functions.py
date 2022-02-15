@@ -1105,7 +1105,7 @@ def broadcast(df: DataFrame) -> DataFrame:
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
-    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
+    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
 
 
 def coalesce(*cols: "ColumnOrName") -> Column:
@@ -2039,7 +2039,8 @@ def hour(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
     """
@@ -2054,7 +2055,8 @@ def minute(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
     """
@@ -2069,7 +2071,8 @@ def second(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> import datetime
+    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
     """
@@ -2551,7 +2554,7 @@ def window(
     ----------
     timeColumn : :class:`~pyspark.sql.Column`
         The column or the expression to use as the timestamp for windowing by time.
-        The time column must be of TimestampType.
+        The time column must be of TimestampType or TimestampNTZType.
     windowDuration : str
         A string specifying the width of the window, e.g. `10 minutes`,
         `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
@@ -2572,7 +2575,10 @@ def window(
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> import datetime
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
+    ... ).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
@@ -2623,7 +2629,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     ----------
     timeColumn : :class:`~pyspark.sql.Column` or str
         The column name or column to use as the timestamp for windowing by time.
-        The time column must be of TimestampType.
+        The time column must be of TimestampType or TimestampNTZType.
     gapDuration : :class:`~pyspark.sql.Column` or str
         A Python string literal or column specifying the timeout of the session. It could be
         static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
@@ -3661,13 +3667,13 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ['data'])
     >>> df.select(element_at(df.data, 1)).collect()
-    [Row(element_at(data, 1)='a'), Row(element_at(data, 1)=None)]
+    [Row(element_at(data, 1)='a')]
 
-    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},)], ['data'])
     >>> df.select(element_at(df.data, lit("a"))).collect()
-    [Row(element_at(data, a)=1.0), Row(element_at(data, a)=None)]
+    [Row(element_at(data, a)=1.0)]
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 

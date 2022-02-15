@@ -161,8 +161,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         boolean isActuallyOverdue =
           System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
-          boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
-          if (hasInFlightRequests) {
+          if (responseHandler.hasOutstandingRequests()) {
             String address = getRemoteAddress(ctx.channel());
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust" +

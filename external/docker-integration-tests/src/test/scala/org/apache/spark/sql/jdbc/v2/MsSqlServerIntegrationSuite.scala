@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -37,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
   override val catalogName: String = "mssql"
 
@@ -58,10 +58,15 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
-  override def dataPreparation(conn: Connection): Unit = {}
+  override def tablePreparation(connection: Connection): Unit = {
+    connection.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary NUMERIC(20, 2), bonus FLOAT)")
+      .executeUpdate()
+  }
 
   override def notSupportsTableComment: Boolean = true
 
@@ -91,4 +96,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
   }
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
 }

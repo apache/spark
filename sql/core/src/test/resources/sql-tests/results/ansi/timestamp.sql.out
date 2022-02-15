@@ -647,19 +647,17 @@ struct<>
 -- !query
 select str - timestamp'2011-11-11 11:11:11' from ts_view
 -- !query schema
-struct<>
+struct<(str - TIMESTAMP '2011-11-11 11:11:11'):interval day to second>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(ts_view.str - TIMESTAMP '2011-11-11 11:11:11')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+0 00:00:00.000000000
 
 
 -- !query
 select timestamp'2011-11-11 11:11:11' - str from ts_view
 -- !query schema
-struct<>
+struct<(TIMESTAMP '2011-11-11 11:11:11' - str):interval day to second>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP '2011-11-11 11:11:11' - ts_view.str)' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, 'ts_view.str' is of string type.; line 1 pos 7
+0 00:00:00.000000000
 
 
 -- !query

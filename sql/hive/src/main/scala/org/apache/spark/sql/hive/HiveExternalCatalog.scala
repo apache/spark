@@ -36,12 +36,11 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -94,22 +93,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap non-fatal
+   * Run some code involving `client` in a [[synchronized]] block and wrap certain
    * exceptions thrown in the process in [[AnalysisException]].
    */
-  private def withClient[T](body: => T): T = withClientWrappingException {
-    body
-  } {
-    _ => None // Will fallback to default wrapping strategy in withClientWrappingException.
-  }
-
-  /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap non-fatal
-   * exceptions thrown in the process in [[AnalysisException]] using the given
-   * `wrapException` function.
-   */
-  private def withClientWrappingException[T](body: => T)
-      (wrapException: Throwable => Option[AnalysisException]): T = synchronized {
+  private def withClient[T](body: => T): T = synchronized {
     try {
       body
     } catch {
@@ -120,11 +107,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           case i: InvocationTargetException => i.getCause
           case o => o
         }
-        wrapException(e) match {
-          case Some(wrapped) => throw wrapped
-          case None => throw new AnalysisException(
-            e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
-        }
+        throw new AnalysisException(
+          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
     }
   }
 
@@ -204,32 +188,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def createDatabase(
       dbDefinition: CatalogDatabase,
-      ignoreIfExists: Boolean): Unit = withClientWrappingException {
+      ignoreIfExists: Boolean): Unit = withClient {
     client.createDatabase(dbDefinition, ignoreIfExists)
-  } { exception =>
-    if (exception.getClass.getName.equals(
-          "org.apache.hadoop.hive.metastore.api.AlreadyExistsException")
-        && exception.getMessage.contains(
-          s"Database ${dbDefinition.name} already exists")) {
-      Some(new DatabaseAlreadyExistsException(dbDefinition.name))
-    } else {
-      None
-    }
   }
 
   override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
-    try {
-      client.dropDatabase(db, ignoreIfNotExists, cascade)
-    } catch {
-      case NonFatal(exception) =>
-        if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
-          && exception.getMessage.contains(s"Database $db is not empty.")) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
-        } else throw exception
-    }
+    client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
   /**
@@ -801,8 +768,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
 
     // Restore Spark's statistics from information in Metastore.
-    val restoredStats =
-      statsFromProperties(table.properties, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(table.properties, table.identifier.table)
     if (restoredStats.isDefined) {
       table = table.copy(stats = restoredStats)
     }
@@ -1170,8 +1136,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   private def statsFromProperties(
       properties: Map[String, String],
-      table: String,
-      schema: StructType): Option[CatalogStatistics] = {
+      table: String): Option[CatalogStatistics] = {
 
     val statsProps = properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
     if (statsProps.isEmpty) {
@@ -1241,8 +1206,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // Restore Spark's statistics from information in Metastore.
     // Note: partition-level statistics were introduced in 2.3.
-    val restoredStats =
-      statsFromProperties(partition.parameters, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(partition.parameters, table.identifier.table)
     if (restoredStats.isDefined) {
       partition.copy(
         spec = restoredSpec,
@@ -1306,7 +1270,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // treats dot as matching any single character and may return more partitions than we
       // expected. Here we do an extra filter to drop unexpected partitions.
       case Some(spec) if spec.exists(_._2.contains(".")) =>
-        res.filter(p => isPartialPartitionSpec(spec, p.spec))
+        res.filter(p => isPartialPartitionSpec(spec, toMetaStorePartitionSpec(p.spec)))
       case _ => res
     }
   }

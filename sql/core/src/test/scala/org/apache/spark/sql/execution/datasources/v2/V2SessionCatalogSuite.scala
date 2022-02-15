@@ -785,8 +785,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   private def filterV2TableProperties(
       properties: util.Map[String, String]): Map[String, String] = {
     properties.asScala.filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX))
-      .filter(_._1 != TableCatalog.PROP_EXTERNAL).toMap
+      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX)).toMap
   }
 }
 

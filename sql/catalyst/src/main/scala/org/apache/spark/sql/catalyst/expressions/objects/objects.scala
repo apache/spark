@@ -50,6 +50,7 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   def propagateNull: Boolean
 
+  override def foldable: Boolean = children.forall(_.foldable) && deterministic
   protected lazy val needNullCheck: Boolean = needNullCheckForIndex.contains(true)
   protected lazy val needNullCheckForIndex: Array[Boolean] =
     arguments.map(a => a.nullable && (propagateNull ||
