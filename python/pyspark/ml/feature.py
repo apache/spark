@@ -484,6 +484,7 @@ class _BucketedRandomProjectionLSHParams:
 class BucketedRandomProjectionLSH(
     _LSH["BucketedRandomProjectionLSHModel"],
     _LSHParams,
+    _BucketedRandomProjectionLSHParams,
     HasSeed,
     JavaMLReadable["BucketedRandomProjectionLSH"],
     JavaMLWritable,
