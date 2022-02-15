@@ -490,4 +490,46 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       assert(attributeReference.dataType == tuple._2)
     }
   }
+
+  test("No need to filter data when the sliding window length is not redundant") {
+    val df1 = Seq(
+      ("2022-02-15 19:39:34", 1, "a"),
+      ("2022-02-15 19:39:56", 2, "a"),
+      ("2022-02-15 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2022-02-15T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    val df3 = Seq(
+      ("2022-02-15 19:39:34", 1, "a"),
+      ("2022-02-15 19:39:56", 2, "a"),
+      ("2022-02-15 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "-2 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+    val df4 = Seq(
+      (LocalDateTime.parse("2022-02-15T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "2 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    Seq(df1, df2).foreach { df =>
+      checkAnswer(
+        df,
+        Seq(Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
+      )
+    }
+
+    Seq(df3, df4).foreach { df =>
+      checkAnswer(
+        df,
+        Seq(Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
+      )
+    }
+  }
 }
