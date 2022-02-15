@@ -17,12 +17,22 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.functions.{lit, lower, struct, sum}
-import org.apache.spark.sql.test.SharedSparkSession
+import java.sql.Timestamp
 
-class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.orc.OrcTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.functions.{lit, lower, struct, sum}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.util.ArrowUtils
+
+class QueryExecutionErrorsSuite extends QueryTest
+  with ParquetTest with OrcTest with SharedSparkSession {
+
   import testImplicits._
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
@@ -170,5 +180,73 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e2.getSqlState === "0A000")
     assert(e2.getMessage === "The feature is not supported: Pivot not after a groupBy.")
+  }
+
+  test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
+    "compatibility with Spark 2.4/3.2 in reading/writing dates") {
+
+    // Fail to read ancient datetime values.
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      val fileName = "before_1582_date_v2_4_5.snappy.parquet"
+      val filePath = getResourceParquetFilePath("test-data/" + fileName)
+      val e = intercept[SparkException] {
+        spark.read.parquet(filePath).collect()
+      }.getCause.asInstanceOf[SparkUpgradeException]
+
+      assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
+      assert(e.getMessage
+        .startsWith("You may get a different result due to the upgrading of Spark 3.0: \n" +
+          "reading dates before"))
+    }
+
+    // Fail to write ancient datetime values.
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
+
+        assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
+        assert(e.getMessage
+          .startsWith("You may get a different result due to the upgrading of Spark 3.0: \n" +
+            "writing dates before"))
+      }
+    }
+  }
+
+  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
+    val schema = new StructType().add("value", TimestampType)
+    val e = intercept[SparkUnsupportedOperationException] {
+      ArrowUtils.toArrowSchema(schema, null)
+    }
+
+    assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+    assert(e.getMessage === "The operation is not supported: " +
+      "timestamp must supply timeZoneId parameter while converting to ArrowType")
+  }
+
+  test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
+    val data = (1 to 10).map { i =>
+      val ts = new Timestamp(i)
+      Row(ts)
+    }
+
+    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+
+    withTempPath { file =>
+      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+      df.write.orc(file.getCanonicalPath)
+      withAllNativeOrcReaders {
+        val e = intercept[SparkException] {
+          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
+
+        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+        assert(e.getMessage === "The operation is not supported: " +
+          "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+      }
+    }
   }
 }
