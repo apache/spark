@@ -118,7 +118,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         assert(!fs.exists(src))
 
         // Rewrite a new file, upload file with delSrc = true and overwrite = false.
-        // Upload failed because dest exists and src still exists.
+        // Upload failed because dest exists, src still exists.
         FileUtils.write(srcFile, "re-init-content", StandardCharsets.UTF_8, true)
         checkUploadException(delSrc = true, overwrite = false)
         assert(fs.exists(src))
