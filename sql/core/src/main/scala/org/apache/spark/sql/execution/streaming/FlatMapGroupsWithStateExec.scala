@@ -93,6 +93,9 @@ case class FlatMapGroupsWithStateExec(
    * to have the same grouping so that the data are co-lacated on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
     ClusteredDistribution(initialStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
       Nil
