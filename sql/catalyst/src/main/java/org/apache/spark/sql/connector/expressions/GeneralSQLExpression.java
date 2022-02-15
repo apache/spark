@@ -37,12 +37,18 @@ public class GeneralSQLExpression implements Expression, Serializable {
     this.children = children;
   }
 
+  public GeneralSQLExpression(Expression[] children) {
+    this.name = "UNDEFINED";
+    this.children = children;
+  }
+
   public void setSql(String sql) {
         this.sql = sql;
     }
 
   public String name() { return name; }
   public Expression[] children() { return children; }
+  public String sql() { return sql; }
 
   @Override
   public String toString() {
