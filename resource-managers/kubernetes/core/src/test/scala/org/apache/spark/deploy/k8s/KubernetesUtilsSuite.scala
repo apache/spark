@@ -19,7 +19,6 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -75,40 +74,50 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("SPARK-38201: check uploadFileToHadoopCompatibleFS with different delSrc and overwrite") {
-    val upload = PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
     withTempDir { srcDir =>
-      val fileName = "test.txt"
-      val srcFile = new File(srcDir, fileName)
-      FileUtils.write(srcFile, "test", StandardCharsets.UTF_8)
       withTempDir { destDir =>
+        val upload = PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
+        val fileName = "test.txt"
+        val srcFile = new File(srcDir, fileName)
         val src = new Path(srcFile.getAbsolutePath)
         val dest = new Path(destDir.getAbsolutePath, fileName)
         val fs = src.getFileSystem(new Configuration())
-        // Scenario 1: delSrc = false and overwrite = true, upload successful
+        // Write a new file, upload file with delSrc = false and overwrite = true.
+        // Upload successful and record the `fileLength.
+        FileUtils.write(srcFile, "init-content", StandardCharsets.UTF_8)
         KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
-        val firstUploadTime = fs.getFileStatus(dest).getModificationTime
-        // sleep 1s to ensure that the `ModificationTime` changes.
-        TimeUnit.SECONDS.sleep(1)
-        // Scenario 2: delSrc = false and overwrite = true,
-        // upload succeeded but `ModificationTime` changed
-        KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
-        val secondUploadTime = fs.getFileStatus(dest).getModificationTime
-        assert(firstUploadTime < secondUploadTime)
+        val firstLength = fs.getFileStatus(dest).getLen
 
-        // Scenario 3: delSrc = false and overwrite = false,
-        // upload failed because dest exists
-        val message = intercept[SparkException] {
+        // Append the file, upload file with delSrc = false and overwrite = true.
+        // Upload succeeded but `fileLength` changed.
+        FileUtils.write(srcFile, "append-content", StandardCharsets.UTF_8, true)
+        KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
+        val secondLength = fs.getFileStatus(dest).getLen
+        assert(firstLength < secondLength)
+
+        // Upload file with delSrc = false and overwrite = false.
+        // Upload failed because dest exists.
+        val message1 = intercept[SparkException] {
           KubernetesUtils.invokePrivate(upload(src, dest, fs, false, false))
         }.getMessage
-        assert(message.contains("Error uploading file"))
+        assert(message1.contains("Error uploading file"))
 
-        TimeUnit.SECONDS.sleep(1)
-        // Scenario 4: delSrc = true and overwrite = true,
-        // upload succeeded, `ModificationTime` changed and src not exists.
+        // Append the file again, upload file delSrc = true and overwrite = true.
+        // Upload succeeded, `fileLength` changed and src not exists.
+        FileUtils.write(srcFile, "append-content", StandardCharsets.UTF_8, true)
         KubernetesUtils.invokePrivate(upload(src, dest, fs, true, true))
-        val thirdUploadTime = fs.getFileStatus(dest).getModificationTime
-        assert(secondUploadTime < thirdUploadTime)
+        val thirdLength = fs.getFileStatus(dest).getLen
+        assert(secondLength < thirdLength)
         assert(!fs.exists(src))
+
+        // Rewrite a new file, upload file with delSrc = true and overwrite = false.
+        // Upload failed because dest exists and src still exists.
+        FileUtils.write(srcFile, "re-init-content", StandardCharsets.UTF_8, true)
+        val message2 = intercept[SparkException] {
+          KubernetesUtils.invokePrivate(upload(src, dest, fs, true, false))
+        }.getMessage
+        assert(message2.contains("Error uploading file"))
+        assert(fs.exists(src))
       }
     }
   }
