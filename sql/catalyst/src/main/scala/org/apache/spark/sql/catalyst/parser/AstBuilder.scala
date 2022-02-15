@@ -2084,8 +2084,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   private def canApplyRegex(ctx: ParserRuleContext): Boolean = withOrigin(ctx) {
     var parent = ctx.getParent
+    if (!isRegex(ctx.getText)) return false
     while (parent != null) {
-      if (parent.isInstanceOf[NamedExpressionContext] && isRegex(ctx.getText)) return true
+      if (parent.isInstanceOf[NamedExpressionContext]) return true
       parent = parent.getParent
     }
     return false
