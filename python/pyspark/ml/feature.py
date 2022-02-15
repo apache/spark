@@ -6943,7 +6943,7 @@ class VectorSizeHint(
         self,
         *,
         inputCol: Optional[str] = None,
-        size: Optional[str] = None,
+        size: Optional[int] = None,
         handleInvalid: str = "error",
     ) -> None:
         """
