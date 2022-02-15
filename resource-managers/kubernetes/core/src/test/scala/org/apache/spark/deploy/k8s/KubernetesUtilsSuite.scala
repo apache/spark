@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -79,7 +79,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
     withTempDir { srcDir =>
       val fileName = "test.txt"
       val srcFile = new File(srcDir, fileName)
-      FileUtils.write(srcFile, "test", Charset.defaultCharset())
+      FileUtils.write(srcFile, "test", StandardCharsets.UTF_8)
       withTempDir { destDir =>
         val src = new Path(srcFile.getAbsolutePath)
         val dest = new Path(destDir.getAbsolutePath, fileName)
