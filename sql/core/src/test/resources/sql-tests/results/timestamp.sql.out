@@ -776,7 +776,7 @@ struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 
 
 -- !query
-select timestampadd('MINUTE', 58, timestamp'2022-02-14 01:02:03')
+select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03')
 -- !query schema
 struct<timestampadd(MINUTE, 58, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 -- !query output
@@ -784,7 +784,7 @@ struct<timestampadd(MINUTE, 58, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 
 
 -- !query
-select timestampadd('YEAR', 1, date'2022-02-15')
+select timestampadd(YEAR, 1, date'2022-02-15')
 -- !query schema
 struct<timestampadd(YEAR, 1, DATE '2022-02-15'):timestamp>
 -- !query output
