@@ -100,5 +100,69 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
     assert(e.message ===
       "The argument_index of string format cannot contain position 0$.")
+
+  test("CANNOT_USE_MIXTURE") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    }
+  }
+  test("UNSUPPORTED_JOIN_CONDITION") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    }
+  }
+  test("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    }
+  }
+  test("UNSUPPORTED_STREAMING_AGGREGATION") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    }
   }
 }

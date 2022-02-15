@@ -18,6 +18,9 @@
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
   },
+  "CANNOT_USE_MIXTURE" : {
+    "message" : [ "Cannot use a mixture of aggregate function and group aggregate pandas UDF" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
@@ -151,6 +154,15 @@
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
+  },
+  "UNSUPPORTED_JOIN_CONDITION" : {
+    "message" : [ "Using PythonUDF in join condition of join type %s is not supported" ]
+  },
+  "UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION" : {
+    "message" : [ "Pivot does not support Pandas UDF aggregate expressions." ]
+  },
+  "UNSUPPORTED_STREAMING_AGGREGATION" : {
+    "message" : [ "Streaming aggregation doesn't support group aggregate pandas UDF" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
