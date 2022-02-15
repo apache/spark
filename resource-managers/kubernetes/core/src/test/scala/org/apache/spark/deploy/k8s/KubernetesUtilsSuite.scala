@@ -93,7 +93,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         // upload succeeded but `ModificationTime` changed
         KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
         val secondUploadTime = fs.getFileStatus(dest).getModificationTime
-        assert(firstUploadTime != secondUploadTime)
+        assert(firstUploadTime < secondUploadTime)
 
         // Scenario 3: delSrc = false and overwrite = false,
         // upload failed because dest exists
@@ -107,7 +107,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         // upload succeeded, `ModificationTime` changed and src not exists.
         KubernetesUtils.invokePrivate(upload(src, dest, fs, true, true))
         val thirdUploadTime = fs.getFileStatus(dest).getModificationTime
-        assert(secondUploadTime != thirdUploadTime)
+        assert(secondUploadTime < thirdUploadTime)
         assert(!fs.exists(src))
       }
     }
