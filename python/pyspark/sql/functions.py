@@ -2576,7 +2576,7 @@ def window(
     Examples
     --------
     >>> import datetime
-    >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
+    >>> df = spark.createDataFrame([(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)]).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
