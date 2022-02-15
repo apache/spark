@@ -491,7 +491,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-38214：No need to filter data when the sliding window length is not redundant") {
+  test("SPARK-38214: No need to filter data when the sliding window length is not redundant") {
     val df1 = Seq(
       ("2022-02-15 19:39:34", 1, "a"),
       ("2022-02-15 19:39:56", 2, "a"),
