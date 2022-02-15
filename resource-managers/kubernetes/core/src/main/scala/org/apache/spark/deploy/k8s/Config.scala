@@ -285,9 +285,9 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_SCHEDULER_NAME =
     ConfigBuilder("spark.kubernetes.scheduler.name")
-      .doc("Specify the scheduler name for driver and executor pod, if " +
-        s"`${KUBERNETES_DRIVER_SCHEDULER_NAME.key}` or `${KUBERNETES_DRIVER_SCHEDULER_NAME.key}` " +
-        "is set, will replace this.")
+      .doc("Specify the scheduler name for driver and executor pods. if " +
+        s"`${KUBERNETES_DRIVER_SCHEDULER_NAME.key}` or " +
+        s"`${KUBERNETES_EXECUTOR_SCHEDULER_NAME.key}` is set, will override this.")
       .version("3.3.0")
       .stringConf
       .createOptional
