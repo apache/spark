@@ -467,11 +467,18 @@ def is_testing() -> bool:
 
 def default_session() -> SparkSession:
     spark = SparkSession.getActiveSession()
-    if spark is not None:
-        return spark
+    if spark is None:
+        spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
-    builder = SparkSession.builder.appName("pandas-on-Spark")
-    return builder.getOrCreate()
+    if spark.conf.get("spark.sql.ansi.enabled"):
+        log_advice(
+            "The config 'spark.sql.ansi.enabled' is set to True. "
+            "This can cause unexpected behavior "
+            "from pandas API on Spark since pandas API on Spark follows "
+            "the behavior of pandas, not SQL."
+        )
+
+    return spark
 
 
 @contextmanager
