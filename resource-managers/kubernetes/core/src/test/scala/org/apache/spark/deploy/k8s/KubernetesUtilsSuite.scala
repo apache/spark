@@ -74,14 +74,6 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("SPARK-38201: check uploadFileToHadoopCompatibleFS with different delSrc and overwrite") {
-
-    def checkUploadFailed(f: () => Unit): Unit = {
-      val message = intercept[SparkException] {
-        f
-      }.getMessage
-      assert(message.contains("Error uploading file"))
-    }
-
     withTempDir { srcDir =>
       withTempDir { destDir =>
         val upload = PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
@@ -90,30 +82,37 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         val src = new Path(srcFile.getAbsolutePath)
         val dest = new Path(destDir.getAbsolutePath, fileName)
         val fs = src.getFileSystem(new Configuration())
+
+        def checkUploadException(delSrc: Boolean, overwrite: Boolean): Unit = {
+          val message = intercept[SparkException] {
+            KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
+          }.getMessage
+          assert(message.contains("Error uploading file"))
+        }
+
+        def appendFileAndUpload(content: String, delSrc: Boolean, overwrite: Boolean): Unit = {
+          FileUtils.write(srcFile, content, StandardCharsets.UTF_8, true)
+          KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
+        }
+
         // Write a new file, upload file with delSrc = false and overwrite = true.
         // Upload successful and record the `fileLength`.
-        FileUtils.write(srcFile, "init-content", StandardCharsets.UTF_8)
-        KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
+        appendFileAndUpload("init-content", delSrc = false, overwrite = true)
         val firstLength = fs.getFileStatus(dest).getLen
 
         // Append the file, upload file with delSrc = false and overwrite = true.
         // Upload succeeded but `fileLength` changed.
-        FileUtils.write(srcFile, "append-content", StandardCharsets.UTF_8, true)
-        KubernetesUtils.invokePrivate(upload(src, dest, fs, false, true))
+        appendFileAndUpload("append-content", delSrc = false, overwrite = true)
         val secondLength = fs.getFileStatus(dest).getLen
         assert(firstLength < secondLength)
 
         // Upload file with delSrc = false and overwrite = false.
         // Upload failed because dest exists.
-        val message1 = intercept[SparkException] {
-          KubernetesUtils.invokePrivate(upload(src, dest, fs, false, false))
-        }.getMessage
-        assert(message1.contains("Error uploading file"))
+        checkUploadException(delSrc = false, overwrite = false)
 
         // Append the file again, upload file delSrc = true and overwrite = true.
         // Upload succeeded, `fileLength` changed and src not exists.
-        FileUtils.write(srcFile, "append-content", StandardCharsets.UTF_8, true)
-        KubernetesUtils.invokePrivate(upload(src, dest, fs, true, true))
+        appendFileAndUpload("append-content", delSrc = true, overwrite = true)
         val thirdLength = fs.getFileStatus(dest).getLen
         assert(secondLength < thirdLength)
         assert(!fs.exists(src))
@@ -121,10 +120,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         // Rewrite a new file, upload file with delSrc = true and overwrite = false.
         // Upload failed because dest exists and src still exists.
         FileUtils.write(srcFile, "re-init-content", StandardCharsets.UTF_8, true)
-        val message2 = intercept[SparkException] {
-          KubernetesUtils.invokePrivate(upload(src, dest, fs, true, false))
-        }.getMessage
-        assert(message2.contains("Error uploading file"))
+        checkUploadException(delSrc = true, overwrite = false)
         assert(fs.exists(src))
       }
     }
