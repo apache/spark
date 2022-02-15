@@ -3084,8 +3084,10 @@ case class ConvertTimezone(
        2022-02-12 04:30:00
       > SELECT _FUNC_('MONTH', 1, timestamp_ltz'2022-01-31 00:00:00');
        2022-02-28 00:00:00
-      > SELECT _FUNC_('SECOND', -10, date'2022-01-01');
+      > SELECT _FUNC_(SECOND, -10, date'2022-01-01');
        2021-12-31 23:59:50
+      > SELECT _FUNC_(YEAR, 10, timestamp'2000-01-01 01:02:03.123456');
+       2010-01-01 01:02:03.123456
   """,
   group = "datetime_funcs",
   since = "3.3.0")
