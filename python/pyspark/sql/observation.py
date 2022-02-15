@@ -109,7 +109,7 @@ class Observation:
         observed_df = self._jo.on(
             df._jdf, exprs[0]._jc, column._to_seq(df._sc, [c._jc for c in exprs[1:]])
         )
-        return DataFrame(observed_df, df.sql_ctx)
+        return DataFrame(observed_df, df.sparkSession)
 
     @property
     def get(self) -> Dict[str, Any]:
