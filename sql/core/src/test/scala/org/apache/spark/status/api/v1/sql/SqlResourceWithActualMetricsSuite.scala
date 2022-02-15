@@ -20,6 +20,7 @@ package org.apache.spark.status.api.v1.sql
 import java.net.URL
 import java.text.SimpleDateFormat
 
+import org.apache.commons.lang3.StringUtils
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 
@@ -97,6 +98,8 @@ class SqlResourceWithActualMetricsSuite
       s"Expected failedJobIds should be empty but actual: ${executionData.failedJobIds}")
     assert(executionData.nodes.nonEmpty, "Expected nodes should not be empty}")
     executionData.nodes.filterNot(node => excludedNodes.contains(node.nodeName)).foreach { node =>
+      assert(StringUtils.isNotBlank(node.nodeName))
+      assert(StringUtils.isNotBlank(node.nodeDesc))
       assert(node.metrics.nonEmpty, "Expected metrics of nodes should not be empty")
     }
   }

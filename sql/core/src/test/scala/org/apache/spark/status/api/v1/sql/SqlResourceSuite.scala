@@ -39,15 +39,19 @@ object SqlResourceSuite {
   val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
   val DESCRIPTION = "csv at MyDataFrames.scala:57"
 
+  val TEST_NODE_DESC_0 = "test_node_desc_0"
+  val TEST_NODE_DESC_1 = "test_node_desc_1"
+  val TEST_NODE_DESC_2 = "test_node_desc_2"
+
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
-  val filterNode = new SparkPlanGraphNode(1, FILTER, "",
+  val filterNode = new SparkPlanGraphNode(1, FILTER, TEST_NODE_DESC_1,
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
-    new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
+    new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, TEST_NODE_DESC_0,
       nodes = ArrayBuffer(filterNode),
       metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
-    new SparkPlanGraphNode(2, SCAN_TEXT, "",
+    new SparkPlanGraphNode(2, SCAN_TEXT, TEST_NODE_DESC_2,
       metrics = Seq(
       SQLPlanMetric(METADATA_TIME, 2, ""),
       SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
@@ -97,12 +101,12 @@ object SqlResourceSuite {
     )
   }
 
-  private def getNodes(): Seq[Node] = {
-    val node = Node(0, WHOLE_STAGE_CODEGEN_1,
+  private def getExpectedNodes(): Seq[Node] = {
+    val node = Node(0, WHOLE_STAGE_CODEGEN_1, TEST_NODE_DESC_0,
       wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
-    val node2 = Node(1, FILTER,
+    val node2 = Node(1, FILTER, TEST_NODE_DESC_1,
       wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val node3 = Node(2, SCAN_TEXT, wholeStageCodegenId = None,
+    val node3 = Node(2, SCAN_TEXT, TEST_NODE_DESC_2, wholeStageCodegenId = None,
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
@@ -113,8 +117,8 @@ object SqlResourceSuite {
   }
 
   private def getExpectedNodesWhenWholeStageCodegenIsOff(): Seq[Node] = {
-    val node = Node(1, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
-    val node2 = Node(2, SCAN_TEXT,
+    val node = Node(1, FILTER, TEST_NODE_DESC_1, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val node2 = Node(2, SCAN_TEXT, TEST_NODE_DESC_2,
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
@@ -168,7 +172,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
         sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, false)
     verifyExpectedExecutionData(
       executionData,
-      nodes = getNodes(),
+      nodes = getExpectedNodes(),
       edges,
       planDescription = "")
   }
@@ -179,7 +183,7 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
         sqlExecutionUIData, SparkPlanGraph(nodes, edges), true, true)
     verifyExpectedExecutionData(
       executionData,
-      nodes = getNodes(),
+      nodes = getExpectedNodes(),
       edges = edges,
       planDescription = PLAN_DESCRIPTION)
   }

@@ -128,7 +128,8 @@ private[v1] class SqlResource extends BaseAppResource {
       val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(node.id).flatten
       val metrics =
         node.metrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim))
-      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics)
+      Node(nodeId = node.id, nodeName = node.name.trim,
+        nodeDesc = node.desc, wholeStageCodegenId, metrics)
     }
 
     nodes.sortBy(_.nodeId).reverse
