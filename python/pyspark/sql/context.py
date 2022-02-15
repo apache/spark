@@ -161,7 +161,9 @@ class SQLContext:
         return cls._get_or_create(sc)
 
     @classmethod
-    def _get_or_create(cls: Type["SQLContext"], sc: SparkContext) -> "SQLContext":
+    def _get_or_create(
+        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+    ) -> "SQLContext":
 
         if (
             cls._instantiatedContext is None
@@ -170,7 +172,7 @@ class SQLContext:
             assert sc._jvm is not None
             # There can be only one running Spark context. That will automatically
             # be used in the Spark session internally.
-            session = SparkSession._getActiveSessionOrCreate()
+            session = SparkSession._getActiveSessionOrCreate(**static_conf)
             cls(sc, session, session._jsparkSession.sqlContext())
         return cast(SQLContext, cls._instantiatedContext)
 
@@ -705,7 +707,14 @@ class HiveContext(SQLContext):
 
     """
 
-    def __init__(self, sparkContext: SparkContext, jhiveContext: Optional[JavaObject] = None):
+    _static_conf = {"spark.sql.catalogImplementation": "hive"}
+
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        sparkSession: Optional[SparkSession] = None,
+        jhiveContext: Optional[JavaObject] = None,
+    ):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use "
             + "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
@@ -713,11 +722,18 @@ class HiveContext(SQLContext):
         )
         static_conf = {}
         if jhiveContext is None:
-            static_conf = {"spark.sql.catalogImplementation": "in-memory"}
+            static_conf = HiveContext._static_conf
         # There can be only one running Spark context. That will automatically
         # be used in the Spark session internally.
-        session = SparkSession._getActiveSessionOrCreate(**static_conf)
-        SQLContext.__init__(self, sparkContext, session, jhiveContext)
+        if sparkSession is not None:
+            sparkSession = SparkSession._getActiveSessionOrCreate(**static_conf)
+        SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
+
+    @classmethod
+    def _get_or_create(
+        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+    ) -> "SQLContext":
+        return SQLContext._get_or_create(sc, **HiveContext._static_conf)
 
     @classmethod
     def _createForTesting(cls, sparkContext: SparkContext) -> "HiveContext":
