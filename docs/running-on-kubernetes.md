@@ -1332,7 +1332,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.scheduler.name<code></td>
+  <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
 	Specify the scheduler name for each executor pod.
@@ -1340,10 +1340,19 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.scheduler.name<code></td>
+  <td><code>spark.kubernetes.driver.scheduler.name</code></td>
   <td>(none)</td>
   <td>
     Specify the scheduler name for driver pod.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.scheduler.name</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the scheduler name for driver and executor pods. If `spark.kubernetes.driver.scheduler.name` or
+    `spark.kubernetes.executor.scheduler.name` is set, will override this.
   </td>
   <td>3.3.0</td>
 </tr>

@@ -38,9 +38,10 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => ExpressionV2, FieldReference, GeneralSQLExpression, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -705,22 +706,17 @@ object DataSourceStrategy
   protected[sql] def translateAggregate(agg: AggregateExpression): Option[AggregateFunc] = {
     if (agg.filter.isEmpty) {
       agg.aggregateFunction match {
-        case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Min(FieldReference.column(name)))
-        case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
-          Some(new Max(FieldReference.column(name)))
+        case aggregate.Min(PushableExpression(expr)) => Some(new Min(expr))
+        case aggregate.Max(PushableExpression(expr)) => Some(new Max(expr))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // COUNT(any literal) is the same as COUNT(*)
             case Literal(_, _) => Some(new CountStar())
-            case PushableColumnWithoutNestedColumn(name) =>
-              Some(new Count(FieldReference.column(name), agg.isDistinct))
+            case PushableExpression(expr) => Some(new Count(expr, agg.isDistinct))
             case _ => None
           }
-        case aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference.column(name), agg.isDistinct))
-        case aggregate.Average(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Avg(FieldReference.column(name), agg.isDistinct))
+        case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, agg.isDistinct))
+        case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, agg.isDistinct))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new GeneralAggregateFunc(
             "VAR_POP", agg.isDistinct, Array(FieldReference.column(name))))
@@ -859,4 +855,14 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
+}
+
+/**
+ * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
+ */
+object PushableExpression {
+  def unapply(e: Expression): Option[ExpressionV2] = e match {
+    case PushableColumnWithoutNestedColumn(name) => Some(FieldReference.column(name))
+    case _ => new ExpressionSQLBuilder(e).build().map(new GeneralSQLExpression(_))
+  }
 }

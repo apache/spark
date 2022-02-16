@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import cast, List, Sequence, TYPE_CHECKING, TypeVar
 
 from pyspark import since
+from pyspark.ml.linalg import Vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import (
     HasCheckpointInterval,
@@ -30,35 +32,40 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.wrapper import JavaPredictionModel
 from pyspark.ml.common import inherit_doc
 
+if TYPE_CHECKING:
+    from pyspark.ml._typing import P
+
+T = TypeVar("T")
+
 
 @inherit_doc
-class _DecisionTreeModel(JavaPredictionModel):
+class _DecisionTreeModel(JavaPredictionModel[T]):
     """
     Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.5.0")
-    def numNodes(self):
+    def numNodes(self) -> int:
         """Return number of nodes of the decision tree."""
         return self._call_java("numNodes")
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.5.0")
-    def depth(self):
+    def depth(self) -> int:
         """Return depth of the decision tree."""
         return self._call_java("depth")
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def toDebugString(self):
+    def toDebugString(self) -> str:
         """Full description of model."""
         return self._call_java("toDebugString")
 
     @since("3.0.0")
-    def predictLeaf(self, value):
+    def predictLeaf(self, value: Vector) -> float:
         """
         Predict the indices of the leaves corresponding to the feature vector.
         """
@@ -70,7 +77,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
     Mixin for Decision Tree parameters.
     """
 
-    leafCol = Param(
+    leafCol: Param[str] = Param(
         Params._dummy(),
         "leafCol",
         "Leaf indices column name. Predicted leaf "
@@ -78,7 +85,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toString,
     )
 
-    maxDepth = Param(
+    maxDepth: Param[int] = Param(
         Params._dummy(),
         "maxDepth",
         "Maximum depth of the tree. (>= 0) E.g., "
@@ -87,7 +94,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toInt,
     )
 
-    maxBins = Param(
+    maxBins: Param[int] = Param(
         Params._dummy(),
         "maxBins",
         "Max number of bins for discretizing continuous "
@@ -96,7 +103,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toInt,
     )
 
-    minInstancesPerNode = Param(
+    minInstancesPerNode: Param[int] = Param(
         Params._dummy(),
         "minInstancesPerNode",
         "Minimum number of "
@@ -107,7 +114,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toInt,
     )
 
-    minWeightFractionPerNode = Param(
+    minWeightFractionPerNode: Param[float] = Param(
         Params._dummy(),
         "minWeightFractionPerNode",
         "Minimum "
@@ -119,14 +126,14 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toFloat,
     )
 
-    minInfoGain = Param(
+    minInfoGain: Param[float] = Param(
         Params._dummy(),
         "minInfoGain",
         "Minimum information gain for a split " + "to be considered at a tree node.",
         typeConverter=TypeConverters.toFloat,
     )
 
-    maxMemoryInMB = Param(
+    maxMemoryInMB: Param[int] = Param(
         Params._dummy(),
         "maxMemoryInMB",
         "Maximum memory in MB allocated to "
@@ -135,7 +142,7 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toInt,
     )
 
-    cacheNodeIds = Param(
+    cacheNodeIds: Param[bool] = Param(
         Params._dummy(),
         "cacheNodeIds",
         "If false, the algorithm will pass "
@@ -146,58 +153,58 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(_DecisionTreeParams, self).__init__()
 
-    def setLeafCol(self, value):
+    def setLeafCol(self: "P", value: str) -> "P":
         """
         Sets the value of :py:attr:`leafCol`.
         """
         return self._set(leafCol=value)
 
-    def getLeafCol(self):
+    def getLeafCol(self) -> str:
         """
         Gets the value of leafCol or its default value.
         """
         return self.getOrDefault(self.leafCol)
 
-    def getMaxDepth(self):
+    def getMaxDepth(self) -> int:
         """
         Gets the value of maxDepth or its default value.
         """
         return self.getOrDefault(self.maxDepth)
 
-    def getMaxBins(self):
+    def getMaxBins(self) -> int:
         """
         Gets the value of maxBins or its default value.
         """
         return self.getOrDefault(self.maxBins)
 
-    def getMinInstancesPerNode(self):
+    def getMinInstancesPerNode(self) -> int:
         """
         Gets the value of minInstancesPerNode or its default value.
         """
         return self.getOrDefault(self.minInstancesPerNode)
 
-    def getMinWeightFractionPerNode(self):
+    def getMinWeightFractionPerNode(self) -> float:
         """
         Gets the value of minWeightFractionPerNode or its default value.
         """
         return self.getOrDefault(self.minWeightFractionPerNode)
 
-    def getMinInfoGain(self):
+    def getMinInfoGain(self) -> float:
         """
         Gets the value of minInfoGain or its default value.
         """
         return self.getOrDefault(self.minInfoGain)
 
-    def getMaxMemoryInMB(self):
+    def getMaxMemoryInMB(self) -> int:
         """
         Gets the value of maxMemoryInMB or its default value.
         """
         return self.getOrDefault(self.maxMemoryInMB)
 
-    def getCacheNodeIds(self):
+    def getCacheNodeIds(self) -> bool:
         """
         Gets the value of cacheNodeIds or its default value.
         """
@@ -205,44 +212,44 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
 
 
 @inherit_doc
-class _TreeEnsembleModel(JavaPredictionModel):
+class _TreeEnsembleModel(JavaPredictionModel[T]):
     """
     (private abstraction)
     Represents a tree ensemble model.
     """
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def trees(self):
+    def trees(self) -> Sequence["_DecisionTreeModel"]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [_DecisionTreeModel(m) for m in list(self._call_java("trees"))]
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def getNumTrees(self):
+    def getNumTrees(self) -> int:
         """Number of trees in ensemble."""
         return self._call_java("getNumTrees")
 
-    @property
+    @property  # type: ignore[misc]
     @since("1.5.0")
-    def treeWeights(self):
+    def treeWeights(self) -> List[float]:
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def totalNumNodes(self):
+    def totalNumNodes(self) -> int:
         """Total number of nodes, summed over all trees in the ensemble."""
         return self._call_java("totalNumNodes")
 
-    @property
+    @property  # type: ignore[misc]
     @since("2.0.0")
-    def toDebugString(self):
+    def toDebugString(self) -> str:
         """Full description of model."""
         return self._call_java("toDebugString")
 
     @since("3.0.0")
-    def predictLeaf(self, value):
+    def predictLeaf(self, value: Vector) -> float:
         """
         Predict the indices of the leaves corresponding to the feature vector.
         """
@@ -254,16 +261,16 @@ class _TreeEnsembleParams(_DecisionTreeParams):
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
 
-    subsamplingRate = Param(
+    subsamplingRate: Param[float] = Param(
         Params._dummy(),
         "subsamplingRate",
         "Fraction of the training data " + "used for learning each decision tree, in range (0, 1].",
         typeConverter=TypeConverters.toFloat,
     )
 
-    supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
+    supportedFeatureSubsetStrategies: List[str] = ["auto", "all", "onethird", "sqrt", "log2"]
 
-    featureSubsetStrategy = Param(
+    featureSubsetStrategy: Param[str] = Param(
         Params._dummy(),
         "featureSubsetStrategy",
         "The number of features to consider for splits at each tree node. Supported "
@@ -277,18 +284,18 @@ class _TreeEnsembleParams(_DecisionTreeParams):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(_TreeEnsembleParams, self).__init__()
 
     @since("1.4.0")
-    def getSubsamplingRate(self):
+    def getSubsamplingRate(self) -> float:
         """
         Gets the value of subsamplingRate or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
 
     @since("1.4.0")
-    def getFeatureSubsetStrategy(self):
+    def getFeatureSubsetStrategy(self) -> str:
         """
         Gets the value of featureSubsetStrategy or its default value.
         """
@@ -300,36 +307,36 @@ class _RandomForestParams(_TreeEnsembleParams):
     Private class to track supported random forest parameters.
     """
 
-    numTrees = Param(
+    numTrees: Param[int] = Param(
         Params._dummy(),
         "numTrees",
         "Number of trees to train (>= 1).",
         typeConverter=TypeConverters.toInt,
     )
 
-    bootstrap = Param(
+    bootstrap: Param[bool] = Param(
         Params._dummy(),
         "bootstrap",
         "Whether bootstrap samples are used " "when building trees.",
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(_RandomForestParams, self).__init__()
 
     @since("1.4.0")
-    def getNumTrees(self):
+    def getNumTrees(self) -> int:
         """
         Gets the value of numTrees or its default value.
         """
         return self.getOrDefault(self.numTrees)
 
     @since("3.0.0")
-    def getBootstrap(self):
+    def getBootstrap(self) -> bool:
         """
         Gets the value of bootstrap or its default value.
         """
-        return self.getOrDefault(self.bootstrap)
+        return cast(bool, self.getOrDefault(self.bootstrap))
 
 
 class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
@@ -337,7 +344,7 @@ class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndi
     Private class to track supported GBT params.
     """
 
-    stepSize = Param(
+    stepSize: Param[float] = Param(
         Params._dummy(),
         "stepSize",
         "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking "
@@ -345,7 +352,7 @@ class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndi
         typeConverter=TypeConverters.toFloat,
     )
 
-    validationTol = Param(
+    validationTol: Param[float] = Param(
         Params._dummy(),
         "validationTol",
         "Threshold for stopping early when fit with validation is used. "
@@ -356,7 +363,7 @@ class _GBTParams(_TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndi
     )
 
     @since("3.0.0")
-    def getValidationTol(self):
+    def getValidationTol(self) -> float:
         """
         Gets the value of validationTol or its default value.
         """
@@ -368,9 +375,9 @@ class _HasVarianceImpurity(Params):
     Private class to track supported impurity measures.
     """
 
-    supportedImpurities = ["variance"]
+    supportedImpurities: List[str] = ["variance"]
 
-    impurity = Param(
+    impurity: Param[str] = Param(
         Params._dummy(),
         "impurity",
         "Criterion used for information gain calculation (case-insensitive). "
@@ -379,11 +386,11 @@ class _HasVarianceImpurity(Params):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(_HasVarianceImpurity, self).__init__()
 
     @since("1.4.0")
-    def getImpurity(self):
+    def getImpurity(self) -> str:
         """
         Gets the value of impurity or its default value.
         """
@@ -397,9 +404,9 @@ class _TreeClassifierParams(Params):
     .. versionadded:: 1.4.0
     """
 
-    supportedImpurities = ["entropy", "gini"]
+    supportedImpurities: List[str] = ["entropy", "gini"]
 
-    impurity = Param(
+    impurity: Param[str] = Param(
         Params._dummy(),
         "impurity",
         "Criterion used for information gain calculation (case-insensitive). "
@@ -408,11 +415,11 @@ class _TreeClassifierParams(Params):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(_TreeClassifierParams, self).__init__()
 
     @since("1.6.0")
-    def getImpurity(self):
+    def getImpurity(self) -> str:
         """
         Gets the value of impurity or its default value.
         """
