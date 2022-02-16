@@ -21,6 +21,7 @@ import java.time.LocalDateTime
 
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.functions._
@@ -447,16 +448,22 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       assert(field.get.nullable, s"'$fieldName' field should be nullable")
     }
 
-    Seq(df1, df2).foreach { df =>
+    for {
+      df <- Seq(df1, df2)
+      nullable <- Seq(true, false)
+    } {
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+        StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // session window without dynamic gap
-      val windowedProject = df.select(session_window($"time", "10 seconds").as("session"), $"value")
-      val schema = windowedProject.queryExecution.executedPlan.schema
+      val windowedProject = dfWithDesiredNullability
+        .select(session_window($"time", "10 seconds").as("session"), $"value")
+      val schema = windowedProject.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema, "session")
 
       // session window with dynamic gap
-      val windowedProject2 = df.select(session_window($"time", udf($"id")).as("session"),
-        $"value")
-      val schema2 = windowedProject2.queryExecution.executedPlan.schema
+      val windowedProject2 = dfWithDesiredNullability
+        .select(session_window($"time", udf($"id")).as("session"), $"value")
+      val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema2, "session")
     }
   }

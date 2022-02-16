@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
@@ -554,16 +555,23 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       assert(field.get.nullable, s"'$fieldName' field should be nullable")
     }
 
-    Seq(df1, df2).foreach { df =>
+    for {
+      df <- Seq(df1, df2)
+      nullable <- Seq(true, false)
+    } {
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+        StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
-      val windowedProject = df.select(window($"time", "10 seconds").as("window"), $"value")
-      val schema = windowedProject.queryExecution.executedPlan.schema
+      val windowedProject = dfWithDesiredNullability
+        .select(window($"time", "10 seconds").as("window"), $"value")
+      val schema = windowedProject.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema, "window")
 
       // sliding windows
-      val windowedProject2 = df.select(window($"time", "10 seconds", "3 seconds").as("window"),
+      val windowedProject2 = dfWithDesiredNullability
+        .select(window($"time", "10 seconds", "3 seconds").as("window"),
         $"value")
-      val schema2 = windowedProject2.queryExecution.executedPlan.schema
+      val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema2, "window")
     }
   }
