@@ -112,7 +112,6 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         assert(fs.exists(dest))
         assert(fs.getFileStatus(dest).getLen == secondLength)
 
-
         // Append the file again, upload file delSrc = true and overwrite = true.
         // Upload succeeded, `fileLength` changed and src not exists.
         appendFileAndUpload("append-content", delSrc = true, overwrite = true)
