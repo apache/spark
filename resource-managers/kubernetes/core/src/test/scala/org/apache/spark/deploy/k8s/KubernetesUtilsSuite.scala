@@ -107,8 +107,11 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         assert(firstLength < secondLength)
 
         // Upload file with delSrc = false and overwrite = false.
-        // Upload failed because dest exists.
+        // Upload failed because dest exists and not changed.
         checkUploadException(delSrc = false, overwrite = false)
+        assert(fs.exists(dest))
+        assert(fs.getFileStatus(dest).getLen == secondLength)
+
 
         // Append the file again, upload file delSrc = true and overwrite = true.
         // Upload succeeded, `fileLength` changed and src not exists.
