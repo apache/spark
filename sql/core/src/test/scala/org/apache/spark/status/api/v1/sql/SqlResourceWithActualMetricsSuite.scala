@@ -28,11 +28,25 @@ import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
+
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
 case class Person(id: Int, name: String, age: Int)
 case class Salary(personId: Int, salary: Double)
+case class StreamingQueryProgressInfo
+            (id : String, runId: String, name: String)
+case class StreamingQueryDataInfo (
+            val name: Option[String],
+            val id: String,
+            val runId: String,
+            val isActive: Boolean,
+            val exception: Option[String],
+            val startTimestamp: Long,
+            val endTimestamp: Option[Long] = None)
 
 /**
  * Sql Resource Public API Unit Tests running query and extracting the metrics.
@@ -42,6 +56,7 @@ class SqlResourceWithActualMetricsSuite
 
   import testImplicits._
 
+  val streamingTimeout = 30.seconds
   // Exclude nodes which may not have the metrics
   val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject")
 
@@ -65,6 +80,121 @@ class SqlResourceWithActualMetricsSuite
     val executionId = callSqlRestEndpointAndVerifyResult()
     callSqlRestEndpointByExecutionIdAndVerifyResult(executionId)
   }
+
+  test("Check streaming query REST API endpoints - 1") {
+    val queryName = "OneQuery"
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val query = getStreamingDF(queryName)
+      query.processAllAvailable()
+    }
+    eventually(timeout(streamingTimeout)) {
+      callSqlStreamingRestEndpointAndVerifyResult(name = queryName, state = true)
+    }
+  }
+
+  test("Check streaming query REST API endpoints after stop") {
+    val queryName = "StoppedQuery"
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val query = getStreamingDF(queryName)
+      query.processAllAvailable()
+      query.stop()
+    }
+    eventually(timeout(streamingTimeout)) {
+      callSqlStreamingRestEndpointAndVerifyResult(name = queryName, state = false)
+    }
+  }
+
+  test("Check streaming query REST API endpoints with RunId") {
+    val queryName = "QueryWithRunId"
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val query = getStreamingDF(queryName)
+      query.processAllAvailable()
+    }
+
+    val url = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}" +
+      s"/sql/streamingqueries")
+
+    var querySummary: StreamingQueryDataInfo = null
+    eventually(timeout(streamingTimeout)) {
+      val jsonResult = verifyAndGetSqlRestResult(url)
+      val streamingQueryDataInfo =
+        JsonMethods.parse(jsonResult).extract[Seq[StreamingQueryDataInfo]]
+
+      assert(streamingQueryDataInfo.size > 0,
+        s"Expected Query Result Size is higher than 0 but received: ${streamingQueryDataInfo.size}")
+      querySummary = streamingQueryDataInfo.filter(_.name.get.equals(queryName)).head
+
+      assert(querySummary != null,
+        s"Expected testStreamingQueryData with name: ${queryName} is not null but received null")
+      assert(querySummary.runId != null,
+        s"Expected Query runId to be not null but received null")
+
+    }
+
+    val runId = querySummary.runId
+    val urlWithRunId = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}" +
+      s"/sql/streamingqueries/${runId}/progress")
+
+    eventually(timeout(streamingTimeout)) {
+      val sqpJsonResult = verifyAndGetSqlRestResult(urlWithRunId)
+      val result = JsonMethods.parse(sqpJsonResult).extract[Seq[StreamingQueryProgressInfo]]
+      assert(result.length == 1)
+      assert(result.head.runId == runId)
+      assert(result.head.id == querySummary.id)
+      assert(result.head.name == queryName)
+    }
+  }
+
+  test("Check streaming query REST API endpoints with RunId - with progress count") {
+    val queryName = "QueryWithRunIdProgressCount"
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val query = getStreamingDF(queryName)
+      query.processAllAvailable()
+    }
+
+    val url = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}" +
+      s"/sql/streamingqueries")
+
+    var querySummary: StreamingQueryDataInfo = null
+    eventually(timeout(streamingTimeout)) {
+      val jsonResult = verifyAndGetSqlRestResult(url)
+      val streamingQueryDataInfo =
+        JsonMethods.parse(jsonResult).extract[Seq[StreamingQueryDataInfo]]
+
+      assert(streamingQueryDataInfo.size > 0,
+        s"Expected Query Result Size is higher than 0 but received: ${streamingQueryDataInfo.size}")
+      querySummary = streamingQueryDataInfo.filter(_.name.get.equals(queryName)).head
+
+      assert(querySummary != null,
+        s"Expected testStreamingQueryData with name: ${queryName} is not null but received null")
+      assert(querySummary.runId != null,
+        s"Expected Query runId to be not null but received null")
+
+    }
+
+    val runId = querySummary.runId
+
+    for (i <- 0 to 2 ) {
+      val urlWithRunId = new URL(spark.sparkContext.ui.get.webUrl
+        + s"/api/v1/applications/${spark.sparkContext.applicationId}" +
+        s"/sql/streamingqueries/${runId}/progress?last=${i}")
+
+      eventually(timeout(streamingTimeout)) {
+        val sqpJsonResult = verifyAndGetSqlRestResult(urlWithRunId)
+        val result = JsonMethods.parse(sqpJsonResult).extract[Seq[StreamingQueryProgressInfo]]
+        assert(result.length == i)
+        if (result.length > 0) {
+          assert(result.head.runId == runId)
+          assert(result.head.id == querySummary.id)
+          assert(result.head.name == queryName)
+        }
+      }
+    }
+  }
+
 
   private def callSqlRestEndpointAndVerifyResult(): Long = {
     val url = new URL(spark.sparkContext.ui.get.webUrl
@@ -109,6 +239,43 @@ class SqlResourceWithActualMetricsSuite
     resultOpt.get
   }
 
+  private def callSqlStreamingRestEndpointAndVerifyResult(name: String, state: Boolean) = {
+    val url = new URL(spark.sparkContext.ui.get.webUrl
+      + s"/api/v1/applications/${spark.sparkContext.applicationId}" +
+      s"/sql/streamingqueries")
+
+    eventually(timeout(streamingTimeout)) {
+      val jsonResult = verifyAndGetSqlRestResult(url)
+
+      val streamingQueryDataInfo =
+        JsonMethods.parse(jsonResult).extract[Seq[StreamingQueryDataInfo]]
+
+      assert(streamingQueryDataInfo.size > 0,
+        s"Expected Query Result Size is higher than 0 but received: ${streamingQueryDataInfo.size}")
+      val testData = streamingQueryDataInfo.filter(_.name.get.equals(name)).head
+
+      assert(testData != null,
+        s"Expected testStreamingQueryData with name: ${name} is not null but received null")
+
+      assert(testData.isActive == state,
+        s"Expected Query isActive to be True ${state} " +
+          s"but received: ${testData.isActive}")
+      assert(testData.id != null,
+        s"Expected Query Id to be not null but received: ${testData.id}")
+      assert(testData.runId != null,
+        s"Expected Query runId to be not null but received: ${testData.runId}")
+      if (testData.isActive) {
+        assert(testData.endTimestamp == None,
+          s"Expected Query endTimestamp to be None " +
+            s"but received: ${testData.endTimestamp}")
+      }
+      else {
+        assert(testData.endTimestamp != None,
+          s"Expected Query endTimestamp to be not None but received None")
+      }
+    }
+  }
+
   private def getDF(): DataFrame = {
     val person: DataFrame =
       spark.sparkContext.parallelize(
@@ -127,6 +294,16 @@ class SqlResourceWithActualMetricsSuite
       .sort()
 
     ds.toDF
+  }
+
+  private def getStreamingDF(name: String, queryCount: Int = 1): StreamingQuery = {
+    val input = MemoryStream[Int]
+    val query = input.toDF().writeStream.format("console").queryName(name).start()
+    for(i <- 0 to queryCount) {
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+    }
+    query
   }
 
 }
