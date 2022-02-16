@@ -285,7 +285,7 @@ private[spark] abstract class MemoryManager(
   /**
    * Return whether we are using G1GC or not
    */
-  private[memory] final val isG1GC: Boolean = {
+  private lazy val isG1GC: Boolean = {
     Try {
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
         .asInstanceOf[Class[_ <: PlatformManagedObject]]
