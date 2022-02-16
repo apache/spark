@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.util.{Locale, UUID}
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
@@ -59,7 +59,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val query = parent.store.allQueryUIData.find { uiData =>
-      uiData.summary.runId.equals(UUID.fromString(parameterId))
+      uiData.summary.runId.equals(parameterId)
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
