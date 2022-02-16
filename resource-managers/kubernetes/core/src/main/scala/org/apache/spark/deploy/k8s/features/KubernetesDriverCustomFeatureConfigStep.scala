@@ -46,8 +46,8 @@ import org.apache.spark.deploy.k8s.KubernetesDriverConf
  * Example of feature step for both driver and executor:
  *
  * {{{
- *   class ExecutorExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep
- *       with KubernetesExecutorCustomFeatureConfigStep {
+ *   class DriverAndExecutorExampleFeatureStep extends KubernetesDriverCustomFeatureConfigStep
+ *     with KubernetesExecutorCustomFeatureConfigStep {
  *     private var kubernetesConf: KubernetesConf = _
  *
  *     override def init(conf: KubernetesDriverConf): Unit = {
