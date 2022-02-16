@@ -2545,7 +2545,7 @@ case class Encode(value: Expression, charset: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
-      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "base2", or "base64".
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", or "base64".
       By default, the binary format for conversion is "hex" if `fmt` is omitted.
       The function returns NULL if at least one of the input parameters is NULL.
   """,
@@ -2570,7 +2570,6 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
             case "hex" => Unhex(expr)
             case "utf-8" => Encode(expr, Literal("UTF-8"))
             case "base64" => UnBase64(expr)
-            case "base2" => Cast(expr, BinaryType)
             case _ => lit
           }
         } else lit
@@ -2592,7 +2591,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
       if (lit.foldable) {
         val value = lit.eval()
         value == null || (value.isInstanceOf[UTF8String] &&
-          Seq("hex", "utf-8", "base64", "base2").contains(
+          Seq("hex", "utf-8", "base64").contains(
             value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)))
       } else false
     }
@@ -2602,7 +2601,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
     } else {
       TypeCheckResult.TypeCheckFailure(
         s"Unsupported encoding format: $format. The format has to be " +
-          s"a case-insensitive string literal of 'hex', 'utf-8', 'base2', or 'base64'")
+          s"a case-insensitive string literal of 'hex', 'utf-8', or 'base64'")
     }
   }
 

@@ -140,7 +140,6 @@ select to_number('00,454.8-', '00,000.9-');
 select to_binary('abc');
 select to_binary('abc', 'utf-8');
 select to_binary('abc', 'base64');
-select to_binary('abc', 'base2');
 select to_binary('abc', 'hex');
 select to_binary('abc', concat('utf', '-8'));
 select to_binary('abc', concat('base', '64'));
