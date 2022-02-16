@@ -215,13 +215,13 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(KubernetesTestConf.createDriverConf(sparkConf).schedulerName === Some("sameScheduler"))
     assert(KubernetesTestConf.createExecutorConf(sparkConf).schedulerName === Some("sameScheduler"))
 
-    // Overwrite by driver/executor side scheduler when ""
+    // Override by driver/executor side scheduler when ""
     sparkConf.set(KUBERNETES_DRIVER_SCHEDULER_NAME, "")
     sparkConf.set(KUBERNETES_EXECUTOR_SCHEDULER_NAME, "")
     assert(KubernetesTestConf.createDriverConf(sparkConf).schedulerName === Some(""))
     assert(KubernetesTestConf.createExecutorConf(sparkConf).schedulerName === Some(""))
 
-    // Overwrite by driver/executor side scheduler when set
+    // Override by driver/executor side scheduler when set
     sparkConf.set(KUBERNETES_DRIVER_SCHEDULER_NAME, "driverScheduler")
     sparkConf.set(KUBERNETES_EXECUTOR_SCHEDULER_NAME, "executorScheduler")
     val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
