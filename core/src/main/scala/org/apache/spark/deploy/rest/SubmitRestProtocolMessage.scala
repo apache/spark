@@ -46,9 +46,6 @@ private[rest] abstract class SubmitRestProtocolMessage {
   val action: String = messageType
   var message: String = null
 
-  // For JSON deserialization
-  private def setAction(a: String): Unit = { }
-
   /**
    * Serialize the message to JSON.
    * This also ensures that the message is valid and its fields are in the expected format.
