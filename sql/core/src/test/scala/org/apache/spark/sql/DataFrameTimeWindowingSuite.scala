@@ -533,14 +533,10 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     // them as nullable. The rule 'TimeWindowing' should respect the dataType.
     val df1 = Seq(
       ("2016-03-27 09:00:05", 1),
-      ("2016-03-27 09:00:32", 2),
-      (null, 3),
-      (null, 4)).toDF("time", "value")
+      ("2016-03-27 09:00:32", 2)).toDF("time", "value")
     val df2 = Seq(
       (LocalDateTime.parse("2016-03-27T09:00:05"), 1),
-      (LocalDateTime.parse("2016-03-27T09:00:32"), 2),
-      (null, 3),
-      (null, 4)).toDF("time", "value")
+      (LocalDateTime.parse("2016-03-27T09:00:32"), 2)).toDF("time", "value")
 
     def validateWindowColumnInSchema(schema: StructType, colName: String): Unit = {
       schema.find(_.name == colName) match {
