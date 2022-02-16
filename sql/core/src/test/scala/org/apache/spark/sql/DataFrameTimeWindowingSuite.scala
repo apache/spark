@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
