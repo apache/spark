@@ -39,6 +39,7 @@ class PartitionerAwareUnionRDDPartition(
 
   override def equals(other: Any): Boolean = super.equals(other)
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent partition at the time of task serialization

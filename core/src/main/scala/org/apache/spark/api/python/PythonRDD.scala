@@ -22,6 +22,7 @@ import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
@@ -750,6 +751,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   /**
    * Read data from disks, then copy it to `out`
    */
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.writeLong(broadcastId)
     val in = new FileInputStream(new File(path))
@@ -763,6 +765,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   /**
    * Write data into disk and map it to a broadcast block.
    */
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = {
     broadcastId = in.readLong()
     val blockId = BroadcastBlockId(broadcastId, "python")

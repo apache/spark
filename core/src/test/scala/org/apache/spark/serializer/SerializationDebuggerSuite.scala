@@ -20,6 +20,7 @@ package org.apache.spark.serializer
 import java.io._
 
 import scala.annotation.meta.param
+import scala.annotation.nowarn
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -186,6 +187,7 @@ class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("improveException with error in debugger") {
     // Object that throws exception in the SerializationDebugger
     val o = new SerializableClass1 {
+      @nowarn
       private def writeReplace(): Object = {
         throw new Exception()
       }
@@ -218,6 +220,7 @@ class SerializableSubclass(val objectField: Object) extends SerializableClass1
 class SerializableClassWithWriteObject(val objectField: Object) extends Serializable {
   val serializableObjectField = new SerializableClass1
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = {
     oos.defaultWriteObject()
@@ -227,6 +230,7 @@ class SerializableClassWithWriteObject(val objectField: Object) extends Serializ
 
 class SerializableClassWithWriteReplace(@(transient @param) replacementFieldObject: Object)
   extends Serializable {
+  @nowarn
   private def writeReplace(): Object = {
     replacementFieldObject
   }
@@ -234,6 +238,7 @@ class SerializableClassWithWriteReplace(@(transient @param) replacementFieldObje
 
 
 class SerializableClassWithRecursiveWriteReplace extends Serializable {
+  @nowarn
   private def writeReplace(): Object = {
     new SerializableClassWithRecursiveWriteReplace
   }

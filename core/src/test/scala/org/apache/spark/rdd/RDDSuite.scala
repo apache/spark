@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
@@ -1096,10 +1097,12 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
 
   test("task serialization exception should not hang scheduler") {
     class BadSerializable extends Serializable {
+      @nowarn
       @throws(classOf[IOException])
       private def writeObject(out: ObjectOutputStream): Unit =
         throw new KryoException("Bad serialization")
 
+      @nowarn
       @throws(classOf[IOException])
       private def readObject(in: ObjectInputStream): Unit = {}
     }

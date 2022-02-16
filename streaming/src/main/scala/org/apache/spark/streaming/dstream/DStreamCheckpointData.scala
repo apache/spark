@@ -19,6 +19,7 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
@@ -123,6 +124,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
       currentCheckpointFiles.mkString("\n") + "\n]"
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".writeObject used")
@@ -146,6 +148,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")

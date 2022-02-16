@@ -34,6 +34,7 @@ private[spark] class ZippedPartitionsPartition(
   var partitionValues = rdds.map(rdd => rdd.partitions(idx))
   def partitions: Seq[Partition] = partitionValues
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization

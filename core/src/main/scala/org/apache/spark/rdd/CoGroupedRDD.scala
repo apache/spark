@@ -40,6 +40,7 @@ private[spark] case class NarrowCoGroupSplitDep(
     var split: Partition
   ) extends Serializable {
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization

@@ -24,6 +24,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.Nullable
 
+import scala.annotation.nowarn
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success, Try}
@@ -538,12 +539,14 @@ private[netty] class NettyRpcEndpointRef(
   override def address: RpcAddress =
     if (endpointAddress.rpcAddress != null) endpointAddress.rpcAddress else null
 
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject()
     nettyEnv = NettyRpcEnv.currentEnv.value
     client = NettyRpcEnv.currentClient.value
   }
 
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = {
     out.defaultWriteObject()
   }

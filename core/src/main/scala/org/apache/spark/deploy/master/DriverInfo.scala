@@ -41,6 +41,7 @@ private[deploy] class DriverInfo(
 
   init()
 
+  @scala.annotation.nowarn
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()

@@ -54,6 +54,7 @@ private[streaming] abstract class RateController(val streamUID: Int, rateEstimat
     rateLimit = new AtomicLong(-1L)
   }
 
+  @scala.annotation.nowarn
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
     init()

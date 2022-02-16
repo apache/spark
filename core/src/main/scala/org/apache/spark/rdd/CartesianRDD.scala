@@ -36,6 +36,7 @@ class CartesianPartition(
   var s2 = rdd2.partitions(s2Index)
   override val index: Int = idx
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization

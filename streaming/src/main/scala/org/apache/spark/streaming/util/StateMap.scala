@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 
 import java.io._
 
+import scala.annotation.nowarn
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
@@ -312,12 +313,14 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     parentStateMap = newParentSessionStore
   }
 
+  @nowarn
   private def writeObject(outputStream: ObjectOutputStream): Unit = {
     // Write all the non-transient fields, especially class tags, etc.
     outputStream.defaultWriteObject()
     writeObjectInternal(outputStream)
   }
 
+  @nowarn
   private def readObject(inputStream: ObjectInputStream): Unit = {
     // Read the non-transient fields, especially class tags, etc.
     inputStream.defaultReadObject()

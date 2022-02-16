@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.log10
@@ -250,6 +251,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     result
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val sfactory = SparkEnv.get.serializer
@@ -268,6 +270,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val sfactory = SparkEnv.get.serializer

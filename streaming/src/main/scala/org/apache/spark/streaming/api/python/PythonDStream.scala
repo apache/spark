@@ -21,6 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
@@ -97,12 +98,14 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
     resultRDD
   }
 
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val bytes = PythonTransformFunctionSerializer.serialize(pfunc)
     out.writeInt(bytes.length)
     out.write(bytes)
   }
 
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val length = in.readInt()
     val bytes = new Array[Byte](length)

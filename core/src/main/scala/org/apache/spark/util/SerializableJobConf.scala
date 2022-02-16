@@ -19,15 +19,19 @@ package org.apache.spark.util
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
+
 import org.apache.hadoop.mapred.JobConf
 
 private[spark]
 class SerializableJobConf(@transient var value: JobConf) extends Serializable {
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
     value.write(out)
   }
 
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     value = new JobConf(false)
     value.readFields(in)

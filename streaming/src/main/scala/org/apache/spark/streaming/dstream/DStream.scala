@@ -20,6 +20,7 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -509,6 +510,7 @@ abstract class DStream[T: ClassTag] (
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug(s"${this.getClass().getSimpleName}.writeObject used")
@@ -532,6 +534,7 @@ abstract class DStream[T: ClassTag] (
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(s"${this.getClass().getSimpleName}.readObject used")

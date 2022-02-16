@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
@@ -194,9 +196,11 @@ case class ExceptionFailure(
  */
 private[spark] class ThrowableSerializationWrapper(var exception: Throwable) extends
     Serializable with Logging {
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = {
     out.writeObject(exception)
   }
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = {
     try {
       exception = in.readObject().asInstanceOf[Throwable]

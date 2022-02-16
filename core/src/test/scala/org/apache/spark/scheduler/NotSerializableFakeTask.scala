@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
+
 import org.apache.spark.TaskContext
 
 /**
@@ -30,6 +32,7 @@ private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
   override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = {
     if (stageId == 0) {
@@ -37,6 +40,7 @@ private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = {}
 }

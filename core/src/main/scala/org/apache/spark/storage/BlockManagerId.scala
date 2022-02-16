@@ -85,6 +85,7 @@ class BlockManagerId private (
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 

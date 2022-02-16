@@ -192,6 +192,7 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
     generatedOrdering.compare(a, b)
   }
 
+  @scala.annotation.nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     generatedOrdering = GenerateOrdering.generate(ordering)

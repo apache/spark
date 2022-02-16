@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
+import scala.annotation.nowarn
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -101,6 +102,7 @@ class TestOutputStream[T: ClassTag](
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()
@@ -125,6 +127,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     ois.defaultReadObject()

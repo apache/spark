@@ -19,6 +19,7 @@ package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.collection.parallel.immutable.ParVector
 
@@ -179,6 +180,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     inputStreams.map(_.rememberDuration).filter(_ != null).maxBy(_.milliseconds)
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug("DStreamGraph.writeObject used")
@@ -191,6 +193,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug("DStreamGraph.readObject used")

@@ -21,6 +21,8 @@ import java.io.{EOFException, IOException, ObjectInputStream, ObjectOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 
+import scala.annotation.nowarn
+
 /**
  * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
  * it easier to pass ByteBuffers in case class messages.
@@ -29,6 +31,7 @@ private[spark]
 class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable {
   def value: ByteBuffer = buffer
 
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val length = in.readInt()
     buffer = ByteBuffer.allocate(length)
@@ -44,6 +47,7 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
     buffer.rewind() // Allow us to read it later
   }
 
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.writeInt(buffer.limit())
     if (Channels.newChannel(out).write(buffer) != buffer.limit()) {

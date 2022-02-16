@@ -18,6 +18,8 @@ package org.apache.spark.util
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import scala.annotation.nowarn
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Unstable}
@@ -29,11 +31,13 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
  */
 @DeveloperApi @Unstable
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
+  @nowarn
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
     value.write(out)
   }
 
+  @nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     value = new Configuration(false)
     value.readFields(in)

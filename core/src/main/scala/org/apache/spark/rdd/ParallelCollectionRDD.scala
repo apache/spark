@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import java.io._
 
+import scala.annotation.nowarn
 import scala.collection.Map
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
@@ -46,6 +47,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 
   override def index: Int = slice
 
+  @nowarn
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
 
@@ -65,6 +67,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
     }
   }
 
+  @nowarn
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
 

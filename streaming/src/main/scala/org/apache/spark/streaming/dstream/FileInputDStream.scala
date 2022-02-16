@@ -310,6 +310,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     _fs = null
   }
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")

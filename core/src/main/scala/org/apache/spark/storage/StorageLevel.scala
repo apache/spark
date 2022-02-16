@@ -112,6 +112,7 @@ class StorageLevel private(
     _replication = in.readByte()
   }
 
+  @scala.annotation.nowarn
   @throws(classOf[IOException])
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 

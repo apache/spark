@@ -188,6 +188,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   }
 
   // Called by Java when deserializing an object
+  @scala.annotation.nowarn
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     if (atDriverSide) {

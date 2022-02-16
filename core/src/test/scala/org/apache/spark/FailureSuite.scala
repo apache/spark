@@ -276,6 +276,7 @@ class NonSerializableUserException extends RuntimeException {
 }
 
 class NonDeserializableUserException extends RuntimeException {
+  @scala.annotation.nowarn
   private def readObject(in: ObjectInputStream): Unit = {
     throw new IOException("Intentional exception during deserialization.")
   }
