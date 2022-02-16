@@ -3926,6 +3926,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           val projections = windows.map(_ +: child.output)
 
+          // When the condition windowDuration % slideDuration = 0 is fulfilled,
+          // the estimation of the number of windows becomes exact one,
+          // which means all produced windows are valid.
           val filterExpr =
             if (window.windowDuration % window.slideDuration == 0) {
               IsNotNull(window.timeColumn)
