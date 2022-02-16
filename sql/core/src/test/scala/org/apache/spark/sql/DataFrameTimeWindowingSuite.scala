@@ -253,8 +253,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       (null, 4)).toDF("time", "value")
 
     Seq(df1, df2).foreach { df =>
-      val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
-      assert(expands.isEmpty, "Tumbling windows shouldn't require expand")
       checkDataset(
         df.select(window($"time", "10 seconds"), $"value")
           .orderBy($"window.start".asc)
