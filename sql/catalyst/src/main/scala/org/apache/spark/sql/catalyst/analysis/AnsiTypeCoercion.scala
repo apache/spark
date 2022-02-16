@@ -204,6 +204,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
 
+      case (DateType, AnyTimestampType) =>
+        Some(AnyTimestampType.defaultConcreteType)
+
       case (_, target: DataType) =>
         if (Cast.canANSIStoreAssign(inType, target)) {
           Some(target)
