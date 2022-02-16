@@ -313,13 +313,12 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     attr.dataType match {
-      case StringType | BinaryType =>
-        None
       case _: NumericType | DateType | TimestampType | BooleanType =>
         if (!colStatsMap.hasMinMaxStats(attr)) {
-          logDebug("[CBO] No statistics for " + attr)
+          logDebug(s"[CBO] No statistics for $attr")
           return None
         }
+      case StringType | BinaryType =>
     }
 
     val colStat = colStatsMap(attr)
