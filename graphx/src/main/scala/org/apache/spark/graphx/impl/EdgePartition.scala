@@ -64,6 +64,9 @@ class EdgePartition[
     activeSet: Option[VertexSet])
   extends Serializable {
 
+  /** No-arg constructor for serialization. */
+  private def this() = this(null, null, null, null, null, null, null, null)
+
   /** Return a new `EdgePartition` with the specified edge data. */
   def withData[ED2: ClassTag](data: Array[ED2]): EdgePartition[ED2, VD] = {
     new EdgePartition(
