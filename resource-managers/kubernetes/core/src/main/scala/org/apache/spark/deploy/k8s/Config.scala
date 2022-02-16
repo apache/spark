@@ -292,6 +292,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_JOB_QUEUE = ConfigBuilder("spark.kubernetes.job.queue")
+    .doc("The name of the queue to which the job is submitted. This info " +
+      "will be stored in configuration and passed to specified feature step (such as " +
+      "`VolcanoFeatureStep`).")
+    .version("3.3.0")
+    .stringConf
+    .createWithDefault("default")
+
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
