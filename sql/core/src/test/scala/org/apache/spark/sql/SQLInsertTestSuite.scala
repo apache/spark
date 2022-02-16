@@ -313,14 +313,17 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-38228: legacy store assignment should not fail on error under ANSI mode") {
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(
-        SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString,
-        SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        withTable("t") {
-          sql("create table t(a int) using parquet")
-          sql("insert into t values('ansi')")
-          checkAnswer(spark.table("t"), Row(null))
+    // DS v2 doesn't support the legacy policy
+    if (format != "foo") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          withTable("t") {
+            sql("create table t(a int) using parquet")
+            sql("insert into t values('ansi')")
+            checkAnswer(spark.table("t"), Row(null))
+          }
         }
       }
     }
