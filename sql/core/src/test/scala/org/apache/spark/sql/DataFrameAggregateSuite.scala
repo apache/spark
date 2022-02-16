@@ -1448,6 +1448,11 @@ class DataFrameAggregateSuite extends QueryTest
     val emptyAgg = Map.empty[String, String]
     assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count == 1)
   }
+
+  test("SPARK-38221: group by stream of complex expressions should not fail") {
+    val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
+    checkAnswer(df, Row(2, 3, 1))
+  }
 }
 
 case class B(c: Option[Double])
