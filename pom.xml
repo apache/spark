@@ -157,7 +157,7 @@
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
-    <commons.math3.version>3.4.1</commons.math3.version>
+    <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>4.4</commons.collections.version>
     <scala.version>2.12.15</scala.version>
