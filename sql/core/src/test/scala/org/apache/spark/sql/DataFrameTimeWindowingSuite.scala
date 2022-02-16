@@ -527,4 +527,48 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         "when windowDuration is multiple of slideDuration")
     }
   }
+
+  test("SPARK-38227: 'start' and 'end' fields should be nullable") {
+    // We expect the fields in window struct as nullable since the dataType of TimeWindow defines
+    // them as nullable. The rule 'TimeWindowing' should respect the dataType.
+    val df1 = Seq(
+      ("2016-03-27 09:00:05", 1),
+      ("2016-03-27 09:00:32", 2),
+      (null, 3),
+      (null, 4)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T09:00:05"), 1),
+      (LocalDateTime.parse("2016-03-27T09:00:32"), 2),
+      (null, 3),
+      (null, 4)).toDF("time", "value")
+
+    def validateWindowColumnInSchema(schema: StructType, colName: String): Unit = {
+      schema.find(_.name == colName) match {
+        case Some(StructField(_, st: StructType, _, _)) =>
+          assertFieldInWindowStruct(st, "start")
+          assertFieldInWindowStruct(st, "end")
+
+        case _ => fail("Failed to find suitable window column from DataFrame!")
+      }
+    }
+
+    def assertFieldInWindowStruct(windowType: StructType, fieldName: String): Unit = {
+      val field = windowType.fields.find(_.name == fieldName)
+      assert(field.isDefined, s"'$fieldName' field should exist in window struct")
+      assert(field.get.nullable, s"'$fieldName' field should be nullable")
+    }
+
+    Seq(df1, df2).foreach { df =>
+      // tumbling windows
+      val windowedProject = df.select(window($"time", "10 seconds").as("window"), $"value")
+      val schema = windowedProject.queryExecution.executedPlan.schema
+      validateWindowColumnInSchema(schema, "window")
+
+      // sliding windows
+      val windowedProject2 = df.select(window($"time", "10 seconds", "3 seconds").as("window"),
+        $"value")
+      val schema2 = windowedProject2.queryExecution.executedPlan.schema
+      validateWindowColumnInSchema(schema2, "window")
+    }
+  }
 }
