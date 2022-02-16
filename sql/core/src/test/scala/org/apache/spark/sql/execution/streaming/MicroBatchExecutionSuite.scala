@@ -93,9 +93,9 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     testStream(streamEvent) (
       AddData(inputData, 1, 2, 3, 4, 5, 6),
       StartStream(Trigger.Once, checkpointLocation = checkpointDir.getAbsolutePath),
-      ExpectFailure[IllegalStateException](e => {
+      ExpectFailure[IllegalStateException] { e =>
         assert(e.getMessage.contains("batch 3 doesn't exist"))
-      })
+      }
     )
   }
 
@@ -215,4 +215,3 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     }
   }
 }
-
