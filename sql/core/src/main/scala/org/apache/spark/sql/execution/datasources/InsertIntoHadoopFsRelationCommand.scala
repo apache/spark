@@ -92,16 +92,30 @@ case class InsertIntoHadoopFsRelationCommand(
 
     var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
     var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
-    var matchingPartitions: Seq[CatalogTablePartition] = Seq.empty
 
     // When partitions are tracked by the catalog, compute all custom partition locations that
     // may be relevant to the insertion job.
     if (partitionsTrackedByCatalog) {
-      matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
-        catalogTable.get.identifier, Some(staticPartitions))
-      initialMatchingPartitions = matchingPartitions.map(_.spec)
-      customPartitionLocations = getCustomPartitionLocations(
-        fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
+      if (sparkSession.sessionState.conf.hasCustomPartitionLocations) {
+        val matchingPartitions = sparkSession.sessionState.catalog.listPartitions(
+          catalogTable.get.identifier, Some(staticPartitions))
+        initialMatchingPartitions = matchingPartitions.map(_.spec)
+        customPartitionLocations = getCustomPartitionLocations(
+          fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
+      } else {
+        val partitionNames = sparkSession.sessionState.catalog.listPartitionNames(
+          catalogTable.get.identifier, Some(staticPartitions))
+        initialMatchingPartitions = partitionNames.map(str => {
+          val parts = str.split("/")
+          parts.map(part => {
+            val kvs = part.split("=")
+            if (kvs.length != 2) {
+              throw new IllegalArgumentException("fetched error part: " + part)
+            }
+            (kvs(0), kvs(1))
+          }).toMap
+        })
+      }
     }
 
     val jobId = java.util.UUID.randomUUID().toString
@@ -119,7 +133,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.ErrorIfExists, true) =>
           throw QueryCompilationErrors.outputPathAlreadyExistsError(qualifiedOutputPath)
         case (SaveMode.Overwrite, true) =>
-          if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
+          if (ifPartitionNotExists && initialMatchingPartitions.nonEmpty) {
             false
           } else if (dynamicPartitionOverwrite) {
             // For dynamic partition overwrite, do not delete partition directories ahead.
