@@ -414,7 +414,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(AGGREGATE_EXPRESSION)) {
     case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
       ae.copy(isDistinct = false)
   }
@@ -436,8 +437,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateAggregateFilter extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
-    _.containsAllPatterns(TRUE_OR_FALSE_LITERAL), ruleId)  {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsAllPatterns(AGGREGATE_EXPRESSION, TRUE_OR_FALSE_LITERAL), ruleId)  {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
     case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>

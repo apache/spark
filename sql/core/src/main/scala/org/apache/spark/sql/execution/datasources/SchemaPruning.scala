@@ -77,7 +77,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       }
 
       val metadataSchema =
-        relation.output.collect { case MetadataAttribute(attr) => attr }.toStructType
+        relation.output.collect { case FileSourceMetadataAttribute(attr) => attr }.toStructType
       val prunedMetadataSchema = if (metadataSchema.nonEmpty) {
         pruneSchema(metadataSchema, requestedRootFields)
       } else {

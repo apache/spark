@@ -32,15 +32,10 @@ class SparkContextSchedulerCreationSuite
   def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = {}
 
   def createTaskScheduler(master: String)(body: TaskSchedulerImpl => Unit = noOp): Unit =
-    createTaskScheduler(master, "client")(body)
-
-  def createTaskScheduler(master: String, deployMode: String)(
-      body: TaskSchedulerImpl => Unit): Unit =
-    createTaskScheduler(master, deployMode, new SparkConf())(body)
+    createTaskScheduler(master, new SparkConf())(body)
 
   def createTaskScheduler(
       master: String,
-      deployMode: String,
       conf: SparkConf)(body: TaskSchedulerImpl => Unit): Unit = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
@@ -48,7 +43,7 @@ class SparkContextSchedulerCreationSuite
     val createTaskSchedulerMethod =
       PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]](Symbol("createTaskScheduler"))
     val (_, sched) =
-      SparkContext invokePrivate createTaskSchedulerMethod(sc, master, deployMode)
+      SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
     try {
       body(sched.asInstanceOf[TaskSchedulerImpl])
     } finally {
@@ -132,7 +127,7 @@ class SparkContextSchedulerCreationSuite
   test("local-default-parallelism") {
     val conf = new SparkConf().set("spark.default.parallelism", "16")
 
-    val sched = createTaskScheduler("local", "client", conf) { sched =>
+    val sched = createTaskScheduler("local", conf) { sched =>
       sched.backend match {
         case s: LocalSchedulerBackend => assert(s.defaultParallelism() === 16)
         case _ => fail()

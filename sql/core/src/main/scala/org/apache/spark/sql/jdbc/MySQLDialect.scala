@@ -21,6 +21,8 @@ import java.sql.{Connection, SQLException, Types}
 import java.util
 import java.util.Locale
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
@@ -74,6 +76,25 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
+  }
+
+  override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    listSchemas(conn, options).exists(_.head == schema)
+  }
+
+  override def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val schemaBuilder = ArrayBuilder.make[Array[String]]
+    try {
+      JdbcUtils.executeQuery(conn, options, "SHOW SCHEMAS") { rs =>
+        while (rs.next()) {
+          schemaBuilder += Array(rs.getString("Database"))
+        }
+      }
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot show schemas.")
+    }
+    schemaBuilder.result
   }
 
   override def getTableExistsQuery(table: String): String = {
@@ -134,6 +155,14 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
+  override def getSchemaCommentQuery(schema: String, comment: String): String = {
+    throw QueryExecutionErrors.unsupportedCreateNamespaceCommentError()
+  }
+
+  override def removeSchemaCommentQuery(schema: String): String = {
+    throw QueryExecutionErrors.unsupportedRemoveNamespaceCommentError()
+  }
+
   // CREATE INDEX syntax
   // https://dev.mysql.com/doc/refman/8.0/en/create-index.html
   override def createIndex(
@@ -175,26 +204,27 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     val sql = s"SHOW INDEXES FROM $tableName"
     var indexMap: Map[String, TableIndex] = Map()
     try {
-      val rs = JdbcUtils.executeQuery(conn, options, sql)
-      while (rs.next()) {
-        val indexName = rs.getString("key_name")
-        val colName = rs.getString("column_name")
-        val indexType = rs.getString("index_type")
-        val indexComment = rs.getString("Index_comment")
-        if (indexMap.contains(indexName)) {
-          val index = indexMap.get(indexName).get
-          val newIndex = new TableIndex(indexName, indexType,
-            index.columns() :+ FieldReference(colName),
-            index.columnProperties, index.properties)
-          indexMap += (indexName -> newIndex)
-        } else {
-          // The only property we are building here is `COMMENT` because it's the only one
-          // we can get from `SHOW INDEXES`.
-          val properties = new util.Properties();
-          if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
-          val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
-            new util.HashMap[NamedReference, util.Properties](), properties)
-          indexMap += (indexName -> index)
+      JdbcUtils.executeQuery(conn, options, sql) { rs =>
+        while (rs.next()) {
+          val indexName = rs.getString("key_name")
+          val colName = rs.getString("column_name")
+          val indexType = rs.getString("index_type")
+          val indexComment = rs.getString("Index_comment")
+          if (indexMap.contains(indexName)) {
+            val index = indexMap.get(indexName).get
+            val newIndex = new TableIndex(indexName, indexType,
+              index.columns() :+ FieldReference(colName),
+              index.columnProperties, index.properties)
+            indexMap += (indexName -> newIndex)
+          } else {
+            // The only property we are building here is `COMMENT` because it's the only one
+            // we can get from `SHOW INDEXES`.
+            val properties = new util.Properties();
+            if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
+            val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
+              new util.HashMap[NamedReference, util.Properties](), properties)
+            indexMap += (indexName -> index)
+          }
         }
       }
     } catch {
@@ -217,6 +247,14 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         }
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
+    }
+  }
+
+  override def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    } else {
+      throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
     }
   }
 }
