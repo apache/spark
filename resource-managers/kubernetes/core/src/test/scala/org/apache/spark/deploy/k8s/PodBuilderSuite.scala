@@ -53,6 +53,14 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     verify(client, never()).pods()
   }
 
+  test("SPARK-36059: set custom scheduler") {
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
+      .set(Config.KUBERNETES_SCHEDULER_NAME.key, "custom")
+    val pod = buildPod(sparkConf, client)
+    assert(pod.pod.getSpec.getSchedulerName === "custom")
+  }
+
   test("load pod template if specified") {
     val client = mockKubernetesClient()
     val sparkConf = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
