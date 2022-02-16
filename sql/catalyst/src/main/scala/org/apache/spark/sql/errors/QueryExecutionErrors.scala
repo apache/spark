@@ -89,9 +89,9 @@ object QueryExecutionErrors {
       messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
-  def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
+  def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(t.toString, dataType.catalogString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -240,6 +240,14 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
+  }
+
+  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"pivoting by the value '${v.toString}' of the column data type" +
+        s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -1942,5 +1950,17 @@ object QueryExecutionErrors {
 
   def MultipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
+  }
+
+  def unsupportedCreateNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  }
+
+  def unsupportedRemoveNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Remove namespace comment is not supported")
+  }
+
+  def unsupportedDropNamespaceRestrictError(): Throwable = {
+    new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
   }
 }

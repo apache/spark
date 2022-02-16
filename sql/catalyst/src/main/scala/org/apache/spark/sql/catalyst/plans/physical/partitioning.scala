@@ -101,6 +101,16 @@ case class ClusteredDistribution(
  * Since this distribution relies on [[HashPartitioning]] on the physical partitioning of the
  * stateful operator, only [[HashPartitioning]] (and HashPartitioning in
  * [[PartitioningCollection]]) can satisfy this distribution.
+ * When `_requiredNumPartitions` is 1, [[SinglePartition]] is essentially same as
+ * [[HashPartitioning]], so it can satisfy this distribution as well.
+ *
+ * NOTE: This is applied only to stream-stream join as of now. For other stateful operators, we
+ * have been using ClusteredDistribution, which could construct the physical partitioning of the
+ * state in different way (ClusteredDistribution requires relaxed condition and multiple
+ * partitionings can satisfy the requirement.) We need to construct the way to fix this with
+ * minimizing possibility to break the existing checkpoints.
+ *
+ * TODO(SPARK-38204): address the issue explained in above note.
  */
 case class StatefulOpClusteredDistribution(
     expressions: Seq[Expression],

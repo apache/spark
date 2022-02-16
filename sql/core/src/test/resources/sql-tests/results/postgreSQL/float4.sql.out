@@ -171,6 +171,7 @@ struct<four:string,f1:float>
 	0.0
 	1.2345679E-20
 	1.2345679E20
+	1004.3
 
 
 -- !query
@@ -178,7 +179,7 @@ SELECT '' AS one, f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3'
 -- !query schema
 struct<one:string,f1:float>
 -- !query output
-	1004.3
+
 
 
 -- !query
@@ -189,6 +190,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
@@ -199,6 +201,7 @@ struct<three:string,f1:float>
 	-34.84
 	0.0
 	1.2345679E-20
+	1004.3
 
 
 -- !query
@@ -227,22 +230,22 @@ struct<four:string,f1:float>
 SELECT '' AS three, f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
-	1.2345679E-20	-1.2345678E-19
-	1.2345679E20	-1.2345678E21
-	1004.3	-10043.0
+	1.2345679E-20	-1.2345678720289608E-19
+	1.2345679E20	-1.2345678955701443E21
+	1004.3	-10042.999877929688
 
 
 -- !query
 SELECT '' AS three, f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
 	1.2345679E-20	-10.0
-	1.2345679E20	1.2345679E20
-	1004.3	994.3
+	1.2345679E20	1.2345678955701443E20
+	1004.3	994.2999877929688
 
 
 -- !query
@@ -260,11 +263,11 @@ struct<three:string,f1:float,x:double>
 SELECT '' AS three, f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:float>
+struct<three:string,f1:float,x:double>
 -- !query output
 	1.2345679E-20	10.0
-	1.2345679E20	1.2345679E20
-	1004.3	1014.3
+	1.2345679E20	1.2345678955701443E20
+	1004.3	1014.2999877929688
 
 
 -- !query
@@ -375,7 +378,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9.22338E18 to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting -9.22338E18 to bigint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

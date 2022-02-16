@@ -217,6 +217,8 @@ class MicroBatchExecution(
         reportTimeTaken("triggerExecution") {
           // We'll do this initialization only once every start / restart
           if (currentBatchId < 0) {
+            AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(
+              offsetLog.getLatest().map(_._2), sources)
             populateStartOffsets(sparkSessionForStream)
             logInfo(s"Stream started from $committedOffsets")
           }

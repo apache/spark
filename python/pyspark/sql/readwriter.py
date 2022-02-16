@@ -27,7 +27,7 @@ from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
-    from pyspark.sql.context import SQLContext
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
 
@@ -62,8 +62,8 @@ class DataFrameReader(OptionUtils):
     .. versionadded:: 1.4
     """
 
-    def __init__(self, spark: "SQLContext"):
-        self._jreader = spark._ssql_ctx.read()  # type: ignore[attr-defined]
+    def __init__(self, spark: "SparkSession"):
+        self._jreader = spark._jsparkSession.read()  # type: ignore[attr-defined]
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -560,7 +560,7 @@ class DataFrameReader(OptionUtils):
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
             # We can do it through creating a jvm dataset firstly and using the jvm api
             # for creating a dataframe from dataset storing csv.
-            jdataset = self._spark._ssql_ctx.createDataset(
+            jdataset = self._spark._jsparkSession.createDataset(
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.csv(jdataset))
@@ -737,7 +737,7 @@ class DataFrameWriter(OptionUtils):
 
     def __init__(self, df: "DataFrame"):
         self._df = df
-        self._spark = df.sql_ctx
+        self._spark = df.sparkSession
         self._jwrite = df._jdf.write()  # type: ignore[operator]
 
     def _sq(self, jsq: JavaObject) -> "StreamingQuery":
@@ -1360,7 +1360,7 @@ class DataFrameWriterV2:
 
     def __init__(self, df: "DataFrame", table: str):
         self._df = df
-        self._spark = df.sql_ctx
+        self._spark = df.sparkSession
         self._jwriter = df._jdf.writeTo(table)  # type: ignore[operator]
 
     @since(3.1)
