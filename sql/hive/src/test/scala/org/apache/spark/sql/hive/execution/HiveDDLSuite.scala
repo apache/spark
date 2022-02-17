@@ -3043,4 +3043,10 @@ class HiveDDLSuite
       assert(df1.schema.names.toSeq == Seq("A", "B"))
     }
   }
+
+  test("SPARK-38216: Fail early if all the columns are partitioned columns") {
+    assertAnalysisError(
+      "CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET",
+      "Cannot use all columns for partition columns")
+  }
 }
