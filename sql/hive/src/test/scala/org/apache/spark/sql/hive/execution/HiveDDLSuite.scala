@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
@@ -2927,37 +2927,41 @@ class HiveDDLSuite
   }
 
   test("SPARK-33844, 37969: Insert overwrite directory should check schema too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        Seq("PARQUET", "ORC").foreach { format =>
-          val e = intercept[SparkException] {
-            spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
-              s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-          }.getCause.getMessage
-          assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
-            " invalid character(s). Please use alias to rename it."))
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempPath { path =>
+          Seq("PARQUET", "ORC").foreach { format =>
+            val e = intercept[SparkException] {
+              spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+                s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+            }.getCause.getMessage
+            assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
+              " invalid character(s). Please use alias to rename it."))
+          }
         }
       }
     }
   }
 
   test("SPARK-36201: Add check for inner field of parquet/orc schema") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        val e = intercept[SparkException] {
-          spark.sql(
-            s"""
-               |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
-               |STORED AS PARQUET
-               |SELECT
-               |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-               |FROM v
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempPath { path =>
+          val e = intercept[SparkException] {
+            spark.sql(
+              s"""
+                 |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
+                 |STORED AS PARQUET
+                 |SELECT
+                 |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+                 |FROM v
                """.stripMargin)
-        }.getCause.getMessage
-        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains invalid character(s). " +
-          "Please use alias to rename it."))
+          }.getCause.getMessage
+          assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains invalid character(s). " +
+            "Please use alias to rename it."))
+        }
       }
     }
   }
