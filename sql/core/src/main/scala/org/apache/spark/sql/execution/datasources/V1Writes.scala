@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * V1 write includes both datasoruce and hive, that requires a specific ordering of data.
+ * V1 write includes both datasoruce v1 and hive, that requires a specific ordering of data.
  * It should be resolved by [[V1Writes]].
  *
  * TODO(SPARK-37333): Specify the required distribution at V1Write
@@ -65,7 +65,7 @@ object V1Writes extends Rule[LogicalPlan] with V1WritesHelper {
 
 trait V1WritesHelper {
 
-  def getBucketSpec(
+  def getWriterBucketSpec(
       bucketSpec: Option[BucketSpec],
       dataColumns: Seq[Attribute],
       options: Map[String, String]): Option[WriterBucketSpec] = {
@@ -114,7 +114,7 @@ trait V1WritesHelper {
       options: Map[String, String]): Seq[SortOrder] = {
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputColumns.filterNot(partitionSet.contains)
-    val writerBucketSpec = getBucketSpec(bucketSpec, dataColumns, options)
+    val writerBucketSpec = getWriterBucketSpec(bucketSpec, dataColumns, options)
     val sortColumns = getBucketSortColumns(bucketSpec, dataColumns)
 
     assert(partitionColumns.size >= numStaticPartitions)

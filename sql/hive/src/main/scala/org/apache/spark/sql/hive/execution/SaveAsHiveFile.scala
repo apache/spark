@@ -98,7 +98,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand with V1HiveWritesH
       staticPartitionColumns = Seq.empty,
       bucketSpec = bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = options(bucketSpec))
+      options = getOptionsWithHiveBucketWrite(bucketSpec))
   }
 
   protected def getExternalTmpPath(

@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 trait V1HiveWritesHelper {
-  def options(bucketSpec: Option[BucketSpec]): Map[String, String] = {
+  def getOptionsWithHiveBucketWrite(bucketSpec: Option[BucketSpec]): Map[String, String] = {
     bucketSpec
       .map(_ => Map(BucketingUtils.optionForHiveCompatibleBucketWrite -> "true"))
       .getOrElse(Map.empty)

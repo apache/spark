@@ -122,7 +122,7 @@ object FileFormatWriter extends Logging with V1WritesHelper {
     }
     val empty2NullPlan = if (needConvert) ProjectExec(projectList, plan) else plan
 
-    val writerBucketSpec = getBucketSpec(bucketSpec, dataColumns, options)
+    val writerBucketSpec = getWriterBucketSpec(bucketSpec, dataColumns, options)
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
     val dataSchema = dataColumns.toStructType

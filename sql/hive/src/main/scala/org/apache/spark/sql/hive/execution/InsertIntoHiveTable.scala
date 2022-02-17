@@ -79,7 +79,7 @@ case class InsertIntoHiveTable(
   override lazy val partitionColumns: Seq[Attribute] =
     getDynamicPartitionColumns(table, query, partition)
   override lazy val bucketSpec: Option[BucketSpec] = table.bucketSpec
-  override lazy val options: Map[String, String] = options(table.bucketSpec)
+  override lazy val options: Map[String, String] = getOptionsWithHiveBucketWrite(table.bucketSpec)
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
