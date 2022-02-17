@@ -3076,7 +3076,7 @@ case class ConvertTimezone(
           - "MILLISECOND", "SQL_TSI_FRAC_SECOND" - milliseconds
           - "MICROSECOND"
       * interval - this is the number of units of time that you want to add.
-      * timestamp - This is a timestamp (w/ or w/o timezone) to which you want to add.
+      * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
   """,
   examples = """
     Examples:
