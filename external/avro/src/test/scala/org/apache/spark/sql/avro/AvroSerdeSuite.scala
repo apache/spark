@@ -17,7 +17,7 @@
 package org.apache.spark.sql.avro
 
 import java.nio.ByteBuffer
-import java.time.{Instant, ZoneId}
+import java.time.{Instant, LocalDateTime, ZoneId}
 
 import scala.collection.JavaConverters._
 
@@ -175,20 +175,16 @@ class AvroSerdeSuite extends SparkFunSuite {
 
       val millisSchema = LogicalTypes.timestampMillis().addToSchema(Schema.create(LONG))
 
-      val avroSchema = Schema.createRecord(
-        "name",
-        "doc",
-        "space",
-        true,
-        Seq(
-          new Schema.Field("javaSqlTimeMicro", microSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("java8TimeInstantMicro", microSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field("javaSqlTimeMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
-          new Schema.Field(
-            "java8TimeInstantMillis",
-            millisSchema,
-            "",
-            null.asInstanceOf[AnyVal])).asJava)
+      val avroSchema = Schema.createRecord("name", "doc", "space", true,
+          Seq(
+            new Schema.Field("javaSqlTimeMicro", microSchema, "", null.asInstanceOf[AnyVal]),
+            new Schema.Field("java8TimeInstantMicro", microSchema, "", null.asInstanceOf[AnyVal]),
+            new Schema.Field("javaSqlTimeMillis", millisSchema, "", null.asInstanceOf[AnyVal]),
+            new Schema.Field(
+              "java8TimeInstantMillis",
+              millisSchema,
+              "",
+              null.asInstanceOf[AnyVal])).asJava)
 
       val serializer = Serializer.create(structType, avroSchema, fieldMatch)
 
@@ -207,6 +203,44 @@ class AvroSerdeSuite extends SparkFunSuite {
       assert(grec.get("java8TimeInstantMicro").asInstanceOf[Long] === epochMicro)
       assert(grec.get("javaSqlTimeMillis").asInstanceOf[Long] === epoch)
       assert(grec.get("java8TimeInstantMillis").asInstanceOf[Long] === epoch)
+    }
+  }
+
+  test(s"""
+        |Serialize TimestampNTZType to Avro LONG with logical type
+        | timestamp-micros and timestamp-millis
+        """.stripMargin) {
+    withFieldMatchType { fieldMatch =>
+      val structType = StructType(
+        Seq(
+          StructField("java8LocalDateTimeMicro", TimestampNTZType, nullable = false),
+          StructField("java8LocalDateTimeMillis", TimestampNTZType, nullable = false)))
+
+      val microSchema = LogicalTypes.timestampMicros().addToSchema(Schema.create(LONG))
+
+      val millisSchema = LogicalTypes.timestampMillis().addToSchema(Schema.create(LONG))
+
+      val avroSchema = Schema.createRecord("name", "doc", "space", true,
+          Seq(
+            new Schema.Field("java8LocalDateTimeMicro", microSchema, "", null.asInstanceOf[AnyVal]),
+            new Schema.Field(
+              "java8LocalDateTimeMillis",
+              millisSchema,
+              "",
+              null.asInstanceOf[AnyVal])).asJava)
+
+      val serializer = Serializer.create(structType, avroSchema, fieldMatch)
+
+      val epoch = 1643121231000L
+      val epochMicro = 1000 * 1643121231000L
+
+      val dataTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(epoch), ZoneId.of("UTC"))
+      val input = InternalRow(dataTime, dataTime)
+
+      val grec = serializer.serialize(input).asInstanceOf[GenericRecord]
+
+      assert(grec.get("java8LocalDateTimeMicro").asInstanceOf[Long] === epochMicro)
+      assert(grec.get("java8LocalDateTimeMillis").asInstanceOf[Long] === epoch)
     }
   }
 
