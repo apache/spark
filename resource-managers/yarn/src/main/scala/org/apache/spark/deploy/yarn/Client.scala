@@ -84,7 +84,11 @@ private[spark] class Client(
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
 
-  private val amMemoryOverheadFactor = sparkConf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+  private val amMemoryOverheadFactor = if (isClusterMode) {
+    sparkConf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+  } else {
+    sparkConf.get(AM_MEMORY_OVERHEAD_FACTOR)
+  }
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {

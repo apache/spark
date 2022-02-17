@@ -53,8 +53,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
-  private val memoryOverheadFactor = conf.get(MEMORY_OVERHEAD_FACTOR)
-    .getOrElse(conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR))
+  private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
+    conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+  } else {
+    conf.get(MEMORY_OVERHEAD_FACTOR)
+  }
 
   // The memory overhead factor to use. If the user has not set it, then use a different
   // value for non-JVM apps. This value is propagated to executors.

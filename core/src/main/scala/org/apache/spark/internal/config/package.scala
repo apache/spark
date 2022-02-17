@@ -107,13 +107,13 @@ package object config {
 
   private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.driver.memoryOverheadFactor")
-      .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
-      "as a fraction of total driver memory. If memory overhead is specified directly, " +
-      "it takes precedence.")
+      .doc("This sets the Memory Overhead Factor on the driver that will allocate memory to " +
+        "non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various " +
+        "systems processes, and tmpfs-based local directories.")
       .version("3.3.0")
       .doubleConf
-      .checkValue(factor => factor >= 0 && factor < 1,
-        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .checkValue(factor => factor > 0,
+        "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
   private[spark] val DRIVER_LOG_DFS_DIR =
@@ -328,12 +328,13 @@ package object config {
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
-      .doc("The amount of non-heap memory to be allocated per executor, as a fraction of total " +
-        "executor memory. If memory overhead is specified directly, it takes precedence.")
+      .doc("This sets the Memory Overhead Factor on executors that will allocate memory to " +
+        "non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various " +
+        "systems processes, and tmpfs-based local directories.")
       .version("3.3.0")
       .doubleConf
-      .checkValue(factor => factor >= 0 && factor < 1,
-        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .checkValue(factor => factor > 0,
+        "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
