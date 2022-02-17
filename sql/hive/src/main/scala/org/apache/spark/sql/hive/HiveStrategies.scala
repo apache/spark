@@ -209,7 +209,7 @@ case class RelationConversions(
 
   private def convertProvider(storage: CatalogStorageFormat): String = {
     val serde = storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    Some("parquet").filter(serde.contains).getOrElse("orc")
+    if (serde.contains("parquet")) "parquet" else "orc"
   }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
