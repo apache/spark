@@ -282,65 +282,65 @@ class DistributionSuite extends SparkFunSuite {
     }
 
     // Validate only HashPartitioning (and HashPartitioning in PartitioningCollection) can satisfy
-    // StatefulOpClusteredDistribution. SinglePartition can also satisfy this distribution when
-    // `_requiredNumPartitions` is 1.
+    // HashClusteredDistribution. SinglePartition can also satisfy this distribution when
+    // `requiredNumPartitions` is Some(1).
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       true)
 
     checkSatisfied(
       PartitioningCollection(Seq(
         HashPartitioning(Seq($"a", $"b", $"c"), 10),
         RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10))),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       true)
 
     checkSatisfied(
       SinglePartition,
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 1),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(1)),
       true)
 
     checkSatisfied(
       PartitioningCollection(Seq(
         HashPartitioning(Seq($"a", $"b"), 1),
         SinglePartition)),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 1),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(1)),
       true)
 
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b"), 10),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 5),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       SinglePartition,
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       BroadcastPartitioning(IdentityBroadcastMode),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       RoundRobinPartitioning(10),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
 
     checkSatisfied(
       UnknownPartitioning(10),
-      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      HashClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
       false)
   }
 }
