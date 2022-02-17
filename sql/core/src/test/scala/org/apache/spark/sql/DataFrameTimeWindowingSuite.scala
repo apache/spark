@@ -527,5 +527,4 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         "when windowDuration is multiple of slideDuration")
     }
   }
-
 }
