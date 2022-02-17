@@ -184,15 +184,16 @@ private[sql] class AvroSerializer(
 
       case (DateType, INT) =>
         (getter, ordinal) =>
-          getter.get(ordinal, DateType) match {
-            case epochDays: java.lang.Integer => dateRebaseFunc(epochDays)
-            case date: java.sql.Date => dateRebaseFunc(date.toLocalDate().toEpochDay().toInt)
-            case localDate: java.time.LocalDate => dateRebaseFunc(localDate.toEpochDay().toInt)
+          val epochDays: Int = getter.get(ordinal, DateType) match {
+            case epochDays: java.lang.Integer => epochDays
+            case date: java.sql.Date => date.toLocalDate().toEpochDay().toInt
+            case localDate: java.time.LocalDate => localDate.toEpochDay().toInt
             case other =>
               throw new IncompatibleSchemaException(s"""
                   |Expected java.lang.Integer, java.sql.Date, or java.time.LocalDate,
                   | but found ${other.getClass}""".stripMargin)
           }
+          dateRebaseFunc(epochDays)
 
       case (TimestampType, LONG) =>
         avroType.getLogicalType match {
