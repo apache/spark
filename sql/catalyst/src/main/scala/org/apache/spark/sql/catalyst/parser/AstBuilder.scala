@@ -2945,9 +2945,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Validate a replace table statement and return the [[TableIdentifier]].
    */
   override def visitReplaceTableHeader(
-      ctx: ReplaceTableHeaderContext): TableHeader = withOrigin(ctx) {
+      ctx: ReplaceTableHeaderContext): Seq[String] = withOrigin(ctx) {
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText).toSeq
-    (multipartIdentifier, false, false, false)
+    multipartIdentifier
   }
 
   /**
@@ -3543,22 +3543,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temp, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val table = visitReplaceTableHeader(ctx.replaceTableHeader)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-
-    if (temp) {
-      val action = if (orCreate) "CREATE OR REPLACE" else "REPLACE"
-      operationNotAllowed(s"$action TEMPORARY TABLE ..., use $action TEMPORARY VIEW instead.", ctx)
-    }
-
-    if (external) {
-      operationNotAllowed("REPLACE EXTERNAL TABLE ...", ctx)
-    }
-
-    if (ifNotExists) {
-      operationNotAllowed("REPLACE ... IF NOT EXISTS, use CREATE IF NOT EXISTS instead", ctx)
-    }
-
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
