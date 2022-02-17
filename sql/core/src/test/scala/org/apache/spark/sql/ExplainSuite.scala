@@ -527,20 +527,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
   import testImplicits._
 
-  /**
-   * Get the final plan explain after running the sql
-   */
-  private def withFinalPlanNormalizedExplain(query: String, mode: String)(f: String => Unit) = {
-    val output = new java.io.ByteArrayOutputStream()
-    Console.withOut(output) {
-      val df = sql(query)
-      df.collect()
-      df.explain(mode)
-    }
-    val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
-    f(normalizedOutput)
-  }
-
   test("SPARK-35884: Explain Formatted") {
     val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
@@ -743,9 +729,9 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS c")
       val expected =
         "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]"
-      withFinalPlanNormalizedExplain(
-        "SELECT count(s) FROM (SELECT (SELECT c FROM t) as s)",
-        "formatted") { output =>
+      val df = sql("SELECT count(s) FROM (SELECT (SELECT c FROM t) as s)")
+      df.collect()
+      withNormalizedExplain(df, FormattedMode) { output =>
         assert(output.contains(expected))
       }
     }
