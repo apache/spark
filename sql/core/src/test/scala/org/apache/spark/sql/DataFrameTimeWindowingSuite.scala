@@ -491,8 +491,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("No need to filter data when the sliding window length is not redundant") {
-    // check the value column
+  test("No need to filter windows when windowDuration is multiple of slideDuration") {
     val df1 = Seq(
       ("2022-02-15 19:39:34", 1, "a"),
       ("2022-02-15 19:39:56", 2, "a"),
@@ -519,52 +518,14 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       .select(window($"time", "9 seconds", "3 seconds", "2 second"), $"value")
       .orderBy($"window.start".asc, $"value".desc).select("value")
 
-    Seq(df1, df2).foreach { df =>
+    Seq(df1, df2, df3, df4).foreach { df =>
       val filter = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-      val exist = filter.get.constraints.iterator.toStream.filter(e =>
+      assert(filter.isDefined)
+      val exist = filter.get.constraints.filter(e =>
         e.toString.contains(">=") || e.toString.contains("<"))
-      assert(exist.isEmpty, "No need to filter data between " +
-        "window.start and window.end when the sliding window length is not redundant")
-
-      checkAnswer(
-        df,
-        Seq(Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
-      )
+      assert(exist.isEmpty, "No need to filter windows " +
+        "when windowDuration is multiple of slideDuration")
     }
-
-    Seq(df3, df4).foreach { df =>
-      val filter = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-      val exist = filter.get.constraints.iterator.toStream.filter(e =>
-        e.toString.contains(">=") || e.toString.contains("<"))
-      assert(exist.isEmpty, "No need to filter data between " +
-        "window.start and window.end when the sliding window length is not redundant")
-
-      checkAnswer(
-        df,
-        Seq(Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
-      )
-    }
-
-    // check produces right windows
-    val df = Seq(
-      ("1970-01-01 12:06:49", 1)).toDF("time", "value")
-
-    checkAnswer(
-      df.select(window($"time", "10 minutes", "5 minutes", "2 minutes"), $"value")
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
-      Seq(
-        Row("1970-01-01 11:57:00", "1970-01-01 12:07:00", 1),
-        Row("1970-01-01 12:02:00", "1970-01-01 12:12:00", 1))
-    )
-
-    checkAnswer(
-      df.select(window($"time", "10 minutes", "5 minutes", "0 minutes"), $"value")
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
-      Seq(
-        Row("1970-01-01 12:00:00", "1970-01-01 12:10:00", 1),
-        Row("1970-01-01 12:05:00", "1970-01-01 12:15:00", 1))
-    )
   }
+
 }
