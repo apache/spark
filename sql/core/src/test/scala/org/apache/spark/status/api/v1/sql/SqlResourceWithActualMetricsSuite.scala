@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
@@ -32,8 +33,6 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
-
-import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
 case class Person(id: Int, name: String, age: Int)
 case class Salary(personId: Int, salary: Double)
