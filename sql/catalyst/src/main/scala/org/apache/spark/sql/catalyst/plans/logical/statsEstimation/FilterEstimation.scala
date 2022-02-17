@@ -318,7 +318,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
           logDebug(s"[CBO] No statistics for $attr")
           return None
         }
-      case StringType | BinaryType =>
+      case _ =>
     }
 
     val colStat = colStatsMap(attr)
