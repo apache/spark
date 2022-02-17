@@ -1177,23 +1177,23 @@ object DateTimeUtils {
     unit.toUpperCase(Locale.ROOT) match {
       case "MICROSECOND" =>
         timestampAddDayTime(micros, interval, zoneId)
-      case "MILLISECOND" | "SQL_TSI_FRAC_SECOND" =>
+      case "MILLISECOND" =>
         timestampAddDayTime(micros, interval * MICROS_PER_MILLIS, zoneId)
-      case "SECOND" | "SQL_TSI_SECOND" =>
+      case "SECOND" =>
         timestampAddDayTime(micros, interval * MICROS_PER_SECOND, zoneId)
-      case "MINUTE" | "SQL_TSI_MINUTE" =>
+      case "MINUTE" =>
         timestampAddDayTime(micros, interval * MICROS_PER_MINUTE, zoneId)
-      case "HOUR" | "SQL_TSI_HOUR" =>
+      case "HOUR" =>
         timestampAddDayTime(micros, interval * MICROS_PER_HOUR, zoneId)
-      case "DAY" | "SQL_TSI_DAY" | "DAYOFYEAR" | "SQL_TSI_DAYOFYEAR" =>
+      case "DAY" | "DAYOFYEAR" =>
         timestampAddDayTime(micros, interval * MICROS_PER_DAY, zoneId)
-      case "WEEK" | "SQL_TSI_WEEK" =>
+      case "WEEK" =>
         timestampAddDayTime(micros, interval * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
-      case "MONTH" | "SQL_TSI_MONTH" =>
+      case "MONTH" =>
         timestampAddMonths(micros, interval, zoneId)
-      case "QUARTER" | "SQL_TSI_QUARTER" =>
+      case "QUARTER" =>
         timestampAddMonths(micros, interval * 3, zoneId)
-      case "YEAR" | "SQL_TSI_YEAR" =>
+      case "YEAR" =>
         timestampAddMonths(micros, interval * MONTHS_PER_YEAR, zoneId)
       case _ =>
         throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)

@@ -3065,15 +3065,15 @@ case class ConvertTimezone(
     Arguments:
       * unit - this indicates the units of datetime that you want to add.
         Supported string values of `unit` are (case insensitive):
-          - "YEAR", "SQL_TSI_YEAR"
-          - "QUARTER", "SQL_TSI_QUARTER" - 3 months
-          - "MONTH", "SQL_TSI_MONTH"
-          - "WEEK", "SQL_TSI_WEEK" - 7 days
-          - "DAY", "DAYOFYEAR", "SQL_TSI_DAY", "SQL_TSI_DAYOFYEAR"
-          - "HOUR", "SQL_TSI_HOUR"
-          - "MINUTE", "SQL_TSI_MINUTE"
-          - "SECOND", "SQL_TSI_SECOND"
-          - "MILLISECOND", "SQL_TSI_FRAC_SECOND" - milliseconds
+          - "YEAR"
+          - "QUARTER" - 3 months
+          - "MONTH"
+          - "WEEK" - 7 days
+          - "DAY", "DAYOFYEAR"
+          - "HOUR"
+          - "MINUTE"
+          - "SECOND"
+          - "MILLISECOND" - milliseconds
           - "MICROSECOND"
       * interval - this is the number of units of time that you want to add.
       * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
