@@ -298,7 +298,7 @@ private[spark] object Config extends Logging {
       "`VolcanoFeatureStep`).")
     .version("3.3.0")
     .stringConf
-    .createWithDefault("default")
+    .createOptional
 
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")

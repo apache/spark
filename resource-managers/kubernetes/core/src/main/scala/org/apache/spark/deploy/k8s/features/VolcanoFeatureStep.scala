@@ -47,11 +47,10 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
         .withName(podGroupName)
         .withNamespace(namespace)
       .endMetadata()
-      .editOrNewSpec()
-        .withQueue(queue)
-      .endSpec()
-      .build()
-    Seq(podGroup)
+
+    queue.foreach(podGroup.editOrNewSpec().withQueue(_).endSpec())
+
+    Seq(podGroup.build())
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {

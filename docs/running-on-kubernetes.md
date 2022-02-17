@@ -1358,7 +1358,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.job.queue</code></td>
-  <td><code>default</code></td>
+  <td><code>(none)</code></td>
   <td>
     The name of the queue to which the job is submitted. This info will be stored in configuration
     and passed to specified feature step (such as `VolcanoFeatureStep`).

@@ -40,9 +40,9 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite._
 
   lazy val volcanoClient: VolcanoClient
-  = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
+    = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
   lazy val k8sClient: NamespacedKubernetesClient
-  = kubernetesTestComponents.kubernetesClient
+    = kubernetesTestComponents.kubernetesClient
 
   protected def checkScheduler(pod: Pod): Unit = {
     assert(pod.getSpec.getSchedulerName === "volcano")
