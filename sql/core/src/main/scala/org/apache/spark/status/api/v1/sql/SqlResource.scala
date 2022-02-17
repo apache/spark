@@ -24,7 +24,9 @@ import javax.ws.rs.core.MediaType
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}
+import org.apache.spark.sql.execution.ui._
+import org.apache.spark.sql.streaming.StreamingQueryProgress
+import org.apache.spark.sql.streaming.ui.StreamingQueryData
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -61,6 +63,33 @@ private[v1] class SqlResource extends BaseAppResource {
         .execution(execId)
         .map(prepareExecutionData(_, graph, details, planDescription))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
+    }
+  }
+
+  @GET
+  @Path("streamingqueries")
+  def StreamingJobStatusList(): Seq[StreamingQueryData] = withUI { ui =>
+    val streamingQueryStore = new StreamingQueryStatusStore(ui.store.store)
+    val query = streamingQueryStore.allQueryUIData
+    if (query.isEmpty) {
+      throw new NotFoundException("No streaming queries exist.")
+    }
+    query.map(uiData => uiData.summary)
+  }
+
+  @GET
+  @Path("streamingqueries/{runId}/progress")
+  def StreamingJobStatus(
+      @PathParam("runId") runId: String,
+      @DefaultValue("1") @QueryParam("last") last: Int): Seq[StreamingQueryProgress] = {
+    withUI { ui =>
+      val streamingQueryStore = new StreamingQueryStatusStore(ui.store.store)
+      val runIdInternal = runId
+      val query = streamingQueryStore.allQueryUIData.find { uiData =>
+        uiData.summary.runId.equals(runIdInternal)
+      }.getOrElse(
+        throw new NotFoundException(s"Failed to find streaming query $runIdInternal"))
+      query.recentProgress.take(last)
     }
   }
 
