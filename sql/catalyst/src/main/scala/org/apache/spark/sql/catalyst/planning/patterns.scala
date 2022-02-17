@@ -263,7 +263,7 @@ object ExtractContainsJoin
 
 object ExtractContainsPattern extends Logging {
 
-  def concatChildren(concat: Concat): Seq[Expression] = {
+  def concatChildren(concat: Concat): mutable.ArrayBuffer[Expression] = {
     val stack = mutable.Stack[Expression](concat)
     val buf = mutable.ArrayBuffer[Expression]()
     while (!stack.isEmpty) {
