@@ -30,7 +30,9 @@ import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SharedSparkSession
 
-
+/**
+ * Sql Resource Public API Unit Tests running query testing negative cases.
+ */
 class SqlResourceInvalidEndpointSuite
   extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper {
 
