@@ -5254,7 +5254,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
 
-        original_where = []
+        original_where: Union[Any, List] = []
         if np.nan in where:
             max_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
             original_where = where.copy()
@@ -5274,7 +5274,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
                 result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
-                print(result)
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
