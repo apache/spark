@@ -141,7 +141,7 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return "org.apache.spark.mllib.tree.model.DecisionTreeModel"
 
 
-class DecisionTree(object):
+class DecisionTree:
     """
     Learning algorithm for a decision tree model for classification or
     regression.
@@ -366,7 +366,7 @@ class RandomForestModel(TreeEnsembleModel, JavaLoader):
         return "org.apache.spark.mllib.tree.model.RandomForestModel"
 
 
-class RandomForest(object):
+class RandomForest:
     """
     Learning algorithm for a random forest model for classification or
     regression.
@@ -637,7 +637,7 @@ class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
         return "org.apache.spark.mllib.tree.model.GradientBoostedTreesModel"
 
 
-class GradientBoostedTrees(object):
+class GradientBoostedTrees:
     """
     Learning algorithm for a gradient boosted trees model for
     classification or regression.

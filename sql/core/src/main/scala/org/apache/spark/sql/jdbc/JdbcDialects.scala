@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.NamedReference
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -203,25 +203,96 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        Some(s"MIN(${quoteIdentifier(min.column.fieldNames.head)})")
+        val sql = min.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MIN($sql)")
       case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        Some(s"MAX(${quoteIdentifier(max.column.fieldNames.head)})")
+        val sql = max.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        Some(s"MAX($sql)")
       case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
+        val sql = count.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(count.column.fieldNames.head)
-        Some(s"COUNT($distinct$column)")
+        Some(s"COUNT($distinct$sql)")
       case sum: Sum =>
-        if (sum.column.fieldNames.length != 1) return None
+        val sql = sum.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val column = quoteIdentifier(sum.column.fieldNames.head)
-        Some(s"SUM($distinct$column)")
+        Some(s"SUM($distinct$sql)")
       case _: CountStar =>
-        Some(s"COUNT(*)")
+        Some("COUNT(*)")
+      case avg: Avg =>
+        val sql = avg.column match {
+          case field: FieldReference =>
+            if (field.fieldNames.length != 1) return None
+            quoteIdentifier(field.fieldNames.head)
+          case expr: GeneralSQLExpression =>
+            expr.sql()
+        }
+        val distinct = if (avg.isDistinct) "DISTINCT " else ""
+        Some(s"AVG($distinct$sql)")
       case _ => None
     }
+  }
+
+  /**
+   * Create schema with an optional comment. Empty string means no comment.
+   */
+  def createSchema(statement: Statement, schema: String, comment: String): Unit = {
+    val schemaCommentQuery = if (comment.nonEmpty) {
+      // We generate comment query here so that it can fail earlier without creating the schema.
+      getSchemaCommentQuery(schema, comment)
+    } else {
+      comment
+    }
+    statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
+    if (comment.nonEmpty) {
+      statement.executeUpdate(schemaCommentQuery)
+    }
+  }
+
+  /**
+   * Check schema exists or not.
+   */
+  def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val rs = conn.getMetaData.getSchemas(null, schema)
+    while (rs.next()) {
+      if (rs.getString(1) == schema) return true;
+    }
+    false
+  }
+
+  /**
+   * Lists all the schemas in this table.
+   */
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val schemaBuilder = ArrayBuilder.make[Array[String]]
+    val rs = conn.getMetaData.getSchemas()
+    while (rs.next()) {
+      schemaBuilder += Array(rs.getString(1))
+    }
+    schemaBuilder.result
   }
 
   /**
@@ -322,6 +393,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
+  def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    }
+  }
+
   /**
    * Build a create index SQL statement.
    *
@@ -395,11 +474,6 @@ abstract class JdbcDialect extends Serializable with Logging{
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
-
-  /**
-   * returns whether the dialect supports limit or not
-   */
-  def supportsLimit(): Boolean = true
 
   def supportsTableSample: Boolean = false
 

@@ -36,6 +36,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
@@ -226,15 +227,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       try {
         // Get a handle on the buffered data, to make sure memory gets freed once we read past the
         // end of it. Need to use reflection to get handle on inner structures for this check
-        val byteBufferInputStream = if (mergedStream.isInstanceOf[ChunkedByteBufferInputStream]) {
-          assert(inputLength < limit)
-          mergedStream.asInstanceOf[ChunkedByteBufferInputStream]
-        } else {
-          assert(inputLength >= limit)
-          val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
-          val fieldValue = getFieldValue(sequenceStream, "in")
-          assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
-          fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
+        val byteBufferInputStream = mergedStream match {
+          case stream: ChunkedByteBufferInputStream =>
+            assert(inputLength < limit)
+            stream
+          case _ =>
+            assert(inputLength >= limit)
+            val sequenceStream = mergedStream.asInstanceOf[SequenceInputStream]
+            val fieldValue = getFieldValue(sequenceStream, "in")
+            assert(fieldValue.isInstanceOf[ChunkedByteBufferInputStream])
+            fieldValue.asInstanceOf[ChunkedByteBufferInputStream]
         }
         (0 until inputLength).foreach { idx =>
           assert(bytes(idx) === mergedStream.read().asInstanceOf[Byte])
@@ -685,11 +687,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   // Test for using the util function to change our log levels.
   test("log4j log level change") {
-    val current = org.apache.log4j.Logger.getRootLogger().getLevel()
+    val rootLogger = org.apache.logging.log4j.LogManager.getRootLogger()
+    val current = rootLogger.getLevel()
     try {
-      Utils.setLogLevel(org.apache.log4j.Level.ALL)
+      Utils.setLogLevel(Level.ALL)
+      assert(rootLogger.getLevel == Level.ALL)
       assert(log.isInfoEnabled())
-      Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+      Utils.setLogLevel(Level.ERROR)
+      assert(rootLogger.getLevel == Level.ERROR)
       assert(!log.isInfoEnabled())
       assert(log.isErrorEnabled())
     } finally {

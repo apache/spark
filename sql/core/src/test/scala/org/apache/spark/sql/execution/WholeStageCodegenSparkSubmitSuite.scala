@@ -71,7 +71,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
   var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     spark = SparkSession.builder().getOrCreate()
 

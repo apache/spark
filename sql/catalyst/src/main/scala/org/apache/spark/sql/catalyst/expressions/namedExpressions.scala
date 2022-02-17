@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -294,7 +294,7 @@ case class AttributeReference(
   }
 
   override lazy val preCanonicalized: Expression = {
-    AttributeReference("none", dataType.asNullable)(exprId)
+    AttributeReference("none", dataType)(exprId)
   }
 
   override def newInstance(): AttributeReference =
@@ -342,7 +342,7 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
-  override def withDataType(newType: DataType): Attribute = {
+  override def withDataType(newType: DataType): AttributeReference = {
     AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
   }
 
@@ -431,4 +431,48 @@ object VirtualColumn {
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
+}
+
+/**
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
+ */
+object MetadataAttribute {
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
+      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
+      Some(attr)
+    } else None
+  }
+}
+
+/**
+ * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
+ * and `__file_source_metadata_col` to `true` in AttributeReference's metadata
+ * - apply() will create a file source metadata attribute reference
+ * - unapply() will check if an attribute reference is the file source metadata attribute reference
+ */
+object FileSourceMetadataAttribute {
+
+  val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder()
+        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    attr match {
+      case MetadataAttribute(attr)
+        if attr.metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+          && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
+      case _ => None
+    }
 }

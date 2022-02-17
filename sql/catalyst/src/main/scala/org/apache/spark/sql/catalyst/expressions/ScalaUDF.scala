@@ -67,7 +67,7 @@ case class ScalaUDF(
   override lazy val preCanonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
-    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil)
+    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil, outputEncoder = None)
   }
 
   /**

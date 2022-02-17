@@ -26,12 +26,14 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.HadoopReadOptions
+import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.format.converter.ParquetMetadataConverter
-import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
+import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter, ParquetOutputFormat}
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.internal.SQLConf
@@ -168,8 +170,17 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 
+  def withAllParquetWriters(code: => Unit): Unit = {
+    // Parquet version 1
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_1_0.toString)(code)
+    // Parquet version 2
+    withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
+      ParquetProperties.WriterVersion.PARQUET_2_0.toString)(code)
+  }
+
   def getMetaData(dir: java.io.File): Map[String, String] = {
-    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+    val file = TestUtils.listDirectory(dir).head
     val conf = new Configuration()
     val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
     val parquetReadOptions = HadoopReadOptions.builder(conf).build()

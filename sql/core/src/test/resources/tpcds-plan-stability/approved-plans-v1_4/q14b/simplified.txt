@@ -4,7 +4,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
       Filter [sales]
         Subquery #4
           WholeStageCodegen (8)
-            HashAggregate [sum,count] [avg(CheckOverflow((promote_precision(cast(cast(quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price as decimal(12,2)))), DecimalType(18,2), true)),average_sales,sum,count]
+            HashAggregate [sum,count] [avg(CheckOverflow((promote_precision(cast(quantity as decimal(12,2))) * promote_precision(cast(list_price as decimal(12,2)))), DecimalType(18,2), true)),average_sales,sum,count]
               InputAdapter
                 Exchange #12
                   WholeStageCodegen (7)
@@ -38,7 +38,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
                                       ReusedSubquery [d_date_sk] #3
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #6
-        HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),channel,sales,number_sales,sum,isEmpty,count]
+        HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(ss_quantity as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),channel,sales,number_sales,sum,isEmpty,count]
           InputAdapter
             Exchange [i_brand_id,i_class_id,i_category_id] #1
               WholeStageCodegen (25)
@@ -167,7 +167,7 @@ TakeOrderedAndProject [i_brand_id,i_class_id,i_category_id,channel,sales,number_
           WholeStageCodegen (51)
             Filter [sales]
               ReusedSubquery [average_sales] #4
-              HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),channel,sales,number_sales,sum,isEmpty,count]
+              HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(ss_quantity as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),channel,sales,number_sales,sum,isEmpty,count]
                 InputAdapter
                   Exchange [i_brand_id,i_class_id,i_category_id] #14
                     WholeStageCodegen (50)

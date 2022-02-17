@@ -24,7 +24,7 @@ from pyspark import since, _NoValue  # type: ignore[attr-defined]
 from pyspark._globals import _NoValueType
 
 
-class RuntimeConfig(object):
+class RuntimeConfig:
     """User-facing configuration API, accessible through `SparkSession.conf`.
 
     Options set here are automatically propagated to the Hadoop configuration during I/O.

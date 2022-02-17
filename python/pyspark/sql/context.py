@@ -46,7 +46,6 @@ from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.sql.types import AtomicType, DataType, StructType
 from pyspark.sql.streaming import StreamingQueryManager
-from pyspark.conf import SparkConf
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -60,7 +59,7 @@ __all__ = ["SQLContext", "HiveContext"]
 
 
 # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-class SQLContext(object):
+class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
@@ -119,9 +118,9 @@ class SQLContext(object):
         self._jsc = self._sc._jsc  # type: ignore[attr-defined]
         self._jvm = self._sc._jvm  # type: ignore[attr-defined]
         if sparkSession is None:
-            sparkSession = SparkSession.builder.getOrCreate()
+            sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
-            jsqlContext = sparkSession._jwrapped
+            jsqlContext = sparkSession._jsparkSession.sqlContext()
         self.sparkSession = sparkSession
         self._jsqlContext = jsqlContext
         _monkey_patch_RDD(self.sparkSession)
@@ -141,11 +140,6 @@ class SQLContext(object):
         """
         return self._jsqlContext
 
-    @property
-    def _conf(self) -> SparkConf:
-        """Accessor for the JVM SQL-specific configurations"""
-        return self.sparkSession._jsparkSession.sessionState().conf()
-
     @classmethod
     def getOrCreate(cls: Type["SQLContext"], sc: SparkContext) -> "SQLContext":
         """
@@ -164,19 +158,22 @@ class SQLContext(object):
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
             FutureWarning,
         )
+        return cls._get_or_create(sc)
+
+    @classmethod
+    def _get_or_create(
+        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+    ) -> "SQLContext":
 
         if (
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
-            jsqlContext = (
-                sc._jvm.SparkSession.builder()  # type: ignore[attr-defined]
-                .sparkContext(sc._jsc.sc())  # type: ignore[attr-defined]
-                .getOrCreate()
-                .sqlContext()
-            )
-            sparkSession = SparkSession(sc, jsqlContext.sparkSession())
-            cls(sc, sparkSession, jsqlContext)
+            assert sc._jvm is not None
+            # There can be only one running Spark context. That will automatically
+            # be used in the Spark session internally.
+            session = SparkSession._getActiveSessionOrCreate(**static_conf)
+            cls(sc, session, session._jsparkSession.sqlContext())
         return cast(SQLContext, cls._instantiatedContext)
 
     def newSession(self) -> "SQLContext":
@@ -592,9 +589,9 @@ class SQLContext(object):
         Row(namespace='', tableName='table1', isTemporary=True)
         """
         if dbName is None:
-            return DataFrame(self._ssql_ctx.tables(), self)
+            return DataFrame(self._ssql_ctx.tables(), self.sparkSession)
         else:
-            return DataFrame(self._ssql_ctx.tables(dbName), self)
+            return DataFrame(self._ssql_ctx.tables(dbName), self.sparkSession)
 
     def tableNames(self, dbName: Optional[str] = None) -> List[str]:
         """Returns a list of names of tables in the database ``dbName``.
@@ -649,7 +646,7 @@ class SQLContext(object):
         -------
         :class:`DataFrameReader`
         """
-        return DataFrameReader(self)
+        return DataFrameReader(self.sparkSession)
 
     @property
     def readStream(self) -> DataStreamReader:
@@ -671,7 +668,7 @@ class SQLContext(object):
         >>> text_sdf.isStreaming
         True
         """
-        return DataStreamReader(self)
+        return DataStreamReader(self.sparkSession)
 
     @property
     def streams(self) -> StreamingQueryManager:
@@ -710,20 +707,33 @@ class HiveContext(SQLContext):
 
     """
 
-    def __init__(self, sparkContext: SparkContext, jhiveContext: Optional[JavaObject] = None):
+    _static_conf = {"spark.sql.catalogImplementation": "hive"}
+
+    def __init__(
+        self,
+        sparkContext: SparkContext,
+        sparkSession: Optional[SparkSession] = None,
+        jhiveContext: Optional[JavaObject] = None,
+    ):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use "
             + "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
             FutureWarning,
         )
+        static_conf = {}
         if jhiveContext is None:
-            sparkContext._conf.set(  # type: ignore[attr-defined]
-                "spark.sql.catalogImplementation", "hive"
-            )
-            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
-        else:
-            sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
+            static_conf = HiveContext._static_conf
+        # There can be only one running Spark context. That will automatically
+        # be used in the Spark session internally.
+        if sparkSession is not None:
+            sparkSession = SparkSession._getActiveSessionOrCreate(**static_conf)
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
+
+    @classmethod
+    def _get_or_create(
+        cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
+    ) -> "SQLContext":
+        return SQLContext._get_or_create(sc, **HiveContext._static_conf)
 
     @classmethod
     def _createForTesting(cls, sparkContext: SparkContext) -> "HiveContext":
@@ -733,10 +743,9 @@ class HiveContext(SQLContext):
         you may end up launching multiple derby instances and encounter with incredibly
         confusing error messages.
         """
-        jsc = sparkContext._jsc.sc()  # type: ignore[attr-defined]
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(  # type: ignore[attr-defined]
-            jsc, False
-        )
+        jsc = sparkContext._jsc.sc()
+        assert sparkContext._jvm is not None
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:

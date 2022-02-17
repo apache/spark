@@ -98,5 +98,7 @@ private[spark] object ToolTips {
     """
 
   val DURATION =
-    "Elapsed time since the stage was submitted until execution completion of all its tasks."
+    """Elapsed time since the first task of the stage was launched until execution completion of
+       all its tasks (Excluding the time of the stage waits to be launched after submitted).
+    """
 }

@@ -212,4 +212,11 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(store.read(classOf[ApplicationStoreInfo], dstC.getAbsolutePath).size === 2)
   }
 
+  test("SPARK-38095: appStorePath should use backend extensions") {
+    HybridStoreDiskBackend.values.zip(Seq(".ldb", ".rdb")).foreach { case (backend, extension) =>
+      val conf = new SparkConf().set(HYBRID_STORE_DISK_BACKEND, backend.toString)
+      val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
+      assert(manager.appStorePath("appId", None).getName.endsWith(extension))
+    }
+  }
 }

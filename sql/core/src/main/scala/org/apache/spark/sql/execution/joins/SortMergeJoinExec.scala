@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -45,7 +46,8 @@ case class SortMergeJoinExec(
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
@@ -123,6 +125,7 @@ case class SortMergeJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val spillSize = longMetric("spillSize")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
@@ -152,6 +155,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSize,
               cleanupResources
             )
             private[this] val joinRow = new JoinedRow
@@ -197,6 +201,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSize,
             cleanupResources
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
@@ -212,6 +217,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSize,
             cleanupResources
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
@@ -247,6 +253,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow
             )
@@ -284,6 +291,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow
             )
@@ -328,6 +336,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSize,
               cleanupResources,
               onlyBufferFirstMatchedRow
             )
@@ -648,6 +657,13 @@ case class SortMergeJoinExec(
 
   override def needCopyResult: Boolean = true
 
+  /**
+   * This is called by generated Java class, should be public.
+   */
+  def getTaskContext(): TaskContext = {
+    TaskContext.get()
+  }
+
   override def doProduce(ctx: CodegenContext): String = {
     // Specialize `doProduce` code for full outer join, because full outer join needs to
     // buffer both sides of join.
@@ -766,7 +782,7 @@ case class SortMergeJoinExec(
     val thisPlan = ctx.addReferenceObj("plan", this)
     val eagerCleanup = s"$thisPlan.cleanupResources();"
 
-    joinType match {
+    val doJoin = joinType match {
       case _: InnerLike =>
         codegenInner(findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck, outputRow,
           eagerCleanup)
@@ -786,6 +802,26 @@ case class SortMergeJoinExec(
         throw new IllegalArgumentException(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
     }
+
+    val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
+    val addHookToRecordMetrics =
+      s"""
+         |$thisPlan.getTaskContext().addTaskCompletionListener(
+         |  new org.apache.spark.util.TaskCompletionListener() {
+         |    @Override
+         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
+         |      ${metricTerm(ctx, "spillSize")}.add($matches.spillSize());
+         |    }
+         |});
+       """.stripMargin
+
+    s"""
+       |if (!$initJoin) {
+       |  $initJoin = true;
+       |  $addHookToRecordMetrics
+       |}
+       |$doJoin
+     """.stripMargin
   }
 
   /**
@@ -1231,6 +1267,7 @@ private[joins] class SortMergeJoinScanner(
     bufferedIter: RowIterator,
     inMemoryThreshold: Int,
     spillThreshold: Int,
+    spillSize: SQLMetric,
     eagerCleanupResources: () => Unit,
     onlyBufferFirstMatch: Boolean = false) {
   private[this] var streamedRow: InternalRow = _
@@ -1245,6 +1282,11 @@ private[joins] class SortMergeJoinScanner(
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
   private[this] val bufferedMatches: ExternalAppendOnlyUnsafeRowArray =
     new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+
+  // At the end of the task, update the task's spill size for buffered side.
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+    spillSize += bufferedMatches.spillSize
+  })
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()

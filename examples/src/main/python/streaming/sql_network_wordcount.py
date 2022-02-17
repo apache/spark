@@ -75,7 +75,7 @@ if __name__ == "__main__":
             wordCountsDataFrame = \
                 spark.sql("select word, count(*) as total from words group by word")
             wordCountsDataFrame.show()
-        except:
+        except BaseException:
             pass
 
     words.foreachRDD(process)

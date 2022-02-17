@@ -116,7 +116,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
-      "org.apache.spark.sql.catalyst.optimizer.NotPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.NullDownPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::

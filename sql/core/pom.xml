@@ -38,7 +38,6 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.20.3</version>
     </dependency>
     <dependency>
       <groupId>com.univocity</groupId>
@@ -154,7 +153,7 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>1.4.195</version>
+      <version>2.0.204</version>
       <scope>test</scope>
     </dependency>
     <dependency>

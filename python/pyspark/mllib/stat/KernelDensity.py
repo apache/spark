@@ -24,7 +24,7 @@ from pyspark.mllib.common import callMLlibFunc
 from pyspark.rdd import RDD
 
 
-class KernelDensity(object):
+class KernelDensity:
     """
     Estimate probability density at required points given an RDD of samples
     from the population.

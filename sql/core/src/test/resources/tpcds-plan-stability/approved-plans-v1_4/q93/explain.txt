@@ -109,7 +109,7 @@ Right keys [1]: [r_reason_sk#14]
 Join condition: None
 
 (20) Project [codegen id : 6]
-Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#11) THEN CheckOverflow((promote_precision(cast(cast((ss_quantity#4 - sr_return_quantity#11) as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) ELSE CheckOverflow((promote_precision(cast(cast(ss_quantity#4 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) END AS act_sales#17]
+Output [2]: [ss_customer_sk#2, CASE WHEN isnotnull(sr_return_quantity#11) THEN CheckOverflow((promote_precision(cast((ss_quantity#4 - sr_return_quantity#11) as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) ELSE CheckOverflow((promote_precision(cast(ss_quantity#4 as decimal(12,2))) * promote_precision(cast(ss_sales_price#5 as decimal(12,2)))), DecimalType(18,2), true) END AS act_sales#17]
 Input [6]: [ss_customer_sk#2, ss_quantity#4, ss_sales_price#5, sr_reason_sk#9, sr_return_quantity#11, r_reason_sk#14]
 
 (21) HashAggregate [codegen id : 6]

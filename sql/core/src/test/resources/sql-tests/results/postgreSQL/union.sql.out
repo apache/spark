@@ -76,20 +76,29 @@ struct<two:int>
 -- !query
 SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query schema
-struct<three:int>
+struct<>
 -- !query output
-1
-2
-3
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {<EOF>, ';'}(line 1, pos 39)
+
+== SQL ==
+SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
+---------------------------------------^^^
 
 
 -- !query
 SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
 -- !query schema
-struct<two:int>
+struct<>
 -- !query output
-1
-2
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {<EOF>, ';'}(line 1, pos 37)
+
+== SQL ==
+SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
+-------------------------------------^^^
 
 
 -- !query
@@ -158,20 +167,29 @@ struct<two:double>
 -- !query
 SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query schema
-struct<three:decimal(11,1)>
+struct<>
 -- !query output
-1.1
-2.0
-3.0
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {<EOF>, ';'}(line 1, pos 41)
+
+== SQL ==
+SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
+-----------------------------------------^^^
 
 
 -- !query
 SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
 -- !query schema
-struct<two:double>
+struct<>
 -- !query output
-1.1
-2.0
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {<EOF>, ';'}(line 1, pos 47)
+
+== SQL ==
+SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
+-----------------------------------------------^^^
 
 
 -- !query
@@ -359,33 +377,57 @@ struct<q1:bigint>
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6
 -- !query schema
-struct<1:int,2:int,3:int>
+struct<>
 -- !query output
-4	5	6
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {')', ',', 'CLUSTER', 'DISTRIBUTE', 'EXCEPT', 'FROM', 'GROUP', 'HAVING', 'INTERSECT', 'LATERAL', 'LIMIT', 'ORDER', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW', '-'}(line 1, pos 20)
+
+== SQL ==
+(SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6
+--------------------^^^
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6
 -- !query schema
-struct<1:int,2:int,3:int>
+struct<>
 -- !query output
-4	5	6
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {')', ',', 'CLUSTER', 'DISTRIBUTE', 'EXCEPT', 'FROM', 'GROUP', 'HAVING', 'INTERSECT', 'LATERAL', 'LIMIT', 'ORDER', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW', '-'}(line 1, pos 20)
+
+== SQL ==
+(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6
+--------------------^^^
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6
 -- !query schema
-struct<1:int,2:int,3:int>
+struct<>
 -- !query output
-1	2	3
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {')', ',', 'CLUSTER', 'DISTRIBUTE', 'EXCEPT', 'FROM', 'GROUP', 'HAVING', 'INTERSECT', 'LATERAL', 'LIMIT', 'ORDER', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW', '-'}(line 1, pos 20)
+
+== SQL ==
+(SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6
+--------------------^^^
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6
 -- !query schema
-struct<1:int,2:int,3:int>
+struct<>
 -- !query output
-1	2	3
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {')', ',', 'CLUSTER', 'DISTRIBUTE', 'EXCEPT', 'FROM', 'GROUP', 'HAVING', 'INTERSECT', 'LATERAL', 'LIMIT', 'ORDER', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW', '-'}(line 1, pos 20)
+
+== SQL ==
+(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6
+--------------------^^^
 
 
 -- !query
@@ -684,9 +726,13 @@ SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Union can only be performed on tables with the compatible column types. The first column of the second table is string type which is not compatible with decimal(38,18) at same column of first table
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'SELECT' expecting {<EOF>, ';'}(line 1, pos 44)
+
+== SQL ==
+SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
+--------------------------------------------^^^
 
 
 -- !query

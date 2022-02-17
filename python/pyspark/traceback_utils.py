@@ -46,7 +46,7 @@ def first_spark_call():
     return CallSite(function=sfun, file=ufile, linenum=uline)
 
 
-class SCCallSiteSync(object):
+class SCCallSiteSync:
     """
     Helper for setting the spark context call site.
 

@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.sql import DataFrame
 
 
-class MLUtils(object):
+class MLUtils:
 
     """
     Helper methods to load, save and pre-process data used in MLlib.
@@ -420,7 +420,7 @@ class MLUtils(object):
         return callMLlibFunc("convertMatrixColumnsFromML", dataset, list(cols))
 
 
-class Saveable(object):
+class Saveable:
     """
     Mixin for models and transformers which may be saved as files.
 
@@ -468,7 +468,7 @@ class JavaSaveable(Saveable):
         self._java_model.save(sc._jsc.sc(), path)
 
 
-class Loader(object):
+class Loader:
     """
     Mixin for classes which can load saved models from files.
 
@@ -534,7 +534,7 @@ class JavaLoader(Loader):
         return cls(java_model)
 
 
-class LinearDataGenerator(object):
+class LinearDataGenerator:
     """Utils for generating linear data.
 
     .. versionadded:: 1.5.0

@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class DistributedMatrix(object):
+class DistributedMatrix:
     """
     Represents a distributively stored matrix backed by one or
     more RDDs.
@@ -520,7 +520,7 @@ class SingularValueDecomposition(JavaModelWrapper):
         return self.call("V")
 
 
-class IndexedRow(object):
+class IndexedRow:
     """
     Represents a row of an IndexedRowMatrix.
 
@@ -868,7 +868,7 @@ class IndexedRowMatrix(DistributedMatrix):
         return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 
-class MatrixEntry(object):
+class MatrixEntry:
     """
     Represents an entry of a CoordinateMatrix.
 

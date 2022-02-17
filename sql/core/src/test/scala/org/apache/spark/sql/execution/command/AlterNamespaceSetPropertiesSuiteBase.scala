@@ -93,7 +93,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
         withNamespace(ns) {
           // Set the location explicitly because v2 catalog may not set the default location.
           // Without this, `meta.get(key)` below may return null.
-          sql(s"CREATE NAMESPACE $ns LOCATION '/tmp'")
+          sql(s"CREATE NAMESPACE $ns LOCATION 'tmp/prop_test'")
           assert(getProperties(ns) === "")
           sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='foo')")
           assert(getProperties(ns) === "", s"$key is a reserved namespace property and ignored")
@@ -109,7 +109,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
   protected def getProperties(namespace: String): String = {
     val propsRow = sql(s"DESCRIBE NAMESPACE EXTENDED $namespace")
       .toDF("key", "value")
-      .where(s"key like 'Properties%'")
+      .where("key like 'Properties%'")
       .collect()
     assert(propsRow.length == 1)
     propsRow(0).getString(1)

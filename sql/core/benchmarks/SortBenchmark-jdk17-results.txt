@@ -2,15 +2,15 @@
 radix sort
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-reference TimSort key prefix array                12459          12571         158          2.0         498.3       1.0X
-reference Arrays.sort                              2776           2805          42          9.0         111.0       4.5X
-radix sort one byte                                 232            234           1        107.6           9.3      53.6X
-radix sort two bytes                                425            427           1         58.8          17.0      29.3X
-radix sort eight bytes                             1637           1638           1         15.3          65.5       7.6X
-radix sort key prefix array                        2680           2681           2          9.3         107.2       4.6X
+reference TimSort key prefix array                11914          12211         420          2.1         476.6       1.0X
+reference Arrays.sort                              2498           2623         177         10.0          99.9       4.8X
+radix sort one byte                                 500            504           4         50.0          20.0      23.8X
+radix sort two bytes                                969            980          12         25.8          38.7      12.3X
+radix sort eight bytes                             3765           3846         114          6.6         150.6       3.2X
+radix sort key prefix array                        7220           7230          14          3.5         288.8       1.7X
 
 

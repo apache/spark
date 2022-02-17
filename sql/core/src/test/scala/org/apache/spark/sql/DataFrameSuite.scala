@@ -631,7 +631,19 @@ class DataFrameSuite extends QueryTest
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
   }
 
-  test("withColumns") {
+  test("withColumns: public API, with Map input") {
+    val df = testData.toDF().withColumns(Map(
+      "newCol1" -> (col("key") + 1), "newCol2" -> (col("key")  + 2)
+    ))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
+  }
+
+  test("withColumns: internal method") {
     val df = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
       Seq(col("key") + 1, col("key") + 2))
     checkAnswer(
@@ -655,7 +667,7 @@ class DataFrameSuite extends QueryTest
     assert(err2.getMessage.contains("Found duplicate column(s)"))
   }
 
-  test("withColumns: case sensitive") {
+  test("withColumns: internal method, case sensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val df = testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
         Seq(col("key") + 1, col("key") + 2))
@@ -674,7 +686,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("withColumns: given metadata") {
+  test("withColumns: internal method, given metadata") {
     def buildMetadata(num: Int): Seq[Metadata] = {
       (0 until num).map { n =>
         val builder = new MetadataBuilder
@@ -3032,6 +3044,60 @@ class DataFrameSuite extends QueryTest
         assert(thrown2.getMessage.contains(msg))
       }
     }
+  }
+
+  test("SPARK-37855: IllegalStateException when transforming an array inside a nested struct") {
+    def makeInput(): DataFrame = {
+      val innerElement1 = Row(3, 3.12)
+      val innerElement2 = Row(4, 2.1)
+      val innerElement3 = Row(1, 985.2)
+      val innerElement4 = Row(10, 757548.0)
+      val innerElement5 = Row(1223, 0.665)
+
+      val outerElement1 = Row(1, Row(List(innerElement1, innerElement2)))
+      val outerElement2 = Row(2, Row(List(innerElement3)))
+      val outerElement3 = Row(3, Row(List(innerElement4, innerElement5)))
+
+      val data = Seq(
+        Row("row1", List(outerElement1)),
+        Row("row2", List(outerElement2, outerElement3))
+      )
+
+      val schema = new StructType()
+        .add("name", StringType)
+        .add("outer_array", ArrayType(new StructType()
+          .add("id", IntegerType)
+          .add("inner_array_struct", new StructType()
+            .add("inner_array", ArrayType(new StructType()
+              .add("id", IntegerType)
+              .add("value", DoubleType)
+            ))
+          )
+        ))
+
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val df = makeInput().limit(2)
+
+    val res = df.withColumn("extracted", transform(
+      col("outer_array"),
+      c1 => {
+        struct(
+          c1.getField("id").alias("outer_id"),
+          transform(
+            c1.getField("inner_array_struct").getField("inner_array"),
+            c2 => {
+              struct(
+                c2.getField("value").alias("inner_value")
+              )
+            }
+          )
+        )
+      }
+    ))
+
+    assert(res.collect.length == 2)
   }
 }
 

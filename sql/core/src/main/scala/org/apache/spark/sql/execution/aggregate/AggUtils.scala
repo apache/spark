@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -53,7 +55,9 @@ object AggUtils {
       child: SparkPlan): SparkPlan = {
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-    if (useHash) {
+    val forceSortAggregate = forceApplySortAggregate(child.conf)
+
+    if (useHash && !forceSortAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
@@ -66,7 +70,7 @@ object AggUtils {
       val objectHashEnabled = child.conf.useObjectHashAggregation
       val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
 
-      if (objectHashEnabled && useObjectHash) {
+      if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
@@ -528,5 +532,14 @@ object AggUtils {
 
       case None => partialAggregate
     }
+  }
+
+  /**
+   * Returns whether a sort aggregate should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplySortAggregate(conf: SQLConf): Boolean = {
+    Utils.isTesting &&
+      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 }

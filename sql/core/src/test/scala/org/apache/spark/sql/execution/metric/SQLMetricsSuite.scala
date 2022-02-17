@@ -300,6 +300,13 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
             "shuffle records written" -> 2L)))),
           enableWholeStage
         )
+        testSparkPlanMetricsWithPredicates(df, 1, Map(
+          nodeId1 -> (("SortMergeJoin", Map(
+            "spill size" -> {
+              _.toString.matches(sizeMetricPattern)
+            })))),
+          enableWholeStage
+        )
       }
     }
   }

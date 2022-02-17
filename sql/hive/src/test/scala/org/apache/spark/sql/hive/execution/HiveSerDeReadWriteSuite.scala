@@ -24,7 +24,9 @@ import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METAS
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 
+@SlowHiveTest
 class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   private var originalConvertMetastoreParquet = CONVERT_METASTORE_PARQUET.defaultValueString

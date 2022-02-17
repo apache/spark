@@ -206,7 +206,7 @@ def _get_local_scope() -> Dict[str, Any]:
     # Get 2 scopes above (_get_local_scope -> sql -> ...) to capture the vars there.
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
-    except Exception as e:
+    except Exception:
         # TODO (rxin, thunterdb): use a more narrow scope exception.
         # See https://github.com/pyspark.pandas/pull/448
         return {}
@@ -222,7 +222,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
 
         shell = get_ipython()
         return shell.user_ns
-    except Exception as e:
+    except Exception:
         # TODO (rxin, thunterdb): use a more narrow scope exception.
         # See https://github.com/pyspark.pandas/pull/448
         return None
@@ -254,7 +254,7 @@ def escape_sql_string(value: str) -> str:
     return value.translate(_escape_table)
 
 
-class SQLProcessor(object):
+class SQLProcessor:
     def __init__(self, scope: Dict[str, Any], statement: str, session: SparkSession):
         self._scope = scope
         self._statement = statement

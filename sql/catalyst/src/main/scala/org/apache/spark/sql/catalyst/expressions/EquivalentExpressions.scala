@@ -21,9 +21,9 @@ import java.util.Objects
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
+import org.apache.spark.util.Utils
 
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
@@ -197,7 +197,7 @@ class EquivalentExpressions {
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
-      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
+      (expr.isInstanceOf[PlanExpression[_]] && Utils.isInRunningSparkTask)
 
     if (!skip && !updateExprInMap(expr, map, useCount)) {
       val uc = useCount.signum

@@ -21,7 +21,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
 import org.mockito.Mockito.{mock, reset, verifyNoMoreInteractions}

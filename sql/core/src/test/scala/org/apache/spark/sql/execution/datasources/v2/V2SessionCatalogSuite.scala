@@ -67,10 +67,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   override protected def afterAll(): Unit = {
     val catalog = newCatalog()
-    catalog.dropNamespace(Array("db"))
-    catalog.dropNamespace(Array("db2"))
-    catalog.dropNamespace(Array("ns"))
-    catalog.dropNamespace(Array("ns2"))
+    catalog.dropNamespace(Array("db"), cascade = true)
+    catalog.dropNamespace(Array("db2"), cascade = true)
+    catalog.dropNamespace(Array("ns"), cascade = true)
+    catalog.dropNamespace(Array("ns2"), cascade = true)
     super.afterAll()
   }
 
@@ -122,7 +122,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
     assert(table.schema == schema)
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     assert(catalog.tableExists(testIdent))
   }
@@ -140,7 +140,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
     assert(table.schema == schema)
-    assert(table.properties == properties)
+    assert(filterV2TableProperties(table.properties).asJava == properties)
 
     assert(catalog.tableExists(testIdent))
   }
@@ -224,8 +224,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("invalidateTable") {
@@ -254,15 +253,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
-    assert(updated.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1"))
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(loaded.properties) == Map("prop-1" -> "1"))
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
   }
 
   test("alterTable: add property to existing") {
@@ -273,15 +272,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
     val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-2", "2"))
-    assert(updated.properties.asScala == Map("prop-1" -> "1", "prop-2" -> "2"))
+    assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1", "prop-2" -> "2"))
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map("prop-1" -> "1", "prop-2" -> "2"))
+    assert(filterV2TableProperties(loaded.properties) == Map("prop-1" -> "1", "prop-2" -> "2"))
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
   }
 
   test("alterTable: remove existing property") {
@@ -292,15 +291,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
     val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
-    assert(updated.properties.asScala == Map())
+    assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map())
+    assert(filterV2TableProperties(loaded.properties) == Map())
 
-    assert(table.properties.asScala == Map("prop-1" -> "1"))
+    assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
   }
 
   test("alterTable: remove missing property") {
@@ -308,15 +307,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
 
     val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
-    assert(updated.properties.asScala == Map())
+    assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
-    assert(loaded.properties.asScala == Map())
+    assert(filterV2TableProperties(loaded.properties) == Map())
 
-    assert(table.properties.asScala == Map())
+    assert(filterV2TableProperties(table.properties) == Map())
   }
 
   test("alterTable: add top-level column") {
@@ -740,8 +739,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -783,6 +781,12 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(exc.message.contains(testIdentNewOtherDb.namespace.quoted))
     assert(exc.message.contains("RENAME TABLE source and destination databases do not match"))
   }
+
+  private def filterV2TableProperties(
+      properties: util.Map[String, String]): Map[String, String] = {
+    properties.asScala.filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX)).toMap
+  }
 }
 
 class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
@@ -806,7 +810,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.listNamespaces(Array()) === Array(testNs, defaultNs))
     assert(catalog.listNamespaces(testNs) === Array())
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("listNamespaces: fail if missing namespace") {
@@ -844,7 +848,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(metadata.asScala, Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("loadNamespaceMetadata: empty metadata") {
@@ -859,7 +863,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(metadata.asScala, emptyProps.asScala)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: basic behavior") {
@@ -879,7 +883,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map("property" -> "value"))
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: initialize location") {
@@ -895,7 +899,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map.empty)
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: relative location") {
@@ -912,7 +916,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map.empty)
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: fail if namespace already exists") {
@@ -928,7 +932,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: fail nested namespace") {
@@ -943,7 +947,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(exc.getMessage.contains("Invalid namespace name: db.nested"))
 
-    catalog.dropNamespace(Array("db"))
+    catalog.dropNamespace(Array("db"), cascade = false)
   }
 
   test("createTable: fail if namespace does not exist") {
@@ -964,7 +968,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === false)
   }
@@ -976,7 +980,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === true)
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === true)
     assert(catalog.namespaceExists(testNs) === false)
@@ -988,8 +992,8 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    val exc = intercept[IllegalStateException] {
-      catalog.dropNamespace(testNs)
+    val exc = intercept[AnalysisException] {
+      catalog.dropNamespace(testNs, cascade = false)
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
@@ -997,7 +1001,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
 
     catalog.dropTable(testIdent)
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: basic behavior") {
@@ -1022,7 +1026,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       catalog.loadNamespaceMetadata(testNs).asScala,
       Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: update namespace location") {
@@ -1045,7 +1049,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", "relativeP"))
     assert(newRelativePath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: update namespace comment") {
@@ -1060,7 +1064,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(newComment === spark.catalog.getDatabase(testNs(0)).description)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: fail if namespace doesn't exist") {
@@ -1087,6 +1091,6 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
 
     }
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 }

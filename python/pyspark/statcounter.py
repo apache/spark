@@ -29,7 +29,7 @@ except ImportError:
     sqrt = math.sqrt  # type: ignore[assignment]
 
 
-class StatCounter(object):
+class StatCounter:
     def __init__(self, values: Optional[Iterable[float]] = None):
         if values is None:
             values = list()

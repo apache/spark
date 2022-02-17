@@ -70,7 +70,7 @@ from pyspark.util import fail_on_stopiteration, _parse_memory
 __all__ = ["RDD"]
 
 
-class PythonEvalType(object):
+class PythonEvalType:
     """
     Evaluation type of python rdd.
 
@@ -189,7 +189,7 @@ def _load_from_socket(sock_info, serializer):
 
 
 def _local_iterator_from_socket(sock_info, serializer):
-    class PyLocalIterable(object):
+    class PyLocalIterable:
         """Create a synchronous local iterable over a socket"""
 
         def __init__(self, _sock_info, _serializer):
@@ -235,7 +235,7 @@ def _local_iterator_from_socket(sock_info, serializer):
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-class Partitioner(object):
+class Partitioner:
     def __init__(self, numPartitions, partitionFunc):
         self.numPartitions = numPartitions
         self.partitionFunc = partitionFunc
@@ -251,7 +251,7 @@ class Partitioner(object):
         return self.partitionFunc(k) % self.numPartitions
 
 
-class RDD(object):
+class RDD:
 
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
@@ -996,7 +996,7 @@ class RDD(object):
         This method should only be used if the resulting array is expected
         to be small, as all the data is loaded into the driver's memory.
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
         return list(_load_from_socket(sock_info, self._jrdd_deserializer))
 
@@ -1014,7 +1014,7 @@ class RDD(object):
             FutureWarning,
         )
 
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
@@ -2171,7 +2171,7 @@ class RDD(object):
 
         keyed = self.mapPartitionsWithIndex(add_shuffle_key, preservesPartitioning=True)
         keyed._bypass_serializer = True
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
             jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions, id(partitionFunc))
         jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
@@ -2362,7 +2362,10 @@ class RDD(object):
         >>> x.flatMapValues(f).collect()
         [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
-        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
+
+        def flat_map_fn(kv):
+            return ((kv[0], x) for x in f(kv[1]))
+
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def mapValues(self, f):
@@ -2378,7 +2381,10 @@ class RDD(object):
         >>> x.mapValues(f).collect()
         [('a', 3), ('b', 1)]
         """
-        map_values_fn = lambda kv: (kv[0], f(kv[1]))
+
+        def map_values_fn(kv):
+            return kv[0], f(kv[1])
+
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def groupWith(self, other, *others):
@@ -2826,7 +2832,7 @@ class RDD(object):
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.context):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
                 self._jrdd.rdd(), prefetchPartitions
             )
@@ -2947,7 +2953,7 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     )
 
 
-class RDDBarrier(object):
+class RDDBarrier:
 
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.

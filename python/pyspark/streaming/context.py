@@ -27,7 +27,7 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 __all__ = ["StreamingContext"]
 
 
-class StreamingContext(object):
+class StreamingContext:
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
     represents the connection to a Spark cluster, and can be used to create

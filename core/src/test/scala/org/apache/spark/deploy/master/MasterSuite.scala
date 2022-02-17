@@ -323,7 +323,7 @@ class MasterSuite extends SparkFunSuite
   test("master/worker web ui available") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
-    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
@@ -360,7 +360,7 @@ class MasterSuite extends SparkFunSuite
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
     conf.set(UI_REVERSE_PROXY, true)
-    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
@@ -398,7 +398,7 @@ class MasterSuite extends SparkFunSuite
     val conf = new SparkConf()
     conf.set(UI_REVERSE_PROXY, true)
     conf.set(UI_REVERSE_PROXY_URL, reverseProxyUrl)
-    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    val localCluster = LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {

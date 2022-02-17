@@ -17,18 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `DROP NAMESPACE` command to check V2 table catalogs.
  */
-class DropNamespaceSuite extends command.DropNamespaceSuiteBase with CommandSuiteBase {
-  // TODO: Unify the error that throws from v1 and v2 test suite into `AnalysisException`
-  override protected def assertDropFails(): Unit = {
-    val e = intercept[SparkException] {
-      sql(s"DROP NAMESPACE $catalog.ns")
-    }
-    assert(e.getMessage.contains("Cannot drop a non-empty namespace: ns"))
-  }
-}
+class DropNamespaceSuite extends command.DropNamespaceSuiteBase with CommandSuiteBase

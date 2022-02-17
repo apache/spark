@@ -1,16 +1,16 @@
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Avro writer benchmark:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Output Single Int Column                           4206           4332         178          3.7         267.4       1.0X
-Output Single Double Column                        3707           3716          14          4.2         235.7       1.1X
-Output Int and String Column                       7347           7374          39          2.1         467.1       0.6X
-Output Partitions                                  6408           6436          39          2.5         407.4       0.7X
-Output Buckets                                     7664           7919         361          2.1         487.3       0.5X
+Output Single Int Column                           3293           3340          66          4.8         209.4       1.0X
+Output Single Double Column                        3449           3464          21          4.6         219.3       1.0X
+Output Int and String Column                       6224           6260          51          2.5         395.7       0.5X
+Output Partitions                                  5242           5342         141          3.0         333.3       0.6X
+Output Buckets                                     6784           6799          20          2.3         431.3       0.5X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.8.0-1042-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Write wide rows into 20 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Write wide rows                                   55426          56549        1587          0.0      110852.8       1.0X
+Write wide rows                                   42047          42418         524          0.0       84094.7       1.0X
 

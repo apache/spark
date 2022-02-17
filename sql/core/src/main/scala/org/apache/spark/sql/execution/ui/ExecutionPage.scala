@@ -151,7 +151,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     val configs = UIUtils.listingTable(
       propertyHeader,
       propertyRow,
-      modifiedConfigs.toSeq.sorted,
+      Option(modifiedConfigs).getOrElse(Map.empty).toSeq.sorted,
       fixedWidth = true
     )
 

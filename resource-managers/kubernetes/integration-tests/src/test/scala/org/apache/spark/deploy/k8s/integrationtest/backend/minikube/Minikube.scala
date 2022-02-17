@@ -111,10 +111,6 @@ private[spark] object Minikube extends Logging {
   def minikubeServiceAction(args: String*): String = {
     executeMinikube(true, "service", args: _*).head
   }
-
-  def describePods(labels: String): Seq[String] =
-    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
-      "-l", labels)
 }
 
 private[spark] object MinikubeStatus extends Enumeration {

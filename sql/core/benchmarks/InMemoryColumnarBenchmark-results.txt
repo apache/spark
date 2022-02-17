@@ -2,11 +2,11 @@
 Int In-memory
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1021-azure
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Int In-Memory scan:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-columnar deserialization + columnar-to-row            266            276          12          3.8         265.9       1.0X
-row-based deserialization                             197            206          15          5.1         196.7       1.4X
+columnar deserialization + columnar-to-row            217            236          28          4.6         217.3       1.0X
+row-based deserialization                             178            188          15          5.6         177.9       1.2X
 
 

@@ -529,7 +529,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = ArrayType(StringType)
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = str
   override def second: Expression = regex

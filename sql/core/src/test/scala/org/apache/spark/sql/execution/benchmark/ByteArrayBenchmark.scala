@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.benchmark
 import scala.util.Random
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.unsafe.types.ByteArray
+import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 /**
- * Benchmark to measure performance for byte array comparisons.
+ * Benchmark to measure performance for byte array operators.
  * {{{
  *   To run this benchmark:
  *   1. without sbt:
@@ -34,21 +35,21 @@ import org.apache.spark.unsafe.types.ByteArray
  * }}}
  */
 object ByteArrayBenchmark extends BenchmarkBase {
+  private val chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  private val randomChar = new Random(0)
+
+  def randomBytes(min: Int, max: Int): Array[Byte] = {
+    val len = randomChar.nextInt(max - min) + min
+    val bytes = new Array[Byte](len)
+    var i = 0
+    while (i < len) {
+      bytes(i) = chars.charAt(randomChar.nextInt(chars.length())).toByte
+      i += 1
+    }
+    bytes
+  }
 
   def byteArrayComparisons(iters: Long): Unit = {
-    val chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    val random = new Random(0)
-    def randomBytes(min: Int, max: Int): Array[Byte] = {
-      val len = random.nextInt(max - min) + min
-      val bytes = new Array[Byte](len)
-      var i = 0
-      while (i < len) {
-        bytes(i) = chars.charAt(random.nextInt(chars.length())).toByte
-        i += 1
-      }
-      bytes
-    }
-
     val count = 16 * 1000
     val dataTiny = Seq.fill(count)(randomBytes(2, 7)).toArray
     val dataSmall = Seq.fill(count)(randomBytes(8, 16)).toArray
@@ -78,9 +79,46 @@ object ByteArrayBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
+  def byteArrayEquals(iters: Long): Unit = {
+    def binaryEquals(inputs: Array[BinaryEqualInfo]) = { _: Int =>
+      var res = false
+      for (_ <- 0L until iters) {
+        inputs.foreach { input =>
+          res = ByteArrayMethods.arrayEquals(
+            input.s1.getBaseObject, input.s1.getBaseOffset,
+            input.s2.getBaseObject, input.s2.getBaseOffset + input.deltaOffset,
+            input.len)
+        }
+      }
+    }
+    val count = 16 * 1000
+    val rand = new Random(0)
+    val inputs = (0 until count).map { _ =>
+      val s1 = UTF8String.fromBytes(randomBytes(1, 16))
+      val s2 = UTF8String.fromBytes(randomBytes(1, 16))
+      val len = s1.numBytes().min(s2.numBytes())
+      val deltaOffset = rand.nextInt(len)
+      BinaryEqualInfo(s1, s2, deltaOffset, len)
+    }.toArray
+
+    val benchmark = new Benchmark("Byte Array equals", count * iters, 25, output = output)
+    benchmark.addCase("Byte Array equals")(binaryEquals(inputs))
+    benchmark.run()
+  }
+
+  case class BinaryEqualInfo(
+      s1: UTF8String,
+      s2: UTF8String,
+      deltaOffset: Int,
+      len: Int)
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("byte array comparisons") {
       byteArrayComparisons(1024 * 4)
+    }
+
+    runBenchmark("byte array equals") {
+      byteArrayEquals(1000 * 10)
     }
   }
 }

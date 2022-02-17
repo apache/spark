@@ -467,7 +467,6 @@ class SparkToParquetSchemaConverter(
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
       // ===================
@@ -697,23 +696,6 @@ private[sql] object ParquetSchemaConverter {
 
   val EMPTY_MESSAGE: MessageType =
     Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-
-  def checkFieldName(name: String): Unit = {
-    // ,;{}()\n\t= and space are special characters in Parquet schema
-    if (name.matches(".*[ ,;{}()\n\t=].*")) {
-      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
-    }
-  }
-
-  def checkFieldNames(schema: StructType): Unit = {
-    schema.foreach { field =>
-      checkFieldName(field.name)
-      field.dataType match {
-        case s: StructType => checkFieldNames(s)
-        case _ =>
-      }
-    }
-  }
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {

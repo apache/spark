@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class VectorTransformer(object):
+class VectorTransformer:
     """
     Base class for transformation of a vector or RDD of vector
     """
@@ -233,7 +233,7 @@ class StandardScalerModel(JavaVectorTransformer):
         return self.call("mean")
 
 
-class StandardScaler(object):
+class StandardScaler:
     """
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
@@ -325,7 +325,7 @@ class ChiSqSelectorModel(JavaVectorTransformer):
         return JavaVectorTransformer.transform(self, vector)
 
 
-class ChiSqSelector(object):
+class ChiSqSelector:
     """
     Creates a ChiSquared feature selector.
     The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
@@ -481,7 +481,7 @@ class PCAModel(JavaVectorTransformer):
     """
 
 
-class PCA(object):
+class PCA:
     """
     A feature transformer that projects vectors to a low-dimensional space using PCA.
 
@@ -524,7 +524,7 @@ class PCA(object):
         return PCAModel(jmodel)
 
 
-class HashingTF(object):
+class HashingTF:
     """
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
@@ -642,7 +642,7 @@ class IDFModel(JavaVectorTransformer):
         return self.call("numDocs")
 
 
-class IDF(object):
+class IDF:
     """
     Inverse document frequency (IDF).
 
@@ -780,7 +780,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         return Word2VecModel(model)
 
 
-class Word2Vec(object):
+class Word2Vec:
     """Word2Vec creates vector representation of words in a text corpus.
     The algorithm first constructs a vocabulary from the corpus
     and then learns vector representation of words in the vocabulary.
