@@ -278,7 +278,10 @@ class LogisticRegressionModel(LinearClassificationModel):
         return model
 
     def __repr__(self):
-        return self._call_java("toString")
+        return (
+            "pyspark.mllib.LogisticRegressionModel: intercept = {}, "
+            "numFeatures = {}, numClasses = {}, threshold = {}"
+        ).format(self._intercept, self._numFeatures, self._numClasses, self._threshold)
 
 
 class LogisticRegressionWithSGD:
