@@ -5254,32 +5254,39 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
 
+        original_where = []
+        if np.nan in where:
+            max_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
+            original_where = where.copy()
+            where = [max_index if x is np.nan else x for x in where]
+
+        column_prefix_constant = "col_"
         cond = [
             F.last(
                 F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column),
                 ignorenulls=True,
-            )
-            for index in where
+            ).alias(column_prefix_constant + str(index) + "_" + str(idx))
+            for idx, index in enumerate(where)
         ]
         sdf = self._internal.spark_frame.select(cond)
+
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
                 result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
+                print(result)
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
         with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            if len(where) == len(set(where)):
-                psdf: DataFrame = DataFrame(sdf)
-                psdf.columns = pd.Index(where)
-                return first_series(psdf.transpose()).rename(self.name)
+            psdf = ps.DataFrame(sdf)  # type: DataFrame
+            if len(original_where) > 0:
+                df = pd.DataFrame(
+                    psdf.transpose().values, columns=[self.name], index=original_where
+                )
             else:
-                # If `where` has duplicate items, leverage the pandas directly
-                # since pandas API on Spark doesn't support the duplicate column name.
-                pdf: pd.DataFrame = sdf.limit(1).toPandas()
-                pdf.columns = pd.Index(where)
-                return first_series(DataFrame(pdf.transpose())).rename(self.name)
+                df = pd.DataFrame(psdf.transpose().values, columns=[self.name], index=where)
+            return df[df.columns[0]]
 
     def mad(self) -> float:
         """
