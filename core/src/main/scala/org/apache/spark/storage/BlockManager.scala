@@ -1143,7 +1143,7 @@ private[spark] class BlockManager(
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
         if (blockSize > 0 && buf.size() == 0) {
-          throw new IllegalStateException(s"Empty buffer received for non empty block " +
+          throw new IllegalStateException("Empty buffer received for non empty block " +
             s"when fetch remote block $blockId from $loc")
         }
         buf
