@@ -906,7 +906,7 @@ private[spark] class SparkSubmit extends Logging {
 
     if (args.verbose) {
       logInfo(s"Main class:\n$childMainClass")
-      logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
+      logInfo(s"Arguments:\n${childArgs.sorted.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
       logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n")}")
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
