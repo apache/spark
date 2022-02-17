@@ -3523,6 +3523,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CONTAINS_JOIN_ENABLED = buildConf("spark.sql.planner.containsJoin.enabled")
+    .internal()
+    .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, " +
+      "the planner will use contains join operator (instead of BNL) for string match queries.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val CONTAINS_JOIN_THRESHOLD = buildConf("spark.sql.containsJoinThreshold")
+    .doc("Configures the maximum size in bytes for a string relation that will be broadcast to " +
+      "all worker nodes when performing contains join.")
+    .version("3.3.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("50MB")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4254,6 +4269,10 @@ class SQLConf extends Serializable with Logging {
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
+
+  def containsJoinEnabled: Boolean = getConf(CONTAINS_JOIN_ENABLED)
+
+  def containsJoinThreshold: Long = getConf(CONTAINS_JOIN_THRESHOLD)
 
   /** ********************** SQLConf functionality methods ************ */
 

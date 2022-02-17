@@ -29,10 +29,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, IdentityBroadcastMode, Partitioning}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode, TokenTreeBroadcastMode, TreeRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.LongType
@@ -76,7 +76,7 @@ trait BroadcastExchangeLike extends Exchange {
  * a transformed SparkPlan.
  */
 case class BroadcastExchangeExec(
-    mode: BroadcastMode,
+    var mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
 
@@ -87,7 +87,8 @@ case class BroadcastExchangeExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
-    "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
+    "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"),
+    "broadcastId" -> SQLMetrics.createMetric(sparkContext, "broadcast id"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -145,11 +146,28 @@ case class BroadcastExchangeExec(
             longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
             // Construct the relation.
-            val relation = mode.transform(input, Some(numRows))
+            val relation =
+              if (mode.isInstanceOf[TokenTreeBroadcastMode]) {
+                val inputRows: Array[InternalRow] = input.toArray
+                mode.transform(inputRows) match {
+                  case Some(relation) =>
+                    relation
+
+                  case None =>
+                    logInfo(s"Could not broadcast relation with TokenTreeBroadcastMode," +
+                      s"fall back to IdentityBroadcastMode")
+                    mode = IdentityBroadcastMode
+                    IdentityBroadcastMode.transform(inputRows)
+                }
+              } else {
+                mode.transform(input, Some(numRows))
+              }
 
             val dataSize = relation match {
               case map: HashedRelation =>
                 map.estimatedSize
+              case tree: TreeRelation =>
+                tree.estimatedSize
               case arr: Array[InternalRow] =>
                 arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
               case _ =>
@@ -168,6 +186,7 @@ case class BroadcastExchangeExec(
 
             // Broadcast the relation
             val broadcasted = sparkContext.broadcast(relation)
+            longMetric("broadcastId") += broadcasted.id
             longMetric("broadcastTime") += NANOSECONDS.toMillis(
               System.nanoTime() - beforeBroadcast)
             val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)

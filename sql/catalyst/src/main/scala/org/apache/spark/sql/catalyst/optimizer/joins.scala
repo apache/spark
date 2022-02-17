@@ -445,5 +445,28 @@ trait JoinSelectionHelper {
     Utils.isTesting &&
       conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
+
+  def canBroadcastTokenTree(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      buildSide: BuildSide,
+      hint: JoinHint,
+      conf: SQLConf): Boolean = buildSide match {
+    case BuildLeft if hintToBroadcastLeft(hint) =>
+      true
+
+    case BuildRight if hintToBroadcastRight(hint) =>
+      true
+
+    case BuildLeft =>
+      left.stats.sizeInBytes >= 0 &&
+        left.stats.sizeInBytes <= conf.containsJoinThreshold &&
+        !hintToNotBroadcastLeft(hint)
+
+    case BuildRight =>
+      right.stats.sizeInBytes >= 0 &&
+        right.stats.sizeInBytes <= conf.containsJoinThreshold &&
+        !hintToNotBroadcastRight(hint)
+  }
 }
 

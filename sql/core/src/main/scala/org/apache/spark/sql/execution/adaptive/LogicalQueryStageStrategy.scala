@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.planning.{ExtractContainsJoin, ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.execution.{joins, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, TokenTreeBroadcastMode}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -42,6 +43,17 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
     case _ => false
   }
 
+  def isBroadcastTokenTreeStage(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, BroadcastQueryStageExec(_,
+           BroadcastExchangeExec(TokenTreeBroadcastMode(_, _, _), _), _)) => true
+
+    case LogicalQueryStage(_, BroadcastQueryStageExec(_,
+           ReusedExchangeExec(_, BroadcastExchangeExec(TokenTreeBroadcastMode(_, _, _), _)),
+             _)) => true
+
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
           left, right, hint)
@@ -50,6 +62,11 @@ object LogicalQueryStageStrategy extends Strategy with PredicateHelper {
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
         planLater(right)))
+
+    case ExtractContainsJoin(joinType, leftExpr, rightExpr, left, right, buildSide, checkWildcards,
+    conditions, _) if isBroadcastTokenTreeStage(left) || isBroadcastTokenTreeStage(right) =>
+      Seq(joins.BroadcastContainsJoinExec(leftExpr, rightExpr,
+        planLater(left), planLater(right), buildSide, joinType, checkWildcards, conditions))
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStage(j.right) =>

@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -187,6 +190,147 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       } else {
         None
       }
+  }
+}
+
+object ExtractContainsJoin
+  extends Logging
+    with PredicateHelper
+    with JoinSelectionHelper
+    with SQLConfHelper {
+
+  type ReturnType = (JoinType, Expression, Expression, LogicalPlan, LogicalPlan, BuildSide,
+    Boolean, Option[Expression], JoinHint)
+
+  val matchPattern: PartialFunction[Expression, (Expression, Expression, Boolean)] = {
+    case Like(inputExpr, ExtractContainsPattern(patternExpr), _) =>
+      (inputExpr, patternExpr, true)
+
+    case GreaterThan(StringLocate(patternExpr, inputExpr, IntegerLiteral(1)), IntegerLiteral(0)) =>
+      (inputExpr, patternExpr, false)
+  }
+
+  def evaluateOrder(inputExpr: Expression,
+                    patternExpr: Expression,
+                    left: LogicalPlan,
+                    right: LogicalPlan,
+                    joinType: JoinType): Option[(Expression, Expression, BuildSide)] = {
+    logInfo(s"evaluate string match order, inputExpr = $inputExpr, patternExpr = $patternExpr")
+    if (canEvaluate(inputExpr, left) && canEvaluate(patternExpr, right) &&
+      canBuildBroadcastRight(joinType)) {
+      Some((inputExpr, patternExpr, BuildRight))
+    } else if (canEvaluate(patternExpr, left) && canEvaluate(inputExpr, right) &&
+      canBuildBroadcastLeft(joinType)) {
+      Some((patternExpr, inputExpr, BuildLeft))
+    } else {
+      None
+    }
+  }
+
+  def unapply(join: Join): Option[ReturnType] = {
+    if (conf.containsJoinEnabled && conf.adaptiveExecutionEnabled) {
+      join match {
+        case Join(left, right, joinType, Some(condition), hint) =>
+          var matchedPattern: Option[(Expression, Expression, Boolean)] = None
+          var leftConditions = ExpressionSet(Seq.empty)
+          splitConjunctivePredicates(condition).foreach(expr => {
+            if (matchedPattern.isEmpty && matchPattern.isDefinedAt(expr)) {
+              matchedPattern = Some(matchPattern(expr))
+            } else {
+              leftConditions += expr
+            }
+          })
+
+          matchedPattern match {
+            case Some((inputExpr, patternExpr, checkWildcards)) =>
+              val remainConditions = leftConditions.reduceOption(And)
+              evaluateOrder(inputExpr, patternExpr, left, right, joinType) collect {
+                case (leftExpr, rightExpr, buildSide) =>
+                  (joinType, leftExpr, rightExpr, left, right, buildSide, checkWildcards,
+                    remainConditions, hint)
+              }
+
+            case _ => None
+          }
+
+        case _ => None
+      }
+    } else {
+      None
+    }
+  }
+}
+
+object ExtractContainsPattern extends Logging {
+
+  def concatChildren(concat: Concat): Seq[Expression] = {
+    val stack = mutable.Stack[Expression](concat)
+    val buf = mutable.ArrayBuffer[Expression]()
+    while (!stack.isEmpty) {
+      stack.pop() match {
+        case e: Concat => stack.pushAll(e.children.reverse)
+        case e => buf += e
+      }
+    }
+    buf
+  }
+
+  def unapply(expr: Expression): Option[Expression] = {
+    expr match {
+      case concat: Concat =>
+        var children = concatChildren(concat)
+        logInfo(s"try to extract children from concat expression: ${children.mkString}")
+        var fullMatchFlag = true
+        if (children.length > 1) {
+          children.head match {
+            case StringLiteral(str) if str.startsWith("%") =>
+              if (str.length == 1) {
+                children = children.tail
+              } else {
+                children = Seq(Literal(str.substring(1))) ++ children.tail
+              }
+
+            case _ =>
+              fullMatchFlag = false
+          }
+        } else {
+          fullMatchFlag = false
+        }
+
+        if (children.length > 1) {
+          children.last match {
+            case StringLiteral(str) if str.endsWith("%") =>
+              if (str.length == 1) {
+                children = children.take(children.length - 1)
+              } else {
+                children = children.take(children.length - 1) ++
+                  Seq(Literal(str.substring(0, str.length - 2)))
+              }
+
+            case _ =>
+              fullMatchFlag = false
+          }
+        } else {
+          fullMatchFlag = false
+        }
+
+        children collect {
+          case StringLiteral(str) if str.contains("%") || str.contains("_") =>
+            fullMatchFlag = false
+        }
+
+        if (!fullMatchFlag) {
+          None
+        } else if (children.length == 1) {
+          Some(children(0))
+        } else if (children.length > 1) {
+          Some(Concat(children))
+        } else {
+          None
+        }
+
+      case _ => None
+    }
   }
 }
 
