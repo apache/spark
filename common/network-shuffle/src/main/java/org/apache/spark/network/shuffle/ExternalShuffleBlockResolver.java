@@ -118,9 +118,17 @@ public class ExternalShuffleBlockResolver {
             return new ShuffleIndexInformation(file);
           }
         };
+
+    // SPARK-33206: weightCorrection is a constant to increase the shuffle index weight for the
+    // index cache to avoid underestimating the retained memory size coming from the bookkeeping
+    // objects in case of very small index files (i.e files with two offsets are only 16 bytes
+    // in size but related bookkeeping objects retained memory is 1192 bytes) otherwise we can
+    // easily cause an OOM in the NodeManager even when the default cache size limit is used.
+    final int weightCorrection = 1176;
     shuffleIndexCache = CacheBuilder.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
+      .weigher((Weigher<File, ShuffleIndexInformation>)
+        (file, indexInfo) -> indexInfo.getSize() + weightCorrection)
       .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
