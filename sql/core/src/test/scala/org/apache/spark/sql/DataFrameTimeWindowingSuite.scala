@@ -521,7 +521,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     Seq(df1, df2, df3, df4).foreach { df =>
       val filter = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
       assert(filter.isDefined)
-      val exist = filter.get.constraints.filter(e =>
+      val exist = filter.get.constraints.filter( e =>
         e.toString.contains(">=") || e.toString.contains("<"))
       assert(exist.isEmpty, "No need to filter windows " +
         "when windowDuration is multiple of slideDuration")
