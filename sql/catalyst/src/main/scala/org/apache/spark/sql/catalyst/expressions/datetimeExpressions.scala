@@ -3060,7 +3060,7 @@ case class ConvertTimezone(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unit, interval, timestamp) - Adds the specified number of units to the given timestamp.",
+  usage = "_FUNC_(unit, quantity, timestamp) - Adds the specified number of units to the given timestamp.",
   arguments = """
     Arguments:
       * unit - this indicates the units of datetime that you want to add.
@@ -3075,7 +3075,7 @@ case class ConvertTimezone(
           - "SECOND"
           - "MILLISECOND" - milliseconds
           - "MICROSECOND"
-      * interval - this is the number of units of time that you want to add.
+      * quantity - this is the number of units of time that you want to add.
       * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
   """,
   examples = """
@@ -3094,7 +3094,7 @@ case class ConvertTimezone(
 // scalastyle:on line.size.limit
 case class TimestampAdd(
     unit: Expression,
-    interval: Expression,
+    quantity: Expression,
     timestamp: Expression,
     timeZoneId: Option[String] = None)
   extends TernaryExpression
@@ -3102,11 +3102,11 @@ case class TimestampAdd(
   with NullIntolerant
   with TimeZoneAwareExpression {
 
-  def this(unit: Expression, interval: Expression, timestamp: Expression) =
-    this(unit, interval, timestamp, None)
+  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+    this(unit, quantity, timestamp, None)
 
   override def first: Expression = unit
-  override def second: Expression = interval
+  override def second: Expression = quantity
   override def third: Expression = timestamp
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
@@ -3117,10 +3117,10 @@ case class TimestampAdd(
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
 
-  override def nullSafeEval(u: Any, i: Any, micros: Any): Any = {
+  override def nullSafeEval(u: Any, q: Any, micros: Any): Any = {
     DateTimeUtils.timestampAdd(
       u.asInstanceOf[UTF8String].toString,
-      i.asInstanceOf[Int],
+      q.asInstanceOf[Int],
       micros.asInstanceOf[Long],
       zoneIdInEval)
   }
@@ -3128,8 +3128,8 @@ case class TimestampAdd(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, (u, i, micros) =>
-      s"""$dtu.timestampAdd($u.toString(), $i, $micros, $zid)""")
+    defineCodeGen(ctx, ev, (u, q, micros) =>
+      s"""$dtu.timestampAdd($u.toString(), $q, $micros, $zid)""")
   }
 
   override def prettyName: String = "timestampadd"
@@ -3138,6 +3138,6 @@ case class TimestampAdd(
       newFirst: Expression,
       newSecond: Expression,
       newThird: Expression): TimestampAdd = {
-    copy(unit = newFirst, interval = newSecond, timestamp = newThird)
+    copy(unit = newFirst, quantity = newSecond, timestamp = newThird)
   }
 }

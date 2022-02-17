@@ -1886,7 +1886,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-38195: add an amount of interval units to a timestamp") {
+  test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(
       TimestampAdd(Literal("Hour"), Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
@@ -1936,10 +1936,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       outstandingTimezonesIds.foreach { tz =>
         Seq(TimestampNTZType, TimestampType).foreach { tsType =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-            (interval: Expression, timestamp: Expression) =>
+            (quantity: Expression, timestamp: Expression) =>
               TimestampAdd(
                 Literal(unit),
-                interval,
+                quantity,
                 timestamp,
                 Some(tz)),
             IntegerType, tsType)

@@ -956,7 +956,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("SPARK-38195: add an amount of interval units to a timestamp") {
+  test("SPARK-38195: add a quantity of interval units to a timestamp") {
     outstandingZoneIds.foreach { zid =>
       assert(timestampAdd("MICROSECOND", 1, date(2022, 2, 14, 11, 27, 0, 0, zid), zid) ===
         date(2022, 2, 14, 11, 27, 0, 1, zid))
