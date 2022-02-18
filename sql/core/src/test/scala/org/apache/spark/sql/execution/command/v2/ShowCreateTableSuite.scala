@@ -101,7 +101,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "'via' = '2')",
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
-        "LOCATION 'file:/tmp'",
+        "LOCATION 'file:///tmp'",
         "TBLPROPERTIES (",
         "'prop1' = '1',",
         "'prop2' = '2',",
