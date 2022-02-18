@@ -2021,12 +2021,18 @@ abstract class JsonSuite
   test("SPARK-18772: Parse special floats correctly") {
     val jsons = Seq(
       """{"a": "NaN"}""",
+      """{"a": "+INF"}""",
+      """{"a": "-INF"}""",
       """{"a": "Infinity"}""",
+      """{"a": "+Infinity"}""",
       """{"a": "-Infinity"}""")
 
     // positive cases
     val checks: Seq[Double => Boolean] = Seq(
       _.isNaN,
+      _.isPosInfinity,
+      _.isNegInfinity,
+      _.isPosInfinity,
       _.isPosInfinity,
       _.isNegInfinity)
 
