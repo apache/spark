@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.JobContext
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.PrimitiveType
@@ -140,6 +141,18 @@ class MessageCapturingCommitProtocol(jobId: String, path: String)
   }
 }
 
+object CheckStagingDirWhenCommitJobCommitProtocol {
+  var stagingDirExists = true;
+}
+class CheckStagingDirWhenCommitJobCommitProtocol(jobId: String, path: String)
+  extends HadoopMapReduceCommitProtocol(jobId, path) {
+
+  override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
+    val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+    CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists = fs.exists(stagingDir);
+    super.commitJob(jobContext, taskCommits);
+  }
+}
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
@@ -1270,6 +1283,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
               spark.table("t1").orderBy("k1"))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-38250: Check existence before deleting stagingDir in HadoopMapReduceCommitProtocol") {
+    withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[CheckStagingDirWhenCommitJobCommitProtocol].getCanonicalName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists = true;
+        spark.range(10).repartition(10).write.mode("overwrite").parquet(path)
+        assert(!CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists)
       }
     }
   }

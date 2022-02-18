@@ -236,7 +236,7 @@ class HadoopMapReduceCommitProtocol(
         }
       }
 
-      fs.delete(stagingDir, true)
+      cleanStagingDir(jobContext)
     }
   }
 
@@ -256,8 +256,7 @@ class HadoopMapReduceCommitProtocol(
     }
     try {
       if (hasValidPath) {
-        val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-        fs.delete(stagingDir, true)
+        cleanStagingDir(jobContext)
       }
     } catch {
       case e: IOException =>
@@ -303,6 +302,13 @@ class HadoopMapReduceCommitProtocol(
     } catch {
       case e: IOException =>
         logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+    }
+  }
+
+  private def cleanStagingDir(jobContext: JobContext): Unit = {
+    val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+    if (fs.exists(stagingDir)) {
+      fs.delete(stagingDir, true)
     }
   }
 }
