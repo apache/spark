@@ -55,7 +55,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
     val k = clusterCenters.length
     val numFeatures = clusterCenters.head.size
     if (DistanceMeasure.shouldComputeStatistics(k) &&
-      DistanceMeasure.shouldComputeStatisticsLocally(k, numFeatures)) {
+        DistanceMeasure.shouldComputeStatisticsLocally(k, numFeatures)) {
       Some(distanceMeasureInstance.computeStatistics(clusterCentersWithNorm))
     } else {
       None

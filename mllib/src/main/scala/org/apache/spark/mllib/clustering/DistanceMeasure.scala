@@ -117,6 +117,13 @@ private[spark] abstract class DistanceMeasure extends Serializable {
     packedValues
   }
 
+  /**
+   * @param centers the clustering centers
+   * @param statistics optional statistics to accelerate the computation, which should not
+   *                   change the result.
+   * @param point given point
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
   def findClosest(
       centers: Array[VectorWithNorm],
       statistics: Option[Array[Double]],
