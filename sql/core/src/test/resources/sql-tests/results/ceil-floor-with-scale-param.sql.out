@@ -5,7 +5,7 @@
 -- !query
 SELECT CEIL(2.5, 0)
 -- !query schema
-struct<CEIL(2.5):decimal(2,0)>
+struct<ceil(2.5, 0):decimal(2,0)>
 -- !query output
 3
 
@@ -13,7 +13,7 @@ struct<CEIL(2.5):decimal(2,0)>
 -- !query
 SELECT CEIL(3.5, 0)
 -- !query schema
-struct<CEIL(3.5):decimal(2,0)>
+struct<ceil(3.5, 0):decimal(2,0)>
 -- !query output
 4
 
@@ -21,7 +21,7 @@ struct<CEIL(3.5):decimal(2,0)>
 -- !query
 SELECT CEIL(-2.5, 0)
 -- !query schema
-struct<CEIL(-2.5):decimal(2,0)>
+struct<ceil(-2.5, 0):decimal(2,0)>
 -- !query output
 -2
 
@@ -29,7 +29,7 @@ struct<CEIL(-2.5):decimal(2,0)>
 -- !query
 SELECT CEIL(-3.5, 0)
 -- !query schema
-struct<CEIL(-3.5):decimal(2,0)>
+struct<ceil(-3.5, 0):decimal(2,0)>
 -- !query output
 -3
 
@@ -45,7 +45,7 @@ struct<ceil(-0.35, 1):decimal(2,1)>
 -- !query
 SELECT CEIL(-35, -1)
 -- !query schema
-struct<ceil(-35, -1):bigint>
+struct<ceil(-35, -1):decimal(10,0)>
 -- !query output
 -30
 
@@ -53,7 +53,7 @@ struct<ceil(-35, -1):bigint>
 -- !query
 SELECT CEIL(-0.1, 0)
 -- !query schema
-struct<CEIL(-0.1):decimal(1,0)>
+struct<ceil(-0.1, 0):decimal(1,0)>
 -- !query output
 0
 
@@ -61,7 +61,7 @@ struct<CEIL(-0.1):decimal(1,0)>
 -- !query
 SELECT CEIL(5, 0)
 -- !query schema
-struct<CEIL(5):bigint>
+struct<ceil(5, 0):decimal(10,0)>
 -- !query output
 5
 
@@ -69,7 +69,7 @@ struct<CEIL(5):bigint>
 -- !query
 SELECT CEIL(3.14115, -3)
 -- !query schema
-struct<ceil(3.14115, -3):bigint>
+struct<ceil(3.14115, -3):decimal(6,0)>
 -- !query output
 1000
 
@@ -104,7 +104,7 @@ Invalid number of parameters to the function 'ceil'.; line 1 pos 7
 -- !query
 SELECT FLOOR(2.5, 0)
 -- !query schema
-struct<FLOOR(2.5):decimal(2,0)>
+struct<floor(2.5, 0):decimal(2,0)>
 -- !query output
 2
 
@@ -112,7 +112,7 @@ struct<FLOOR(2.5):decimal(2,0)>
 -- !query
 SELECT FLOOR(3.5, 0)
 -- !query schema
-struct<FLOOR(3.5):decimal(2,0)>
+struct<floor(3.5, 0):decimal(2,0)>
 -- !query output
 3
 
@@ -120,7 +120,7 @@ struct<FLOOR(3.5):decimal(2,0)>
 -- !query
 SELECT FLOOR(-2.5, 0)
 -- !query schema
-struct<FLOOR(-2.5):decimal(2,0)>
+struct<floor(-2.5, 0):decimal(2,0)>
 -- !query output
 -3
 
@@ -128,7 +128,7 @@ struct<FLOOR(-2.5):decimal(2,0)>
 -- !query
 SELECT FLOOR(-3.5, 0)
 -- !query schema
-struct<FLOOR(-3.5):decimal(2,0)>
+struct<floor(-3.5, 0):decimal(2,0)>
 -- !query output
 -4
 
@@ -144,7 +144,7 @@ struct<floor(-0.35, 1):decimal(2,1)>
 -- !query
 SELECT FLOOR(-35, -1)
 -- !query schema
-struct<floor(-35, -1):bigint>
+struct<floor(-35, -1):decimal(10,0)>
 -- !query output
 -40
 
@@ -152,7 +152,7 @@ struct<floor(-35, -1):bigint>
 -- !query
 SELECT FLOOR(-0.1, 0)
 -- !query schema
-struct<FLOOR(-0.1):decimal(1,0)>
+struct<floor(-0.1, 0):decimal(1,0)>
 -- !query output
 -1
 
@@ -160,7 +160,7 @@ struct<FLOOR(-0.1):decimal(1,0)>
 -- !query
 SELECT FLOOR(5, 0)
 -- !query schema
-struct<FLOOR(5):bigint>
+struct<floor(5, 0):decimal(10,0)>
 -- !query output
 5
 
@@ -168,7 +168,7 @@ struct<FLOOR(5):bigint>
 -- !query
 SELECT FLOOR(3.14115, -3)
 -- !query schema
-struct<floor(3.14115, -3):bigint>
+struct<floor(3.14115, -3):decimal(6,0)>
 -- !query output
 0
 

@@ -269,6 +269,24 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
+trait CeilFloorExpressionBuilder extends ExpressionBuilder {
+  val functionName: String
+  def build(expressions: Seq[Expression]): Expression
+
+  def extractChildAndScaleParam(expressions: Seq[Expression]): (Expression, Expression) = {
+    val child = expressions(0)
+    val scale = expressions(1)
+    if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
+      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
+    }
+    val scaleV = scale.eval(EmptyRow)
+    if (scaleV == null) {
+      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
+    }
+    (child, scale)
+  }
+}
+
 @ExpressionDescription(
   usage = """
   _FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller
@@ -286,30 +304,17 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   """,
   since = "3.3.0",
   group = "math_funcs")
-object CeilExpressionBuilder extends ExpressionBuilder {
+object CeilExpressionBuilder extends CeilFloorExpressionBuilder {
+  val functionName: String = "ceil"
+
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) {
       Ceil(expressions.head)
     } else if (expressions.length == 2) {
-      val child = expressions(0)
-      val scale = expressions(1)
-      if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
-        throw QueryCompilationErrors.invalidScaleParameterRoundBase("ceil")
-      }
-      val scaleV = scale.eval(EmptyRow)
-      if (scaleV == null) {
-        throw QueryCompilationErrors.invalidScaleParameterRoundBase("ceil")
-      }
-
-      (child.dataType, scaleV.asInstanceOf[Int]) match {
-        case (_, 0) => Ceil(child)
-        case (_, x) if x < 0 => RoundCeil(Cast(child, LongType), scale)
-        case (_: IntegralType, _) => RoundCeil(Cast(child, LongType), scale)
-        case (_ : FloatType, _) => RoundCeil(Cast(child, DoubleType), scale)
-        case _ => RoundCeil(child, scale)
-      }
+      val (child, scale) = extractChildAndScaleParam(expressions)
+      RoundCeil(child, scale)
     } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters("ceil")
+      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
     }
   }
 }
@@ -551,14 +556,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   """,
   since = "3.3.0",
   group = "math_funcs")
-object FloorExpressionBuilder extends ExpressionBuilder {
+object FloorExpressionBuilder extends CeilFloorExpressionBuilder {
+  val functionName: String = "floor"
+
   def build(expressions: Seq[Expression]): Expression = {
     if (expressions.length == 1) {
       Floor(expressions.head)
     } else if (expressions.length == 2) {
-      RoundFloor(expressions(0), expressions(1))
+      val(child, scale) = extractChildAndScaleParam(expressions)
+      RoundFloor(child, scale)
     } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters("floor")
+      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
     }
   }
 }
@@ -1494,8 +1502,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           // Overflow cannot happen, so no need to control nullOnOverflow
           decimal.toPrecision(decimal.precision, s, mode)
         } else {
-          decimal.toPrecision(decimal.precision, s, mode)
-//          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
+          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
@@ -1534,12 +1541,9 @@ abstract class RoundBase(child: Expression, scale: Expression,
             ${ev.isNull} = ${ev.value} == null;"""
        } else {
           s"""
-            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true);
+            ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
+            .setScale(${_scale}, Decimal.$modeStr()), $p, $s);
             ${ev.isNull} = ${ev.value} == null;"""
-//          s"""
-//          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-//            setScale(${_scale}, java.math.BigDecimal.${modeStr});"""
         }
       case ByteType =>
         if (_scale < 0) {
