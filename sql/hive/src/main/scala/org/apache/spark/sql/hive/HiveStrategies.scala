@@ -186,6 +186,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * - When writing to non-partitioned Hive-serde Parquet/Orc tables
  * - When writing to partitioned Hive-serde Parquet/Orc tables when
  *   `spark.sql.hive.convertInsertingPartitionedTable` is true
+ * - When writing to directory with Hive-serde
+ * - When writing to non-partitioned Hive-serde Parquet/ORC tables using CTAS
  * - When scanning Hive-serde Parquet/ORC tables
  *
  * This rule must be run before all other DDL post-hoc resolution rules, i.e.
