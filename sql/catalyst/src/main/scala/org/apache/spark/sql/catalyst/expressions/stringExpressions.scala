@@ -2545,7 +2545,7 @@ case class Encode(value: Expression, charset: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
-      `fmt` can be a case-insensitive string literal of "hex", "utf-8", "base2", or "base64".
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", or "base64".
       By default, the binary format for conversion is "hex" if `fmt` is omitted.
       The function returns NULL if at least one of the input parameters is NULL.
   """,
@@ -2562,7 +2562,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
 
   def this(expr: Expression, format: Expression) = this(expr, Option(format),
     format match {
-      case lit if lit.foldable =>
+      case lit if (lit.foldable && Seq(StringType, NullType).contains(lit.dataType)) =>
         val value = lit.eval()
         if (value == null) Literal(null, BinaryType)
         else {
@@ -2570,7 +2570,6 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
             case "hex" => Unhex(expr)
             case "utf-8" => Encode(expr, Literal("UTF-8"))
             case "base64" => UnBase64(expr)
-            case "base2" => Cast(expr, BinaryType)
             case _ => lit
           }
         }
@@ -2589,10 +2588,11 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
 
   override def checkInputDataTypes(): TypeCheckResult = {
     def checkFormat(lit: Expression) = {
-      if (lit.foldable) {
+      if (lit.foldable && Seq(StringType, NullType).contains(lit.dataType)) {
         val value = lit.eval()
-        value == null || Seq("hex", "utf-8", "base64", "base2").contains(
-          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
+        value == null ||
+          Seq("hex", "utf-8", "base64").contains(
+            value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
       } else false
     }
 
@@ -2601,7 +2601,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
     } else {
       TypeCheckResult.TypeCheckFailure(
         s"Unsupported encoding format: $format. The format has to be " +
-          s"a case-insensitive string literal of 'hex', 'utf-8', 'base2', or 'base64'")
+          s"a case-insensitive string literal of 'hex', 'utf-8', or 'base64'")
     }
   }
 
