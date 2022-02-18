@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
 import org.apache.spark.sql.types.StructType
 
@@ -248,32 +249,33 @@ object ParquetUtils {
       blocks.forEach { block =>
         val blockMetaData = block.getColumns
         agg match {
-          case max: Max =>
-            val colName = max.column.fieldNames.head
+          case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(max.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
-          case min: Min =>
-            val colName = min.column.fieldNames.head
+          case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(min.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
-          case count: Count =>
-            schemaName = "count(" + count.column.fieldNames.head + ")"
+          case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(count.column).get
+            schemaName = "count(" + colName + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
-            if (partitionSchema.fields.map(_.name).toSet.contains(count.column.fieldNames.head)) {
+            if (partitionSchema.fields.map(_.name).toSet.contains(colName)) {
               isPartitionCol = true
             }
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
+              index = dataSchema.fieldNames.toList.indexOf(colName)
               // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(filePath, blockMetaData, index)
             }

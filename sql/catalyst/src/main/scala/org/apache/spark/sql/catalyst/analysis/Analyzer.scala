@@ -28,6 +28,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.{extraHintForAnsiTypeCoercionExpression, DATA_TYPE_MISMATCH_ERROR}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
@@ -2045,7 +2046,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
       case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
-        lookupBuiltinOrTempFunction(nameParts).map { info =>
+        lookupBuiltinOrTempFunction(nameParts)
+          .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
           if (requirePersistentFunc) {
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
@@ -2111,6 +2113,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
       if (name.length == 1) {
         v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+      } else {
+        None
+      }
+    }
+
+    def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
+      if (name.length == 1) {
+        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
       } else {
         None
       }
@@ -3582,7 +3592,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
+          throw new IllegalStateException(
+            s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target")
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
@@ -3834,8 +3845,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   windowId <- ceil((timestamp - startTime) / slideDuration)
-   *   windowStart <- windowId * slideDuration + (i - maxNumOverlapping) * slideDuration + startTime
+   *   lastStart <- timestamp - (timestamp - startTime + slideDuration) % slideDuration
+   *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
    *
@@ -3875,14 +3886,11 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-        def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
-          val division = (PreciseTimestampConversion(
-            window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
-          val ceil = Ceil(division)
-          // if the division is equal to the ceiling, our record is the start of a window
-          val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
-          val windowStart = (windowId + i - overlappingWindows) *
-            window.slideDuration + window.startTime
+        def getWindow(i: Int, dataType: DataType): Expression = {
+          val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
+          val lastStart = timestamp - (timestamp - window.startTime
+            + window.slideDuration) % window.slideDuration
+          val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
@@ -3897,7 +3905,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
         if (window.windowDuration == window.slideDuration) {
-          val windowStruct = Alias(getWindow(0, 1, window.timeColumn.dataType), WINDOW_COL_NAME)(
+          val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
             exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
@@ -3915,13 +3923,20 @@ object TimeWindowing extends Rule[LogicalPlan] {
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
           val windows =
             Seq.tabulate(overlappingWindows)(i =>
-              getWindow(i, overlappingWindows, window.timeColumn.dataType))
+              getWindow(i, window.timeColumn.dataType))
 
           val projections = windows.map(_ +: child.output)
 
+          // When the condition windowDuration % slideDuration = 0 is fulfilled,
+          // the estimation of the number of windows becomes exact one,
+          // which means all produced windows are valid.
           val filterExpr =
-            window.timeColumn >= windowAttr.getField(WINDOW_START) &&
-              window.timeColumn < windowAttr.getField(WINDOW_END)
+            if (window.windowDuration % window.slideDuration == 0) {
+              IsNotNull(window.timeColumn)
+            } else {
+              window.timeColumn >= windowAttr.getField(WINDOW_START) &&
+                window.timeColumn < windowAttr.getField(WINDOW_END)
+            }
 
           val substitutedPlan = Filter(filterExpr,
             Expand(projections, windowAttr +: child.output, child))
@@ -4240,7 +4255,30 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
  * rule right after the main resolution batch.
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.foreachUp {
+      // HAVING clause will be resolved as a Filter. When having func(column with wrong data type),
+      // the column could be wrapped by a TempResolvedColumn, e.g. mean(tempresolvedcolumn(t.c)).
+      // Because TempResolvedColumn can still preserve column data type, here is a chance to check
+      // if the data type matches with the required data type of the function. We can throw an error
+      // when data types mismatches.
+      case operator: Filter =>
+        operator.expressions.foreach(_.foreachUp {
+          case e: Expression if e.childrenResolved && e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.failAnalysis(
+                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                    extraHintForAnsiTypeCoercionExpression(plan))
+            }
+          case _ =>
+        })
+      case _ =>
+    }
+
+    plan.resolveExpressions {
+      case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+    }
   }
 }

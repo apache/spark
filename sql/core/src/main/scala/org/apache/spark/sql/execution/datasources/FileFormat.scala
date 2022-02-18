@@ -192,7 +192,8 @@ object FileFormat {
     .add(StructField(FILE_MODIFICATION_TIME, TimestampType))
 
   // create a file metadata struct col
-  def createFileMetadataCol: AttributeReference = MetadataAttribute(METADATA_NAME, METADATA_STRUCT)
+  def createFileMetadataCol: AttributeReference =
+    FileSourceMetadataAttribute(METADATA_NAME, METADATA_STRUCT)
 
   // create an internal row given required metadata fields and file information
   def createMetadataInternalRow(

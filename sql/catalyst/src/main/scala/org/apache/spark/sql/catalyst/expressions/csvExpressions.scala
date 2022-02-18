@@ -91,7 +91,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw QueryExecutionErrors.rowFromCSVParserNotExpectedError
+      throw new IllegalStateException("Expected one row from CSV parser.")
     }
   }
 

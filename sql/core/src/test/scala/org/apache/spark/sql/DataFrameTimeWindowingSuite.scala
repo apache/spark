@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -488,6 +488,43 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       val attributeReference = timeWindow.asInstanceOf[AttributeReference]
       assert(attributeReference.name == "window")
       assert(attributeReference.dataType == tuple._2)
+    }
+  }
+
+  test("No need to filter windows when windowDuration is multiple of slideDuration") {
+    val df1 = Seq(
+      ("2022-02-15 19:39:34", 1, "a"),
+      ("2022-02-15 19:39:56", 2, "a"),
+      ("2022-02-15 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2022-02-15T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    val df3 = Seq(
+      ("2022-02-15 19:39:34", 1, "a"),
+      ("2022-02-15 19:39:56", 2, "a"),
+      ("2022-02-15 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "-2 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+    val df4 = Seq(
+      (LocalDateTime.parse("2022-02-15T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2022-02-15T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "9 seconds", "3 seconds", "2 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    Seq(df1, df2, df3, df4).foreach { df =>
+      val filter = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
+      assert(filter.isDefined)
+      val exist = filter.get.constraints.filter(e =>
+        e.toString.contains(">=") || e.toString.contains("<"))
+      assert(exist.isEmpty, "No need to filter windows " +
+        "when windowDuration is multiple of slideDuration")
     }
   }
 }
