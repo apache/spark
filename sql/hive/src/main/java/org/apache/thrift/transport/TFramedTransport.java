@@ -18,8 +18,11 @@
 package org.apache.thrift.transport;
 
 
+import org.apache.thrift.TByteArrayOutputStream;
+import org.apache.thrift.TConfiguration;
+
 /**
- * This is from libthrift-0.12.0 {@link org.apache.thrift.transport.TFramedTransport}.
+ * This is based on libthrift-0.12.0 {@link org.apache.thrift.transport.TFramedTransport}.
  * To fix class of org.apache.thrift.transport.TFramedTransport not found after upgrading libthrift.
  *
  * TFramedTransport is a buffered TTransport that ensures a fully read message
@@ -60,7 +63,7 @@ public class TFramedTransport extends TTransport {
     }
 
     @Override
-    public TTransport getTransport(TTransport base) {
+    public TTransport getTransport(TTransport base) throws TTransportException {
       return new TFramedTransport(base, maxLength_);
     }
   }
@@ -68,12 +71,12 @@ public class TFramedTransport extends TTransport {
   /**
    * Constructor wraps around another transport
    */
-  public TFramedTransport(TTransport transport, int maxLength) {
+  public TFramedTransport(TTransport transport, int maxLength) throws TTransportException {
     transport_ = transport;
     maxLength_ = maxLength;
   }
 
-  public TFramedTransport(TTransport transport) {
+  public TFramedTransport(TTransport transport) throws TTransportException {
     transport_ = transport;
     maxLength_ = TFramedTransport.DEFAULT_MAX_LENGTH;
   }
@@ -122,6 +125,21 @@ public class TFramedTransport extends TTransport {
     readBuffer_.consumeBuffer(len);
   }
 
+  @Override
+  public TConfiguration getConfiguration() {
+    return null;
+  }
+
+  @Override
+  public void updateKnownMessageSize(long l) throws TTransportException {
+
+  }
+
+  @Override
+  public void checkReadBytesAvailable(long l) throws TTransportException {
+
+  }
+
   public void clear() {
     readBuffer_.clear();
   }
@@ -134,7 +152,8 @@ public class TFramedTransport extends TTransport {
 
     if (size < 0) {
       close();
-      throw new TTransportException(TTransportException.CORRUPTED_DATA, "Read a negative frame size (" + size + ")!");
+      throw new TTransportException(TTransportException.CORRUPTED_DATA,
+          "Read a negative frame size (" + size + ")!");
     }
 
     if (size > maxLength_) {
