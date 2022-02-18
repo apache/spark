@@ -1289,7 +1289,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.scheduler.name<code></td>
+  <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
 	Specify the scheduler name for each executor pod.
