@@ -407,6 +407,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_AGGREGATE =
+    buildConf("spark.sql.aggregate.requireAllClusterKeys")
+      .internal()
+      .doc("When true, aggregate operator requires all the clustering keys as the hash partition" +
+        " keys from child. This is to avoid data skews which can lead to significant " +
+        "performance regression if shuffles are eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +

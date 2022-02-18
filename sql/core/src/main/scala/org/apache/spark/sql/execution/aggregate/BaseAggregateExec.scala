@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, HashClusteredDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtils, UnaryExecNode}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Holds common logic for aggregate operators
@@ -92,7 +93,12 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
       case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) => ClusteredDistribution(exprs) :: Nil
+      case Some(exprs) =>
+        if (conf.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_AGGREGATE)) {
+          HashClusteredDistribution(exprs) :: Nil
+        } else {
+          ClusteredDistribution(exprs) :: Nil
+        }
       case None => UnspecifiedDistribution :: Nil
     }
   }
