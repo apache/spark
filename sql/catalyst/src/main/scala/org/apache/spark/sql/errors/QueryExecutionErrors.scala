@@ -1963,4 +1963,10 @@ object QueryExecutionErrors {
   def unsupportedDropNamespaceRestrictError(): Throwable = {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
   }
+
+  def invalidUnitInTimestampAdd(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampadd", unit))
+  }
 }

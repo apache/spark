@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -90,6 +90,16 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
     }
+  }
+
+  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')").collect()
+    }
+    assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage ===
+      "The value of parameter(s) 'unit' in timestampadd is invalid: nanosecond")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {

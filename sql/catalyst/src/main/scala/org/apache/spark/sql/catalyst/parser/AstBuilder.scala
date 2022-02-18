@@ -4506,4 +4506,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
 
   private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
+
+  /**
+   * Create a TimestampAdd expression.
+   */
+  override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
+    val arguments = Seq(
+      Literal(ctx.unit.getText),
+      expression(ctx.unitsAmount),
+      expression(ctx.timestamp))
+    UnresolvedFunction("timestampadd", arguments, isDistinct = false)
+  }
 }

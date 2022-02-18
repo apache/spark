@@ -142,3 +142,9 @@ select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
+
+-- Add a number of units to a timestamp or a date
+select timestampadd('MONTH', -1, timestamp'2022-02-14 01:02:03');
+select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03');
+select timestampadd(YEAR, 1, date'2022-02-15');
+select timestampadd('SECOND', -1, date'2022-02-15');
