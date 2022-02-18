@@ -53,11 +53,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuiteBase
+abstract class AvroSuite
   extends QueryTest
   with SharedSparkSession
+  with CommonFileDataSourceSuite
   with NestedDataSourceSuiteBase {
 
+  import testImplicits._
+
+  override protected def dataSourceFormat = "avro"
   override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
@@ -91,11 +95,6 @@ abstract class AvroSuiteBase
       }
     }, new GenericDatumReader[Any]()).getSchema.toString(false)
   }
-}
-
-abstract class AvroSuite extends AvroSuiteBase {
-
-  import testImplicits._
 
   private def getResourceAvroFilePath(name: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(name).toString
@@ -2434,22 +2433,4 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       }
     }
   }
-}
-
-class AvroV1SuiteWithCommonFileSourceCheck extends AvroSuiteBase with CommonFileDataSourceSuite {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
-
-  override protected def dataSourceFormat = "avro"
-}
-
-class AvroV2SuiteWithCommonFileSourceCheck extends AvroSuiteBase with CommonFileDataSourceSuite {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "")
-
-  override protected def dataSourceFormat = "avro"
 }

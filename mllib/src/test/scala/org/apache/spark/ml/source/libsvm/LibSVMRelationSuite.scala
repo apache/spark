@@ -32,9 +32,20 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-abstract class LibSVMRelationSuiteBase
+class LibSVMRelationSuite
   extends SparkFunSuite
-  with MLlibTestSparkContext {
+  with MLlibTestSparkContext
+  with CommonFileDataSourceSuite {
+
+  override protected def dataSourceFormat = "libsvm"
+  override protected def inputDataset = {
+    val rawData = new java.util.ArrayList[Row]()
+    rawData.add(Row(1.0, Vectors.sparse(1, Seq((0, 1.0)))))
+    val struct = new StructType()
+      .add("labelFoo", DoubleType, false)
+      .add("featuresBar", VectorType, false)
+    spark.createDataFrame(rawData, struct)
+  }
 
   // Path for dataset
   var path: String = _
@@ -67,9 +78,6 @@ abstract class LibSVMRelationSuiteBase
       super.afterAll()
     }
   }
-}
-
-class LibSVMRelationSuite extends LibSVMRelationSuiteBase {
 
   test("select as sparse vector") {
     val df = spark.read.format("libsvm").load(path)
@@ -216,19 +224,5 @@ class LibSVMRelationSuite extends LibSVMRelationSuiteBase {
       val v = row1.getAs[SparseVector](1)
       assert(v == Vectors.sparse(2, Seq((0, 2.0), (1, 3.0))))
     }
-  }
-}
-
-class LibSVMRelationSuiteWithCommonFileSourceCheck
-  extends LibSVMRelationSuiteBase with CommonFileDataSourceSuite {
-
-  override protected def dataSourceFormat = "libsvm"
-  override protected def inputDataset = {
-    val rawData = new java.util.ArrayList[Row]()
-    rawData.add(Row(1.0, Vectors.sparse(1, Seq((0, 1.0)))))
-    val struct = new StructType()
-      .add("labelFoo", DoubleType, false)
-      .add("featuresBar", VectorType, false)
-    spark.createDataFrame(rawData, struct)
   }
 }
