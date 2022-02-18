@@ -2592,7 +2592,7 @@ case class ToBinary(expr: Expression, format: Option[Expression], child: Express
         val value = lit.eval()
         value == null ||
           Seq("hex", "utf-8", "base64").contains(
-            value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT)))
+            value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
       } else false
     }
 
