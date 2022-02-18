@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
   since = "3.0.0")
 case class CountIf(child: Expression) extends RuntimeReplaceableAggregate
   with ImplicitCastInputTypes with UnaryLike[Expression] {
-  lazy val replacement: Expression = Count(new NullIf(child, Literal.FalseLiteral))
+  override lazy val replacement: Expression = Count(new NullIf(child, Literal.FalseLiteral))
   override def nodeName: String = "count_if"
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
   override protected def withNewChildInternal(newChild: Expression): CountIf =

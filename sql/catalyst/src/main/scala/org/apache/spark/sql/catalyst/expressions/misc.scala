@@ -127,7 +127,7 @@ object RaiseError {
   since = "2.0.0",
   group = "misc_funcs")
 case class AssertTrue(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   override def prettyName: String = "assert_true"
 
@@ -139,7 +139,7 @@ case class AssertTrue(left: Expression, right: Expression, replacement: Expressi
     this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): AssertTrue =
     copy(replacement = newChild)
@@ -343,7 +343,7 @@ case class AesEncrypt(
     padding: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesEncrypt",
@@ -407,7 +407,7 @@ case class AesDecrypt(
     padding: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
-  lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesDecrypt",

@@ -76,13 +76,13 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class TryAdd(left: Expression, right: Expression, replacement: Expression)
-    extends RuntimeReplaceableInheritingTypeCoercion {
+    extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Add(left, right, failOnError = true)))
 
   override def prettyName: String = "try_add"
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
@@ -109,14 +109,13 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class TryDivide(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
-  def this(left: Expression, right: Expression) = {
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Divide(left, right, failOnError = true)))
-  }
 
   override def prettyName: String = "try_divide"
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)
@@ -144,13 +143,13 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   since = "3.3.0",
   group = "math_funcs")
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Subtract(left, right, failOnError = true)))
 
   override def prettyName: String = "try_subtract"
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
@@ -171,13 +170,13 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
   since = "3.3.0",
   group = "math_funcs")
 case class TryMultiply(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Multiply(left, right, failOnError = true)))
 
   override def prettyName: String = "try_multiply"
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)

@@ -1049,7 +1049,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   since = "3.2.0",
   group = "string_funcs")
 case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(srcStr: Expression, trimStr: Expression) = {
     this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
@@ -1061,7 +1061,7 @@ case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], repla
 
   override def prettyName: String = "btrim"
 
-  override def actualInputs: Seq[Expression] = srcStr +: trimStr.toSeq
+  override def parameters: Seq[Expression] = srcStr +: trimStr.toSeq
 
   override protected def withNewChildInternal(newChild: Expression): StringTrimBoth =
     copy(replacement = newChild)
@@ -1457,7 +1457,7 @@ case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Ex
   extends RuntimeReplaceable with ImplicitCastInputTypes {
   assert(funcName == "lpad" || funcName == "rpad")
 
-  lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[ByteArray],
     BinaryType,
     funcName,
@@ -2008,7 +2008,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  lazy val replacement: Expression = If(
+  override lazy val replacement: Expression = If(
     IsNull(str),
     Literal(null, StringType),
     If(
@@ -2044,7 +2044,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
 case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  lazy val replacement: Expression = Substring(str, Literal(1), len)
+  override lazy val replacement: Expression = Substring(str, Literal(1), len)
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(TypeCollection(StringType, BinaryType), IntegerType)
@@ -2436,11 +2436,11 @@ object Decode {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(params: Seq[Expression]) = this(params, Decode.createExpr(params))
 
-  override def actualInputs: Seq[Expression] = params
+  override def parameters: Seq[Expression] = params
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)

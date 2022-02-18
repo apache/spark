@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{AbstractDataType, NumericType}
   since = "3.3.0")
 case class RegrCount(left: Expression, right: Expression)
   extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
-  lazy val replacement: Expression = Count(Seq(left, right))
+  override lazy val replacement: Expression = Count(Seq(left, right))
   override def nodeName: String = "regr_count"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(

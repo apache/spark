@@ -244,7 +244,7 @@ case class ILike(
     escapeChar: Char) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
+  override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
 
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')

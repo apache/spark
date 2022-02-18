@@ -371,25 +371,22 @@ trait RuntimeReplaceable extends Expression {
 }
 
 /**
- * A special variant of [[RuntimeReplaceable]]. It makes `replacement` the child of the expression,
- * to inherit the type coercion rules for it. The implementation should put `replacement` in the
- * case class constructor, and define a normal constructor that accepts only the original
- * parameters, or use `ExpressionBuilder`. For an example, see [[TryAdd]]. To make sure the explain
- * plan and expression SQL works correctly, the implementation should also implement the
- * `actualInputs` method, which should extracts the actual inputs after type coercion from
- * `replacement`.
+ * An add-on of [[RuntimeReplaceable]]. It makes `replacement` the child of the expression, to
+ * inherit the analysis rules for it, such as type coercion. The implementation should put
+ * `replacement` in the case class constructor, and define a normal constructor that accepts only
+ * the original parameters. For an example, see [[TryAdd]]. To make sure the explain plan and
+ * expression SQL works correctly, the implementation should also implement the `parameters` method.
  */
-trait RuntimeReplaceableInheritingTypeCoercion
-  extends RuntimeReplaceable with UnaryLike[Expression] {
+trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplaceable =>
   override def child: Expression = replacement
-  def actualInputs: Seq[Expression]
-  override def flatArguments: Iterator[Any] = actualInputs.iterator
+  def parameters: Seq[Expression]
+  override def flatArguments: Iterator[Any] = parameters.iterator
   // This method is used to generate a SQL string with transformed inputs. This is necessary as
   // the actual inputs are not the children of this expression.
   def makeSQLString(childrenSQL: Seq[String]): String = {
     prettyName + childrenSQL.mkString("(", ", ", ")")
   }
-  final override def sql: String = makeSQLString(actualInputs.map(_.sql))
+  final override def sql: String = makeSQLString(parameters.map(_.sql))
 }
 
 /**

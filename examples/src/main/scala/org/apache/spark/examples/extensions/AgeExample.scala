@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
  * How old are you in days?
  */
 case class AgeExample(birthday: Expression) extends RuntimeReplaceable with UnaryLike[Expression] {
-  lazy val replacement: Expression = SubtractDates(CurrentDate(), birthday)
+  override lazy val replacement: Expression = SubtractDates(CurrentDate(), birthday)
   override def child: Expression = birthday
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(birthday = newChild)

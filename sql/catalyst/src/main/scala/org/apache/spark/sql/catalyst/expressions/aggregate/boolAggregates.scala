@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
   since = "3.0.0")
 case class BoolAnd(child: Expression) extends RuntimeReplaceableAggregate
   with ImplicitCastInputTypes with UnaryLike[Expression] {
-  lazy val replacement: Expression = Min(child)
+  override lazy val replacement: Expression = Min(child)
   override def nodeName: String = "bool_and"
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
   override protected def withNewChildInternal(newChild: Expression): Expression =
@@ -58,7 +58,7 @@ case class BoolAnd(child: Expression) extends RuntimeReplaceableAggregate
   since = "3.0.0")
 case class BoolOr(child: Expression) extends RuntimeReplaceableAggregate
   with ImplicitCastInputTypes with UnaryLike[Expression] {
-  lazy val replacement: Expression = Max(child)
+  override lazy val replacement: Expression = Max(child)
   override def nodeName: String = "bool_or"
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
   override protected def withNewChildInternal(newChild: Expression): Expression =

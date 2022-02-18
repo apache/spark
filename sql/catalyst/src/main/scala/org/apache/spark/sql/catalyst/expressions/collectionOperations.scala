@@ -186,7 +186,7 @@ case class MapKeys(child: Expression)
 case class MapContainsKey(left: Expression, right: Expression)
   extends RuntimeReplaceable with BinaryLike[Expression] with ImplicitCastInputTypes {
 
-  lazy val replacement: Expression = ArrayContains(MapKeys(left), right)
+  override lazy val replacement: Expression = ArrayContains(MapKeys(left), right)
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
@@ -2253,13 +2253,13 @@ case class ElementAt(
   since = "3.3.0",
   group = "map_funcs")
 case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, ElementAt(left, right, failOnError = false))
 
   override def prettyName: String = "try_element_at"
 
-  override def actualInputs: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)

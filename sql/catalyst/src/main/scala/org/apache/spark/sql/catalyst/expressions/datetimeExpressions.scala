@@ -1587,9 +1587,9 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 case class DatetimeSub(
     start: Expression,
     interval: Expression,
-    replacement: Expression) extends RuntimeReplaceableInheritingTypeCoercion {
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
 
-  override def actualInputs: Seq[Expression] = Seq(start, interval)
+  override def parameters: Seq[Expression] = Seq(start, interval)
 
   override def makeSQLString(childrenSQL: Seq[String]): String = {
     childrenSQL.mkString(" - ")
@@ -1985,7 +1985,7 @@ case class ParseToDate(
     timeZoneId: Option[String] = None)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  lazy val replacement: Expression = format.map { f =>
+  override lazy val replacement: Expression = format.map { f =>
     Cast(GetTimestamp(left, f, TimestampType, timeZoneId), DateType, timeZoneId)
   }.getOrElse(Cast(left, DateType, timeZoneId)) // backwards compatibility
 
@@ -2057,7 +2057,7 @@ case class ParseToTimestamp(
     timeZoneId: Option[String] = None)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
-  lazy val replacement: Expression = format.map { f =>
+  override lazy val replacement: Expression = format.map { f =>
     GetTimestamp(left, f, dataType, timeZoneId)
   }.getOrElse(Cast(left, dataType, timeZoneId))
 
@@ -2838,12 +2838,12 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class Extract(field: Expression, source: Expression, replacement: Expression)
-  extends RuntimeReplaceableInheritingTypeCoercion {
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(field: Expression, source: Expression) =
     this(field, source, Extract.createExpr("extract", field, source))
 
-  override def actualInputs: Seq[Expression] = Seq(field, source)
+  override def parameters: Seq[Expression] = Seq(field, source)
 
   override def makeSQLString(childrenSQL: Seq[String]): String = {
     getTagValue(FunctionRegistry.FUNC_ALIAS) match {

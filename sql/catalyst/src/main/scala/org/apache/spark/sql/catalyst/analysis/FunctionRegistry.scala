@@ -111,10 +111,10 @@ object FunctionRegistryBase {
       name: String,
       since: Option[String]): (ExpressionInfo, Seq[Expression] => T) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
-    // For `RuntimeReplaceableInheritingTypeCoercion`, skip the constructor with most arguments,
-    // which is the main constructor and contains non-parameter `replacement` and should not be
-    // used as function builder.
-    val isRuntime = classOf[RuntimeReplaceableInheritingTypeCoercion].isAssignableFrom(runtimeClass)
+    // For `InheritAnalysisRules`, skip the constructor with most arguments, which is the main
+    // constructor and contains non-parameter `replacement` and should not be used as
+    // function builder.
+    val isRuntime = classOf[InheritAnalysisRules].isAssignableFrom(runtimeClass)
     val constructors = if (isRuntime) {
       val all = runtimeClass.getConstructors
       val maxNumArgs = all.map(_.getParameterCount).max
@@ -340,12 +340,12 @@ object FunctionRegistry {
   //     expression with a different function name, e.g. `expression[Rand]("random", true)`.
   //   - The function is mostly the same with another function, but has a different parameter list.
   //     We can use `RuntimeReplaceable` to create a new expression, which can customize the
-  //     parameter list and type coercion behavior. The `RuntimeReplaceable` expression will be
-  //     replaced by the actual expression at the end of analysis. See `Left` as an example.
+  //     parameter list and analysis behavior (type coercion). The `RuntimeReplaceable` expression
+  //     will be replaced by the actual expression at the end of analysis. See `Left` as an example.
   //   - The function can be implemented by combining some existing expressions. We can use
   //     `RuntimeReplaceable` to define the combination. See `ParseToDate` as an example.
-  //     We can also inherit the type coercion behavior from the replacement expression, by
-  //     extending `RuntimeReplaceableInheritingTypeCoercion`. See `TryAdd` as an example.
+  //     We can also inherit the analysis behavior from the replacement expression, by
+  //     mixing `InheritAnalysisRules`. See `TryAdd` as an example.
   //   - Similarly, we can use `RuntimeReplaceableAggregate` to implement new aggregate functions.
   //
   // Sometimes, multiple functions share the same/similar expression replacement logic and it's
