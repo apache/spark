@@ -235,7 +235,7 @@ private[sql] class AvroSerializer(
           // To keep consistent with TimestampType, if the Avro type is Long and it is not
           // logical type (the `null` case), output the TimestampNTZ as long value
           // in millisecond precision.
-          case null | _: LocalTimestampMillis | _: TimestampMillis =>
+          case null | _: LocalTimestampMillis =>
             (getter, ordinal) =>
               getter.get(ordinal, TimestampNTZType) match {
                 case micros: java.lang.Long => DateTimeUtils.microsToMillis(micros)
@@ -246,7 +246,7 @@ private[sql] class AvroSerializer(
                        |Expected java.lang.Long or java.time.LocalDateTime,
                        | but found ${other.getClass}""".stripMargin)
               }
-          case _: LocalTimestampMicros | _: TimestampMicros =>
+          case _: LocalTimestampMicros =>
             (getter, ordinal) =>
               getter.get(ordinal, TimestampNTZType) match {
                 case micros: java.lang.Long => micros

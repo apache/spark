@@ -216,9 +216,9 @@ class AvroSerdeSuite extends SparkFunSuite {
           StructField("java8LocalDateTimeMicro", TimestampNTZType, nullable = false),
           StructField("java8LocalDateTimeMillis", TimestampNTZType, nullable = false)))
 
-      val microSchema = LogicalTypes.timestampMicros().addToSchema(Schema.create(LONG))
+      val microSchema = LogicalTypes.localTimestampMicros().addToSchema(Schema.create(LONG))
 
-      val millisSchema = LogicalTypes.timestampMillis().addToSchema(Schema.create(LONG))
+      val millisSchema = LogicalTypes.localTimestampMillis().addToSchema(Schema.create(LONG))
 
       val avroSchema = Schema.createRecord("name", "doc", "space", true,
           Seq(
