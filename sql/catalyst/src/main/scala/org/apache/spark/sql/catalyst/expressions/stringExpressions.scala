@@ -2558,28 +2558,33 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
   with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
-    if (f.foldable && (f.dataType == StringType || f.dataType == NullType)) {
-      val value = f.eval()
-      if (value == null) {
-        Literal(null, BinaryType)
-      } else {
-        value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-          case "hex" => Unhex(expr)
-          case "utf-8" => Encode(expr, Literal("UTF-8"))
-          case "base64" => UnBase64(expr)
-          case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
-            "to_binary", "format", other,
-            Some("The value has to be a case-insensitive string literal of " +
-              "'hex', 'utf-8', or 'base64'."))
-        }
-      }
+    assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
+    val value = f.eval()
+    if (value == null) {
+      Literal(null, BinaryType)
     } else {
-      throw QueryCompilationErrors.requireStringLiteralParameter("to_binary", "format")
+      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
+        case "hex" => Unhex(expr)
+        case "utf-8" => Encode(expr, Literal("UTF-8"))
+        case "base64" => UnBase64(expr)
+        case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
+          "to_binary", "format", other,
+          Some("The value has to be a case-insensitive string literal of " +
+            "'hex', 'utf-8', or 'base64'."))
+      }
     }
   }.getOrElse(Unhex(expr))
 
   def this(expr: Expression) = this(expr, None)
-  def this(expr: Expression, format: Expression) = this(expr, Some(format))
+
+  def this(expr: Expression, format: Expression) = this(expr, Some({
+    // We perform this check in the constructor to make it eager and not go through type coercion.
+    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+      format
+    } else {
+      throw QueryCompilationErrors.requireStringLiteralParameter("to_binary", "format")
+    }
+  }))
 
   override def prettyName: String = "to_binary"
 
