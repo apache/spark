@@ -135,6 +135,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   /** Promotes StringType to other data types. */
+  @scala.annotation.tailrec
   private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
       case (StringType, _: IntegralType) => Some(LongType)
