@@ -52,9 +52,10 @@ private[spark] class HistoryAppStatusStore(
 
   override def executorSummary(executorId: String): v1.ExecutorSummary = {
     val execSummary = super.executorSummary(executorId)
-    logUrlPattern match {
-      case Some(_) => replaceLogUrls(execSummary)
-      case None => execSummary
+    if (logUrlPattern.nonEmpty) {
+      replaceLogUrls(execSummary)
+    } else {
+      execSummary
     }
   }
 
