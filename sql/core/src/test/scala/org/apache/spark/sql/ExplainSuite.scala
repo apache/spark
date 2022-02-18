@@ -522,6 +522,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         "== Analyzed Logical Plan ==\nCreateViewCommand")
     }
   }
+
+  test("SPARK-38247: Unify the output of df.explain and \"explain \" if plan is command") {
+    checkKeywordsNotExistsInExplain(
+      sql("show tables"),
+      ExtendedMode,
+      "CommandResult")
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {

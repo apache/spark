@@ -541,7 +541,8 @@ class Dataset[T] private[sql](
     // of evaluation of the Dataset. So just output QueryExecution's query plans here.
 
     // scalastyle:off println
-    println(queryExecution.explainString(ExplainMode.fromString(mode)))
+    println(sparkSession.sessionState.executePlan(queryExecution.logical,
+      CommandExecutionMode.SKIP).explainString(ExplainMode.fromString(mode)))
     // scalastyle:on println
   }
 
