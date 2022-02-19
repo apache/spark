@@ -290,7 +290,7 @@ abstract class StreamExecution(
         // Disable any config affecting the required child distribution of stateful operators.
         // Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution for
         // details.
-        sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_SOLE_PARTITION.key,
+        sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION.key,
           "false")
 
         updateStatusMessage("Initializing sources")

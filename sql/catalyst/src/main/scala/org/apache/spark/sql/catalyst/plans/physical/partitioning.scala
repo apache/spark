@@ -261,8 +261,16 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, _) =>
+          if (SQLConf.get.requireAllClusterKeysForHashPartition) {
+            // Checks `HashPartitioning` is partitioned on exactly full clustering keys of
+            // `ClusteredDistribution`. Opt in this feature with enabling
+            // "spark.sql.requireAllClusterKeysForHashPartition", can help avoid potential data
+            // skewness for some jobs.
+            isPartitionedOnFullKeys(c)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
