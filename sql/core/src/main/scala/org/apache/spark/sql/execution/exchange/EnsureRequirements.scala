@@ -56,7 +56,23 @@ case class EnsureRequirements(
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
+        (child.outputPartitioning, distribution) match {
+          case (p: HashPartitioning, d: ClusteredDistribution) =>
+            val spec = HashShuffleSpec(p, d)
+            if (spec.canCreatePartitioning) {
+              child
+            } else {
+              // If shuffle spec cannot create desired partitioning, add an extra shuffle for
+              // `ClusteredDistribution` even though its child `HashPartitioning` satisfies its
+              // distribution. This could happen when child `HashPartitioning` is partitioned on
+              // subset of clustering keys of `ClusteredDistribution`. Opt in this feature with
+              // enabling "spark.sql.requireAllClusterKeysForHashPartition" to require partition on
+              // full clustering keys, can help avoid potential data skewness for some jobs.
+              val numPartitions = d.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
+              ShuffleExchangeExec(d.createPartitioning(numPartitions), child, shuffleOrigin)
+            }
+          case _ => child
+        }
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>

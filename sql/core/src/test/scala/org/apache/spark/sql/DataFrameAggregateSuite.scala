@@ -24,10 +24,12 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.execution.{InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ShuffleExchangeExec}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1452,6 +1454,57 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-38221: group by stream of complex expressions should not fail") {
     val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-38237: require all cluster keys for child required distribution") {
+    def partitionExpressionsColumns(expressions: Seq[Expression]): Seq[String] = {
+      expressions.flatMap {
+        case ref: AttributeReference => Some(ref.name)
+      }
+    }
+
+    def isShuffleExecByRequirement(
+        plan: ShuffleExchangeExec,
+        desiredClusterColumns: Seq[String],
+        desiredNumPartitions: Int): Boolean = plan match {
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS)
+        if partitionExpressionsColumns(op.expressions) === desiredClusterColumns &&
+          op.numPartitions === desiredNumPartitions => true
+
+      case _ => false
+    }
+
+    val df = Seq(("a", 1, 1), ("a", 2, 2), ("b", 1, 3), ("b", 1, 4)).toDF("key1", "key2", "value")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION.key -> "true") {
+
+      val grouped = df
+        // repartition by sub group keys which satisfies ClusteredDistribution(group keys)
+        .repartition($"key1")
+        .groupBy($"key1", $"key2")
+        .agg(sum($"value"))
+
+      checkAnswer(grouped, Seq(Row("a", 1, 1), Row("a", 2, 2), Row("b", 1, 7)))
+
+      val numPartitions = spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS)
+
+      val shuffleByRequirement = grouped.queryExecution.executedPlan.flatMap {
+        case a if a.isInstanceOf[BaseAggregateExec] =>
+          a.children.head match {
+            case InputAdapter(s: ShuffleExchangeExec)
+              if isShuffleExecByRequirement(s, Seq("key1", "key2"), numPartitions) => Some(s)
+            case s: ShuffleExchangeExec
+              if isShuffleExecByRequirement(s, Seq("key1", "key2"), numPartitions) => Some(s)
+            case _ => None
+          }
+
+        case _ => None
+      }
+
+      assert(shuffleByRequirement.nonEmpty, "Can't find desired shuffle node from the query plan")
+    }
   }
 }
 
