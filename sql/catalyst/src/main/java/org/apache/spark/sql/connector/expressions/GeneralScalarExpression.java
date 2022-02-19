@@ -23,21 +23,26 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * The general V2 expression corresponding to V1 expression.
+ * <p>
+ * The currently supported expression:
+ * <ol>
+ *  <li><pre>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</pre> Since 3.3.0</li>
+ * </ol>
  *
  * @since 3.3.0
  */
 @Evolving
-public class GeneralSQLExpression implements Expression, Serializable {
+public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
   private Expression[] children;
   private String sql;
 
-  public GeneralSQLExpression(String name, Expression[] children) {
+  public GeneralScalarExpression(String name, Expression[] children) {
     this.name = name;
     this.children = children;
   }
 
-  public GeneralSQLExpression(Expression[] children) {
+  public GeneralScalarExpression(Expression[] children) {
     this.name = "UNDEFINED";
     this.children = children;
   }

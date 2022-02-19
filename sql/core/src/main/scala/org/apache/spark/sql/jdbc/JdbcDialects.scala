@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralSQLExpression, LiteralValue, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -206,13 +206,13 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileExpression(expr: Expression): Option[String] = expr match {
     case lit: LiteralValue[_] => Some(lit.toString)
     case f: FieldReference => Some(f.toString)
-    case e: GeneralSQLExpression if e.name() == "IS NULL" =>
+    case e: GeneralScalarExpression if e.name() == "IS NULL" =>
       assert(e.children().length == 1)
       compileExpression(e.children()(0)).map(v => s"$v IS NULL")
-    case e: GeneralSQLExpression if e.name() == "IS NOT NULL" =>
+    case e: GeneralScalarExpression if e.name() == "IS NOT NULL" =>
       assert(e.children().length == 1)
       compileExpression(e.children()(0)).map(v => s"$v IS NOT NULL")
-    case e: GeneralSQLExpression if BINARY_OPERATION.contains(e.name()) =>
+    case e: GeneralScalarExpression if BINARY_OPERATION.contains(e.name()) =>
       assert(e.children().length == 2)
       val l = compileExpression(e.children()(0))
       val r = compileExpression(e.children()(1))
@@ -221,16 +221,16 @@ abstract class JdbcDialect extends Serializable with Logging{
       } else {
         None
       }
-    case e: GeneralSQLExpression if e.name() == "NOT" =>
+    case e: GeneralScalarExpression if e.name() == "NOT" =>
       assert(e.children().length == 1)
       compileExpression(e.children()(0)).map(v => s"NOT ($v)")
-    case e: GeneralSQLExpression if e.name() == "CASE WHEN" =>
+    case e: GeneralScalarExpression if e.name() == "CASE WHEN" =>
       assert(e.children().length == 1 || e.children().length == 2)
-      assert(e.children()(0).isInstanceOf[GeneralSQLExpression])
-      val branchExpression = e.children()(0).asInstanceOf[GeneralSQLExpression]
+      assert(e.children()(0).isInstanceOf[GeneralScalarExpression])
+      val branchExpression = e.children()(0).asInstanceOf[GeneralScalarExpression]
       val branchExpressions = branchExpression.children()
       val branchSQL = branchExpressions.map {
-        case branch: GeneralSQLExpression =>
+        case branch: GeneralScalarExpression =>
           assert(branch.children().length == 2)
           val c = compileExpression(branch.children()(0))
           val v = compileExpression(branch.children()(1))
@@ -268,7 +268,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             Some(s"MIN(${quoteIdentifier(field.fieldNames.head)})")
-          case expr: GeneralSQLExpression =>
+          case expr: GeneralScalarExpression =>
             compileExpression(expr).map(v => s"MIN($v)")
         }
       case max: Max =>
@@ -276,7 +276,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             Some(s"MAX(${quoteIdentifier(field.fieldNames.head)})")
-          case expr: GeneralSQLExpression =>
+          case expr: GeneralScalarExpression =>
             compileExpression(expr).map(v => s"MAX($v)")
         }
       case count: Count =>
@@ -284,7 +284,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
+          case expr: GeneralScalarExpression =>
             val compiledValue = compileExpression(expr)
             if (compiledValue.isEmpty) return None
             compiledValue.get
@@ -296,7 +296,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
+          case expr: GeneralScalarExpression =>
             val compiledValue = compileExpression(expr)
             if (compiledValue.isEmpty) return None
             compiledValue.get
@@ -310,7 +310,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           case field: FieldReference =>
             if (field.fieldNames.length != 1) return None
             quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
+          case expr: GeneralScalarExpression =>
             val compiledValue = compileExpression(expr)
             if (compiledValue.isEmpty) return None
             compiledValue.get

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -866,6 +866,6 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
 object PushableExpression {
   def unapply(e: Expression): Option[V2Expression] = e match {
     case PushableColumnWithoutNestedColumn(name) => Some(FieldReference.column(name))
-    case _ => new ExpressionSQLBuilder(e).build()
+    case _ => new V2ExpressionBuilder(e).build()
   }
 }
