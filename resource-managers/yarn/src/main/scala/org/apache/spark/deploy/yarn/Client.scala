@@ -54,6 +54,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -87,7 +88,7 @@ private[spark] class Client(
   private val amMemoryOverheadFactor = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
   } else {
-    sparkConf.get(AM_MEMORY_OVERHEAD_FACTOR)
+    AM_MEMORY_OVERHEAD_FACTOR
   }
 
   // AM related configurations

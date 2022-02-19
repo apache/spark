@@ -320,11 +320,6 @@ package object config extends Logging {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
-  private[spark] val AM_MEMORY_OVERHEAD_FACTOR = ConfigBuilder("spark.yarn.am.memoryOverheadFactor")
-    .version("3.3.0")
-    .doubleConf
-    .createWithDefault(0.1)
-
   private[spark] val AM_MEMORY = ConfigBuilder("spark.yarn.am.memory")
     .version("1.3.0")
     .bytesConf(ByteUnit.MiB)
