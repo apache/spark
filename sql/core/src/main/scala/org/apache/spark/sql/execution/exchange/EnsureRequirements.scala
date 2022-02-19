@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -58,18 +59,18 @@ case class EnsureRequirements(
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         (child.outputPartitioning, distribution) match {
           case (p: HashPartitioning, d: ClusteredDistribution) =>
-            val spec = HashShuffleSpec(p, d)
-            if (spec.canCreatePartitioning) {
-              child
-            } else {
-              // If shuffle spec cannot create desired partitioning, add an extra shuffle for
-              // `ClusteredDistribution` even though its child `HashPartitioning` satisfies its
-              // distribution. This could happen when child `HashPartitioning` is partitioned on
-              // subset of clustering keys of `ClusteredDistribution`. Opt in this feature with
-              // enabling "spark.sql.requireAllClusterKeysForHashPartition" to require partition on
+            if (conf.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_SOLE_PARTITION) &&
+              requiredChildDistributions.size == 1 && !p.isPartitionedOnFullKeys(d)) {
+              // Add an extra shuffle for `ClusteredDistribution` even though its child
+              // `HashPartitioning` satisfies its distribution. This could happen when child
+              // `HashPartitioning` is partitioned on subset of clustering keys of
+              // `ClusteredDistribution`. Opt in this feature with
+              // enabling "spark.sql.requireAllClusterKeysForSolePartition" to require partition on
               // full clustering keys, can help avoid potential data skewness for some jobs.
               val numPartitions = d.requiredNumPartitions.getOrElse(conf.numShufflePartitions)
               ShuffleExchangeExec(d.createPartitioning(numPartitions), child, shuffleOrigin)
+            } else {
+              child
             }
           case _ => child
         }

@@ -272,6 +272,17 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     HashShuffleSpec(this, distribution)
 
   /**
+   * Checks if [[HashPartitioning]] is partitioned on exactly same full `clustering` keys of
+   * [[ClusteredDistribution]].
+   */
+  def isPartitionedOnFullKeys(distribution: ClusteredDistribution): Boolean = {
+    expressions.length == distribution.clustering.length &&
+      expressions.zip(distribution.clustering).forall {
+        case (l, r) => l.semanticEquals(r)
+      }
+  }
+
+  /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
@@ -520,14 +531,11 @@ case class HashShuffleSpec(
 
   override def canCreatePartitioning: Boolean = {
     // To avoid potential data skew, we don't allow `HashShuffleSpec` to create partitioning if
-    // the hash partition keys are not the full clustering keys. Then the planner will add shuffles
-    // with the default partitioning of `ClusteredDistribution`, which uses all the clustering
-    // keys.
-    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION)) {
-      partitioning.expressions.length == distribution.clustering.length &&
-        partitioning.expressions.zip(distribution.clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
+    // the hash partition keys are not the full join keys (the cluster keys). Then the planner
+    // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
+    // the join keys.
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      partitioning.isPartitionedOnFullKeys(distribution)
     } else {
       true
     }

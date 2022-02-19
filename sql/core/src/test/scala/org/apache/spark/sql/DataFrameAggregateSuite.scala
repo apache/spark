@@ -1478,7 +1478,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION.key -> "true") {
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_SOLE_PARTITION.key -> "true") {
 
       val grouped = df
         // repartition by sub group keys which satisfies ClusteredDistribution(group keys)
