@@ -1199,4 +1199,29 @@ object DateTimeUtils {
         throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
     }
   }
+
+  def timestampDiff(unit: String, ts1: Long, ts2: Long, zoneId: ZoneId): Long = {
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" =>
+        ts2 - ts1
+      case "MILLISECOND" =>
+        (ts2 - ts1) / MICROS_PER_MILLIS
+      case "SECOND" =>
+        (ts2 - ts1) / MICROS_PER_SECOND
+      case "MINUTE" =>
+        (ts2 - ts1) / MICROS_PER_MINUTE
+      case "HOUR" =>
+        (ts2 - ts1) / MICROS_PER_HOUR
+      case "DAY" =>
+        (ts2 - ts1) / MICROS_PER_DAY
+      case "WEEK" =>
+        (ts2 - ts1) / (MICROS_PER_DAY * DAYS_PER_WEEK)
+      case "MONTH" =>
+        ChronoUnit.MONTHS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId))
+      case "QUARTER" =>
+        ChronoUnit.MONTHS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId)) / 3
+      case "YEAR" =>
+        ChronoUnit.YEARS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId))
+    }
+  }
 }
