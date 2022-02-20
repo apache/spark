@@ -139,9 +139,10 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           Seq(true)
             .toDF()
             .mapPartitions { _ =>
-              TaskContext.get.getLocalProperty(confKey) == confValue match {
-                case true => Iterator(true)
-                case false => Iterator.empty
+              if (TaskContext.get.getLocalProperty(confKey) == confValue) {
+                Iterator(true)
+              } else {
+                Iterator.empty
               }
             }
         }
