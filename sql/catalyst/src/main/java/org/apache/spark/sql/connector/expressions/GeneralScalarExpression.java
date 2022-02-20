@@ -21,6 +21,7 @@ import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
 
+// scalastyle:off line.size.limit
 /**
  * The general V2 expression corresponding to V1 expression.
  * <p>
@@ -31,6 +32,7 @@ import org.apache.spark.annotation.Evolving;
  *
  * @since 3.3.0
  */
+// scalastyle:on line.size.limit
 @Evolving
 public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
