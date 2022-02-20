@@ -360,7 +360,8 @@ abstract class DynamicPartitionPruningSuiteBase
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "0") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -565,7 +566,8 @@ abstract class DynamicPartitionPruningSuiteBase
   test("filtering ratio policy with stats when the broadcast pruning is disabled") {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "0") {
       Given("disabling the use of stats in the DPP heuristic")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false") {
@@ -1480,6 +1482,20 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkPartitionPruningPredicate(df, false, true)
       checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
+  }
+
+  test("SPARK-36840: Support DPP if there is no selective predicate on the filtering side") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT.key -> "1000") {
+      val df = sql(
+        """
+          |SELECT count(*) FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(13) :: Nil)
     }
   }
 }

@@ -22,11 +22,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -219,14 +221,21 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     }.isDefined
   }
 
+  private def rowCounts(plan: LogicalPlan): BigInt = {
+    plan.stats.rowCount
+      .getOrElse(plan.stats.sizeInBytes / EstimationUtils.getSizePerRow(plan.output))
+  }
+
   /**
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
+   *   (2) it needs to contain a selective predicate used for filtering or row count less than
+   *       spark.sql.optimizer.dynamicPartitionPruning.filteringSideThreshold
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming && (hasSelectivePredicate(plan)
+      || rowCounts(plan) < conf.getConf(SQLConf.DYNAMIC_PARTITION_PRUNING_FILTERING_ROW_COUNT))
   }
 
   private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
