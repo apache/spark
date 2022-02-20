@@ -533,7 +533,7 @@ jobs:
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
         apt-get update -y
         apt-get install -y ruby ruby-dev
-        Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
+        Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         gem install bundler
