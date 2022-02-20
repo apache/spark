@@ -26,19 +26,19 @@ Read on to learn more about viewing documentation in plain text (i.e., markdown)
 documentation yourself. Why build it yourself? So that you have the docs that correspond to
 whichever version of Spark you currently have checked out of revision control.
 
-## Building documentation
+## Building Documentation
 There are two ways to build Spark documentation, complete and partial. Complete will build a site similar
-to one you can find https://spark.apache.org/documentation.html with all APIs documented and partial
-one can be used to build a language/API specific documentation.
+to the main documentation site at https://spark.apache.org/documentation.html. Partial documentation build is for 
+a specific language or API, are also possible.
 
 ### Prerequisites
 
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
 Python, R and SQL.
 
-For complete documentation all below tools must be installed **including Optionals**.
+For complete documentation all tools below must be installed **including Optionals**.
 
-You need to have JDK, Scala, [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
+You need to have the JDK, Scala, [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
 [Python](https://docs.python.org/3.8/using/unix.html#getting-and-installing-the-latest-version-of-python)
 installed. Make sure the `bundle` command is available, if not install the Gem containing it:
 
@@ -112,14 +112,6 @@ $ bundle exec jekyll serve --watch
 $ PRODUCTION=1 bundle exec jekyll build
 ```
 
-You can optionally skip API build (for partial build) as it takes time
-
-```sh
-$ cd docs
-# Skip generating API docs (which takes a while)
-$ SKIP_API=1 bundle exec jekyll build
-```
-
 ## Generating individual API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
 You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.
@@ -138,6 +130,14 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
-bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
+NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, see below example. 
+In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
 to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+
+For example:
+
+```sh
+$ cd docs
+# Skip generating API docs (which takes a while)
+$ SKIP_API=1 bundle exec jekyll build
+```
