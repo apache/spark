@@ -928,7 +928,7 @@ select to_binary(null, cast(null as int))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_binary(NULL, CAST(NULL AS INT))' due to data type mismatch: Unsupported encoding format: Some(ansi_cast(null as int)). The format has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'; line 1 pos 7
+cannot resolve 'to_binary(NULL, CAST(NULL AS INT))' due to data type mismatch: Unsupported encoding format: Some(cast(null as int)). The format has to be a case-insensitive string literal of 'hex', 'utf-8', or 'base64'; line 1 pos 7
 
 
 -- !query

@@ -999,8 +999,7 @@ class _LogisticRegressionParams(
                 raise ValueError(
                     "Logistic Regression getThreshold only applies to"
                     + " binary classification, but thresholds has length != 2."
-                    + "  thresholds: "
-                    + ",".join(ts)
+                    + "  thresholds: {ts}".format(ts=ts)
                 )
             return 1.0 / (1.0 + ts[0] / ts[1])
         else:
