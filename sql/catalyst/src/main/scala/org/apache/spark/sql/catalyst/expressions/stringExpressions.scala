@@ -2582,7 +2582,7 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
     if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
       format
     } else {
-      throw QueryCompilationErrors.requireStringLiteralParameter("to_binary", "format")
+      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
     }
   }))
 

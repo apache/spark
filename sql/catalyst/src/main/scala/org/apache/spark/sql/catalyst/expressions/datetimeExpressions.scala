@@ -2873,7 +2873,7 @@ object Extract {
         }
       }
     } else {
-      throw QueryCompilationErrors.requireStringLiteralParameter(funcName, "field")
+      throw QueryCompilationErrors.requireLiteralParameter(funcName, "field", "string")
     }
   }
 }

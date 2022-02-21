@@ -721,9 +721,10 @@ object QueryCompilationErrors {
       s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
   }
 
-  def requireStringLiteralParameter(funcName: String, argName: String): Throwable = {
+  def requireLiteralParameter(
+      funcName: String, argName: String, requiredType: String): Throwable = {
     new AnalysisException(
-      s"The '$argName' parameter of function '$funcName' needs to be a string literal.")
+      s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
   }
 
   def invalidStringLiteralParameter(
