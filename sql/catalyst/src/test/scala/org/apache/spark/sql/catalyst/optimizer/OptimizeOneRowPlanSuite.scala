@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -60,22 +60,21 @@ class OptimizeOneRowPlanSuite extends PlanTest {
     comparePlans(Optimize.execute(plan3), plan3)
   }
 
-  test("Remove group only aggregate") {
+  test("Convert group only aggregate to project") {
     val plan1 = t1.groupBy($"a")($"a").analyze
-    comparePlans(Optimize.execute(plan1), t1)
+    comparePlans(Optimize.execute(plan1), t1.select($"a").analyze)
+
+    val plan2 = t1.groupBy($"a" + 1)($"a" + 1).analyze
+    comparePlans(Optimize.execute(plan2), t1.select($"a" + 1).analyze)
 
     // do not remove
-    val plan2 = t2.groupBy($"a")($"a").analyze
-    comparePlans(Optimize.execute(plan2), plan2)
-
-    val plan3 = t1.groupBy($"a")(sum($"a")).analyze
+    val plan3 = t2.groupBy($"a")($"a").analyze
     comparePlans(Optimize.execute(plan3), plan3)
 
-    val plan4 = t1.groupBy()(sum($"a")).analyze
+    val plan4 = t1.groupBy($"a")(sum($"a")).analyze
     comparePlans(Optimize.execute(plan4), plan4)
 
-    // do not remove if the output is not subset of its child
-    val plan5 = t1.groupBy($"a" + 1)($"a" + 1).analyze
+    val plan5 = t1.groupBy()(sum($"a")).analyze
     comparePlans(Optimize.execute(plan5), plan5)
   }
 
@@ -95,7 +94,7 @@ class OptimizeOneRowPlanSuite extends PlanTest {
 
   test("Remove in complex case") {
     val plan1 = t1.groupBy($"a")($"a").orderBy($"a".asc).analyze
-    val expected1 = t1.analyze
+    val expected1 = t1.select($"a").analyze
     comparePlans(Optimize.execute(plan1), expected1)
 
     val plan2 = t1.groupBy($"a")(sumDistinct($"a").as("s")).orderBy($"s".asc).analyze

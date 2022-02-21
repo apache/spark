@@ -2506,7 +2506,7 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelSort(origin1).size == 1)
       assert(findTopLevelSort(adaptive1).isEmpty)
 
-      // remove group only aggregate
+      // convert group only aggregate to project
       val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
         """
           |SELECT distinct c1 FROM (SELECT /*+ repartition(c1) */ * FROM v where c1 = 1)

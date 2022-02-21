@@ -456,40 +456,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
 }
 
 /**
- * The rule is applied both normal and AQE Optimizer. It optimizes plan using max rows:
- *   - if the child of sort max rows less than or equal to 1, remove the sort
- *   - if the child of local sort max rows per partition less than or equal to 1, remove the
- *     local sort
- *   - if the child of aggregate max rows less than or equal to 1 and its output is subset of
- *     its child and it's grouping only(include the rewritten distinct plan), remove the aggregate
- *   - if the child of aggregate max rows less than or equal to 1, set distinct to false in all
- *     aggregate expression
- */
-object OptimizeOneRowPlan extends Rule[LogicalPlan] {
-  private def maxRowNotLargerThanOne(plan: LogicalPlan): Boolean = {
-    plan.maxRows.exists(_ <= 1L)
-  }
-
-  private def maxRowPerPartitionNotLargerThanOne(plan: LogicalPlan): Boolean = {
-    plan.maxRowsPerPartition.exists(_ <= 1L)
-  }
-
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformDownWithPruning(_.containsAnyPattern(SORT, AGGREGATE), ruleId) {
-      case Sort(_, _, child) if maxRowNotLargerThanOne(child) => child
-      case Sort(_, false, child) if maxRowPerPartitionNotLargerThanOne(child) => child
-      case agg @ Aggregate(_, _, child) if agg.groupOnly &&
-        agg.outputSet.subsetOf(child.outputSet) && maxRowNotLargerThanOne(child) => child
-      case agg: Aggregate if maxRowNotLargerThanOne(agg.child) =>
-        agg.transformExpressions {
-          case aggExpr: AggregateExpression if aggExpr.isDistinct =>
-            aggExpr.copy(isDistinct = false)
-        }
-    }
-  }
-}
-
-/**
  * An optimizer used in test code.
  *
  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
