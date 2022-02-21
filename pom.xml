@@ -393,7 +393,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1091,8 +1091,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
-        <version>3.2.10.0</version>
+        <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
+        <version>3.2.11.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1104,13 +1104,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>3.12.4</version>
+        <version>4.2.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>3.12.4</version>
+        <version>4.2.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
