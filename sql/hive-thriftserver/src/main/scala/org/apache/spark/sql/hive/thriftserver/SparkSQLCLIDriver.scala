@@ -83,10 +83,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     })
   }
 
+  def exit(code: Int): Unit = {
+    exitCode = code
+    System.exit(exitCode)
+  }
+
   def main(args: Array[String]): Unit = {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
-      System.exit(1)
+      exit(1)
     }
 
     val sparkConf = new SparkConf(loadDefaults = true)
@@ -103,11 +108,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case e: UnsupportedEncodingException => exit(3)
     }
 
     if (!oproc.process_stage2(sessionState)) {
-      System.exit(2)
+      exit(2)
     }
 
     // Set all properties specified via command line.
@@ -184,9 +189,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException =>
-        exitCode = 3
-        System.exit(exitCode)
+      case e: UnsupportedEncodingException => exit(3)
     }
 
     if (sessionState.database != null) {
@@ -207,20 +210,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     cli.printMasterAndAppId
 
     if (sessionState.execString != null) {
-      exitCode = cli.processLine(sessionState.execString)
-      System.exit(exitCode)
+      exit(cli.processLine(sessionState.execString))
     }
 
     try {
       if (sessionState.fileName != null) {
-        exitCode = cli.processFile(sessionState.fileName)
-        System.exit(exitCode)
+        exit(cli.processFile(sessionState.fileName))
       }
     } catch {
       case e: FileNotFoundException =>
         logError(s"Could not open input file for reading. (${e.getMessage})")
-        exitCode = 3
-        System.exit(exitCode)
+        exit(3)
     }
 
     val reader = new ConsoleReader()
@@ -302,8 +302,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.close()
 
-    exitCode = ret
-    System.exit(exitCode)
+    exit(ret)
   }
 
 
@@ -358,7 +357,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
       sessionState.close()
-      System.exit(0)
+      SparkSQLCLIDriver.exit(0)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
@@ -483,8 +482,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Kill the VM on second ctrl+c
           if (!initialRequest) {
             console.printInfo("Exiting the JVM")
-            SparkSQLCLIDriver.exitCode = 127
-            System.exit(exitCode)
+            SparkSQLCLIDriver.exit(127)
           }
 
           // Interrupt the CLI thread to stop the current statement and return
