@@ -227,15 +227,24 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val (newTotalSize, _) = CommandUtils.calculateTotalSizeAndNumFiles(sparkSession, tableMeta)
+      val (newTotalSize, newNumFiles) =
+        CommandUtils.calculateTotalSizeAndNumFiles(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
       val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      val newProperties =
+        Map("numFiles" -> newNumFiles.toString,
+          "rawDataSize" -> newTotalSize.toString,
+          "totalSize" -> newTotalSize.toString) ++
+          newRowCount.map { rowCount =>
+            Map("numRows" -> rowCount.toString)
+          }.getOrElse(Map.empty[String, String]) ++ tableMeta.properties
       if (newStats.isDefined) {
-        sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+        sessionState.catalog.alterTable(
+          tableMeta.copy(stats = newStats, properties = newProperties))
       }
     }
   }
