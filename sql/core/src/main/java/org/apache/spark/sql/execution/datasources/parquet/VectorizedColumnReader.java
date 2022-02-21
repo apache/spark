@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.Decimal;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 
 /**
@@ -292,6 +293,16 @@ public class VectorizedColumnReader {
         return new VectorizedDeltaByteArrayReader();
       case DELTA_BINARY_PACKED:
         return new VectorizedDeltaBinaryPackedReader();
+      case RLE:
+        PrimitiveType.PrimitiveTypeName typeName =
+          this.descriptor.getPrimitiveType().getPrimitiveTypeName();
+        // RLE encoding only supports boolean type `Values`, and  `bitwidth` is always 1.
+        if (typeName == BOOLEAN) {
+          return new VectorizedRleValuesReader(1);
+        } else {
+          throw new UnsupportedOperationException(
+            "RLE encoding is not supported for values of type: " + typeName);
+        }
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
     }

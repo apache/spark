@@ -190,6 +190,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   test("implicit type cast - DateType") {
     val checkedType = DateType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -198,6 +199,16 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   test("implicit type cast - TimestampType") {
     val checkedType = TimestampType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, checkedType)
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - TimestampNTZType") {
+    val checkedType = TimestampNTZType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, checkedType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -476,6 +487,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
+    shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 

@@ -876,7 +876,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 " to isin(), you passed a [{values_type}]".format(values_type=type(values).__name__)
             )
 
-        values = values.tolist() if isinstance(values, np.ndarray) else list(values)
+        values = (
+            cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
+        )
 
         other = [SF.lit(v) for v in values]
         scol = self.spark.column.isin(other)

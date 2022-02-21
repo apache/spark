@@ -15,6 +15,21 @@
 # limitations under the License.
 #
 
+- case: linearRegressionMethodChaining
+  main: |
+    from pyspark.ml.regression import LinearRegression, LinearRegressionModel
+
+    lr = LinearRegression()
+    reveal_type(lr.setFeaturesCol("foo").setLabelCol("bar"))
+
+    lrm = LinearRegressionModel.load("/foo")
+    reveal_type(lrm.setPredictionCol("baz"))
+
+  out: |
+     main:4: note: Revealed type is "pyspark.ml.regression.LinearRegression"
+     main:7: note: Revealed type is "pyspark.ml.regression.LinearRegressionModel"
+
+
 - case: loadFMRegressor
   main: |
     from pyspark.ml.regression import FMRegressor, FMRegressionModel

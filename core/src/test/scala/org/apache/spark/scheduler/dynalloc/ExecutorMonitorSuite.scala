@@ -233,6 +233,21 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(clock.nanoTime()).toSet === Set("1", "2", "3"))
   }
 
+  test("SPARK-38019: timedOutExecutors should be deterministic") {
+    knownExecs ++= Set("1", "2", "3")
+
+    // start exec 1, 2, 3 at 0s (should idle time out at 60s)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    assert(monitor.isExecutorIdle("1"))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
+    assert(monitor.isExecutorIdle("2"))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "3", execInfo))
+    assert(monitor.isExecutorIdle("3"))
+
+    clock.setTime(TimeUnit.SECONDS.toMillis(150))
+    assert(monitor.timedOutExecutors().map(_._1) === Seq("1", "2", "3"))
+  }
+
   test("SPARK-27677: don't track blocks stored on disk when using shuffle service") {
     // First make sure that blocks on disk are counted when no shuffle service is available.
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))

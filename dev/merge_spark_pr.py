@@ -135,11 +135,12 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         continue_maybe(msg)
         had_conflicts = True
 
+    # First commit author should be considered as the primary author when the rank is the same
     commit_authors = run_cmd(
-        ["git", "log", "HEAD..%s" % pr_branch_name, "--pretty=format:%an <%ae>"]
+        ["git", "log", "HEAD..%s" % pr_branch_name, "--pretty=format:%an <%ae>", "--reverse"]
     ).split("\n")
     distinct_authors = sorted(
-        set(commit_authors), key=lambda x: commit_authors.count(x), reverse=True
+        list(dict.fromkeys(commit_authors)), key=lambda x: commit_authors.count(x), reverse=True
     )
     primary_author = input(
         'Enter primary author in the format of "name <email>" [%s]: ' % distinct_authors[0]

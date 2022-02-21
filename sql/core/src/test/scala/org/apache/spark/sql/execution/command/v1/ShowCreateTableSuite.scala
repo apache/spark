@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.command
  */
 trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
     with command.TestsV1AndV2Commands {
-  override def fullName: String = s"`$ns`.`$table`"
+  override def fullName: String = s"$ns.$table"
 
   test("show create table[simple]") {
     // todo After SPARK-37517 unify the testcase both v1 and v2
@@ -58,11 +58,11 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
       val showDDL = getShowCreateDDL(t)
       assert(showDDL === Array(
         s"CREATE TABLE $fullName (",
-        "`b` BIGINT,",
-        "`c` BIGINT,",
-        "`extraCol` ARRAY<INT>,",
-        "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>,",
-        "`a` BIGINT NOT NULL)",
+        "b BIGINT,",
+        "c BIGINT,",
+        "extraCol ARRAY<INT>,",
+        "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>,",
+        "a BIGINT NOT NULL)",
         "USING parquet",
         "OPTIONS (",
         "'from' = '0',",
@@ -85,11 +85,26 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
       sql(
         s"""CREATE TABLE $t
            |USING json
+           |CLUSTERED BY (a) INTO 2 BUCKETS
+           |AS SELECT 1 AS a, "foo" AS b
+         """.stripMargin
+      )
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
+        s" CLUSTERED BY (a) INTO 2 BUCKETS"
+      assert(getShowCreateDDL(t).mkString(" ") == expected)
+    }
+  }
+
+  test("sort bucketed data source table") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""CREATE TABLE $t
+           |USING json
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
         s" CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -101,11 +116,27 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"""CREATE TABLE $t
            |USING json
            |PARTITIONED BY (c)
+           |CLUSTERED BY (a) INTO 2 BUCKETS
+           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+         """.stripMargin
+      )
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
+        s" PARTITIONED BY (c) CLUSTERED BY (a) INTO 2 BUCKETS"
+      assert(getShowCreateDDL(t).mkString(" ") == expected)
+    }
+  }
+
+  test("partitioned sort bucketed data source table") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""CREATE TABLE $t
+           |USING json
+           |PARTITIONED BY (c)
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING, `c` DECIMAL(2,1)) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
         s" PARTITIONED BY (c) CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }

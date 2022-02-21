@@ -187,6 +187,29 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Change broadcast join to merge join") {
+    withTable("t1", "t2") {
+      withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        sql("CREATE TABLE t1 USING PARQUET AS SELECT 1 c1")
+        sql("CREATE TABLE t2 USING PARQUET AS SELECT 1 c1")
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM (
+            | SELECT distinct c1 from t1
+            | ) tmp1 JOIN (
+            |  SELECT distinct c1 from t2
+            | ) tmp2 ON tmp1.c1 = tmp2.c1
+            |""".stripMargin)
+        assert(findTopLevelBroadcastHashJoin(plan).size == 1)
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan).isEmpty)
+        assert(findTopLevelSortMergeJoin(adaptivePlan).size == 1)
+      }
+    }
+  }
+
   test("Reuse the parallelism of coalesced shuffle in local shuffle read") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -2243,6 +2266,15 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+
+        // The strategy of Eliminate Limits batch should be fixedPoint
+        val (origin3, adaptive3) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT * FROM (SELECT c1 + c2 FROM (SELECT DISTINCT * FROM v LIMIT 10086)) LIMIT 20
+          """.stripMargin
+        )
+        assert(findTopLevelLimit(origin3).size == 1)
+        assert(findTopLevelLimit(adaptive3).isEmpty)
       }
     }
   }
@@ -2406,6 +2438,49 @@ class AdaptiveQueryExecSuite
         assert(shuffles2.size == 4)
         val smj2 = findTopLevelSortMergeJoin(adaptive2)
         assert(smj2.size == 2 && smj2.forall(_.isSkewJoin))
+      }
+    }
+  }
+
+  test("SPARK-37652: optimize skewed join through union") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        def checkSkewJoin(query: String, joinNums: Int, optimizeSkewJoinNums: Int): Unit = {
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          val optimizeSkewJoins = joins.filter(_.isSkewJoin)
+          assert(joins.size == joinNums && optimizeSkewJoins.size == optimizeSkewJoinNums)
+        }
+
+        // skewJoin union skewJoin
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 " +
+            "UNION ALL SELECT key2 FROM skewData1 JOIN skewData2 ON key1 = key2", 2, 2)
+
+        // skewJoin union aggregate
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 " +
+            "UNION ALL SELECT key2 FROM skewData2 GROUP BY key2", 1, 1)
+
+        // skewJoin1 union (skewJoin2 join aggregate)
+        // skewJoin2 will lead to extra shuffles, but skew1 cannot be optimized
+         checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 UNION ALL " +
+            "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
+            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
       }
     }
   }

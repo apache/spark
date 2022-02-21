@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -146,30 +146,28 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _) =>
+    case c @ CreateTable(ResolvedDBObjectName(catalog, name), _, _, _, _)
+        if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
-      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+      if (!isV2Provider(provider)) {
         constructV1TableCmd(None, c.tableSpec, name, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
-        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
-          tableSpec = newTableSpec)
+        c
       }
 
-    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _) =>
+    case c @ CreateTableAsSelect(ResolvedDBObjectName(catalog, name), _, _, _, _, _)
+        if isSessionCatalog(catalog) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, c.tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = true)
-      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+      if (!isV2Provider(provider)) {
         constructV1TableCmd(Some(c.query), c.tableSpec, name, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
-        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
-          tableSpec = newTableSpec)
+        c
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
@@ -180,26 +178,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(
-      ResolvedDBObjectName(catalog, _), _, _, _, _) =>
+    case c @ ReplaceTable(ResolvedDBObjectName(catalog, _), _, _, _, _)
+        if isSessionCatalog(catalog) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+      if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE TABLE")
       } else {
-        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
-        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
-          tableSpec = newTableSpec)
+        c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedDBObjectName(catalog, _), _, _, _, _, _)
+        if isSessionCatalog(catalog) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
-      if (isSessionCatalog(catalog) && !isV2Provider(provider)) {
+      if (!isV2Provider(provider)) {
         throw QueryCompilationErrors
           .operationOnlySupportedWithV2TableError("REPLACE TABLE AS SELECT")
       } else {
-        val newTableSpec = c.tableSpec.copy(bucketSpec = None)
-        c.copy(partitioning = c.partitioning ++ c.tableSpec.bucketSpec.map(_.asTransform),
-          tableSpec = newTableSpec)
+        c
       }
 
     case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
@@ -221,7 +216,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
+    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) if conf.useV1Command =>
@@ -266,12 +261,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
-      if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
-      } else {
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde =>
+      ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
+
+    // If target is view, force use v1 command
+    case ShowCreateTable(ResolvedViewIdentifier(ident), _, output) =>
+      ShowCreateTableCommand(ident.asTableIdentifier, output)
+
+    case ShowCreateTable(ResolvedV1TableIdentifier(ident), _, output)
+      if conf.useV1Command => ShowCreateTableCommand(ident.asTableIdentifier, output)
+
+    case ShowCreateTable(ResolvedTable(catalog, ident, table: V1Table, _), _, output)
+      if isSessionCatalog(catalog) && DDLUtils.isHiveTable(table.catalogTable) =>
         ShowCreateTableCommand(ident.asTableIdentifier, output)
-      }
 
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
       TruncateTableCommand(ident.asTableIdentifier, None)
@@ -446,7 +448,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       storageFormat: CatalogStorageFormat,
       provider: String): CreateTableV1 = {
     val tableDesc = buildCatalogTable(name.asTableIdentifier, tableSchema,
-        partitioning, tableSpec.bucketSpec, tableSpec.properties, provider,
+        partitioning, tableSpec.properties, provider,
         tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
     CreateTableV1(tableDesc, mode, query)
@@ -518,7 +520,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       table: TableIdentifier,
       schema: StructType,
       partitioning: Seq[Transform],
-      bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: String,
       location: Option[String],
@@ -530,6 +531,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     } else {
       CatalogTableType.MANAGED
     }
+    val (partitionColumns, maybeBucketSpec) = partitioning.toSeq.convertTransforms
 
     CatalogTable(
       identifier = table,
@@ -537,8 +539,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       storage = storageFormat,
       schema = schema,
       provider = Some(provider),
-      partitionColumnNames = partitioning.asPartitionColumns,
-      bucketSpec = bucketSpec,
+      partitionColumnNames = partitionColumns,
+      bucketSpec = maybeBucketSpec,
       properties = properties,
       comment = comment)
   }

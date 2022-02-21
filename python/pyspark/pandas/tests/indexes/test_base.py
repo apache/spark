@@ -31,20 +31,16 @@ from pyspark.pandas.missing.indexes import (
     MissingPandasLikeMultiIndex,
     MissingPandasLikeTimedeltaIndex,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTest(PandasOnSparkTestCase, TestUtils):
+class IndexesTest(ComparisonTestBase, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     def test_index_basic(self):
         for pdf in [

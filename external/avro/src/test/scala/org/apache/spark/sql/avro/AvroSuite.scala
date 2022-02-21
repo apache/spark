@@ -1359,6 +1359,32 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-34378: support writing user provided avro schema with missing optional fields") {
+    withTempDir { tempDir =>
+      val avroSchema = SchemaBuilder.builder().record("test").fields()
+        .requiredString("f1").optionalString("f2").endRecord().toString()
+
+      val data = Seq("foo", "bar")
+
+      // Fail if required field f1 is missing
+      val e = intercept[SparkException] {
+        data.toDF("f2").write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/fail")
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e,
+        "Found field 'f1' in Avro schema but there is no match in the SQL schema")
+
+      val tempSaveDir = s"$tempDir/save/"
+      // Succeed if optional field f2 is missing
+      data.toDF("f1").write.option("avroSchema", avroSchema).format("avro").save(tempSaveDir)
+
+      val newDf = spark.read.format("avro").load(tempSaveDir)
+      assert(newDf.schema === new StructType().add("f1", StringType).add("f2", StringType))
+      val rows = newDf.collect()
+      assert(rows.map(_.getAs[String]("f1")).sorted === data.sorted)
+      rows.foreach(row => assert(row.isNullAt(1)))
+    }
+  }
+
   test("SPARK-34133: Reading user provided schema respects case sensitivity for field matching") {
     val wrongCaseSchema = new StructType()
         .add("STRING", StringType, nullable = false)

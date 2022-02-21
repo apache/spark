@@ -47,7 +47,8 @@ private[sql] object CatalogV2Util {
     Seq(TableCatalog.PROP_COMMENT,
       TableCatalog.PROP_LOCATION,
       TableCatalog.PROP_PROVIDER,
-      TableCatalog.PROP_OWNER)
+      TableCatalog.PROP_OWNER,
+      TableCatalog.PROP_EXTERNAL)
 
   /**
    * The list of reserved namespace properties, which can not be removed or changed directly by

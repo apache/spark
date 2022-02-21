@@ -228,13 +228,4 @@ class OrcFileFormat
 
     case _ => false
   }
-
-  override def supportFieldName(name: String): Boolean = {
-    try {
-      TypeDescription.fromString(s"struct<`$name`:int>")
-      true
-    } catch {
-      case _: IllegalArgumentException => false
-    }
-  }
 }

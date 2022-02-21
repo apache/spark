@@ -773,8 +773,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
     // join predicates is a super set of child's partitioning columns
     val bucketedTableTestSpec1 =
-      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
-        numPartitions = 1, expectedShuffle = false)
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
     testBucketing(
       bucketedTableTestSpecLeft = bucketedTableTestSpec1,
       bucketedTableTestSpecRight = bucketedTableTestSpec1,

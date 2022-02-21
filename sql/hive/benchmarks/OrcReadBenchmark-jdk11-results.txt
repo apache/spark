@@ -2,221 +2,221 @@
 SQL Single Numeric Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1064           1070           9         14.8          67.6       1.0X
-Native ORC Vectorized                               237            326          73         66.3          15.1       4.5X
-Hive built-in ORC                                  1232           1330         139         12.8          78.3       0.9X
+Hive built-in ORC                                  1137           1138           1         13.8          72.3       1.0X
+Native ORC MR                                       962            982          17         16.3          61.2       1.2X
+Native ORC Vectorized                               225            298          65         69.9          14.3       5.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       947           1056         155         16.6          60.2       1.0X
-Native ORC Vectorized                               232            311          56         67.7          14.8       4.1X
-Hive built-in ORC                                  1317           1330          19         11.9          83.7       0.7X
+Hive built-in ORC                                  1250           1253           4         12.6          79.5       1.0X
+Native ORC MR                                      1038           1135         136         15.1          66.0       1.2X
+Native ORC Vectorized                               232            307          47         67.9          14.7       5.4X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       964           1070         150         16.3          61.3       1.0X
-Native ORC Vectorized                               275            304          32         57.2          17.5       3.5X
-Hive built-in ORC                                  1328           1336          11         11.8          84.4       0.7X
+Hive built-in ORC                                  1360           1399          55         11.6          86.5       1.0X
+Native ORC MR                                      1047           1107          85         15.0          66.5       1.3X
+Native ORC Vectorized                               273            291          20         57.7          17.3       5.0X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1006           1066          84         15.6          64.0       1.0X
-Native ORC Vectorized                               342            353          12         46.0          21.7       2.9X
-Hive built-in ORC                                  1361           1386          36         11.6          86.5       0.7X
+Hive built-in ORC                                  1381           1425          62         11.4          87.8       1.0X
+Native ORC MR                                      1136           1138           4         13.9          72.2       1.2X
+Native ORC Vectorized                               336            377          31         46.8          21.4       4.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1020           1026           8         15.4          64.8       1.0X
-Native ORC Vectorized                               352            381          23         44.7          22.4       2.9X
-Hive built-in ORC                                  1457           1457           0         10.8          92.7       0.7X
+Hive built-in ORC                                  1425           1425           1         11.0          90.6       1.0X
+Native ORC MR                                      1090           1093           4         14.4          69.3       1.3X
+Native ORC Vectorized                               349            381          47         45.1          22.2       4.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1036           1056          28         15.2          65.9       1.0X
-Native ORC Vectorized                               387            403          15         40.6          24.6       2.7X
-Hive built-in ORC                                  1409           1417          11         11.2          89.6       0.7X
+Hive built-in ORC                                  1434           1477          61         11.0          91.2       1.0X
+Native ORC MR                                      1116           1125          12         14.1          71.0       1.3X
+Native ORC Vectorized                               366            388          18         43.0          23.2       3.9X
 
 
 ================================================================================================
 Int and String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1993           2094         144          5.3         190.0       1.0X
-Native ORC Vectorized                              1290           1348          83          8.1         123.0       1.5X
-Hive built-in ORC                                  2336           2426         127          4.5         222.8       0.9X
+Hive built-in ORC                                  2442           2543         143          4.3         232.8       1.0X
+Native ORC MR                                      2030           2048          25          5.2         193.6       1.2X
+Native ORC Vectorized                              1261           1266           8          8.3         120.2       1.9X
 
 
 ================================================================================================
 Partitioned Table Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Partitioned Table:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Data column - Native ORC MR                        1369           1384          22         11.5          87.0       1.0X
-Data column - Native ORC Vectorized                 406            428          20         38.7          25.8       3.4X
-Data column - Hive built-in ORC                    1444           1527         118         10.9          91.8       0.9X
-Partition column - Native ORC MR                    745            796          45         21.1          47.4       1.8X
-Partition column - Native ORC Vectorized             70             96          28        223.2           4.5      19.4X
-Partition column - Hive built-in ORC               1035           1063          39         15.2          65.8       1.3X
-Both columns - Native ORC MR                       1245           1306          86         12.6          79.2       1.1X
-Both columns - Native ORC Vectorized                385            424          35         40.9          24.5       3.6X
-Both columns - Hive built-in ORC                   1481           1566         120         10.6          94.2       0.9X
+Data column - Hive built-in ORC                    1615           1617           3          9.7         102.7       1.0X
+Data column - Native ORC MR                        1330           1373          61         11.8          84.6       1.2X
+Data column - Native ORC Vectorized                 343            404          83         45.8          21.8       4.7X
+Partition column - Hive built-in ORC               1087           1099          18         14.5          69.1       1.5X
+Partition column - Native ORC MR                    912            922          12         17.2          58.0       1.8X
+Partition column - Native ORC Vectorized             67             94          33        234.6           4.3      24.1X
+Both columns - Hive built-in ORC                   1743           1748           7          9.0         110.8       0.9X
+Both columns - Native ORC MR                       1454           1459           6         10.8          92.5       1.1X
+Both columns - Native ORC Vectorized                354            414          57         44.4          22.5       4.6X
 
 
 ================================================================================================
 Repeated String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1102           1261         224          9.5         105.1       1.0X
-Native ORC Vectorized                               216            260          55         48.5          20.6       5.1X
-Hive built-in ORC                                  1299           1427         181          8.1         123.9       0.8X
+Hive built-in ORC                                  1331           1342          16          7.9         126.9       1.0X
+Native ORC MR                                       901            910          12         11.6          85.9       1.5X
+Native ORC Vectorized                               228            291          72         45.9          21.8       5.8X
 
 
 ================================================================================================
 String with Nulls Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1632           1653          30          6.4         155.6       1.0X
-Native ORC Vectorized                               689            698           8         15.2          65.7       2.4X
-Hive built-in ORC                                  2224           2254          43          4.7         212.1       0.7X
+Hive built-in ORC                                  2295           2298           4          4.6         218.9       1.0X
+Native ORC MR                                      1711           1743          46          6.1         163.1       1.3X
+Native ORC Vectorized                               686            692           8         15.3          65.4       3.3X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      1516           1555          54          6.9         144.6       1.0X
-Native ORC Vectorized                               782            801          19         13.4          74.6       1.9X
-Hive built-in ORC                                  2023           2110         123          5.2         192.9       0.7X
+Hive built-in ORC                                  2045           2107          88          5.1         195.0       1.0X
+Native ORC MR                                      1577           1585          11          6.6         150.4       1.3X
+Native ORC Vectorized                               801            804           5         13.1          76.4       2.6X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       879            931          48         11.9          83.8       1.0X
-Native ORC Vectorized                               250            342          85         42.0          23.8       3.5X
-Hive built-in ORC                                  1204           1219          20          8.7         114.9       0.7X
+Hive built-in ORC                                  1254           1261          10          8.4         119.6       1.0X
+Native ORC MR                                       944            962          15         11.1          90.1       1.3X
+Native ORC Vectorized                               262            334         103         40.1          25.0       4.8X
 
 
 ================================================================================================
 Single Column Scan From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       159            192          24          6.6         151.4       1.0X
-Native ORC Vectorized                                85            116          32         12.3          81.0       1.9X
-Hive built-in ORC                                   790            853          99          1.3         753.9       0.2X
+Hive built-in ORC                                   954           1002          68          1.1         909.8       1.0X
+Native ORC MR                                       149            188          30          7.0         141.9       6.4X
+Native ORC Vectorized                                83            108          30         12.7          78.7      11.6X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 200 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       161            196          40          6.5         153.9       1.0X
-Native ORC Vectorized                               110            139          28          9.6         104.6       1.5X
-Hive built-in ORC                                  1549           1585          51          0.7        1476.8       0.1X
+Hive built-in ORC                                  1939           1994          78          0.5        1848.9       1.0X
+Native ORC MR                                       187            259          57          5.6         178.2      10.4X
+Native ORC Vectorized                               117            193          46          9.0         111.2      16.6X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Column Scan from 300 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       201            221          14          5.2         191.8       1.0X
-Native ORC Vectorized                               135            163          23          7.8         128.6       1.5X
-Hive built-in ORC                                  2166           2172           8          0.5        2065.6       0.1X
+Hive built-in ORC                                  2759           2827          96          0.4        2631.6       1.0X
+Native ORC MR                                       328            368          50          3.2         312.5       8.4X
+Native ORC Vectorized                               149            210          68          7.0         141.9      18.5X
 
 
 ================================================================================================
 Struct scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Struct Column Scan with 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       473            522          41          2.2         451.4       1.0X
-Native ORC Vectorized                               234            351          58          4.5         222.9       2.0X
-Hive built-in ORC                                   472            601         116          2.2         449.8       1.0X
+Hive built-in ORC                                   681            696          17          1.5         649.0       1.0X
+Native ORC MR                                       484            497           9          2.2         461.7       1.4X
+Native ORC Vectorized                               303            371          59          3.5         289.3       2.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Struct Column Scan with 100 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                       3238           3394         221          0.3        3087.5       1.0X
-Native ORC Vectorized                               2724           2844         169          0.4        2598.2       1.2X
-Hive built-in ORC                                   3898           3934          52          0.3        3717.0       0.8X
+Hive built-in ORC                                   3762           4091         465          0.3        3588.1       1.0X
+Native ORC MR                                       3503           3577         104          0.3        3340.7       1.1X
+Native ORC Vectorized                               2296           2415         168          0.5        2189.9       1.6X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Struct Column Scan with 300 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      10723          10890         236          0.1       10226.4       1.0X
-Native ORC Vectorized                               9966          10091         177          0.1        9503.9       1.1X
-Hive built-in ORC                                  12360          12482         172          0.1       11787.4       0.9X
+Hive built-in ORC                                  11058          11109          72          0.1       10545.5       1.0X
+Native ORC MR                                      11323          11354          44          0.1       10798.4       1.0X
+Native ORC Vectorized                              11246          11315          97          0.1       10725.2       1.0X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Single Struct Column Scan with 600 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                      24875          25382         717          0.0       23722.6       1.0X
-Native ORC Vectorized                              22763          22830          95          0.0       21708.5       1.1X
-Hive built-in ORC                                  27783          28079         419          0.0       26496.0       0.9X
+Hive built-in ORC                                  25265          29571         441          0.0       24094.4       1.0X
+Native ORC MR                                      26980          27178         280          0.0       25730.4       0.9X
+Native ORC Vectorized                              26603          26976         527          0.0       25370.3       0.9X
 
 
 ================================================================================================
 Nested Struct scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Nested Struct Scan with 10 Elements, 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                            4175           4184          12          0.3        3982.0       1.0X
-Native ORC Vectorized                                    1476           1483           9          0.7        1407.9       2.8X
-Hive built-in ORC                                        4128           4150          31          0.3        3936.6       1.0X
+Hive built-in ORC                                        4354           4453         140          0.2        4152.1       1.0X
+Native ORC MR                                            3674           4025         497          0.3        3503.4       1.2X
+Native ORC Vectorized                                    1000           1014          21          1.0         953.4       4.4X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Nested Struct Scan with 30 Elements, 10 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                            9819           9945         178          0.1        9364.0       1.0X
-Native ORC Vectorized                                    3771           3809          54          0.3        3596.0       2.6X
-Hive built-in ORC                                       11067          11090          32          0.1       10554.8       0.9X
+Hive built-in ORC                                       11727          11762          50          0.1       11183.8       1.0X
+Native ORC MR                                            8861           8862           1          0.1        8450.8       1.3X
+Native ORC Vectorized                                    2441           2497          79          0.4        2327.9       4.8X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1025-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Nested Struct Scan with 10 Elements, 30 Fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-Native ORC MR                                           10779          10781           3          0.1       10279.7       1.0X
-Native ORC Vectorized                                    7162           7392         325          0.1        6830.7       1.5X
-Hive built-in ORC                                        8417           8553         192          0.1        8027.5       1.3X
+Hive built-in ORC                                        9604           9616          17          0.1        9159.4       1.0X
+Native ORC MR                                            9501           9535          47          0.1        9061.0       1.0X
+Native ORC Vectorized                                    4418           4582         232          0.2        4213.6       2.2X
 
 

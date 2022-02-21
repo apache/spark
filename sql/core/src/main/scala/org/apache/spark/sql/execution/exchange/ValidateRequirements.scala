@@ -45,23 +45,29 @@ object ValidateRequirements extends Logging {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
-    // Verify partition number. For (hash) clustered distribution, the corresponding children must
-    // have the same number of partitions.
-    val numPartitions = requiredChildDistributions.zipWithIndex.collect {
-      case (_: ClusteredDistribution, i) => i
-    }.map(i => children(i).outputPartitioning.numPartitions)
-    if (numPartitions.length > 1 && !numPartitions.tail.forall(_ == numPartitions.head)) {
-      logDebug(s"ValidateRequirements failed: different partition num in\n$plan")
-      return false
-    }
-
-    children.zip(requiredChildDistributions.zip(requiredChildOrderings)).forall {
+    val satisfied = children.zip(requiredChildDistributions.zip(requiredChildOrderings)).forall {
       case (child, (distribution, ordering))
           if !child.outputPartitioning.satisfies(distribution)
             || !SortOrder.orderingSatisfies(child.outputOrdering, ordering) =>
         logDebug(s"ValidateRequirements failed: $distribution, $ordering\n$plan")
         false
       case _ => true
+    }
+
+    if (satisfied && children.length > 1 &&
+      requiredChildDistributions.forall(_.isInstanceOf[ClusteredDistribution])) {
+      // Check the co-partitioning requirement.
+      val specs = children.map(_.outputPartitioning).zip(requiredChildDistributions).map {
+        case (p, d) => p.createShuffleSpec(d.asInstanceOf[ClusteredDistribution])
+      }
+      if (specs.tail.forall(_.isCompatibleWith(specs.head))) {
+        true
+      } else {
+        logDebug(s"ValidateRequirements failed: children not co-partitioned in\n$plan")
+        false
+      }
+    } else {
+      satisfied
     }
   }
 }

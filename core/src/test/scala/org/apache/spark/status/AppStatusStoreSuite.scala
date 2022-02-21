@@ -19,6 +19,7 @@ package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
@@ -81,7 +82,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
-  private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
+  private def createAppStore(disk: Boolean, diskStoreType: HybridStoreDiskBackend.Value = null,
+      live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
       return AppStatusStore.createLiveStore(conf)
@@ -92,8 +94,9 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
 
     val store: KVStore = if (disk) {
+      conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
       val testDir = Utils.createTempDir()
-      val diskStore = KVUtils.open(testDir, getClass.getName)
+      val diskStore = KVUtils.open(testDir, getClass.getName, conf)
       new ElementTrackingStore(diskStore, conf)
     } else {
       new ElementTrackingStore(new InMemoryStore, conf)
@@ -102,7 +105,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   Seq(
-    "disk" -> createAppStore(disk = true, live = false),
+    "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false),
+    "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
     "in memory" -> createAppStore(disk = false, live = false),
     "in memory live" -> createAppStore(disk = false, live = true)
   ).foreach { case (hint, appStore) =>

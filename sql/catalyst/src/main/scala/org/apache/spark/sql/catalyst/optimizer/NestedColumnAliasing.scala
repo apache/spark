@@ -210,6 +210,7 @@ object NestedColumnAliasing {
     case _: Repartition => true
     case _: Sample => true
     case _: RepartitionByExpression => true
+    case _: RebalancePartitions => true
     case _: Join => true
     case _: Window => true
     case _: Sort => true

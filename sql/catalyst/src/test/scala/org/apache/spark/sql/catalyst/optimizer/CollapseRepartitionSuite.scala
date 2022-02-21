@@ -207,4 +207,18 @@ class CollapseRepartitionSuite extends PlanTest {
       .distribute('a)(20)
     comparePlans(Optimize.execute(originalQuery2.analyze), originalQuery2.analyze)
   }
+
+  test("SPARK-37904: Improve rebalance in CollapseRepartition") {
+    Seq(testRelation.sortBy($"a".asc),
+      testRelation.orderBy($"a".asc),
+      testRelation.coalesce(1),
+      testRelation.repartition(1),
+      testRelation.distribute($"a")(1),
+      testRelation.rebalance($"a")).foreach { prefix =>
+      val plan = prefix.rebalance($"a").analyze
+      val optimized = Optimize.execute(plan)
+      val expected = testRelation.rebalance($"a").analyze
+      comparePlans(optimized, expected)
+    }
+  }
 }

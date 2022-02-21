@@ -43,7 +43,7 @@ object SortPrefixUtils {
       case StringType => stringPrefixComparator(sortOrder)
       case BinaryType => binaryPrefixComparator(sortOrder)
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType |
-          _: AnsiIntervalType =>
+          TimestampNTZType | _: AnsiIntervalType =>
         longPrefixComparator(sortOrder)
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         longPrefixComparator(sortOrder)
@@ -123,7 +123,7 @@ object SortPrefixUtils {
   def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
     sortOrder.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
-           TimestampType | FloatType | DoubleType | _: AnsiIntervalType =>
+           TimestampType | TimestampNTZType | FloatType | DoubleType | _: AnsiIntervalType =>
         true
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         true

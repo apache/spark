@@ -51,8 +51,8 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(showDDL(0) == s"CREATE TABLE $fullName (")
-      assert(showDDL(1) == "`a` BIGINT NOT NULL,")
-      assert(showDDL(2) == "`b` BIGINT)")
+      assert(showDDL(1) == "a BIGINT NOT NULL,")
+      assert(showDDL(2) == "b BIGINT)")
       assert(showDDL(3) == s"USING ${classOf[SimpleInsertSource].getName}")
     }
   }
@@ -75,10 +75,10 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       )
       val showDDL = getShowCreateDDL(t)
       assert(showDDL(0) == s"CREATE TABLE $fullName (")
-      assert(showDDL(1) == "`a` STRING,")
-      assert(showDDL(2) == "`b` STRING,")
+      assert(showDDL(1) == "a STRING,")
+      assert(showDDL(2) == "b STRING,")
       assert(showDDL(3) == "`extra col` ARRAY<INT>,")
-      assert(showDDL(4) == "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>)")
+      assert(showDDL(4) == "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>)")
       assert(showDDL(5) == "USING json")
       assert(showDDL(6).startsWith("LOCATION 'file:") && showDDL(6).endsWith("sample.json'"))
     }
@@ -95,7 +95,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(showDDL(0) == s"CREATE TABLE $fullName (")
-      assert(showDDL(1) == "`a` STRUCT<`b`: STRING>)")
+      assert(showDDL(1) == "a STRUCT<b: STRING>)")
       assert(showDDL(2) == "USING json")
     }
   }
@@ -119,7 +119,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |)
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a STRING) USING json" +
         " OPTIONS ( 'k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4', 'k5' = 'v5')" +
         " TBLPROPERTIES ( 'a' = '2', 'b' = '1')"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
@@ -134,7 +134,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING) USING json"
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
   }
@@ -148,7 +148,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING) USING json PARTITIONED BY (b)"
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json PARTITIONED BY (b)"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
   }
@@ -162,7 +162,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING, `c` DECIMAL(2,1)) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
         s" COMMENT 'This is a comment'"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -177,7 +177,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING, `c` DECIMAL(2,1)) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
         s" TBLPROPERTIES ( 'a' = '1')"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }

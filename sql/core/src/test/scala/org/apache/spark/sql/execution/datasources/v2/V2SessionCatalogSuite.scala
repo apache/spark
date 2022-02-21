@@ -67,10 +67,10 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   override protected def afterAll(): Unit = {
     val catalog = newCatalog()
-    catalog.dropNamespace(Array("db"))
-    catalog.dropNamespace(Array("db2"))
-    catalog.dropNamespace(Array("ns"))
-    catalog.dropNamespace(Array("ns2"))
+    catalog.dropNamespace(Array("db"), cascade = true)
+    catalog.dropNamespace(Array("db2"), cascade = true)
+    catalog.dropNamespace(Array("ns"), cascade = true)
+    catalog.dropNamespace(Array("ns2"), cascade = true)
     super.afterAll()
   }
 
@@ -785,8 +785,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   private def filterV2TableProperties(
       properties: util.Map[String, String]): Map[String, String] = {
     properties.asScala.filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX))
-      .filter(_._1 != TableCatalog.PROP_EXTERNAL).toMap
+      .filter(!_._1.startsWith(TableCatalog.OPTION_PREFIX)).toMap
   }
 }
 
@@ -811,7 +810,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.listNamespaces(Array()) === Array(testNs, defaultNs))
     assert(catalog.listNamespaces(testNs) === Array())
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("listNamespaces: fail if missing namespace") {
@@ -849,7 +848,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(metadata.asScala, Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("loadNamespaceMetadata: empty metadata") {
@@ -864,7 +863,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(metadata.asScala, emptyProps.asScala)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: basic behavior") {
@@ -884,7 +883,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map("property" -> "value"))
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: initialize location") {
@@ -900,7 +899,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map.empty)
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: relative location") {
@@ -917,7 +916,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(metadata, Map.empty)
     assert(expectedPath === metadata("location"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: fail if namespace already exists") {
@@ -933,7 +932,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === true)
     checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("createNamespace: fail nested namespace") {
@@ -948,7 +947,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(exc.getMessage.contains("Invalid namespace name: db.nested"))
 
-    catalog.dropNamespace(Array("db"))
+    catalog.dropNamespace(Array("db"), cascade = false)
   }
 
   test("createTable: fail if namespace does not exist") {
@@ -969,7 +968,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === false)
   }
@@ -981,7 +980,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === true)
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === true)
     assert(catalog.namespaceExists(testNs) === false)
@@ -993,8 +992,8 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    val exc = intercept[IllegalStateException] {
-      catalog.dropNamespace(testNs)
+    val exc = intercept[AnalysisException] {
+      catalog.dropNamespace(testNs, cascade = false)
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
@@ -1002,7 +1001,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
 
     catalog.dropTable(testIdent)
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: basic behavior") {
@@ -1027,7 +1026,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       catalog.loadNamespaceMetadata(testNs).asScala,
       Map("property" -> "value"))
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: update namespace location") {
@@ -1050,7 +1049,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", "relativeP"))
     assert(newRelativePath === spark.catalog.getDatabase(testNs(0)).locationUri)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: update namespace comment") {
@@ -1065,7 +1064,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(newComment === spark.catalog.getDatabase(testNs(0)).description)
 
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 
   test("alterNamespace: fail if namespace doesn't exist") {
@@ -1092,6 +1091,6 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
       assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
 
     }
-    catalog.dropNamespace(testNs)
+    catalog.dropNamespace(testNs, cascade = false)
   }
 }
