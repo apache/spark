@@ -322,7 +322,7 @@ public class SparkLauncherSuite extends BaseSuite {
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
       assertEquals("hello", args[0]);
-      new SparkContext().stop();
+      new SparkContext().stop(0);
 
       synchronized (LOCK) {
         LOCK.notifyAll();
