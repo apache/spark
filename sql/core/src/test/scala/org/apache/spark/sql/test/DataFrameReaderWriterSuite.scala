@@ -142,10 +142,11 @@ class MessageCapturingCommitProtocol(jobId: String, path: String)
 }
 
 object CheckStagingDirWhenCommitJobCommitProtocol {
-  var stagingDirExists = true;
+  var stagingDirExists = false
 }
-class CheckStagingDirWhenCommitJobCommitProtocol(jobId: String, path: String)
-  extends HadoopMapReduceCommitProtocol(jobId, path) {
+class CheckStagingDirWhenCommitJobCommitProtocol(jobId: String, path: String,
+                                                 dynamicPartitionOverwrite: Boolean)
+  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
@@ -1288,14 +1289,26 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("SPARK-38250: Check existence before deleting stagingDir in HadoopMapReduceCommitProtocol") {
-    withSQLConf(
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
       SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[CheckStagingDirWhenCommitJobCommitProtocol].getCanonicalName) {
-      withTempDir { dir =>
-        val path = dir.getCanonicalPath
-        CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists = true;
-        spark.range(10).repartition(10).write.mode("overwrite").parquet(path)
-        assert(!CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists)
+        classOf[CheckStagingDirWhenCommitJobCommitProtocol].getName) {
+      withTempDir { d =>
+        withTable("t") {
+          CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists = false;
+          sql(
+            s"""
+               | create table t(c1 int, p1 int) using parquet partitioned by (p1)
+               | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+          val df = Seq((1, 2)).toDF("c1", "p1")
+          df.write
+            .partitionBy("p1")
+            .mode("overwrite")
+            .saveAsTable("t")
+          assert(CheckStagingDirWhenCommitJobCommitProtocol.stagingDirExists)
+        }
       }
     }
   }

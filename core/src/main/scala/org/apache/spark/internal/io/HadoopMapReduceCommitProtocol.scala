@@ -106,8 +106,6 @@ class HadoopMapReduceCommitProtocol(
    */
   protected def stagingDir = getStagingDir(path, jobId)
 
-  protected var stagingDirExists = false
-
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -159,7 +157,6 @@ class HadoopMapReduceCommitProtocol(
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
     // In principle we could include hash(absoluteDir) instead but this is simpler.
     val tmpOutputPath = new Path(stagingDir, UUID.randomUUID().toString() + "-" + filename).toString
-    stagingDirExists = true
 
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
     tmpOutputPath
@@ -239,7 +236,7 @@ class HadoopMapReduceCommitProtocol(
         }
       }
 
-      if (stagingDirExists) {
+      if (dynamicPartitionOverwrite || filesToMove.nonEmpty) {
         fs.delete(stagingDir, true)
       }
     }
@@ -260,9 +257,11 @@ class HadoopMapReduceCommitProtocol(
         logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
     }
     try {
-      if (hasValidPath && stagingDirExists) {
+      if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-        fs.delete(stagingDir, true)
+        if (fs.exists(stagingDir)) {
+          fs.delete(stagingDir, true)
+        }
       }
     } catch {
       case e: IOException =>
