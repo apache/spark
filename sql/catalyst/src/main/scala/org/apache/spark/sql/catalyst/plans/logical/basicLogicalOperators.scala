@@ -1347,6 +1347,8 @@ case class Sample(
   }
 
   override def maxRows: Option[Long] = {
+    // when withReplacement is true, PoissonSampler is applied in SampleExec,
+    // which can not guarantee the number of output rows less than or equal to child.maxRows.
     if (withReplacement) None else child.maxRows
   }
   override def output: Seq[Attribute] = child.output
