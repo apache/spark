@@ -546,8 +546,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
-  def stop(exitCode: Int = 0): Unit = {
-    sc.stop(exitCode)
+  def stop(): Unit = {
+    sc.stop()
   }
 
   override def close(): Unit = stop()
