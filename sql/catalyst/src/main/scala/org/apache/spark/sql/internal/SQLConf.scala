@@ -3529,14 +3529,14 @@ object SQLConf {
       "the planner will use contains join operator (instead of BNL) for string match queries.")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val CONTAINS_JOIN_THRESHOLD = buildConf("spark.sql.containsJoinThreshold")
     .doc("Configures the maximum size in bytes for a string relation that will be broadcast to " +
       "all worker nodes when performing contains join.")
     .version("3.3.0")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefaultString("50MB")
+    .createWithDefaultString("10MB")
 
   /**
    * Holds information about keys that have been deprecated.
