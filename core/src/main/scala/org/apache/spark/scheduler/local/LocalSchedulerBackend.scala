@@ -140,7 +140,7 @@ private[spark] class LocalSchedulerBackend(
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     stop(SparkAppHandle.State.FINISHED)
   }
 

@@ -925,10 +925,10 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     speculationScheduler.shutdown()
     if (backend != null) {
-      backend.stop()
+      backend.stop(exitCode)
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()

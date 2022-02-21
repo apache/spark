@@ -592,7 +592,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     reviveThread.shutdownNow()
     cleanupService.foreach(_.shutdownNow())
     stopExecutors()

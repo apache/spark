@@ -2768,11 +2768,11 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
   }
 
-  def stop(): Unit = {
+  def stop(exitCode: Int = 0): Unit = {
     messageScheduler.shutdownNow()
     shuffleMergeFinalizeScheduler.shutdownNow()
     eventProcessLoop.stop()
-    taskScheduler.stop()
+    taskScheduler.stop(exitCode)
   }
 
   eventProcessLoop.start()

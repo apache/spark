@@ -59,6 +59,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
   private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
+  private var exitCode = 0
 
   initializeLogIfNecessary(true)
   installSignalHandler()
@@ -139,7 +140,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
-    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
+    ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop(exitCode) }
 
     if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
@@ -183,7 +184,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.info = new PrintStream(System.err, true, UTF_8.name())
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
-      case e: UnsupportedEncodingException => System.exit(3)
+      case e: UnsupportedEncodingException =>
+        exitCode = 3
+        System.exit(exitCode)
     }
 
     if (sessionState.database != null) {
@@ -204,17 +207,20 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     cli.printMasterAndAppId
 
     if (sessionState.execString != null) {
-      System.exit(cli.processLine(sessionState.execString))
+      exitCode = cli.processLine(sessionState.execString)
+      System.exit(exitCode)
     }
 
     try {
       if (sessionState.fileName != null) {
-        System.exit(cli.processFile(sessionState.fileName))
+        exitCode = cli.processFile(sessionState.fileName)
+        System.exit(exitCode)
       }
     } catch {
       case e: FileNotFoundException =>
         logError(s"Could not open input file for reading. (${e.getMessage})")
-        System.exit(3)
+        exitCode = 3
+        System.exit(exitCode)
     }
 
     val reader = new ConsoleReader()
@@ -296,7 +302,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.close()
 
-    System.exit(ret)
+    exitCode = ret
+    System.exit(exitCode)
   }
 
 
@@ -476,7 +483,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Kill the VM on second ctrl+c
           if (!initialRequest) {
             console.printInfo("Exiting the JVM")
-            System.exit(127)
+            SparkSQLCLIDriver.exitCode = 127
+            System.exit(exitCode)
           }
 
           // Interrupt the CLI thread to stop the current statement and return

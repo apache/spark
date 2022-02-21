@@ -107,7 +107,7 @@ private[spark] abstract class YarnSchedulerBackend(
     require(appId.isDefined, "application ID unset")
   }
 
-  override def stop(): Unit = {
+  override def stop(exitCode: Int = 0): Unit = {
     try {
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
@@ -319,10 +319,10 @@ private[spark] abstract class YarnSchedulerBackend(
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
     }
 
-    private[cluster] def handleClientModeDriverStop(): Unit = {
+    private[cluster] def handleClientModeDriverStop(exitCode: Int): Unit = {
       amEndpoint match {
         case Some(am) =>
-          am.send(Shutdown)
+          am.send(Shutdown(exitCode))
         case None =>
           logWarning("Attempted to send shutdown message before the AM has registered!")
       }

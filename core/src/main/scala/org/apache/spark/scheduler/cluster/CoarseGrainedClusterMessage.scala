@@ -151,7 +151,7 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
   // Used internally by executors to shut themselves down.
-  case object Shutdown extends CoarseGrainedClusterMessage
+  case class Shutdown(exitCode: Int = 0) extends CoarseGrainedClusterMessage
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
