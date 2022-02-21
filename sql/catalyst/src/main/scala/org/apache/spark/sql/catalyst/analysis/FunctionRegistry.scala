@@ -363,8 +363,8 @@ object FunctionRegistry {
     expression[Bin]("bin"),
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
-    expression[Ceil]("ceil"),
-    expression[Ceil]("ceiling", true),
+    expressionBuilder("ceil", CeilExpressionBuilder),
+    expressionBuilder("ceiling", CeilExpressionBuilder, true),
     expression[Cos]("cos"),
     expression[Sec]("sec"),
     expression[Cosh]("cosh"),
@@ -373,7 +373,7 @@ object FunctionRegistry {
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
-    expression[Floor]("floor"),
+    expressionBuilder("floor", FloorExpressionBuilder),
     expression[Factorial]("factorial"),
     expression[Hex]("hex"),
     expression[Hypot]("hypot"),
@@ -806,11 +806,14 @@ object FunctionRegistry {
   }
 
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
-      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+      name: String, builder: T, setAlias: Boolean = false)
+  : (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, None)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      builder.build(expressions)
+      val expr = builder.build(expressions)
+      if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
+      expr
     }
     (name, (info, funcBuilder))
   }

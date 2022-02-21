@@ -149,7 +149,7 @@ case class CheckOverflow(
     })
   }
 
-  override def toString: String = s"CheckOverflow($child, $dataType, $nullOnOverflow)"
+  override def toString: String = s"CheckOverflow($child, $dataType)"
 
   override def sql: String = child.sql
 
