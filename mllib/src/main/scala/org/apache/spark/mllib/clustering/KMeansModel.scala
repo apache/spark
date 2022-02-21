@@ -50,7 +50,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
 
   // TODO: computation of statistics may take seconds, so save it to KMeansModel in training
   @transient private lazy val statistics = if (clusterCenters == null) {
-    null
+    None
   } else {
     val k = clusterCenters.length
     val numFeatures = clusterCenters.head.size
