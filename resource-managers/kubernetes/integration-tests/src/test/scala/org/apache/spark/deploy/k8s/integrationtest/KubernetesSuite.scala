@@ -213,8 +213,8 @@ class KubernetesSuite extends SparkFunSuite
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
       appArgs: Array[String] = Array.empty[String],
       isJVM: Boolean = true,
-      sparkConf: Option[SparkAppConf] = None,
-      appLoc: Option[String] = None): Unit = {
+      customSparkConf: Option[SparkAppConf] = None,
+      customAppLocator: Option[String] = None): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_PI_MAIN_CLASS,
@@ -224,8 +224,8 @@ class KubernetesSuite extends SparkFunSuite
       driverPodChecker,
       executorPodChecker,
       isJVM,
-      sparkConf = sparkConf,
-      appLoc = appLoc
+      customSparkConf = customSparkConf,
+      customAppLocator = customAppLocator
     )
   }
 
@@ -342,8 +342,8 @@ class KubernetesSuite extends SparkFunSuite
       executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
       decommissioningTest: Boolean = false,
       env: Map[String, String] = Map.empty[String, String],
-      sparkConf: Option[SparkAppConf] = None,
-      appLoc: Option[String] = None): Unit = {
+      customSparkConf: Option[SparkAppConf] = None,
+      customAppLocator: Option[String] = None): Unit = {
 
   // scalastyle:on argcount
     val appArguments = SparkAppArguments(
@@ -377,7 +377,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
-      .withLabel("spark-app-locator", appLoc.getOrElse(appLocator))
+      .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
         logDebug("Beginning watch of executors")
@@ -441,7 +441,7 @@ class KubernetesSuite extends SparkFunSuite
     logDebug("Starting Spark K8s job")
     SparkAppLauncher.launch(
       appArguments,
-      sparkConf.getOrElse(sparkAppConf),
+      customSparkConf.getOrElse(sparkAppConf),
       TIMEOUT.value.toSeconds.toInt,
       sparkHomeDir,
       isJVM,
@@ -450,7 +450,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
-      .withLabel("spark-app-locator", appLoc.getOrElse(appLocator))
+      .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "driver")
       .list()
       .getItems

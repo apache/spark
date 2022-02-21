@@ -73,10 +73,13 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     k8sClient.load(new FileInputStream(yamlPath)).delete()
   }
 
-  private def getPods(role: String, groupLoc: String, statusPhase: String): mutable.Buffer[Pod] = {
+  private def getPods(
+      role: String,
+      groupLocator: String,
+      statusPhase: String): mutable.Buffer[Pod] = {
     k8sClient
       .pods()
-      .withLabel("spark-group-locator", groupLoc)
+      .withLabel("spark-group-locator", groupLocator)
       .withLabel("spark-role", role)
       .withField("status.phase", statusPhase)
       .list()
@@ -90,9 +93,7 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     val appLoc = s"${appLocator}${batchSuffix}"
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
-    val conf = createVolcanoSparkConf(
-      driverPodName = podName, appLoc = appLoc, groupLoc = groupLoc, queue
-    )
+    val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue)
     runSparkPiAndVerifyCompletion(
       driverPodChecker = (driverPod: Pod) => {
         checkScheduler(driverPod)
@@ -103,8 +104,8 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
         checkScheduler(executorPod)
         checkAnnotaion(executorPod)
       },
-      sparkConf = Option(conf),
-      appLoc = Option(appLoc)
+      customSparkConf = Option(conf),
+      customAppLocator = Option(appLoc)
     )
   }
 
@@ -153,24 +154,24 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run 4 SparkPi Jobs with 2 volcano queues (queue scheduling)", k8sTestTag, volcanoTag) {
     createOrReplaceYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
     val jobNum = 4
-    val groupLoc = "queue-test" + UUID.randomUUID().toString.replaceAll("-", "")
+    val groupLocator = "queue-test" + UUID.randomUUID().toString.replaceAll("-", "")
     // Submit two jobs into disabled queue0 and enabled queue1
     (1 to jobNum).foreach { i =>
       Future {
-        runJobAndVerify(i.toString, groupLoc = Option(groupLoc), queue = Option(s"queue${i % 2}"))
+        runJobAndVerify(i.toString, Option(groupLocator), Option(s"queue${i % 2}"))
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods(role = "driver", groupLoc = groupLoc, statusPhase = "Succeeded")
+      val completedPods = getPods("driver", groupLocator, "Succeeded")
       assert(completedPods.size === 2)
-      val pendingPods = getPods(role = "driver", groupLoc = groupLoc, statusPhase = "Pending")
+      val pendingPods = getPods("driver", groupLocator, "Pending")
       assert(pendingPods.size === 2)
     }
     // Now, enable all queues, then all jobs completed
     createOrReplaceYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods(role = "driver", groupLoc = groupLoc, statusPhase = "Succeeded")
+      val completedPods = getPods("driver", groupLocator, "Succeeded")
       assert(completedPods.size === jobNum)
     }
     deleteYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
