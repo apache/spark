@@ -407,7 +407,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.novocode</groupId>
+      <groupId>com.github.sbt</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
@@ -1128,7 +1128,7 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.13.1</version>
+        <version>4.13.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1144,9 +1144,9 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.novocode</groupId>
+        <groupId>com.github.sbt</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.11</version>
+        <version>0.13.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
