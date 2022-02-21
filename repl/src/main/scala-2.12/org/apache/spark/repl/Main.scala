@@ -76,7 +76,7 @@ object Main extends Logging {
 
     if (!hasErrors) {
       interp.process(settings) // Repl starts and goes in loop of R.E.P.L
-      Option(sparkContext).foreach(_.stop)
+      Option(sparkContext).foreach(_.stop())
     }
   }
 
