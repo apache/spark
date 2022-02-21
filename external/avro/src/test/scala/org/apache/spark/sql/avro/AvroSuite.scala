@@ -68,6 +68,8 @@ abstract class AvroSuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    // initialize SessionCatalog here so it has a clean hadoopConf
+    spark.sessionState.catalog
     spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
