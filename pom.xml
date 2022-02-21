@@ -133,11 +133,11 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.8.1</kafka.version>
+    <kafka.version>3.1.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.2</parquet.version>
-    <orc.version>1.7.2</orc.version>
+    <orc.version>1.7.3</orc.version>
     <jetty.version>9.4.44.v20210927</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -184,7 +184,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
-    <joda.version>2.10.12</joda.version>
+    <joda.version>2.10.13</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -201,7 +201,7 @@
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>6.0.1</arrow.version>
+    <arrow.version>7.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>5.12.0</kubernetes-client.version>
@@ -1025,6 +1025,11 @@
             <artifactId>commons-math3</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.chuusai</groupId>
+        <artifactId>shapeless_${scala.binary.version}</artifactId>
+        <version>2.3.7</version>
       </dependency>
       <dependency>
         <groupId>org.json4s</groupId>

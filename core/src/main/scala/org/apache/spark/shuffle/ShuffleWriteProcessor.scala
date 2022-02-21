@@ -59,13 +59,25 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       val mapStatus = writer.stop(success = true)
       if (mapStatus.isDefined) {
+        // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
+        if (dep.shuffleMergeAllowed && dep.getMergerLocs.isEmpty) {
+          val mapOutputTracker = SparkEnv.get.mapOutputTracker
+          val mergerLocs =
+            mapOutputTracker.getShufflePushMergerLocations(dep.shuffleId)
+          if (mergerLocs.nonEmpty) {
+            dep.setMergerLocs(mergerLocs)
+          }
+        }
         // Initiate shuffle push process if push based shuffle is enabled
         // The map task only takes care of converting the shuffle data file into multiple
         // block push requests. It delegates pushing the blocks to a different thread-pool -
         // ShuffleBlockPusher.BLOCK_PUSHER_POOL.
-        if (dep.shuffleMergeEnabled && dep.getMergerLocs.nonEmpty && !dep.shuffleMergeFinalized) {
+        if (!dep.shuffleMergeFinalized) {
           manager.shuffleBlockResolver match {
             case resolver: IndexShuffleBlockResolver =>
+              logInfo(s"Shuffle merge enabled with ${dep.getMergerLocs.size} merger locations " +
+                s" for stage ${context.stageId()} with shuffle ID ${dep.shuffleId}")
+              logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
               new ShuffleBlockPusher(SparkEnv.get.conf)
                 .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, partition.index)

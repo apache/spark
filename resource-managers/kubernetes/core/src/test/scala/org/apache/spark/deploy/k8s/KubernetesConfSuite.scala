@@ -222,8 +222,8 @@ class KubernetesConfSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
     val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
     val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
-    assert(driverConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
-    assert(execConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+    assert(driverConf.appId === KubernetesTestConf.APP_ID)
+    assert(execConf.appId === KubernetesTestConf.APP_ID)
   }
 
   test("SPARK-36566: get app name label") {

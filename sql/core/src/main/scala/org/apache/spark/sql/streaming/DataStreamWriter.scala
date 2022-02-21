@@ -290,7 +290,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * TODO (SPARK-33638): Full support of v2 table creation
        */
       val tableSpec = TableSpec(
-        None,
         Map.empty[String, String],
         Some(source),
         Map.empty[String, String],

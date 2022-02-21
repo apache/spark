@@ -42,7 +42,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       return true;
     }
 
-    if (other == null || !(other instanceof BloomFilterImpl)) {
+    if (!(other instanceof BloomFilterImpl)) {
       return false;
     }
 
