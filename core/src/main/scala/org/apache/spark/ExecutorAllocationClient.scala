@@ -21,7 +21,12 @@ import org.apache.spark.scheduler.ExecutorDecommissionInfo
 
 /**
  * A client that communicates with the cluster manager to request or kill executors.
- * This is currently supported only in YARN mode.
+ * This is currently supported in the following modes:
+ * Spark's Standalone,
+ * YARN-Client,
+ * YARN-Cluster,
+ * Mesos,
+ * Kubernetes.
  */
 private[spark] trait ExecutorAllocationClient {
 
