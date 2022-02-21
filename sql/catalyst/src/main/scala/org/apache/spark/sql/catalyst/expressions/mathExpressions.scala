@@ -282,7 +282,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       if (!(scale.foldable && scale.dataType == IntegerType)) {
         throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
       }
-      if ( scale.eval() == null) {
+      if (scale.eval() == null) {
         throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
       }
       buildWithTwoParams(expressions(0), scale)
@@ -539,9 +539,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 }
 
 @ExpressionDescription(
-  usage = """
-  _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater
-  than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.""",
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not " +
+    "greater than `expr`. An optional `scale` parameter can be specified to control the " +
+    "rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
