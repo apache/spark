@@ -66,7 +66,8 @@ case class ParquetScanBuilder(
         isCaseSensitive,
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
-        RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
+        RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+        readPartitionSchema())
       parquetFilters.convertibleFilters(pushedDataFilters).toArray
     } else {
       Array.empty[Filter]

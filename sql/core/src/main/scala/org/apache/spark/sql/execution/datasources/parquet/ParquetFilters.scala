@@ -34,10 +34,13 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnota
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
+import org.apache.spark.sql.catalyst.{InternalRow, StructFilters}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Predicate}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -51,7 +54,9 @@ class ParquetFilters(
     pushDownStartWith: Boolean,
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
-    datetimeRebaseSpec: RebaseSpec) {
+    datetimeRebaseSpec: RebaseSpec,
+    partitionSchema: StructType = StructType(Seq.empty),
+    partitionValues: Option[InternalRow] = None) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -696,6 +701,7 @@ class ParquetFilters(
           createFilterHelper(rhs, canPartialPushDownConjuncts)
 
         (lhsFilterOption, rhsFilterOption) match {
+          case (Some(null), _) | (_, Some(null)) => Some(null)
           case (Some(lhsFilter), Some(rhsFilter)) => Some(FilterApi.and(lhsFilter, rhsFilter))
           case (Some(lhsFilter), None) if canPartialPushDownConjuncts => Some(lhsFilter)
           case (None, Some(rhsFilter)) if canPartialPushDownConjuncts => Some(rhsFilter)
@@ -717,11 +723,13 @@ class ParquetFilters(
         for {
           lhsFilter <- createFilterHelper(lhs, canPartialPushDownConjuncts)
           rhsFilter <- createFilterHelper(rhs, canPartialPushDownConjuncts)
-        } yield FilterApi.or(lhsFilter, rhsFilter)
-
-      case sources.Not(pred) =>
-        createFilterHelper(pred, canPartialPushDownConjuncts = false)
-          .map(FilterApi.not)
+        } yield {
+          (lhsFilter, rhsFilter) match {
+            case (lhsFilter, null) => lhsFilter
+            case (null, rhsFilter) => rhsFilter
+            case _ => FilterApi.or(lhsFilter, rhsFilter)
+          }
+        }
 
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           canMakeFilterOn(name, values.head) =>
@@ -778,7 +786,41 @@ class ParquetFilters(
           )
         }
 
+      case sources.Not(pred) =>
+        createFilterHelper(pred, canPartialPushDownConjuncts = false)
+          .map(FilterApi.not)
+
+      case _ if predicate.references.forall(partitionSchema.names.contains) =>
+        evaluateFilter(predicate)
+
       case _ => None
+    }
+  }
+
+  private def evaluateFilter(filter: sources.Filter): Option[FilterPredicate] = {
+    val predicate = StructFilters.filterToExpression(filter, toRef)
+    if (predicate.isDefined) {
+      val boundPredicate = Predicate.createInterpreted(predicate.get.transform {
+        case a: AttributeReference =>
+          val index = partitionSchema.indexWhere(a.name == _.name)
+          BoundReference(index, partitionSchema(index).dataType, nullable = true)
+      })
+      if (partitionValues.exists(boundPredicate.eval)) {
+        None
+      } else {
+        // Empty FilterPredicate, will be removed later.
+        Some(null)
+      }
+    } else {
+      None
+    }
+  }
+
+  private def toRef(attr: String): Option[BoundReference] = {
+    // The names have been normalized and case sensitivity is not a concern here.
+    partitionSchema.getFieldIndex(attr).map { index =>
+      val field = partitionSchema(index)
+      BoundReference(index, field.dataType, field.nullable)
     }
   }
 }

@@ -224,12 +224,15 @@ case class ParquetPartitionReaderFactory(
         pushDownStringStartWith,
         pushDownInFilterThreshold,
         isCaseSensitive,
-        datetimeRebaseSpec)
+        datetimeRebaseSpec,
+        partitionSchema,
+        Some(file.partitionValues))
       filters
         // Collects all converted Parquet filter predicates. Notice that not all predicates can be
         // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
         // is used here.
         .flatMap(parquetFilters.createFilter)
+        .filter(_ != null)
         .reduceOption(FilterApi.and)
     } else {
       None
