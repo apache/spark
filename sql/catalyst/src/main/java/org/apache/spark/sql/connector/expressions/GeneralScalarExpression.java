@@ -21,18 +21,17 @@ import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
 
-// scalastyle:off line.size.limit
 /**
  * The general V2 expression corresponding to V1 expression.
  * <p>
  * The currently supported expression:
  * <ol>
- *  <li><pre>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</pre> Since 3.3.0</li>
+ *  <li><pre>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</pre>
+ *  Since 3.3.0</li>
  * </ol>
  *
  * @since 3.3.0
  */
-// scalastyle:on line.size.limit
 @Evolving
 public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
