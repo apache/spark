@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -92,6 +92,16 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')").collect()
+    }
+    assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage ===
+      "The value of parameter(s) 'unit' in timestampadd is invalid: nanosecond")
+  }
+
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
@@ -129,13 +139,12 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[SparkRuntimeException] {
       trainingSales
         .groupBy($"sales.year")
-        .pivot(struct(lower($"sales.course"), $"training"))
+        .pivot(struct(lower(trainingSales("sales.course")), trainingSales("training")))
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getMessage === "The feature is not supported: " +
-      "literal for '[dotnet,Dummies]' of class " +
-      "org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema.")
+    assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
+      """ '[dotnet,Dummies]' of the column data type 'struct<col1:string,training:string>'.""")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {

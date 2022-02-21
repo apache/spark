@@ -393,7 +393,7 @@ class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
         assert self._java_obj is not None
 
         self._transfer_params_to_java()
-        return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sql_ctx)
+        return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sparkSession)
 
 
 @inherit_doc

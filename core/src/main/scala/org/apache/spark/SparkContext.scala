@@ -560,7 +560,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _plugins = PluginContainer(this, _resources.asJava)
 
     // Create and start the scheduler
-    val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
+    val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
@@ -2890,8 +2890,7 @@ object SparkContext extends Logging {
    */
   private def createTaskScheduler(
       sc: SparkContext,
-      master: String,
-      deployMode: String): (SchedulerBackend, TaskScheduler) = {
+      master: String): (SchedulerBackend, TaskScheduler) = {
     import SparkMasterRegex._
 
     // When running locally, don't try to re-execute tasks on failure.

@@ -242,6 +242,14 @@ object QueryExecutionErrors {
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
   }
 
+  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"pivoting by the value '${v.toString}' of the column data type" +
+        s" '${dataType.catalogString}'."))
+  }
+
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
     new RuntimeException(s"no default for type $dataType")
   }
@@ -797,6 +805,15 @@ object QueryExecutionErrors {
       s"""
          |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
          |in case-insensitive mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateFieldInFieldIdLookupModeError(
+      requiredId: Int, matchedFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredId": $matchedFields
+         |in id mapping mode
        """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -1954,5 +1971,11 @@ object QueryExecutionErrors {
 
   def unsupportedDropNamespaceRestrictError(): Throwable = {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
+
+  def invalidUnitInTimestampAdd(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampadd", unit))
   }
 }

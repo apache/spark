@@ -978,6 +978,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
     object ExtractAttribute {
+      @scala.annotation.tailrec
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)

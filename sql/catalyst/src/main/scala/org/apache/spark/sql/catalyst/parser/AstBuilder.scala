@@ -2092,6 +2092,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Returns whether the pattern is a regex expression (instead of a normal
+   * string). Normal string is a string with all alphabets/digits and "_".
+   */
+  private def isRegex(pattern: String): Boolean = {
+    pattern.exists(p => !Character.isLetterOrDigit(p) && p != '_')
+  }
+
+  /**
    * Create a dereference expression. The return type depends on the type of the parent.
    * If the parent is an [[UnresolvedAttribute]], it can be a [[UnresolvedAttribute]] or
    * a [[UnresolvedRegex]] for regex quoted in ``; if the parent is some other expression,
@@ -2103,7 +2111,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
-            if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+            if conf.supportQuotedRegexColumnName &&
+              isRegex(columnNameRegex) && canApplyRegex(ctx) =>
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
               conf.caseSensitiveAnalysis)
           case _ =>
@@ -2121,7 +2130,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
-        if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+        if conf.supportQuotedRegexColumnName &&
+          isRegex(columnNameRegex) && canApplyRegex(ctx) =>
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         UnresolvedAttribute.quoted(ctx.getText)
@@ -2935,9 +2945,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Validate a replace table statement and return the [[TableIdentifier]].
    */
   override def visitReplaceTableHeader(
-      ctx: ReplaceTableHeaderContext): TableHeader = withOrigin(ctx) {
+      ctx: ReplaceTableHeaderContext): Seq[String] = withOrigin(ctx) {
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText).toSeq
-    (multipartIdentifier, false, false, false)
+    multipartIdentifier
   }
 
   /**
@@ -3533,22 +3543,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temp, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val table = visitReplaceTableHeader(ctx.replaceTableHeader)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-
-    if (temp) {
-      val action = if (orCreate) "CREATE OR REPLACE" else "REPLACE"
-      operationNotAllowed(s"$action TEMPORARY TABLE ..., use $action TEMPORARY VIEW instead.", ctx)
-    }
-
-    if (external) {
-      operationNotAllowed("REPLACE EXTERNAL TABLE ...", ctx)
-    }
-
-    if (ifNotExists) {
-      operationNotAllowed("REPLACE ... IF NOT EXISTS, use CREATE IF NOT EXISTS instead", ctx)
-    }
-
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
@@ -4510,4 +4506,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
 
   private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
+
+  /**
+   * Create a TimestampAdd expression.
+   */
+  override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
+    val arguments = Seq(
+      Literal(ctx.unit.getText),
+      expression(ctx.unitsAmount),
+      expression(ctx.timestamp))
+    UnresolvedFunction("timestampadd", arguments, isDistinct = false)
+  }
 }
