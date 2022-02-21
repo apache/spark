@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.lang.{Integer => JInteger}
 import java.sql.Timestamp
 import java.util.{Locale, UUID}
 
@@ -701,6 +702,53 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       assertNumStateRows(
         total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0)))
     )
+  }
+
+  test("joining non-nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[JInteger]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, 1, 5),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      CheckNewAnswer((1, 1, 2, 3), (5, 5, 10, 15))
+    )
+  }
+
+  test("joining nullable left join key with non-nullable right join key") {
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[Int]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, 1, 5),
+      CheckNewAnswer((1, 1, 2, 3), (5, 5, 10, 15))
+    )
+  }
+
+  test("joining nullable left join key with nullable right join key") {
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[JInteger]
+
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), null),
+      CheckNewAnswer(
+        Row(JInteger.valueOf(1), JInteger.valueOf(1), JInteger.valueOf(2), JInteger.valueOf(3)),
+        Row(JInteger.valueOf(5), JInteger.valueOf(5), JInteger.valueOf(10), JInteger.valueOf(15)),
+        Row(null, null, null, null))
+    )
+  }
+
+  private def testForJoinKeyNullability(left: DataFrame, right: DataFrame): DataFrame = {
+    val df1 = left.selectExpr("value as leftKey", "value * 2 as leftValue")
+    val df2 = right.selectExpr("value as rightKey", "value * 3 as rightValue")
+
+    df1.join(df2, expr("leftKey <=> rightKey"))
+      .select("leftKey", "rightKey", "leftValue", "rightValue")
   }
 }
 
