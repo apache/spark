@@ -54,8 +54,13 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td><=></td>
- *   <td><pre>expr1 <=> expr2</pre></td>
+ *   <td>&lt;&gt;</td>
+ *   <td><pre>expr1 &lt;&gt; expr2</pre></td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&lt;=&gt;</td>
+ *   <td><pre>expr1 &lt;=&gt; expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
