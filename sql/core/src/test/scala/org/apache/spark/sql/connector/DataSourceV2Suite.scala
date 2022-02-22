@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector
 
 import java.io.File
-import java.util
 import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
@@ -552,7 +551,7 @@ abstract class SimpleBatchTable extends Table with SupportsRead  {
 
   override def name(): String = this.getClass.toString
 
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(BATCH_READ)
+  override def capabilities(): java.util.Set[TableCapability] = java.util.EnumSet.of(BATCH_READ)
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder
@@ -575,7 +574,7 @@ trait TestingV2Source extends TableProvider {
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     getTable(new CaseInsensitiveStringMap(properties))
   }
 
@@ -792,7 +791,7 @@ class SchemaRequiredDataSource extends TableProvider {
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     val userGivenSchema = schema
     new SimpleBatchTable {
       override def schema(): StructType = userGivenSchema
