@@ -2068,6 +2068,8 @@ case class ElementAt(
     case MapType(_, valueType, _) => valueType
   }
 
+  override val isElementAtFunction: Boolean = true
+
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
@@ -2129,7 +2131,7 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw QueryExecutionErrors.invalidArrayIndexError(index, array.numElements())
+            throw QueryExecutionErrors.invalidElementAtIndexError(index, array.numElements())
           } else {
             null
           }
@@ -2168,7 +2170,7 @@ case class ElementAt(
           }
 
           val indexOutOfBoundBranch = if (failOnError) {
-            s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
+            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements());"
           } else {
             s"${ev.isNull} = true;"
           }

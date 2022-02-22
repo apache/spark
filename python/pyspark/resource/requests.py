@@ -304,12 +304,9 @@ class TaskResourceRequests:
 
         _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
         if _jvm is not None:
-            assert SparkContext._jvm is not None
             self._java_task_resource_requests: Optional[
                 JavaObject
-            ] = (
-                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()  # type: ignore[attr-defined]
-            )
+            ] = _jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:

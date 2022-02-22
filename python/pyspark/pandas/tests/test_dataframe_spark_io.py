@@ -361,10 +361,6 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 1
             ).write.orc(path, mode="overwrite")
 
-            # `spark.write.orc` create a directory contains distributed orc files.
-            # But pandas only can read from file, not directory. Therefore, we need orc file path.
-            orc_file_path = glob.glob(os.path.join(path, "*.orc"))[0]
-
             expected = data.reset_index()[data.columns]
             actual = ps.read_orc(path)
             self.assertPandasEqual(expected, actual.to_pandas())

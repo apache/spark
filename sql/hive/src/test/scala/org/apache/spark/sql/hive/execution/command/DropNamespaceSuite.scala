@@ -25,4 +25,5 @@ import org.apache.spark.sql.execution.command.v1
  */
 class DropNamespaceSuite extends v1.DropNamespaceSuiteBase with CommandSuiteBase {
   override def isCasePreserving: Boolean = false
+  override def commandVersion: String = super[DropNamespaceSuiteBase].commandVersion
 }

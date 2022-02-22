@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
-  private val DRIVER_LABELS = Map("labelkey" -> "labelvalue")
+  private val CUSTOM_DRIVER_LABELS = Map("labelkey" -> "labelvalue")
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map("customAnnotation" -> "customAnnotationValue")
   private val DRIVER_ENVS = Map(
@@ -64,7 +64,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
-      labels = DRIVER_LABELS,
+      labels = CUSTOM_DRIVER_LABELS,
       environment = DRIVER_ENVS,
       annotations = DRIVER_ANNOTATIONS)
 
@@ -116,12 +116,13 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val driverPodMetadata = configuredPod.pod.getMetadata
     assert(driverPodMetadata.getName === "spark-driver-pod")
-    val DEFAULT_LABELS = Map(
-      SPARK_APP_NAME_LABEL-> KubernetesConf.getAppNameLabel(kubernetesConf.appName)
-    )
-    (DRIVER_LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
+
+    // Check custom and preset labels are as expected
+    CUSTOM_DRIVER_LABELS.foreach { case (k, v) =>
       assert(driverPodMetadata.getLabels.get(k) === v)
     }
+    assert(driverPodMetadata.getLabels === kubernetesConf.labels.asJava)
+
     assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)
     assert(configuredPod.pod.getSpec.getRestartPolicy === "Never")
     val expectedSparkConf = Map(

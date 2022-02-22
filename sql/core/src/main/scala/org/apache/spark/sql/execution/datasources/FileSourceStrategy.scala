@@ -213,14 +213,13 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
-      val metadataStructOpt = requiredAttributes.collectFirst {
-        case MetadataAttribute(attr) => attr
+      val metadataStructOpt = l.output.collectFirst {
+        case FileSourceMetadataAttribute(attr) => attr
       }
 
-      // TODO (yaohua): should be able to prune the metadata struct only containing what needed
       val metadataColumns = metadataStructOpt.map { metadataStruct =>
         metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          MetadataAttribute(field.name, field.dataType)
+          FileSourceMetadataAttribute(field.name, field.dataType)
         }.toSeq
       }.getOrElse(Seq.empty)
 

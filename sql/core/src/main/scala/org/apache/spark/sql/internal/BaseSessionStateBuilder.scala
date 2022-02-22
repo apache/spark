@@ -322,7 +322,8 @@ abstract class BaseSessionStateBuilder(
   /**
    * Interface to start and stop streaming queries.
    */
-  protected def streamingQueryManager: StreamingQueryManager = new StreamingQueryManager(session)
+  protected def streamingQueryManager: StreamingQueryManager =
+    new StreamingQueryManager(session, conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -331,8 +332,8 @@ abstract class BaseSessionStateBuilder(
    * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone(session)).getOrElse(
-      new ExecutionListenerManager(session, loadExtensions = true))
+    parentState.map(_.listenerManager.clone(session, conf)).getOrElse(
+      new ExecutionListenerManager(session, conf, loadExtensions = true))
   }
 
   /**

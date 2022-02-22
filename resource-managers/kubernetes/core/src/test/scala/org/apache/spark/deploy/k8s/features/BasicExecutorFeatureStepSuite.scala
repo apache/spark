@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -54,7 +54,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private val DRIVER_POD_UID = "driver-uid"
   private val RESOURCE_NAME_PREFIX = "base"
   private val EXECUTOR_IMAGE = "executor-image"
-  private val LABELS = Map("label1key" -> "label1value")
+  private val CUSTOM_EXECUTOR_LABELS = Map("label1key" -> "label1value")
   private var defaultProfile: ResourceProfile = _
   private val TEST_IMAGE_PULL_SECRETS = Seq("my-1secret-1", "my-secret-2")
   private val TEST_IMAGE_PULL_SECRET_OBJECTS =
@@ -93,7 +93,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     KubernetesTestConf.createExecutorConf(
       sparkConf = baseConf,
       driverPod = Some(DRIVER_POD),
-      labels = LABELS,
+      labels = CUSTOM_EXECUTOR_LABELS,
       environment = environment)
   }
 
@@ -156,12 +156,13 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     // The executor pod name and default labels.
     assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
-    val DEFAULT_LABELS = Map(
-      SPARK_APP_NAME_LABEL-> KubernetesConf.getAppNameLabel(conf.appName)
-    )
-    (LABELS ++ DEFAULT_LABELS).foreach { case (k, v) =>
+
+    // Check custom and preset labels are as expected
+    CUSTOM_EXECUTOR_LABELS.foreach { case (k, v) =>
       assert(executor.pod.getMetadata.getLabels.get(k) === v)
     }
+    assert(executor.pod.getMetadata.getLabels === conf.labels.asJava)
+
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
     // There is exactly 1 container with 1 volume mount and default memory limits.

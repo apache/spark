@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -157,8 +157,8 @@ case class RowDataSourceScanExec(
       "ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
-        Map("PushedAggregates" -> seqToString(v.aggregateExpressions),
-          "PushedGroupByColumns" -> seqToString(v.groupByColumns))} ++
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
       topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
@@ -200,7 +200,7 @@ case class FileSourceScanExec(
   extends DataSourceScanExec {
 
   lazy val metadataColumns: Seq[AttributeReference] =
-    output.collect { case MetadataAttribute(attr) => attr }
+    output.collect { case FileSourceMetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -221,8 +221,8 @@ case class FileSourceScanExec(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf).map { vectorTypes =>
-        // for column-based file format, append metadata struct column's vector type classes if any
-        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[OnHeapColumnVector].getName)
+        // for column-based file format, append metadata column's vector type classes if any
+        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
       }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
@@ -366,9 +366,11 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // TODO: should be able to push filters containing metadata columns down to skip files
+    // `dataFilters` should not include any metadata col filters
+    // because the metadata struct has been flatted in FileSourceStrategy
+    // and thus metadata col filters are invalid to be pushed down
     dataFilters.filterNot(_.references.exists {
-      case MetadataAttribute(_) => true
+      case FileSourceMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }

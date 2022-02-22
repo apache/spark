@@ -68,19 +68,25 @@ class TimedeltaIndex(Index):
     --------
     >>> from datetime import timedelta
     >>> ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)])
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
 
     From an Series:
 
     >>> s = ps.Series([timedelta(1), timedelta(microseconds=2)], index=[10, 20])
     >>> ps.TimedeltaIndex(s)
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
 
     From an Index:
 
     >>> idx = ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)])
     >>> ps.TimedeltaIndex(idx)
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
     """
 
     @no_type_check
@@ -131,8 +137,7 @@ class TimedeltaIndex(Index):
         Number of days for each element.
         """
 
-        @no_type_check
-        def pandas_days(x) -> int:
+        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
             return x.days
 
         return Index(self.to_series().transform(pandas_days))

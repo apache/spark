@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -427,8 +427,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  def subqueries: Seq[PlanType] = {
-    expressions.flatMap(_.collect {
+  @transient lazy val subqueries: Seq[PlanType] = {
+    expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
   }

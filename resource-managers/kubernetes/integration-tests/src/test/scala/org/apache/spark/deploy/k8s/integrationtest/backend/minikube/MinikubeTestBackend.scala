@@ -40,4 +40,8 @@ private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
   override def getKubernetesClient: DefaultKubernetesClient = {
     defaultClient
   }
+
+  override def describePods(labels: String): Seq[String] =
+    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
+      "-l", labels)
 }

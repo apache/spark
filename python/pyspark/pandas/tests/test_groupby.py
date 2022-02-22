@@ -49,9 +49,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values("a").reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values("a").reset_index(drop=True)
+
             self.assert_eq(
                 sort(psdf.groupby("a", as_index=as_index).sum()),
                 sort(pdf.groupby("a", as_index=as_index).sum()),
@@ -156,9 +162,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values(10).reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values(10).reset_index(drop=True)
+
             self.assert_eq(
                 sort(psdf.groupby(10, as_index=as_index).sum()),
                 sort(pdf.groupby(10, as_index=as_index).sum()),
@@ -244,9 +256,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values(list(df.columns)).reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values(list(df.columns)).reset_index(drop=True)
 
             for check_exact, almost, func in funcs:
                 for kkey, pkey in [("b", "b"), (psdf.b, pdf.b)]:
@@ -351,9 +368,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values(list(df.columns)).reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values(list(df.columns)).reset_index(drop=True)
 
             for kkey, pkey in [("A", "A"), (psdf.A, pdf.A)]:
                 with self.subTest(as_index=as_index, key=pkey):
@@ -564,9 +586,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             for dropna in [True, False]:
                 for as_index in [True, False]:
                     if as_index:
-                        sort = lambda df: df.sort_index()
+
+                        def sort(df):
+                            return df.sort_index()
+
                     else:
-                        sort = lambda df: df.sort_values("A").reset_index(drop=True)
+
+                        def sort(df):
+                            return df.sort_values("A").reset_index(drop=True)
 
                     self.assert_eq(
                         sort(psdf.groupby("A", as_index=as_index, dropna=dropna).std()),
@@ -598,9 +625,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             for dropna in [True, False]:
                 for as_index in [True, False]:
                     if as_index:
-                        sort = lambda df: df.sort_index()
+
+                        def sort(df):
+                            return df.sort_index()
+
                     else:
-                        sort = lambda df: df.sort_values(["A", "B"]).reset_index(drop=True)
+
+                        def sort(df):
+                            return df.sort_values(["A", "B"]).reset_index(drop=True)
 
                     self.assert_eq(
                         sort(
@@ -624,9 +656,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             for dropna in [True, False]:
                 for as_index in [True, False]:
                     if as_index:
-                        sort = lambda df: df.sort_index()
+
+                        def sort(df):
+                            return df.sort_index()
+
                     else:
-                        sort = lambda df: df.sort_values(("X", "A")).reset_index(drop=True)
+
+                        def sort(df):
+                            return df.sort_values(("X", "A")).reset_index(drop=True)
+
                     sorted_stats_psdf = sort(
                         psdf.groupby(("X", "A"), as_index=as_index, dropna=dropna).agg(
                             {("X", "B"): "min", ("Y", "C"): "std"}
@@ -642,9 +680,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             # Testing dropna=True (pandas default behavior)
             for as_index in [True, False]:
                 if as_index:
-                    sort = lambda df: df.sort_index()
+
+                    def sort(df):
+                        return df.sort_index()
+
                 else:
-                    sort = lambda df: df.sort_values("A").reset_index(drop=True)
+
+                    def sort(df):
+                        return df.sort_values("A").reset_index(drop=True)
 
                 self.assert_eq(
                     sort(psdf.groupby("A", as_index=as_index, dropna=True)["B"].min()),
@@ -652,9 +695,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                 )
 
                 if as_index:
-                    sort = lambda df: df.sort_index()
+
+                    def sort(df):
+                        return df.sort_index()
+
                 else:
-                    sort = lambda df: df.sort_values(["A", "B"]).reset_index(drop=True)
+
+                    def sort(df):
+                        return df.sort_values(["A", "B"]).reset_index(drop=True)
 
                 self.assert_eq(
                     sort(
@@ -847,9 +895,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values("A").reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values("A").reset_index(drop=True)
+
             self.assert_eq(
                 sort(psdf.groupby("A", as_index=as_index).all()),
                 sort(pdf.groupby("A", as_index=as_index).all()),
@@ -882,9 +936,15 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         for as_index in [True, False]:
             if as_index:
-                sort = lambda df: df.sort_index()
+
+                def sort(df):
+                    return df.sort_index()
+
             else:
-                sort = lambda df: df.sort_values(("X", "A")).reset_index(drop=True)
+
+                def sort(df):
+                    return df.sort_values(("X", "A")).reset_index(drop=True)
+
             self.assert_eq(
                 sort(psdf.groupby(("X", "A"), as_index=as_index).all()),
                 sort(pdf.groupby(("X", "A"), as_index=as_index).all()),

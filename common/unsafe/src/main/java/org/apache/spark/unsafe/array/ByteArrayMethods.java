@@ -61,7 +61,7 @@ public class ByteArrayMethods {
     int i = 0;
 
     // check if stars align and we can get both offsets to be aligned
-    if ((leftOffset % 8) == (rightOffset % 8)) {
+    if (!unaligned && ((leftOffset % 8) == (rightOffset % 8))) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
         if (Platform.getByte(leftBase, leftOffset + i) !=
             Platform.getByte(rightBase, rightOffset + i)) {

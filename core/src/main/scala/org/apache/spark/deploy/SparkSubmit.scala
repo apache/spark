@@ -856,6 +856,9 @@ private[spark] class SparkSubmit extends Logging {
     if (args.verbose && isSqlShell(childMainClass)) {
       childArgs ++= Seq("--verbose")
     }
+
+    sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
+
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 

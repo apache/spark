@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -101,19 +102,19 @@ object QueryParsingErrors {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with NATURAL join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with NATURAL join."), ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with USING join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with USING join."), ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array(s"LATERAL join type '$joinType'."), ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException(s"LATERAL can only be used with subquery", ctx)
+    new ParseException("INVALID_SQL_SYNTAX", Array("LATERAL can only be used with subquery."), ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
@@ -128,12 +129,8 @@ object QueryParsingErrors {
     new ParseException(s"Cannot resolve window reference '$name'", ctx)
   }
 
-  def joinCriteriaUnimplementedError(join: JoinCriteriaContext, ctx: RelationContext): Throwable = {
-    new ParseException(s"Unimplemented joinCriteria: $join", ctx)
-  }
-
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -302,6 +299,11 @@ object QueryParsingErrors {
     new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
   }
 
+  def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
+      "a string literal.", ctx)
+  }
+
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(s"CTE definition can't have duplicate names: $duplicateNames.", ctx)
   }
@@ -428,5 +430,10 @@ object QueryParsingErrors {
 
   def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Invalid time travel spec: $reason.", ctx)
+  }
+
+  def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
   }
 }

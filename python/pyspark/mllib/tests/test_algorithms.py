@@ -295,7 +295,7 @@ class ListTests(MLlibTestCase):
         GradientBoostedTrees.trainRegressor(
             rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32
         )
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(Exception):
             GradientBoostedTrees.trainRegressor(
                 rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1
             )

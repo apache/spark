@@ -227,7 +227,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    val m = intercept[org.h2.jdbc.JdbcSQLException] {
+    val m = intercept[org.h2.jdbc.JdbcSQLSyntaxErrorException] {
       df.write.option("createTableOptions", "ENGINE tableEngineName")
       .jdbc(url1, "TEST.CREATETBLOPTS", properties)
     }.getMessage
@@ -326,7 +326,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
   test("save errors if wrong user/password combination") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    val e = intercept[org.h2.jdbc.JdbcSQLException] {
+    val e = intercept[org.h2.jdbc.JdbcSQLInvalidAuthorizationSpecException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
         .option("url", url1)
@@ -427,7 +427,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       // verify the data types of the created table by reading the database catalog of H2
       val query =
         """
-          |(SELECT column_name, type_name, character_maximum_length
+          |(SELECT column_name, data_type, character_maximum_length
           | FROM information_schema.columns WHERE table_name = 'DBCOLTYPETEST')
         """.stripMargin
       val rows = spark.read.jdbc(url1, query, properties).collect()
@@ -436,7 +436,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         val typeName = row.getString(1)
         // For CHAR and VARCHAR, we also compare the max length
         if (typeName.contains("CHAR")) {
-          val charMaxLength = row.getInt(2)
+          val charMaxLength = row.getLong(2)
           assert(expectedTypes(row.getString(0)) == s"$typeName($charMaxLength)")
         } else {
           assert(expectedTypes(row.getString(0)) == typeName)
@@ -452,15 +452,18 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
 
     // out-of-order
-    val expected1 = Map("id" -> "BIGINT", "first#name" -> "VARCHAR(123)", "city" -> "CHAR(20)")
+    val expected1 =
+      Map("id" -> "BIGINT", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
     testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), id BIGINT, city CHAR(20)", expected1)
     // partial schema
-    val expected2 = Map("id" -> "INTEGER", "first#name" -> "VARCHAR(123)", "city" -> "CHAR(20)")
+    val expected2 =
+      Map("id" -> "INTEGER", "first#name" -> "CHARACTER VARYING(123)", "city" -> "CHARACTER(20)")
     testUserSpecifiedColTypes(df, "`first#name` VARCHAR(123), city CHAR(20)", expected2)
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       // should still respect the original column names
-      val expected = Map("id" -> "INTEGER", "first#name" -> "VARCHAR(123)", "city" -> "CLOB")
+      val expected = Map("id" -> "INTEGER", "first#name" -> "CHARACTER VARYING(123)",
+        "city" -> "CHARACTER LARGE OBJECT(9223372036854775807)")
       testUserSpecifiedColTypes(df, "`FiRsT#NaMe` VARCHAR(123)", expected)
     }
 
@@ -470,7 +473,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           StructField("First#Name", StringType) ::
           StructField("city", StringType) :: Nil)
       val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-      val expected = Map("id" -> "INTEGER", "First#Name" -> "VARCHAR(123)", "city" -> "CLOB")
+      val expected =
+        Map("id" -> "INTEGER", "First#Name" -> "CHARACTER VARYING(123)",
+          "city" -> "CHARACTER LARGE OBJECT(9223372036854775807)")
       testUserSpecifiedColTypes(df, "`First#Name` VARCHAR(123)", expected)
     }
   }

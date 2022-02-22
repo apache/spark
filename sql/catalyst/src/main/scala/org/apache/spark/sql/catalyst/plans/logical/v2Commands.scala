@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -744,8 +744,7 @@ case class CreateFunction(
  */
 case class DropFunction(
     child: LogicalPlan,
-    ifExists: Boolean,
-    isTemp: Boolean) extends UnaryCommand {
+    ifExists: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DropFunction =
     copy(child = newChild)
 }
@@ -754,15 +753,14 @@ case class DropFunction(
  * The logical plan of the SHOW FUNCTIONS command.
  */
 case class ShowFunctions(
-    child: Option[LogicalPlan],
+    namespace: LogicalPlan,
     userScope: Boolean,
     systemScope: Boolean,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends Command {
-  override def children: Seq[LogicalPlan] = child.toSeq
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): ShowFunctions =
-    copy(child = if (child.isDefined) Some(newChildren.head) else None)
+    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowFunctions =
+    copy(namespace = newChild)
 }
 
 object ShowFunctions {
@@ -1131,7 +1129,6 @@ case class DropIndex(
 }
 
 case class TableSpec(
-    bucketSpec: Option[BucketSpec],
     properties: Map[String, String],
     provider: Option[String],
     options: Map[String, String],

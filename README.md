@@ -25,7 +25,9 @@ This README file only contains basic setup instructions.
 Spark is built using [Apache Maven](https://maven.apache.org/).
 To build Spark and its example programs, run:
 
-    ./build/mvn -DskipTests clean package
+```bash
+./build/mvn -DskipTests clean package
+```
 
 (You do not need to do this if you downloaded a pre-built package.)
 
@@ -38,28 +40,38 @@ For general development tips, including info on developing Spark using an IDE, s
 
 The easiest way to start using Spark is through the Scala shell:
 
-    ./bin/spark-shell
+```bash
+./bin/spark-shell
+```
 
 Try the following command, which should return 1,000,000,000:
 
-    scala> spark.range(1000 * 1000 * 1000).count()
+```scala
+scala> spark.range(1000 * 1000 * 1000).count()
+```
 
 ## Interactive Python Shell
 
 Alternatively, if you prefer Python, you can use the Python shell:
 
-    ./bin/pyspark
+```bash
+./bin/pyspark
+```
 
 And run the following command, which should also return 1,000,000,000:
 
-    >>> spark.range(1000 * 1000 * 1000).count()
+```python
+>>> spark.range(1000 * 1000 * 1000).count()
+```
 
 ## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./bin/run-example <class> [params]`. For example:
 
-    ./bin/run-example SparkPi
+```bash
+./bin/run-example SparkPi
+```
 
 will run the Pi example locally.
 
@@ -70,7 +82,9 @@ locally with one thread, or "local[N]" to run locally with N threads. You
 can also use an abbreviated class name if the class is in the `examples`
 package. For instance:
 
-    MASTER=spark://host:7077 ./bin/run-example SparkPi
+```bash
+MASTER=spark://host:7077 ./bin/run-example SparkPi
+```
 
 Many of the example programs print usage help if no params are given.
 
@@ -79,7 +93,9 @@ Many of the example programs print usage help if no params are given.
 Testing first requires [building Spark](#building-spark). Once Spark is built, tests
 can be run using:
 
-    ./dev/run-tests
+```bash
+./dev/run-tests
+```
 
 Please see the guidance on how to
 [run tests for a module, or individual tests](https://spark.apache.org/developer-tools.html#individual-tests).

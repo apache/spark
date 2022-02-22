@@ -218,7 +218,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "higher order function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "FILTER (WHERE c > 1)"),
-    "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
+    "Function aggregate does not support FILTER clause" :: Nil)
 
   errorTest(
     "non-deterministic filter predicate in aggregate functions",

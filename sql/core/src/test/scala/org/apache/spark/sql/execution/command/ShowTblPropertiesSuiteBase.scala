@@ -42,8 +42,9 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       val status = "new"
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
         s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $tbl").filter("key != 'transient_lastDdlTime'")
+      val properties = sql(s"SHOW TBLPROPERTIES $tbl")
+        .filter("key != 'transient_lastDdlTime'")
+        .filter("key != 'option.serialization.format'")
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)

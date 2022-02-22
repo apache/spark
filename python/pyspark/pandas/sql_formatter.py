@@ -89,7 +89,8 @@ def sql(
             ...     ),
             ... )
             >>> new_psdf = psdf.reset_index()
-            >>> ps.sql("SELECT * FROM {new_psdf}", index_col=["index1", "index2"], new_psdf=new_psdf)
+            >>> ps.sql(
+            ...     "SELECT * FROM {new_psdf}", index_col=["index1", "index2"], new_psdf=new_psdf)
             ... # doctest: +NORMALIZE_WHITESPACE
                            A  B
             index1 index2
