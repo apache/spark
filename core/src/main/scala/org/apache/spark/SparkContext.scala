@@ -2061,7 +2061,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def stop(): Unit = stop(0)
 
-  def stop(exitCode: Int = 0): Unit = {
+  def stop(exitCode: Int): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
