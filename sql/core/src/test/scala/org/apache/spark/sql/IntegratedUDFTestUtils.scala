@@ -414,7 +414,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
-    val prettyName: String = "Scalar Grouped Agg Pandas UDF"
+    val prettyName: String = "Grouped Aggregate Pandas UDF"
   }
 
   /**
