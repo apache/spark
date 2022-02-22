@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.connector.util;
 
+import com.sun.javafx.scene.control.skin.VirtualFlow;
+import org.apache.spark.sql.catalyst.expressions.Exp;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.LiteralValue;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * The builder to generate SQL from V2 expressions.
@@ -33,43 +40,47 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof FieldReference) {
       return visitFieldReference((FieldReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
-        GeneralScalarExpression e = (GeneralScalarExpression) expr;
-        String name = e.name();
-        switch (name) {
-          case "IS_NULL":
-            return visitIsNull(build(e.children()[0]));
-          case "IS_NOT_NULL":
-            return visitIsNotNull(build(e.children()[0]));
-          case "=":
-          case "!=":
-          case "<=>":
-          case "<":
-          case "<=":
-          case ">":
-          case ">=":
-          case "+":
-          case "-":
-          case "*":
-          case "/":
-          case "%":
-          case "&&":
-          case "||":
-          case "AND":
-          case "OR":
-          case "&":
-          case "|":
-          case "^":
-            return visitBinaryOperation(name, build(e.children()[0]), build(e.children()[1]));
-          case "NOT":
-            return visitNot(build(e.children()[0]));
-          case "CASE_WHEN":
-            return visitCaseWhen(e);
-          // TODO supports other expressions
-          default:
-            return visitUnexpectedExpr(expr);
-        }
+      GeneralScalarExpression e = (GeneralScalarExpression) expr;
+      String name = e.name();
+      switch (name) {
+        case "IS_NULL":
+          return visitIsNull(build(e.children()[0]));
+        case "IS_NOT_NULL":
+          return visitIsNotNull(build(e.children()[0]));
+        case "=":
+        case "!=":
+        case "<=>":
+        case "<":
+        case "<=":
+        case ">":
+        case ">=":
+        case "+":
+        case "-":
+        case "*":
+        case "/":
+        case "%":
+        case "&&":
+        case "||":
+        case "AND":
+        case "OR":
+        case "&":
+        case "|":
+        case "^":
+          return visitBinaryOperation(name, build(e.children()[0]), build(e.children()[1]));
+        case "NOT":
+          return visitNot(build(e.children()[0]));
+        case "CASE_WHEN":
+          List<String> children = new ArrayList<>();
+          for (Expression child : e.children()) {
+            children.add(build(child));
+          }
+          return visitCaseWhen(children.toArray(new String[e.children().length]));
+        // TODO supports other expressions
+        default:
+          return visitUnexpectedExpr(expr);
+      }
     } else {
-        return visitUnexpectedExpr(expr);
+      return visitUnexpectedExpr(expr);
     }
   }
 
@@ -97,28 +108,27 @@ public class V2ExpressionSQLBuilder {
     return "NOT (" + v + ")";
   }
 
-  protected String visitCaseWhen(GeneralScalarExpression e) throws Throwable {
-    GeneralScalarExpression branchExpression = (GeneralScalarExpression) e.children()[0];
+  protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");
-    for (Expression expr: branchExpression.children()) {
-      GeneralScalarExpression branch = (GeneralScalarExpression) expr;
-      String c = build(branch.children()[0]);
-      String v = build(branch.children()[1]);
-      sb.append(" WHEN ");
-      sb.append(c);
-      sb.append(" THEN ");
-      sb.append(v);
-    }
-    if (e.children().length == 2) {
-      String elseSQL = build(e.children()[1]);
-      sb.append(" ELSE ");
-      sb.append(elseSQL);
+    for (int i = 0; i < children.length; i += 2) {
+      String c = children[i];
+      int j = i + 1;
+      if (j < children.length) {
+        String v = children[j];
+        sb.append(" WHEN ");
+        sb.append(c);
+        sb.append(" THEN ");
+        sb.append(v);
+      } else {
+        sb.append(" ELSE ");
+        sb.append(c);
+      }
     }
     sb.append(" END");
     return sb.toString();
   }
 
-  protected String visitUnexpectedExpr(Expression expr) throws Throwable {
-    throw QueryExecutionErrors.unexpectedV2ExpressionError(expr);
+  protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
+    throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
   }
 }

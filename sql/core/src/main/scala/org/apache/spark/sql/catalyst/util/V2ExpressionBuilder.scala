@@ -66,16 +66,16 @@ class V2ExpressionBuilder(e: Expression) {
       val conditions = branches.map(_._1).flatMap(generateExpression)
       val values = branches.map(_._2).flatMap(generateExpression)
       if (conditions.length == branches.length && values.length == branches.length) {
-        val branchExpressions = conditions.zip(values).map { case (c, v) =>
-          new GeneralScalarExpression(Array[V2Expression](c, v))
+        val branchExpressions = conditions.zip(values).flatMap { case (c, v) =>
+          Seq[V2Expression](c, v)
         }
-        val branchExpression = new GeneralScalarExpression(branchExpressions.toArray[V2Expression])
         if (elseValue.isDefined) {
           elseValue.flatMap(generateExpression).map { v =>
-            new GeneralScalarExpression("CASE_WHEN", Array[V2Expression](branchExpression, v))
+            val children = (branchExpressions :+ v).toArray[V2Expression]
+            new GeneralScalarExpression("CASE_WHEN", children)
           }
         } else {
-          Some(new GeneralScalarExpression("CASE_WHEN", Array[V2Expression](branchExpression)))
+          Some(new GeneralScalarExpression("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
       } else {
         None
