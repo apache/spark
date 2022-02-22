@@ -1097,6 +1097,40 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-32838: Check DataSource insert command path with actual path") {
+    withTempPath { path =>
+      withTable("t1", "t2", "t3", "t4") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (id STRING, dt STRING)
+             |USING PARQUET
+             |PARTITIONED BY (dt)
+             |LOCATION '${path.getAbsolutePath}'
+            """.stripMargin)
+        sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-09') SELECT 10")
+        sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
+
+        // overwrite partition with different path
+        sql(
+          """
+            |INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10')
+            |select id from t1 where dt='2020-09-09'
+          """.stripMargin)
+        checkAnswer(sql("SELECT * FROM t1 WHERE dt='2020-09-10'"),
+          Row("10", "2020-09-10") :: Nil)
+
+        // overwrite partition with same path
+        sql(
+            """
+              |INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10')
+              |SELECT id FROM t1 WHERE dt='2020-09-10';
+            """.stripMargin)
+        checkAnswer(sql("SELECT * FROM t1 WHERE dt='2020-09-10'"),
+          Row("10", "2020-09-10") :: Nil)
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {

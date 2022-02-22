@@ -222,7 +222,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       // For dynamic partition overwrite, we do not delete partition directories ahead.
       // We write to staging directories and move to final partition directories after writing
       // job is done. So it is ok to have outputPath try to overwrite inputpath.
-      if (overwrite && !insertCommand.dynamicPartitionOverwrite) {
+      if (overwrite && !insertCommand.stagingDirOverwrite) {
         DDLUtils.verifyNotReadPath(actualQuery, outputPath)
       }
       insertCommand

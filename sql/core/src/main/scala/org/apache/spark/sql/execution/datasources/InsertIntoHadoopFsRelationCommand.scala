@@ -61,7 +61,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
-  private[sql] lazy val dynamicPartitionOverwrite: Boolean = {
+  private[sql] lazy val stagingDirOverwrite: Boolean = {
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       // scalastyle:off caselocale
       .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
@@ -69,9 +69,10 @@ case class InsertIntoHadoopFsRelationCommand(
       .getOrElse(conf.partitionOverwriteMode)
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
-    // partition columns.
-    enableDynamicOverwrite && mode == SaveMode.Overwrite &&
-      staticPartitions.size < partitionColumns.length
+    // partition columns or overwrite a static partition.
+    ((enableDynamicOverwrite && staticPartitions.size < partitionColumns.length)
+      || (staticPartitions.size == partitionColumns.length && staticPartitions.nonEmpty)) &&
+      mode == SaveMode.Overwrite
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
@@ -109,7 +110,7 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = jobId,
       outputPath = outputPath.toString,
-      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+      stagingDirOverwrite = stagingDirOverwrite)
 
     val doInsertion = if (mode == SaveMode.Append) {
       true
@@ -121,7 +122,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
-          } else if (dynamicPartitionOverwrite) {
+          } else if (stagingDirOverwrite) {
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
@@ -150,7 +151,7 @@ case class InsertIntoHadoopFsRelationCommand(
           }
           // For dynamic partition overwrite, we never remove partitions but only update existing
           // ones.
-          if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+          if (mode == SaveMode.Overwrite && !stagingDirOverwrite) {
             val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
@@ -164,7 +165,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
-      val committerOutputPath = if (dynamicPartitionOverwrite) {
+      val committerOutputPath = if (stagingDirOverwrite) {
         FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
           .makeQualified(fs.getUri, fs.getWorkingDirectory)
       } else {

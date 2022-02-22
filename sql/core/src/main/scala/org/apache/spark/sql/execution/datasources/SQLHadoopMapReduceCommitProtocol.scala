@@ -32,8 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLHadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
+    stagingDirOverwrite: Boolean = false)
+  extends HadoopMapReduceCommitProtocol(jobId, path, stagingDirOverwrite)
     with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
@@ -55,7 +55,7 @@ class SQLHadoopMapReduceCommitProtocol(
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        val committerOutputPath = if (dynamicPartitionOverwrite) stagingDir else new Path(path)
+        val committerOutputPath = if (stagingDirOverwrite) stagingDir else new Path(path)
         committer = ctor.newInstance(committerOutputPath, context)
       } else {
         // The specified output committer is just an OutputCommitter.

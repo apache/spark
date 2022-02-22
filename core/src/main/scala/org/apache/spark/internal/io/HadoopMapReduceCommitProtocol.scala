@@ -40,7 +40,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
- * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
+ * @param stagingDirOverwrite If true, Spark will overwrite partition directories at runtime
  *                                  dynamically. Suppose final path is /path/to/outputPath, output
  *                                  path of [[FileOutputCommitter]] is an intermediate path, e.g.
  *                                  /path/to/outputPath/.spark-staging-{jobId}, which is a staging
@@ -67,7 +67,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    stagingDirOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -128,7 +128,7 @@ class HadoopMapReduceCommitProtocol(
     val stagingDir: Path = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
-        if (dynamicPartitionOverwrite) {
+        if (stagingDirOverwrite) {
           assert(dir.isDefined,
             "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
           partitionPaths += dir.get
@@ -199,7 +199,7 @@ class HadoopMapReduceCommitProtocol(
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
       val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
-      if (dynamicPartitionOverwrite) {
+      if (stagingDirOverwrite) {
         logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
         absParentPaths.foreach(fs.delete(_, true))
       }
@@ -212,7 +212,7 @@ class HadoopMapReduceCommitProtocol(
         }
       }
 
-      if (dynamicPartitionOverwrite) {
+      if (stagingDirOverwrite) {
         val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
