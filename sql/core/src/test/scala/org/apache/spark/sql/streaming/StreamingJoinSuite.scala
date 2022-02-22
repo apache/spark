@@ -571,7 +571,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       CheckNewAnswer((5, 10, 5, 15, 5, 25)))
   }
 
-  test("streaming join should require HashClusteredDistribution from children") {
+  test("streaming join should require StatefulOpClusteredDistribution from children") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 

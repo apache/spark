@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.vectorized
+package org.apache.spark.sql.vectorized
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
@@ -23,7 +23,6 @@ import org.apache.arrow.vector.complex._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.ArrowColumnVector
 import org.apache.spark.unsafe.types.UTF8String
 
 class ArrowColumnVectorSuite extends SparkFunSuite {
@@ -427,6 +426,37 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     val row4 = columnVector.getStruct(4)
     assert(row4.getInt(0) === 5)
     assert(row4.getLong(1) === 5L)
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test ("SPARK-38086: subclassing") {
+    class ChildArrowColumnVector(vector: ValueVector, n: Int)
+      extends ArrowColumnVector(vector: ValueVector) {
+
+      override def getValueVector: ValueVector = accessor.vector
+      override def getInt(rowId: Int): Int = accessor.getInt(rowId) + n
+    }
+
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
+    val vector = ArrowUtils.toArrowField("int", IntegerType, nullable = true, null)
+      .createVector(allocator).asInstanceOf[IntVector]
+    vector.allocateNew()
+
+    (0 until 10).foreach { i =>
+      vector.setSafe(i, i)
+    }
+
+    val columnVector = new ChildArrowColumnVector(vector, 1)
+    assert(columnVector.dataType === IntegerType)
+    assert(!columnVector.hasNull)
+
+    val intVector = columnVector.getValueVector.asInstanceOf[IntVector]
+    (0 until 10).foreach { i =>
+      assert(columnVector.getInt(i) === i + 1)
+      assert(intVector.get(i) === i)
+    }
 
     columnVector.close()
     allocator.close()

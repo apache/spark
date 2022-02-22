@@ -623,7 +623,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
-  private def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
+  private[analysis] def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
     if (!SQLConf.get.ansiEnabled) {
       ""
     } else {

@@ -91,10 +91,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override def indexOptions: String = "FILLFACTOR=70"
 
   testVarPop()
+  testVarPop(true)
   testVarSamp()
+  testVarSamp(true)
   testStddevPop()
+  testStddevPop(true)
   testStddevSamp()
+  testStddevSamp(true)
   testCovarPop()
+  testCovarPop(true)
   testCovarSamp()
+  testCovarSamp(true)
   testCorr()
+  testCorr(true)
 }

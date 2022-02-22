@@ -24,7 +24,6 @@ from typing import (
     Any,
     Callable,
     Generic,
-    Iterable,
     Iterator,
     List,
     Optional,
@@ -133,7 +132,7 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
 
     def fitMultiple(
         self, dataset: DataFrame, paramMaps: Sequence["ParamMap"]
-    ) -> Iterable[Tuple[int, M]]:
+    ) -> Iterator[Tuple[int, M]]:
         """
         Fits a model to the input dataset for each param map in `paramMaps`.
 

@@ -23,6 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -129,7 +130,11 @@ object FunctionRegistryBase {
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
-          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+          case e: Exception =>
+            throw e.getCause match {
+              case ae: SparkThrowable => ae
+              case _ => new AnalysisException(e.getCause.getMessage)
+            }
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -358,8 +363,8 @@ object FunctionRegistry {
     expression[Bin]("bin"),
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
-    expression[Ceil]("ceil"),
-    expression[Ceil]("ceiling", true),
+    expressionBuilder("ceil", CeilExpressionBuilder),
+    expressionBuilder("ceiling", CeilExpressionBuilder, true),
     expression[Cos]("cos"),
     expression[Sec]("sec"),
     expression[Cosh]("cosh"),
@@ -368,7 +373,7 @@ object FunctionRegistry {
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
-    expression[Floor]("floor"),
+    expressionBuilder("floor", FloorExpressionBuilder),
     expression[Factorial]("factorial"),
     expression[Hex]("hex"),
     expression[Hypot]("hypot"),
@@ -412,6 +417,8 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TrySubtract]("try_subtract"),
+    expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
 
     // aggregate functions
@@ -555,6 +562,7 @@ object FunctionRegistry {
     expression[Second]("second"),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
+    expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
@@ -586,6 +594,7 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
+    expression[TimestampAdd]("timestampadd"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -797,11 +806,14 @@ object FunctionRegistry {
   }
 
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
-      name: String, builder: T): (String, (ExpressionInfo, FunctionBuilder)) = {
+      name: String, builder: T, setAlias: Boolean = false)
+  : (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, None)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      builder.build(expressions)
+      val expr = builder.build(expressions)
+      if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
+      expr
     }
     (name, (info, funcBuilder))
   }

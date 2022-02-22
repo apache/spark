@@ -89,9 +89,9 @@ object QueryExecutionErrors {
       messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
-  def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
+  def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(t.toString, dataType.catalogString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -181,11 +181,6 @@ object QueryExecutionErrors {
     }
   }
 
-  def rowFromCSVParserNotExpectedError(): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "ROW_FROM_CSV_PARSER_NOT_EXPECTED",
-      messageParameters = Array.empty)
-  }
-
   def inputTypeUnsupportedError(dataType: DataType): Throwable = {
     new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
   }
@@ -245,6 +240,14 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
+  }
+
+  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"pivoting by the value '${v.toString}' of the column data type" +
+        s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -802,6 +805,15 @@ object QueryExecutionErrors {
       s"""
          |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
          |in case-insensitive mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateFieldInFieldIdLookupModeError(
+      requiredId: Int, matchedFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredId": $matchedFields
+         |in id mapping mode
        """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -1885,11 +1897,15 @@ object QueryExecutionErrors {
   }
 
   def repeatedPivotsUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("repeated pivots are not supported")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Repeated pivots."))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("pivot is only supported after a groupBy")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pivot not after a groupBy."))
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
@@ -1943,5 +1959,23 @@ object QueryExecutionErrors {
 
   def MultipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
+  }
+
+  def unsupportedCreateNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  }
+
+  def unsupportedRemoveNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Remove namespace comment is not supported")
+  }
+
+  def unsupportedDropNamespaceRestrictError(): Throwable = {
+    new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
+
+  def invalidUnitInTimestampAdd(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampadd", unit))
   }
 }
