@@ -2495,7 +2495,7 @@ class AdaptiveQueryExecSuite
   test("SPARK-38162: Optimize one row plan in AQE Optimizer") {
     withTempView("v") {
       spark.sparkContext.parallelize(
-        (1 to 4).map(i => TestData( i, i.toString)), 2)
+        (1 to 4).map(i => TestData(i, i.toString)), 2)
         .toDF("c1", "c2").createOrReplaceTempView("v")
 
       // remove sort
@@ -2521,6 +2521,21 @@ class AdaptiveQueryExecSuite
           |""".stripMargin)
       assert(findTopLevelAggregate(origin3).size == 4)
       assert(findTopLevelAggregate(adaptive3).size == 2)
+
+      // do not optimize if the aggregate is inside query stage
+      val (origin4, adaptive4) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT distinct c1 FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin4).size == 2)
+      assert(findTopLevelAggregate(adaptive4).size == 2)
+
+      val (origin5, adaptive5) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT sum(distinct c1) FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin5).size == 4)
+      assert(findTopLevelAggregate(adaptive5).size == 4)
     }
   }
 }
