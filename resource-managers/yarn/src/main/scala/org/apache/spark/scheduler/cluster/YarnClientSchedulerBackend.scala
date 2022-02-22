@@ -160,7 +160,7 @@ private[spark] class YarnClientSchedulerBackend(
   /**
    * Stop the scheduler. This assumes `start()` has already been called.
    */
-  override def stop(exitCode: Int = 0): Unit = {
+  override def stop(exitCode: Int): Unit = {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
     yarnSchedulerEndpoint.handleClientModeDriverStop(exitCode)
     if (monitorThread != null) {

@@ -69,7 +69,7 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 private class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
   def start(): Unit = {}
-  def stop(exitCode: Int): Unit = {}
+  def stop(): Unit = {}
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0

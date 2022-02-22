@@ -107,7 +107,7 @@ private[spark] abstract class YarnSchedulerBackend(
     require(appId.isDefined, "application ID unset")
   }
 
-  override def stop(exitCode: Int = 0): Unit = {
+  override def stop(): Unit = {
     try {
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
