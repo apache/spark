@@ -860,7 +860,8 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
-    | TIMESTAMPADD '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'  #timestampadd
+    | TIMESTAMPADD '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'     #timestampadd
+    | TIMESTAMPDIFF '(' unit=identifier ',' startTimestamp=valueExpression ',' startEnd=valueExpression ')'  #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
@@ -1269,6 +1270,7 @@ ansiNonReserved
     | TERMINATED
     | TIMESTAMP
     | TIMESTAMPADD
+    | TIMESTAMPDIFF
     | TOUCH
     | TRANSACTION
     | TRANSACTIONS
@@ -1547,6 +1549,7 @@ nonReserved
     | TIME
     | TIMESTAMP
     | TIMESTAMPADD
+    | TIMESTAMPDIFF
     | TO
     | TOUCH
     | TRAILING
@@ -1825,6 +1828,7 @@ THEN: 'THEN';
 TIME: 'TIME';
 TIMESTAMP: 'TIMESTAMP';
 TIMESTAMPADD: 'TIMESTAMPADD';
+TIMESTAMPDIFF: 'TIMESTAMPDIFF';
 TO: 'TO';
 TOUCH: 'TOUCH';
 TRAILING: 'TRAILING';
