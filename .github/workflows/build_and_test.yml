@@ -329,7 +329,9 @@ jobs:
     - name: Install dependencies for documentation generation
       run: |
         apt-get install -y libcurl4-openssl-dev pandoc
-        python3.6 -m pip install "sphinx<3.5.0" mkdocs numpy
+        # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
+        #   See also https://issues.apache.org/jira/browse/SPARK-38279.
+        python3.6 -m pip install "sphinx<3.5.0" mkdocs numpy 'markupsafe==2.0.1'
         apt-get update -y
         apt-get install -y ruby ruby-dev
         gem install jekyll jekyll-redirect-from rouge
