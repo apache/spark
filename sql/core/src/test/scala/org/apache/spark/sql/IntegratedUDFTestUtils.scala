@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  * Scalar Pandas UDF and Grouped Aggregate Pandas UDF can be tested in SBT & Maven tests.
  *
  * The available UDFs are special. For Scalar UDF, Python UDF and Scalar Pandas UDF,
- * It defines an UDF wrapped by cast. So, the input column is casted into string,
+ * it defines an UDF wrapped by cast. So, the input column is casted into string,
  * UDF returns strings as are, and then output column is casted back to the input column.
  * In this way, UDF is virtually no-op.
  *
@@ -71,7 +71,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  *   df.select(pandasTestUDF(df("id")))
  * }}}
  *
- * For Grouped Aggregate Pandas UDF, It defines an UDF that calculate the count using pandas.
+ * For Grouped Aggregate Pandas UDF, it defines an UDF that calculate the count using pandas.
  * UDF returns the count of given column, so the input and output length could be different.
  *
  * To register Grouped Aggregate Pandas UDF in SQL:
