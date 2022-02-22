@@ -18,11 +18,11 @@
 import sys
 
 from collections import namedtuple
-from typing import TypeVar, Generic, List, Any, cast
+from typing import Generic, List, TypeVar
 
 from pyspark import since, SparkContext
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
-from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc  # type: ignore[attr-defined]
+from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
 from pyspark.rdd import RDD
 
 _all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
@@ -31,7 +31,7 @@ T = TypeVar("T")
 
 
 @inherit_doc
-class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader, Generic[T]):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"], Generic[T]):
     """
     A FP-Growth model for mining frequent itemsets
     using the Parallel FP-Growth algorithm.
@@ -53,13 +53,11 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader, Generic[T]):
     """
 
     @since("1.4.0")
-    def freqItemsets(self) -> "RDD[FPGrowth.FreqItemset[T]]":  # type: ignore[misc]
+    def freqItemsets(self) -> RDD["FPGrowth.FreqItemset[T]"]:  # type: ignore[misc]
         """
         Returns the frequent itemsets of this model.
         """
-        return cast(Any, self.call("getFreqItemsets")).map(
-            lambda x: (FPGrowth.FreqItemset(x[0], x[1]))
-        )
+        return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
 
     @classmethod
     @since("2.0.0")
@@ -82,7 +80,7 @@ class FPGrowth:
 
     @classmethod
     def train(
-        cls, data: "RDD[list[T]]", minSupport: float = 0.3, numPartitions: int = -1
+        cls, data: RDD[List[T]], minSupport: float = 0.3, numPartitions: int = -1
     ) -> FPGrowthModel[T]:
         """
         Computes an FP-Growth model that contains frequent itemsets.
@@ -133,11 +131,9 @@ class PrefixSpanModel(JavaModelWrapper, Generic[T]):
     """
 
     @since("1.6.0")
-    def freqSequences(self) -> "RDD[PrefixSpan.FreqSequence[T]]":  # type: ignore[misc]
+    def freqSequences(self) -> RDD["PrefixSpan.FreqSequence[T]"]:  # type: ignore[misc]
         """Gets frequent sequences"""
-        return cast(Any, self.call("getFreqSequences")).map(
-            lambda x: (PrefixSpan.FreqSequence(x[0], x[1]))
-        )
+        return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
 
 class PrefixSpan:
@@ -157,7 +153,7 @@ class PrefixSpan:
     @classmethod
     def train(
         cls,
-        data: "RDD[List[List[T]]]",
+        data: RDD[List[List[T]]],
         minSupport: float = 0.1,
         maxPatternLength: int = 10,
         maxLocalProjDBSize: int = 32000000,
