@@ -31,11 +31,10 @@ import java.nio.file.Files;
 public class ShuffleIndexInformation {
   /** offsets as long buffer */
   private final LongBuffer offsets;
-  private int size;
 
-  public ShuffleIndexInformation(File indexFile) throws IOException {
-    size = (int)indexFile.length();
-    ByteBuffer buffer = ByteBuffer.allocate(size);
+  public ShuffleIndexInformation(String indexFilePath) throws IOException {
+    File indexFile = new File(indexFilePath);
+    ByteBuffer buffer = ByteBuffer.allocate((int)indexFile.length());
     offsets = buffer.asLongBuffer();
     try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
       dis.readFully(buffer.array());
@@ -46,8 +45,11 @@ public class ShuffleIndexInformation {
    * Size of the index file
    * @return size
    */
-  public int getSize() {
-    return size;
+  public int getRetainedMemorySize() {
+    // SPARK-33206: here the offsets' capacity is multiplied by 8 as offsets stores long values.
+    // And the extra 176 bytes is the estimate of the `ShuffleIndexInformation` memory footprint
+    // which is relevant in case of small index files (i.e. storing only 2 offsets = 16 bytes).
+    return (offsets.capacity() << 3) + 176;
   }
 
   /**

@@ -102,7 +102,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final int ioExceptionsThresholdDuringMerge;
 
   @SuppressWarnings("UnstableApiUsage")
-  private final LoadingCache<File, ShuffleIndexInformation> indexCache;
+  private final LoadingCache<String, ShuffleIndexInformation> indexCache;
 
   @SuppressWarnings("UnstableApiUsage")
   public RemoteBlockPushResolver(TransportConf conf) {
@@ -113,15 +113,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
-      new CacheLoader<File, ShuffleIndexInformation>() {
-        public ShuffleIndexInformation load(File file) throws IOException {
-          return new ShuffleIndexInformation(file);
+    CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
+      new CacheLoader<String, ShuffleIndexInformation>() {
+        public ShuffleIndexInformation load(String filePath) throws IOException {
+          return new ShuffleIndexInformation(filePath);
         }
     };
     indexCache = CacheBuilder.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
-      .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
+      .weigher((Weigher<String, ShuffleIndexInformation>)
+        (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
   }
 
@@ -204,8 +205,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // manager receives a pushed block for a given application shuffle partition.
       File dataFile =
         appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
-      File indexFile =
-        appShuffleInfo.getMergedShuffleIndexFile(shuffleId, shuffleMergeId, reduceId);
+      File indexFile = new File(
+        appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
       File metaFile =
         appShuffleInfo.getMergedShuffleMetaFile(shuffleId, shuffleMergeId, reduceId);
       try {
@@ -251,8 +252,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         shuffleId, shuffleMergeId, reduceId,
         ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
     }
-    File indexFile =
-      appShuffleInfo.getMergedShuffleIndexFile(shuffleId, shuffleMergeId, reduceId);
+    File indexFile = new File(
+      appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
     if (!indexFile.exists()) {
       throw new RuntimeException(String.format(
         "Merged shuffle index file %s not found", indexFile.getPath()));
@@ -290,18 +291,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       throw new RuntimeException(String.format("Merged shuffle data file %s not found",
         dataFile.getPath()));
     }
-    File indexFile =
-      appShuffleInfo.getMergedShuffleIndexFile(shuffleId, shuffleMergeId, reduceId);
+    String indexFilePath =
+      appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId);
     try {
       // If we get here, the merged shuffle file should have been properly finalized. Thus we can
       // use the file length to determine the size of the merged shuffle block.
-      ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFile);
+      ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFilePath);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
         conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
     } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
-        "Failed to open merged shuffle index file %s", indexFile.getPath()), e);
+        "Failed to open merged shuffle index file %s", indexFilePath), e);
     }
   }
 
@@ -1303,11 +1304,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      * @see [[org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile(
      *      org.apache.spark.storage.BlockId, scala.Option)]]
      */
-    private File getFile(String filename) {
+    private String getFilePath(String filename) {
       // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
-      File targetFile = ExecutorDiskUtils.getFile(appPathsInfo.activeLocalDirs,
-        appPathsInfo.subDirsPerLocalDir, filename);
-      logger.debug("Get merged file {}", targetFile.getAbsolutePath());
+      String targetFile =
+        ExecutorDiskUtils.getFilePath(
+          appPathsInfo.activeLocalDirs,
+          appPathsInfo.subDirsPerLocalDir,
+          filename);
+      logger.debug("Get merged file {}", targetFile);
       return targetFile;
     }
 
@@ -1327,16 +1331,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int reduceId) {
       String fileName = String.format("%s.data", generateFileName(appId, shuffleId,
         shuffleMergeId, reduceId));
-      return getFile(fileName);
+      return new File(getFilePath(fileName));
     }
 
-    public File getMergedShuffleIndexFile(
+    public String getMergedShuffleIndexFilePath(
         int shuffleId,
         int shuffleMergeId,
         int reduceId) {
       String indexName = String.format("%s.index", generateFileName(appId, shuffleId,
         shuffleMergeId, reduceId));
-      return getFile(indexName);
+      return getFilePath(indexName);
     }
 
     public File getMergedShuffleMetaFile(
@@ -1345,7 +1349,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         int reduceId) {
       String metaName = String.format("%s.meta", generateFileName(appId, shuffleId,
         shuffleMergeId, reduceId));
-      return getFile(metaName);
+      return new File(getFilePath(metaName));
     }
   }
 

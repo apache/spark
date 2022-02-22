@@ -27,7 +27,7 @@ public class ExecutorDiskUtils {
    * Hashes a filename into the corresponding local directory, in a manner consistent with
    * Spark's DiskBlockManager.getFile().
    */
-  public static File getFile(String[] localDirs, int subDirsPerLocalDir, String filename) {
+  public static String getFilePath(String[] localDirs, int subDirsPerLocalDir, String filename) {
     int hash = JavaUtils.nonNegativeHash(filename);
     String localDir = localDirs[hash % localDirs.length];
     int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
@@ -40,7 +40,7 @@ public class ExecutorDiskUtils {
     // So we are creating a File just to get the normalized path back to intern it.
     // Finally a new File is built and returned with this interned normalized path.
     final String normalizedInternedPath = new File(notNormalizedPath).getPath().intern();
-    return new File(normalizedInternedPath);
+    return normalizedInternedPath;
   }
 
 }
