@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.metric
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
 
   private[spark] val NUM_ROWS_PER_UPDATE = 100
+
+  private[spark] val BUILTIN_OUTPUT_METRICS = Set("bytesWritten", "recordsWritten")
 
   /**
    * Given a class name, builds and returns a metric type for a V2 custom metric class
@@ -52,7 +55,19 @@ object CustomMetrics {
       currentMetricsValues: Seq[CustomTaskMetric],
       customMetrics: Map[String, SQLMetric]): Unit = {
     currentMetricsValues.foreach { metric =>
-      customMetrics.get(metric.name()).map(_.set(metric.value()))
+      val metricName = metric.name()
+      val metricValue = metric.value()
+      customMetrics.get(metricName).map(_.set(metricValue))
+
+      if (BUILTIN_OUTPUT_METRICS.contains(metricName)) {
+        Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
+          metricName match {
+            case "bytesWritten" => outputMetrics.setBytesWritten(metricValue)
+            case "recordsWritten" => outputMetrics.setRecordsWritten(metricValue)
+            case _ => // no-op
+          }
+        }
+      }
     }
   }
 }

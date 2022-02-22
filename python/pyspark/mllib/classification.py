@@ -161,7 +161,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     >>> from shutil import rmtree
     >>> try:
     ...    rmtree(path)
-    ... except:
+    ... except BaseException:
     ...    pass
     >>> multi_class_data = [
     ...     LabeledPoint(0.0, [0.0, 1.0, 0.0]),
@@ -537,7 +537,7 @@ class SVMModel(LinearClassificationModel):
     >>> from shutil import rmtree
     >>> try:
     ...    rmtree(path)
-    ... except:
+    ... except BaseException:
     ...    pass
     """
 

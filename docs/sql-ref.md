@@ -25,6 +25,7 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
  * [ANSI Compliance](sql-ref-ansi-compliance.html)
  * [Data Types](sql-ref-datatypes.html)
  * [Datetime Pattern](sql-ref-datetime-pattern.html)
+ * [Number Pattern](sql-ref-number-pattern.html)
  * [Functions](sql-ref-functions.html)
    * [Built-in Functions](sql-ref-functions-builtin.html)
    * [Scalar User-Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)

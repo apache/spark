@@ -67,7 +67,7 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
 
         try:
             summary.__del__()
-        except:
+        except BaseException:
             pass
 
         def condition():

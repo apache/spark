@@ -25,15 +25,14 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class BooleanOpsTest(OpsTestBase):
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": [True, False, True], "that": [False, True, True]})
@@ -235,9 +234,9 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** b_psser)
 
     def test_rmod(self):
-        pdf, psdf = self.pdf, self.psdf
+        psdf = self.psdf
 
-        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        b_psser = psdf["bool"]
         # 1 % False is 0.0 in pandas
         self.assert_eq(pd.Series([0, 0, None], dtype=float, name="bool"), 1 % b_psser)
         # 0.1 / True is 0.1 in pandas
@@ -381,7 +380,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class BooleanExtensionOpsTest(OpsTestBase):
     @property
     def boolean_pdf(self):
         return pd.DataFrame(

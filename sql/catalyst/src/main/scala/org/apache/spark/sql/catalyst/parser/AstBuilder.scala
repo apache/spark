@@ -55,6 +55,7 @@ import org.apache.spark.util.random.RandomSampler
  * TableIdentifier.
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -1145,7 +1146,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
-            throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
+            throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
           case None if join.NATURAL != null =>
             if (join.LATERAL != null) {
               throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
@@ -2091,6 +2092,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Returns whether the pattern is a regex expression (instead of a normal
+   * string). Normal string is a string with all alphabets/digits and "_".
+   */
+  private def isRegex(pattern: String): Boolean = {
+    pattern.exists(p => !Character.isLetterOrDigit(p) && p != '_')
+  }
+
+  /**
    * Create a dereference expression. The return type depends on the type of the parent.
    * If the parent is an [[UnresolvedAttribute]], it can be a [[UnresolvedAttribute]] or
    * a [[UnresolvedRegex]] for regex quoted in ``; if the parent is some other expression,
@@ -2102,7 +2111,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
-            if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+            if conf.supportQuotedRegexColumnName &&
+              isRegex(columnNameRegex) && canApplyRegex(ctx) =>
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
               conf.caseSensitiveAnalysis)
           case _ =>
@@ -2120,7 +2130,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
-        if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+        if conf.supportQuotedRegexColumnName &&
+          isRegex(columnNameRegex) && canApplyRegex(ctx) =>
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         UnresolvedAttribute.quoted(ctx.getText)
@@ -2934,9 +2945,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Validate a replace table statement and return the [[TableIdentifier]].
    */
   override def visitReplaceTableHeader(
-      ctx: ReplaceTableHeaderContext): TableHeader = withOrigin(ctx) {
+      ctx: ReplaceTableHeaderContext): Seq[String] = withOrigin(ctx) {
     val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText).toSeq
-    (multipartIdentifier, false, false, false)
+    multipartIdentifier
   }
 
   /**
@@ -3203,6 +3214,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
+      case (PROP_EXTERNAL, _) if !legacyOn =>
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
+      case (PROP_EXTERNAL, _) => false
       case _ => true
     }
   }
@@ -3468,8 +3483,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, external)
 
     Option(ctx.query).map(plan) match {
@@ -3527,22 +3543,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temp, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val table = visitReplaceTableHeader(ctx.replaceTableHeader)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
-
-    if (temp) {
-      val action = if (orCreate) "CREATE OR REPLACE" else "REPLACE"
-      operationNotAllowed(s"$action TEMPORARY TABLE ..., use $action TEMPORARY VIEW instead.", ctx)
-    }
-
-    if (external) {
-      operationNotAllowed("REPLACE EXTERNAL TABLE ...", ctx)
-    }
-
-    if (ifNotExists) {
-      operationNotAllowed("REPLACE ... IF NOT EXISTS, use CREATE IF NOT EXISTS instead", ctx)
-    }
-
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
     val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
@@ -3552,8 +3554,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val tableSpec = TableSpec(bucketSpec, properties, provider, options, location, comment,
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
+    val tableSpec = TableSpec(properties, provider, options, location, comment,
       serdeInfo, false)
 
     Option(ctx.query).map(plan) match {
@@ -4390,7 +4393,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         Seq(describeFuncName.getText)
       }
-    DescribeFunction(UnresolvedFunc(functionName), EXTENDED != null)
+    DescribeFunction(
+      UnresolvedFunc(
+        functionName,
+        "DESCRIBE FUNCTION",
+        requirePersistent = false,
+        funcTypeMismatchHint = None),
+      EXTENDED != null)
   }
 
   /**
@@ -4404,32 +4413,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case Some("user") => (true, false)
         case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
-    val pattern = Option(ctx.pattern).map(string(_))
-    val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
-      .map(visitMultipartIdentifier)
-      .map(UnresolvedFunc(_))
-    ShowFunctions(unresolvedFuncOpt, userScope, systemScope, pattern)
-  }
 
-  /**
-   * Create a DROP FUNCTION statement.
-   *
-   * For example:
-   * {{{
-   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
-   * }}}
-   */
-  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    DropFunction(
-      UnresolvedFunc(functionName),
-      ctx.EXISTS != null,
-      ctx.TEMPORARY != null)
+    val ns = Option(ctx.ns).map(visitMultipartIdentifier)
+    val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)
+    val nsPlan = if (ns.isDefined) {
+      if (legacy.isDefined) {
+        throw QueryParsingErrors.showFunctionsInvalidPatternError(ctx.legacy.getText, ctx.legacy)
+      }
+      UnresolvedNamespace(ns.get)
+    } else if (legacy.isDefined) {
+      UnresolvedNamespace(legacy.get.dropRight(1))
+    } else {
+      UnresolvedNamespace(Nil)
+    }
+    val pattern = Option(ctx.pattern).map(string).orElse(legacy.map(_.last))
+    ShowFunctions(nsPlan, userScope, systemScope, pattern)
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
-    RefreshFunction(UnresolvedFunc(functionIdentifier))
+    RefreshFunction(UnresolvedFunc(
+      functionIdentifier,
+      "REFRESH FUNCTION",
+      requirePersistent = true,
+      funcTypeMismatchHint = None))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
@@ -4499,4 +4506,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
 
   private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
+
+  /**
+   * Create a TimestampAdd expression.
+   */
+  override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
+    val arguments = Seq(
+      Literal(ctx.unit.getText),
+      expression(ctx.unitsAmount),
+      expression(ctx.timestamp))
+    UnresolvedFunction("timestampadd", arguments, isDistinct = false)
+  }
 }

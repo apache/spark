@@ -356,6 +356,7 @@ class JacksonParser(
    * to parse the JSON token using given function `f`. If the `f` failed to parse and convert the
    * token, call `failedConversion` to handle the token.
    */
+  @scala.annotation.tailrec
   private def parseJsonToken[R >: Null](
       parser: JsonParser,
       dataType: DataType)(f: PartialFunction[JsonToken, R]): R = {

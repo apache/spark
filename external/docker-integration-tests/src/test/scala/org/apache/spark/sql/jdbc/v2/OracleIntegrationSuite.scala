@@ -18,13 +18,14 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -54,8 +55,9 @@ import org.apache.spark.tags.DockerTest
  * This procedure has been validated with Oracle 18.4.0 Express Edition.
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "oracle"
+  override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
@@ -73,9 +75,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
-  override def dataPreparation(conn: Connection): Unit = {}
+
+  override def tablePreparation(connection: Connection): Unit = {
+    connection.prepareStatement(
+      "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
+        " bonus BINARY_DOUBLE)").executeUpdate()
+  }
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
@@ -93,4 +101,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     assert(msg1.contains(
       s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
+
+  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
+  testCovarPop()
+  testCovarSamp()
+  testCorr()
 }

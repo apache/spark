@@ -402,13 +402,12 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         assert(b.buildSide === buildSide)
       case w: WholeStageCodegenExec =>
         assert(w.children.head.getClass.getSimpleName === joinMethod)
-        if (w.children.head.isInstanceOf[BroadcastNestedLoopJoinExec]) {
-          assert(
-            w.children.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide === buildSide)
-        } else if (w.children.head.isInstanceOf[BroadcastHashJoinExec]) {
-          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === buildSide)
-        } else {
-          fail()
+        w.children.head match {
+          case bnlj: BroadcastNestedLoopJoinExec =>
+            assert(bnlj.buildSide === buildSide)
+          case bhj: BroadcastHashJoinExec =>
+            assert(bhj.buildSide === buildSide)
+          case _ => fail()
         }
     }
   }

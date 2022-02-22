@@ -20,7 +20,11 @@ from typing import Any, Union
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_bool_dtype, is_integer_dtype, CategoricalDtype  # type: ignore[attr-defined]
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_bool_dtype,
+    is_integer_dtype,
+    CategoricalDtype,
+)
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op

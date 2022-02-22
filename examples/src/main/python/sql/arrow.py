@@ -258,8 +258,8 @@ def cogrouped_apply_in_pandas_example(spark):
         [(20000101, 1, "x"), (20000101, 2, "y")],
         ("time", "id", "v2"))
 
-    def asof_join(l, r):
-        return pd.merge_asof(l, r, on="time", by="id")
+    def asof_join(left, right):
+        return pd.merge_asof(left, right, on="time", by="id")
 
     df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         asof_join, schema="time int, id int, v1 double, v2 string").show()
