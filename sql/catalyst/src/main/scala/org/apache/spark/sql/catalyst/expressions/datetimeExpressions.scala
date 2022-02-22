@@ -3144,7 +3144,7 @@ case class TimestampAdd(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unit, timestampStart, timestampEnd) - Gets the difference between the timestamps `timestampEnd` and `timestampStart` in the specified units.",
+  usage = "_FUNC_(unit, startTimestamp, endTimestamp) - Gets the difference between the timestamps `endTimestamp` and `startTimestamp` in the specified units.",
   arguments = """
     Arguments:
       * unit - this indicates the units of the difference between the given timestamps.
@@ -3153,14 +3153,14 @@ case class TimestampAdd(
           - "QUARTER" - 3 months
           - "MONTH"
           - "WEEK" - 7 days
-          - "DAY", "DAYOFYEAR"
+          - "DAY"
           - "HOUR"
           - "MINUTE"
           - "SECOND"
           - "MILLISECOND"
           - "MICROSECOND"
-      * timestampStart - A timestamp which the expression subtracts from `timestampEnd`.
-      * timestampEnd - A timestamp from which the expression subtracts `timestampStart`.
+      * startTimestamp - A timestamp which the expression subtracts from `endTimestamp`.
+      * endTimestamp - A timestamp from which the expression subtracts `startTimestamp`.
   """,
   examples = """
     Examples:
@@ -3172,8 +3172,8 @@ case class TimestampAdd(
 // scalastyle:on line.size.limit
 case class TimestampDiff(
     unit: Expression,
-    timestampStart: Expression,
-    timestampEnd: Expression,
+    startTimestamp: Expression,
+    endTimestamp: Expression,
     timeZoneId: Option[String] = None)
   extends TernaryExpression
   with ImplicitCastInputTypes
@@ -3184,8 +3184,8 @@ case class TimestampDiff(
     this(unit, quantity, timestamp, None)
 
   override def first: Expression = unit
-  override def second: Expression = timestampStart
-  override def third: Expression = timestampEnd
+  override def second: Expression = startTimestamp
+  override def third: Expression = endTimestamp
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringType, AnyTimestampType, AnyTimestampType)
@@ -3194,13 +3194,13 @@ case class TimestampDiff(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestampEnd.dataType)
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(endTimestamp.dataType)
 
-  override def nullSafeEval(u: Any, microsStart: Any, microsEnd: Any): Any = {
+  override def nullSafeEval(u: Any, startMicros: Any, endMicros: Any): Any = {
     DateTimeUtils.timestampDiff(
       u.asInstanceOf[UTF8String].toString,
-      microsStart.asInstanceOf[Long],
-      microsEnd.asInstanceOf[Long],
+      startMicros.asInstanceOf[Long],
+      endMicros.asInstanceOf[Long],
       zoneIdInEval)
   }
 
@@ -3217,6 +3217,6 @@ case class TimestampDiff(
       newFirst: Expression,
       newSecond: Expression,
       newThird: Expression): TimestampDiff = {
-    copy(unit = newFirst, timestampStart = newSecond, timestampEnd = newThird)
+    copy(unit = newFirst, startTimestamp = newSecond, endTimestamp = newThird)
   }
 }
