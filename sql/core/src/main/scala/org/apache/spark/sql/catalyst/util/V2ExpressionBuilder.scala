@@ -72,9 +72,11 @@ class V2ExpressionBuilder(e: Expression) {
         if (elseValue.isDefined) {
           elseValue.flatMap(generateExpression).map { v =>
             val children = (branchExpressions :+ v).toArray[V2Expression]
+            // The children looks like [condition1, value1, ..., conditionN, valueN, elseValue]
             new GeneralScalarExpression("CASE_WHEN", children)
           }
         } else {
+          // The children looks like [condition1, value1, ..., conditionN, valueN]
           Some(new GeneralScalarExpression("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
       } else {
