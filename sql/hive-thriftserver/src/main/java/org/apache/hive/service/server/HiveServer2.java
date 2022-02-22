@@ -19,6 +19,7 @@ package org.apache.hive.service.server;
 
 import java.util.Properties;
 
+import org.apache.spark.util.SparkExitCode;
 import scala.runtime.AbstractFunction0;
 import scala.runtime.BoxedUnit;
 
@@ -259,7 +260,7 @@ public class HiveServer2 extends CompositeService {
     @Override
     public void execute() {
       new HelpFormatter().printHelp(serverName, options);
-      System.exit(0);
+      System.exit(SparkExitCode.EXIT_SUCCESS());
     }
   }
 
