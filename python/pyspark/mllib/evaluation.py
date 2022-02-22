@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, Optional, Tuple, TypeVar, cast
+from typing import List, Optional, Tuple, TypeVar
 
 import sys
 
@@ -24,7 +24,7 @@ from pyspark.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.linalg import Matrix
 from pyspark.sql import SQLContext
-from pyspark.sql.types import ArrayType, StructField, StructType, DoubleType
+from pyspark.sql.types import ArrayType, DoubleType, StructField, StructType
 
 __all__ = [
     "BinaryClassificationMetrics",
@@ -67,7 +67,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     0.88...
     """
 
-    def __init__(self, scoreAndLabels: "RDD[Tuple[float, float]]"):
+    def __init__(self, scoreAndLabels: RDD[Tuple[float, float]]) -> None:
         sc = scoreAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         numCol = len(scoreAndLabels.first())
@@ -92,7 +92,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         Computes the area under the receiver operating characteristic
         (ROC) curve.
         """
-        return cast(float, self.call("areaUnderROC"))
+        return self.call("areaUnderROC")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -100,7 +100,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         """
         Computes the area under the precision-recall curve.
         """
-        return cast(float, self.call("areaUnderPR"))
+        return self.call("areaUnderPR")
 
     @since("1.4.0")
     def unpersist(self) -> None:
@@ -143,7 +143,7 @@ class RegressionMetrics(JavaModelWrapper):
     0.68...
     """
 
-    def __init__(self, predictionAndObservations: "RDD[Tuple[float, float]]"):
+    def __init__(self, predictionAndObservations: RDD[Tuple[float, float]]):
         sc = predictionAndObservations.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         numCol = len(predictionAndObservations.first())
@@ -168,7 +168,7 @@ class RegressionMetrics(JavaModelWrapper):
         Returns the explained variance regression score.
         explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
         """
-        return cast(float, self.call("explainedVariance"))
+        return self.call("explainedVariance")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -177,7 +177,7 @@ class RegressionMetrics(JavaModelWrapper):
         Returns the mean absolute error, which is a risk function corresponding to the
         expected value of the absolute error loss or l1-norm loss.
         """
-        return cast(float, self.call("meanAbsoluteError"))
+        return self.call("meanAbsoluteError")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -186,7 +186,7 @@ class RegressionMetrics(JavaModelWrapper):
         Returns the mean squared error, which is a risk function corresponding to the
         expected value of the squared error loss or quadratic loss.
         """
-        return cast(float, self.call("meanSquaredError"))
+        return self.call("meanSquaredError")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -195,7 +195,7 @@ class RegressionMetrics(JavaModelWrapper):
         Returns the root mean squared error, which is defined as the square root of
         the mean squared error.
         """
-        return cast(float, self.call("rootMeanSquaredError"))
+        return self.call("rootMeanSquaredError")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -203,7 +203,7 @@ class RegressionMetrics(JavaModelWrapper):
         """
         Returns R^2^, the coefficient of determination.
         """
-        return cast(float, self.call("r2"))
+        return self.call("r2")
 
 
 class MulticlassMetrics(JavaModelWrapper):
@@ -282,7 +282,7 @@ class MulticlassMetrics(JavaModelWrapper):
     0.9682...
     """
 
-    def __init__(self, predictionAndLabels: "RDD[Tuple[float, float]]"):
+    def __init__(self, predictionAndLabels: RDD[Tuple[float, float]]):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         numCol = len(predictionAndLabels.first())
@@ -308,35 +308,35 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns confusion matrix: predicted classes are in columns,
         they are ordered by class label ascending, as in "labels".
         """
-        return cast(Matrix, self.call("confusionMatrix"))
+        return self.call("confusionMatrix")
 
     @since("1.4.0")
     def truePositiveRate(self, label: float) -> float:
         """
         Returns true positive rate for a given label (category).
         """
-        return cast(float, self.call("truePositiveRate", label))
+        return self.call("truePositiveRate", label)
 
     @since("1.4.0")
     def falsePositiveRate(self, label: float) -> float:
         """
         Returns false positive rate for a given label (category).
         """
-        return cast(float, self.call("falsePositiveRate", label))
+        return self.call("falsePositiveRate", label)
 
     @since("1.4.0")
     def precision(self, label: float) -> float:
         """
         Returns precision.
         """
-        return cast(float, self.call("precision", float(label)))
+        return self.call("precision", float(label))
 
     @since("1.4.0")
     def recall(self, label: float) -> float:
         """
         Returns recall.
         """
-        return cast(float, self.call("recall", float(label)))
+        return self.call("recall", float(label))
 
     @since("1.4.0")
     def fMeasure(self, label: float, beta: Optional[float] = None) -> float:
@@ -344,9 +344,9 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns f-measure.
         """
         if beta is None:
-            return cast(float, self.call("fMeasure", label))
+            return self.call("fMeasure", label)
         else:
-            return cast(float, self.call("fMeasure", label, beta))
+            return self.call("fMeasure", label, beta)
 
     @property  # type: ignore[misc]
     @since("2.0.0")
@@ -355,7 +355,7 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns accuracy (equals to the total number of correctly classified instances
         out of the total number of instances).
         """
-        return cast(float, self.call("accuracy"))
+        return self.call("accuracy")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -364,7 +364,7 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns weighted true positive rate.
         (equals to precision, recall and f-measure)
         """
-        return cast(float, self.call("weightedTruePositiveRate"))
+        return self.call("weightedTruePositiveRate")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -372,7 +372,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         Returns weighted false positive rate.
         """
-        return cast(float, self.call("weightedFalsePositiveRate"))
+        return self.call("weightedFalsePositiveRate")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -381,7 +381,7 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns weighted averaged recall.
         (equals to precision, recall and f-measure)
         """
-        return cast(float, self.call("weightedRecall"))
+        return self.call("weightedRecall")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -389,7 +389,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         Returns weighted averaged precision.
         """
-        return cast(float, self.call("weightedPrecision"))
+        return self.call("weightedPrecision")
 
     @since("1.4.0")
     def weightedFMeasure(self, beta: Optional[float] = None) -> float:
@@ -397,16 +397,16 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns weighted averaged f-measure.
         """
         if beta is None:
-            return cast(float, self.call("weightedFMeasure"))
+            return self.call("weightedFMeasure")
         else:
-            return cast(float, self.call("weightedFMeasure", beta))
+            return self.call("weightedFMeasure", beta)
 
     @since("3.0.0")
     def logLoss(self, eps: float = 1e-15) -> float:
         """
         Returns weighted logLoss.
         """
-        return cast(float, self.call("logLoss", eps))
+        return self.call("logLoss", eps)
 
 
 class RankingMetrics(JavaModelWrapper):
@@ -451,7 +451,7 @@ class RankingMetrics(JavaModelWrapper):
     0.66...
     """
 
-    def __init__(self, predictionAndLabels: "RDD[Tuple[List[T], List[T]]]"):
+    def __init__(self, predictionAndLabels: RDD[Tuple[List[T], List[T]]]):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(
@@ -472,7 +472,7 @@ class RankingMetrics(JavaModelWrapper):
         If a query has an empty ground truth set, zero will be used as precision together
         with a log warning.
         """
-        return cast(float, self.call("precisionAt", int(k)))
+        return self.call("precisionAt", int(k))
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -482,7 +482,7 @@ class RankingMetrics(JavaModelWrapper):
         If a query has an empty ground truth set, the average precision will be zero and
         a log warning is generated.
         """
-        return cast(float, self.call("meanAveragePrecision"))
+        return self.call("meanAveragePrecision")
 
     @since("3.0.0")
     def meanAveragePrecisionAt(self, k: int) -> float:
@@ -491,7 +491,7 @@ class RankingMetrics(JavaModelWrapper):
         If a query has an empty ground truth set, the average precision will be zero and
         a log warning is generated.
         """
-        return cast(float, self.call("meanAveragePrecisionAt", int(k)))
+        return self.call("meanAveragePrecisionAt", int(k))
 
     @since("1.4.0")
     def ndcgAt(self, k: int) -> float:
@@ -504,7 +504,7 @@ class RankingMetrics(JavaModelWrapper):
         If a query has an empty ground truth set, zero will be used as NDCG together with
         a log warning.
         """
-        return cast(float, self.call("ndcgAt", int(k)))
+        return self.call("ndcgAt", int(k))
 
     @since("3.0.0")
     def recallAt(self, k: int) -> float:
@@ -518,7 +518,7 @@ class RankingMetrics(JavaModelWrapper):
         If a query has an empty ground truth set, zero will be used as recall together
         with a log warning.
         """
-        return cast(float, self.call("recallAt", int(k)))
+        return self.call("recallAt", int(k))
 
 
 class MultilabelMetrics(JavaModelWrapper):
@@ -565,7 +565,7 @@ class MultilabelMetrics(JavaModelWrapper):
     0.54...
     """
 
-    def __init__(self, predictionAndLabels: "RDD[Tuple[List[float], List[float]]]"):
+    def __init__(self, predictionAndLabels: RDD[Tuple[List[float], List[float]]]):
         sc = predictionAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         df = sql_ctx.createDataFrame(
@@ -582,9 +582,9 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns precision or precision for a given label (category) if specified.
         """
         if label is None:
-            return cast(float, self.call("precision"))
+            return self.call("precision")
         else:
-            return cast(float, self.call("precision", float(label)))
+            return self.call("precision", float(label))
 
     @since("1.4.0")
     def recall(self, label: Optional[float] = None) -> float:
@@ -592,9 +592,9 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns recall or recall for a given label (category) if specified.
         """
         if label is None:
-            return cast(float, self.call("recall"))
+            return self.call("recall")
         else:
-            return cast(float, self.call("recall", float(label)))
+            return self.call("recall", float(label))
 
     @since("1.4.0")
     def f1Measure(self, label: Optional[float] = None) -> float:
@@ -602,9 +602,9 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns f1Measure or f1Measure for a given label (category) if specified.
         """
         if label is None:
-            return cast(float, self.call("f1Measure"))
+            return self.call("f1Measure")
         else:
-            return cast(float, self.call("f1Measure", float(label)))
+            return self.call("f1Measure", float(label))
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -613,7 +613,7 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns micro-averaged label-based precision.
         (equals to micro-averaged document-based precision)
         """
-        return cast(float, self.call("microPrecision"))
+        return self.call("microPrecision")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -622,7 +622,7 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns micro-averaged label-based recall.
         (equals to micro-averaged document-based recall)
         """
-        return cast(float, self.call("microRecall"))
+        return self.call("microRecall")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -631,7 +631,7 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns micro-averaged label-based f1-measure.
         (equals to micro-averaged document-based f1-measure)
         """
-        return cast(float, self.call("microF1Measure"))
+        return self.call("microF1Measure")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -639,7 +639,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         Returns Hamming-loss.
         """
-        return cast(float, self.call("hammingLoss"))
+        return self.call("hammingLoss")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -648,7 +648,7 @@ class MultilabelMetrics(JavaModelWrapper):
         Returns subset accuracy.
         (for equal sets of labels)
         """
-        return cast(float, self.call("subsetAccuracy"))
+        return self.call("subsetAccuracy")
 
     @property  # type: ignore[misc]
     @since("1.4.0")
@@ -656,7 +656,7 @@ class MultilabelMetrics(JavaModelWrapper):
         """
         Returns accuracy.
         """
-        return cast(float, self.call("accuracy"))
+        return self.call("accuracy")
 
 
 def _test() -> None:
