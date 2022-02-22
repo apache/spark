@@ -292,10 +292,9 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not " +
-    "smaller than `expr`. An optional `scale` parameter can be specified to control the " +
-    "rounding behavior.",
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -309,6 +308,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
   """,
   since = "3.3.0",
   group = "math_funcs")
+// scalastyle:on line.size.limit
 object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
   override protected def buildWithOneParam(param: Expression): Expression = Ceil(param)
 
@@ -538,10 +538,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not " +
-    "greater than `expr`. An optional `scale` parameter can be specified to control the " +
-    "rounding behavior.",
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -555,6 +554,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   """,
   since = "3.3.0",
   group = "math_funcs")
+// scalastyle:on line.size.limit
 object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
   override protected def buildWithOneParam(param: Expression): Expression = Floor(param)
 
