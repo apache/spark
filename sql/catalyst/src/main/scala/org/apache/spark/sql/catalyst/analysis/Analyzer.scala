@@ -3258,10 +3258,15 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveWindowOrder extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-      case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
+      case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty &&
+        !wf.isInstanceOf[RankLike] =>
         throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
-        val order = spec.orderSpec.map(_.child)
+        val order = if (spec.orderSpec.isEmpty) {
+          spec.partitionSpec
+        } else {
+          spec.orderSpec.map(_.child)
+        }
         WindowExpression(rank.withOrder(order), spec)
     }
   }

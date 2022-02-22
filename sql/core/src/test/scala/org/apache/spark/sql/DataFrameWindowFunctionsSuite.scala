@@ -85,6 +85,25 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     }
   }
 
+  test("rank functions without order by") {
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select(
+          $"key",
+          dense_rank().over(Window.partitionBy("value")),
+          rank().over(Window.partitionBy("value")),
+          percent_rank().over(Window.partitionBy("value"))),
+        df.select(
+          $"key",
+          dense_rank().over(Window.partitionBy("value").orderBy("value")),
+          rank().over(Window.partitionBy("value").orderBy("value")),
+          percent_rank().over(Window.partitionBy("value").orderBy("value")))
+      )
+    }
+  }
+
   test("window function should fail if order by clause is not specified") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
     val e = intercept[AnalysisException](
