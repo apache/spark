@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.expressions;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
@@ -162,21 +163,19 @@ public class GeneralScalarExpression implements Expression, Serializable {
     this.children = children;
   }
 
-  public GeneralScalarExpression(Expression[] children) {
-    this.name = "UNDEFINED";
-    this.children = children;
-  }
-
-  public void setSql(String sql) {
-        this.sql = sql;
-    }
-
   public String name() { return name; }
   public Expression[] children() { return children; }
-  public String sql() { return sql; }
 
   @Override
   public String toString() {
+    if (sql == null) {
+      V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
+      try {
+        this.sql = builder.build(this);
+      } catch (Throwable e) {
+        // Attempt to get SQL failed.
+      }
+    }
     if (sql == null) {
       return name + "(" + children.toString() + ")";
     } else {

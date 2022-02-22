@@ -19,23 +19,13 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
 class V2ExpressionBuilder(e: Expression) {
 
-  def build(): Option[V2Expression] = {
-    val expression = generateExpression(e)
-    expression.foreach {
-      case generated: GeneralScalarExpression =>
-        val V2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
-        Some(V2ExpressionSQLBuilder.build(generated)).foreach(sql => generated.setSql(sql))
-      case _ =>
-    }
-    expression
-  }
+  def build(): Option[V2Expression] = generateExpression(e)
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))

@@ -17,18 +17,13 @@
 
 package org.apache.spark.sql.connector.util;
 
-import com.sun.javafx.scene.control.skin.VirtualFlow;
-import org.apache.spark.sql.catalyst.expressions.Exp;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.LiteralValue;
-import org.apache.spark.sql.errors.QueryExecutionErrors;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * The builder to generate SQL from V2 expressions.
