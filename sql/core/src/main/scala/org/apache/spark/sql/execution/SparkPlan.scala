@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.{broadcast, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.NextIterator
 
 object SparkPlan {
   /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
@@ -384,17 +385,34 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 
-    new Iterator[InternalRow] {
-      private var sizeOfNextRow = ins.readInt()
-      override def hasNext: Boolean = sizeOfNextRow >= 0
-      override def next(): InternalRow = {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(nFields)
-        row.pointTo(bs, sizeOfNextRow)
-        sizeOfNextRow = ins.readInt()
-        row
+    new NextIterator[InternalRow] {
+      private val taskContext: TaskContext = TaskContext.get()
+      if (taskContext != null) {
+        taskContext.addTaskCompletionListener[Unit] { _ => closeIfNeeded() }
       }
+      private var sizeOfNextRow = ins.readInt()
+      override def getNext(): InternalRow = {
+        if (sizeOfNextRow >= 0) {
+          try {
+            val bs = new Array[Byte](sizeOfNextRow)
+            ins.readFully(bs)
+            val row = new UnsafeRow(nFields)
+            row.pointTo(bs, sizeOfNextRow)
+            sizeOfNextRow = ins.readInt()
+            row
+          } catch {
+            case e: Exception =>
+              if (ins != null) {
+                ins.close()
+              }
+              throw e
+          }
+        } else {
+          finished = true
+          null
+        }
+      }
+      override def close(): Unit = ins.close()
     }
   }
 
