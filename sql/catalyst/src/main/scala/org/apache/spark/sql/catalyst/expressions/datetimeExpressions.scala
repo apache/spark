@@ -3165,7 +3165,7 @@ case class TimestampAdd(
   examples = """
     Examples:
       > SELECT _FUNC_('HOUR', timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
-       10
+       8
   """,
   group = "datetime_funcs",
   since = "3.3.0")
@@ -3187,7 +3187,8 @@ case class TimestampDiff(
   override def second: Expression = timestampStart
   override def third: Expression = timestampEnd
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType, AnyTimestampType, AnyTimestampType)
   override def dataType: DataType = LongType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
