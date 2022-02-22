@@ -1200,6 +1200,16 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Gets the difference between two timestamps.
+   *
+   * @param unit Specifies the interval units in which to express the difference between
+   *             the two timestamp parameters.
+   * @param ts1 A timestamp which the function subtracts from `ts2`.
+   * @param ts2 A timestamp from which the function subtracts `ts1`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The time span between two timestamp values, in the units specified.
+   */
   def timestampDiff(unit: String, ts1: Long, ts2: Long, zoneId: ZoneId): Long = {
     unit.toUpperCase(Locale.ROOT) match {
       case "MICROSECOND" =>
