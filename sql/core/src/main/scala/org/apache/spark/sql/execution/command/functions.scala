@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -94,7 +92,7 @@ case class CreateFunctionCommand(
  * }}}
  */
 case class DescribeFunctionCommand(
-    functionName: FunctionIdentifier,
+    info: ExpressionInfo,
     isExtended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
@@ -103,48 +101,19 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Hard code "<>", "!=", "between", "case", and "||"
-    // for now as there is no corresponding functions.
-    functionName.funcName.toLowerCase(Locale.ROOT) match {
-      case "<>" =>
-        Row(s"Function: $functionName") ::
-          Row("Usage: expr1 <> expr2 - " +
-            "Returns true if `expr1` is not equal to `expr2`.") :: Nil
-      case "!=" =>
-        Row(s"Function: $functionName") ::
-          Row("Usage: expr1 != expr2 - " +
-            "Returns true if `expr1` is not equal to `expr2`.") :: Nil
-      case "between" =>
-        Row("Function: between") ::
-          Row("Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-            "evaluate if `expr1` is [not] in between `expr2` and `expr3`.") :: Nil
-      case "case" =>
-        Row("Function: case") ::
-          Row("Usage: CASE expr1 WHEN expr2 THEN expr3 " +
-            "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
-            "When `expr1` = `expr2`, returns `expr3`; " +
-            "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
-      case "||" =>
-        Row("Function: ||") ::
-          Row("Usage: expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.") :: Nil
-      case _ =>
-        try {
-          val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
-          val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
-          val result =
-            Row(s"Function: $name") ::
-              Row(s"Class: ${info.getClassName}") ::
-              Row(s"Usage: ${info.getUsage}") :: Nil
+    val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
+    val result = if (info.getClassName != null) {
+      Row(s"Function: $name") ::
+        Row(s"Class: ${info.getClassName}") ::
+        Row(s"Usage: ${info.getUsage}") :: Nil
+    } else {
+      Row(s"Function: $name") :: Row(s"Usage: ${info.getUsage}") :: Nil
+    }
 
-          if (isExtended) {
-            result :+
-              Row(s"Extended Usage:${info.getExtended}")
-          } else {
-            result
-          }
-        } catch {
-          case _: NoSuchFunctionException => Seq(Row(s"Function: $functionName not found."))
-        }
+    if (isExtended) {
+      result :+ Row(s"Extended Usage:${info.getExtended}")
+    } else {
+      result
     }
   }
 }
@@ -165,11 +134,8 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      if (databaseName.isDefined) {
-        throw QueryCompilationErrors.specifyingDBInDropTempFuncError(databaseName.get)
-      }
       if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
-        throw QueryCompilationErrors.cannotDropNativeFuncError(functionName)
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(functionName)
       }
       catalog.dropTempFunction(functionName, ifExists)
     } else {
@@ -216,7 +182,8 @@ case class ShowFunctionsCommand(
     // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
-        StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
+        StringUtils.filterPattern(
+          FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*")))
         .sorted.map(Row(_))
     } else {
       functionNames.sorted.map(Row(_))
@@ -262,10 +229,4 @@ case class RefreshFunctionCommand(
 
     Seq.empty[Row]
   }
-}
-
-object FunctionsCommand {
-  // operators that do not have corresponding functions.
-  // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
-  val virtualOperators = Seq("!=", "<>", "between", "case", "||")
 }

@@ -534,6 +534,64 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-30362: test input metrics for DSV2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 10).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum == 10)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-37585: test input metrics for DSV2 with output limits") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      Seq("json", "orc", "parquet").foreach { format =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          spark.range(0, 100).write.format(format).save(dir)
+          val df = spark.read.format(format).load(dir)
+          val bytesReads = new mutable.ArrayBuffer[Long]()
+          val recordsRead = new mutable.ArrayBuffer[Long]()
+          val bytesReadListener = new SparkListener() {
+            override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+              bytesReads += taskEnd.taskMetrics.inputMetrics.bytesRead
+              recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+            }
+          }
+          sparkContext.addSparkListener(bytesReadListener)
+          try {
+            df.limit(10).collect()
+            sparkContext.listenerBus.waitUntilEmpty()
+            assert(bytesReads.sum > 0)
+            assert(recordsRead.sum > 0)
+          } finally {
+            sparkContext.removeSparkListener(bytesReadListener)
+          }
+        }
+      }
+    }
+  }
+
   test("Do not use cache on overwrite") {
     Seq("", "orc").foreach { useV1SourceReaderList =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
@@ -989,28 +1047,6 @@ class FileBasedDataSourceSuite extends QueryTest
       val df = spark.read.option("header", true).csv(pathStr)
         .where($"a / b".isNotNull and $"`a``b`".isNotNull)
       checkAnswer(df, Row("v1", "v2"))
-    }
-  }
-
-  test("SPARK-36271: V1 insert should check schema field name too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
-            .format("parquet").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
-      }
-
-      withTempDir { dir =>
-        val e = intercept[AnalysisException] {
-          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
-            .write.mode(SaveMode.Overwrite)
-            .format("parquet").save(dir.getCanonicalPath)
-        }.getMessage
-        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
-      }
     }
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.integrationtest.backend
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 
+import org.apache.spark.deploy.k8s.integrationtest.ProcessUtils
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
@@ -28,6 +29,10 @@ private[spark] trait IntegrationTestBackend {
   def initialize(): Unit
   def getKubernetesClient: DefaultKubernetesClient
   def cleanUp(): Unit = {}
+  def describePods(labels: String): Seq[String] =
+    ProcessUtils.executeProcess(
+      Array("bash", "-c", s"kubectl describe pods --all-namespaces -l $labels"),
+      timeout = 60, dumpOutput = false).filter { !_.contains("https://github.com/kubernetes") }
 }
 
 private[spark] object IntegrationTestBackendFactory {

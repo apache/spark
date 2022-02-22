@@ -44,8 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A runnable distribution of Spark 2.3 or above.
-* A running Kubernetes cluster at version >= 1.6 with access configured to it using
+* A running Kubernetes cluster at version >= 1.20 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -1142,7 +1141,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
   <td><code>0.1</code></td>
   <td>
-    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs<code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs</code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
     This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
   </td>
   <td>2.4.0</td>
@@ -1315,7 +1314,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabel<code></td>
+  <td><code>spark.kubernetes.executor.decommmissionLabel</code></td>
   <td>(none)</td>
   <td>
     Label to be applied to pods which are exiting or being decommissioned. Intended for use
@@ -1324,7 +1323,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabelValue<code></td>
+  <td><code>spark.kubernetes.executor.decommmissionLabelValue</code></td>
   <td>(none)</td>
   <td>
     Value to be applied with the label when
@@ -1333,7 +1332,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.scheduler.name<code></td>
+  <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
 	Specify the scheduler name for each executor pod.
@@ -1341,10 +1340,19 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.scheduler.name<code></td>
+  <td><code>spark.kubernetes.driver.scheduler.name</code></td>
   <td>(none)</td>
   <td>
     Specify the scheduler name for driver pod.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.scheduler.name</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the scheduler name for driver and executor pods. If `spark.kubernetes.driver.scheduler.name` or
+    `spark.kubernetes.executor.scheduler.name` is set, will override this.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -1421,7 +1429,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra driver pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature step
+    can implement `KubernetesDriverCustomFeatureConfigStep` where the driver config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -1431,7 +1441,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Class names of an extra executor pod feature step implementing
     `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
-    Runs after all of Spark internal feature steps.
+    Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature step
+    can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor config
+    is also available.
   </td>
   <td>3.2.0</td>
 </tr>

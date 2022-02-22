@@ -238,7 +238,7 @@ Right keys [1]: [s_store_sk#23]
 Join condition: None
 
 (30) Project [codegen id : 8]
-Output [5]: [store channel AS channel#34, s_store_sk#7 AS id#35, sales#16, coalesce(returns#31, 0.00) AS returns#36, CheckOverflow((promote_precision(cast(profit#17 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#32, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS profit#37]
+Output [5]: [store channel AS channel#34, s_store_sk#7 AS id#35, sales#16, coalesce(returns#31, 0.00) AS returns#36, CheckOverflow((promote_precision(cast(profit#17 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#32, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS profit#37]
 Input [6]: [s_store_sk#7, sales#16, profit#17, s_store_sk#23, returns#31, profit_loss#32]
 
 (31) Scan parquet default.catalog_sales
@@ -329,7 +329,7 @@ Arguments: IdentityBroadcastMode, [id=#65]
 Join condition: None
 
 (49) Project [codegen id : 14]
-Output [5]: [catalog channel AS channel#66, cs_call_center_sk#38 AS id#67, sales#50, returns#63, CheckOverflow((promote_precision(cast(profit#51 as decimal(18,2))) - promote_precision(cast(profit_loss#64 as decimal(18,2)))), DecimalType(18,2), true) AS profit#68]
+Output [5]: [catalog channel AS channel#66, cs_call_center_sk#38 AS id#67, sales#50, returns#63, CheckOverflow((promote_precision(cast(profit#51 as decimal(18,2))) - promote_precision(cast(profit_loss#64 as decimal(18,2)))), DecimalType(18,2)) AS profit#68]
 Input [5]: [cs_call_center_sk#38, sales#50, profit#51, returns#63, profit_loss#64]
 
 (50) Scan parquet default.web_sales
@@ -471,7 +471,7 @@ Right keys [1]: [wp_web_page_sk#90]
 Join condition: None
 
 (79) Project [codegen id : 22]
-Output [5]: [web channel AS channel#101, wp_web_page_sk#74 AS id#102, sales#83, coalesce(returns#98, 0.00) AS returns#103, CheckOverflow((promote_precision(cast(profit#84 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#99, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS profit#104]
+Output [5]: [web channel AS channel#101, wp_web_page_sk#74 AS id#102, sales#83, coalesce(returns#98, 0.00) AS returns#103, CheckOverflow((promote_precision(cast(profit#84 as decimal(18,2))) - promote_precision(cast(coalesce(profit_loss#99, 0.00) as decimal(18,2)))), DecimalType(18,2)) AS profit#104]
 Input [6]: [wp_web_page_sk#74, sales#83, profit#84, wp_web_page_sk#90, returns#98, profit_loss#99]
 
 (80) Union

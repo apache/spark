@@ -723,6 +723,19 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       assert(inMemoryRelationNodeId != columnarToRowNodeId)
     }
   }
+
+  test("SPARK-38232: Explain formatted does not collect subqueries under query stage in AQE") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS c")
+      val expected =
+        "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]"
+      val df = sql("SELECT count(s) FROM (SELECT (SELECT c FROM t) as s)")
+      df.collect()
+      withNormalizedExplain(df, FormattedMode) { output =>
+        assert(output.contains(expected))
+      }
+    }
+  }
 }
 
 case class ExplainSingleData(id: Int)

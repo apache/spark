@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * A rule to optimize skewed joins to avoid straggler tasks whose share of data are significantly
@@ -64,16 +65,6 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   def getSkewThreshold(medianSize: Long): Long = {
     conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD).max(
       medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR))
-  }
-
-  private def medianSize(sizes: Array[Long]): Long = {
-    val numPartitions = sizes.length
-    val bytes = sizes.sorted
-    numPartitions match {
-      case _ if (numPartitions % 2 == 0) =>
-        math.max((bytes(numPartitions / 2) + bytes(numPartitions / 2 - 1)) / 2, 1)
-      case _ => math.max(bytes(numPartitions / 2), 1)
-    }
   }
 
   /**
@@ -130,8 +121,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     assert(leftSizes.length == rightSizes.length)
     val numPartitions = leftSizes.length
     // We use the median size of the original shuffle partitions to detect skewed partitions.
-    val leftMedSize = medianSize(leftSizes)
-    val rightMedSize = medianSize(rightSizes)
+    val leftMedSize = Utils.median(leftSizes)
+    val rightMedSize = Utils.median(rightSizes)
     logDebug(
       s"""
          |Optimizing skewed join.

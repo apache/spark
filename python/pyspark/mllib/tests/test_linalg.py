@@ -523,8 +523,8 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(sv, _convert_to_vector(lil.tocsr()))
         self.assertEqual(sv, _convert_to_vector(lil.todok()))
 
-        def serialize(l):
-            return ser.loads(ser.dumps(_convert_to_vector(l)))
+        def serialize(d):
+            return ser.loads(ser.dumps(_convert_to_vector(d)))
 
         self.assertEqual(sv, serialize(lil))
         self.assertEqual(sv, serialize(lil.tocsc()))

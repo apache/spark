@@ -984,7 +984,9 @@ case class Aggregate(
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
-    aggregateExpressions.map {
+    // aggregateExpressions can be empty through Dateset.agg,
+    // so we should also check groupingExpressions is non empty
+    groupingExpressions.nonEmpty && aggregateExpressions.map {
       case Alias(child, _) => child
       case e => e
     }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
@@ -1462,6 +1464,7 @@ case class RebalancePartitions(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)

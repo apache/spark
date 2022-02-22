@@ -1033,11 +1033,11 @@ def _parse_datatype_string(s: str) -> DataType:
         try:
             # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
             return from_ddl_datatype(s)
-        except:
+        except BaseException:
             try:
                 # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
                 return from_ddl_datatype("struct<%s>" % s.strip())
-            except:
+            except BaseException:
                 raise e
 
 
@@ -1355,11 +1355,20 @@ def _merge_type(
     name: Optional[str] = None,
 ) -> Union[StructType, ArrayType, MapType, DataType]:
     if name is None:
-        new_msg = lambda msg: msg
-        new_name = lambda n: "field %s" % n
+
+        def new_msg(msg: str) -> str:
+            return msg
+
+        def new_name(n: str) -> str:
+            return "field %s" % n
+
     else:
-        new_msg = lambda msg: "%s: %s" % (name, msg)
-        new_name = lambda n: "field %s in %s" % (n, name)
+
+        def new_msg(msg: str) -> str:
+            return "%s: %s" % (name, msg)
+
+        def new_name(n: str) -> str:
+            return "field %s in %s" % (n, name)
 
     if isinstance(a, NullType):
         return b
@@ -1551,11 +1560,20 @@ def _make_type_verifier(
     """
 
     if name is None:
-        new_msg = lambda msg: msg
-        new_name = lambda n: "field %s" % n
+
+        def new_msg(msg: str) -> str:
+            return msg
+
+        def new_name(n: str) -> str:
+            return "field %s" % n
+
     else:
-        new_msg = lambda msg: "%s: %s" % (name, msg)
-        new_name = lambda n: "field %s in %s" % (n, name)
+
+        def new_msg(msg: str) -> str:
+            return "%s: %s" % (name, msg)
+
+        def new_name(n: str) -> str:
+            return "field %s in %s" % (n, name)
 
     def verify_nullability(obj: Any) -> bool:
         if obj is None:
@@ -1582,7 +1600,8 @@ def _make_type_verifier(
 
     if isinstance(dataType, StringType):
         # StringType can work with any types
-        verify_value = lambda _: _
+        def verify_value(obj: Any) -> None:
+            pass
 
     elif isinstance(dataType, UserDefinedType):
         verifier = _make_type_verifier(dataType.sqlType(), name=name)

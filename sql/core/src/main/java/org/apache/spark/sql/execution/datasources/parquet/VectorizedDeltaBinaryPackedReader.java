@@ -73,10 +73,10 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   private ByteBufferInputStream in;
 
   // temporary buffers used by readByte, readShort, readInteger, and readLong
-  byte byteVal;
-  short shortVal;
-  int intVal;
-  long longVal;
+  private byte byteVal;
+  private short shortVal;
+  private int intVal;
+  private long longVal;
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {

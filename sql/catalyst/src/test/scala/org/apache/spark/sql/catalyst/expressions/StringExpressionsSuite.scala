@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
@@ -886,6 +887,172 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  test("ToNumber") {
+    ToNumber(Literal("454"), Literal("")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Number format cannot be empty"))
+    }
+    ToNumber(Literal("454"), NonFoldableLiteral.create("999", StringType))
+      .checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Format expression must be foldable"))
+    }
+
+    // Test '0' and '9'
+
+    Seq("454", "054", "54", "450").foreach { input =>
+      val invalidFormat1 = 0.until(input.length - 1).map(_ => '0').mkString
+      val invalidFormat2 = 0.until(input.length - 2).map(_ => '0').mkString
+      val invalidFormat3 = 0.until(input.length - 1).map(_ => '9').mkString
+      val invalidFormat4 = 0.until(input.length - 2).map(_ => '9').mkString
+      Seq(invalidFormat1, invalidFormat2, invalidFormat3, invalidFormat4)
+        .filter(_.nonEmpty).foreach { format =>
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal(input), Literal(format)),
+          s"The input string '$input' does not match the given number format: '$format'")
+      }
+
+      val format1 = 0.until(input.length).map(_ => '0').mkString
+      val format2 = 0.until(input.length).map(_ => '9').mkString
+      val format3 = 0.until(input.length).map(i => i % 2 * 9).mkString
+      val format4 = 0.until(input.length + 1).map(_ => '0').mkString
+      val format5 = 0.until(input.length + 1).map(_ => '9').mkString
+      val format6 = 0.until(input.length + 1).map(i => i % 2 * 9).mkString
+      Seq(format1, format2, format3, format4, format5, format6).foreach { format =>
+        checkEvaluation(ToNumber(Literal(input), Literal(format)), Decimal(input))
+      }
+    }
+
+    // Test '.' and 'D'
+    checkExceptionInExpression[IllegalArgumentException](
+      ToNumber(Literal("454.2"), Literal("999")),
+      "The input string '454.2' does not match the given number format: '999'")
+    Seq("999.9", "000.0", "99.99", "00.00", "0000.0", "9999.9", "00.000", "99.999")
+      .foreach { format =>
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal("454.23"), Literal(format)),
+          s"The input string '454.23' does not match the given number format: '$format'")
+        val format2 = format.replace('.', 'D')
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal("454.23"), Literal(format2)),
+          s"The input string '454.23' does not match the given number format: '$format2'")
+    }
+
+    Seq(
+      ("454.2", "000.0") -> Decimal(454.2),
+      ("454.23", "000.00") -> Decimal(454.23),
+      ("454.2", "000.00") -> Decimal(454.2),
+      ("454.0", "000.0") -> Decimal(454),
+      ("454.00", "000.00") -> Decimal(454),
+      (".4542", ".0000") -> Decimal(0.4542),
+      ("4542.", "0000.") -> Decimal(4542)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace('.', 'D')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = format.replace('0', '9')
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = format3.replace('.', 'D')
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
+    }
+
+    Seq("999.9.9", "999D9D9", "999.9D9", "999D9.9").foreach { str =>
+      ToNumber(Literal("454.3.2"), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(s"At most one 'D' or '.' is allowed in the number format: '$str'"))
+      }
+    }
+
+    // Test ',' and 'G'
+    checkExceptionInExpression[IllegalArgumentException](
+      ToNumber(Literal("123,456"), Literal("9G9")),
+      "The input string '123,456' does not match the given number format: '9G9'")
+    checkExceptionInExpression[IllegalArgumentException](
+      ToNumber(Literal("123,456,789"), Literal("999,999")),
+      "The input string '123,456,789' does not match the given number format: '999,999'")
+
+    Seq(
+      ("12,454", "99,999") -> Decimal(12454),
+      ("12,454", "99,999,999") -> Decimal(12454),
+      ("12,454,367", "99,999,999") -> Decimal(12454367),
+      ("12,454,", "99,999,") -> Decimal(12454),
+      (",454,367", ",999,999") -> Decimal(454367),
+      (",454,367", "999,999") -> Decimal(454367)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace(',', 'G')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = format.replace('9', '0')
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = format3.replace(',', 'G')
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
+      val format5 = s"${format}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format5)), expected)
+      val format6 = s"${format}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format6)), expected)
+      val format7 = s"9${format}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format7)), expected)
+      val format8 = s"0${format}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format8)), expected)
+      val format9 = s"${format3}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format9)), expected)
+      val format10 = s"${format3}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format10)), expected)
+      val format11 = s"9${format3}9"
+      checkEvaluation(ToNumber(Literal(str), Literal(format11)), expected)
+      val format12 = s"0${format3}0"
+      checkEvaluation(ToNumber(Literal(str), Literal(format12)), expected)
+    }
+
+    // Test '$'
+    Seq(
+      ("$78.12", "$99.99") -> Decimal(78.12),
+      ("$78.12", "$00.00") -> Decimal(78.12),
+      ("78.12$", "99.99$") -> Decimal(78.12),
+      ("78.12$", "00.00$") -> Decimal(78.12)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+
+    ToNumber(Literal("$78$.12"), Literal("$99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one '$' is allowed in the number format: '$99$.99'"))
+    }
+    ToNumber(Literal("78$.12"), Literal("99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'$' must be the first or last char in the number format: '99$.99'"))
+    }
+
+    // Test '-' and 'S'
+    Seq(
+      ("454-", "999-") -> Decimal(-454),
+      ("-454", "-999") -> Decimal(-454),
+      ("12,454.8-", "99G999D9-") -> Decimal(-12454.8),
+      ("00,454.8-", "99G999.9-") -> Decimal(-454.8)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+      val format2 = format.replace('9', '0')
+      checkEvaluation(ToNumber(Literal(str), Literal(format2)), expected)
+      val format3 = format.replace('-', 'S')
+      checkEvaluation(ToNumber(Literal(str), Literal(format3)), expected)
+      val format4 = format2.replace('-', 'S')
+      checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
+    }
+
+    ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one 'S' or '-' is allowed in the number format: '999D9SS'"))
+    }
+
+    Seq("9S99", "9-99").foreach { str =>
+      ToNumber(Literal("-454"), Literal(str)).checkInputDataTypes() match {
+        case TypeCheckResult.TypeCheckFailure(msg) =>
+          assert(msg.contains(
+            s"'S' or '-' must be the first or last char in the number format: '$str'"))
+      }
+    }
   }
 
   test("find in set") {

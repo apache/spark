@@ -2257,7 +2257,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       caseSensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
+        MessageTypeParser.parseMessageType(parquetSchema),
+        catalystSchema,
+        caseSensitive,
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2821,7 +2824,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       }
       assertThrows[RuntimeException] {
         ParquetReadSupport.clipParquetSchema(
-          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+         MessageTypeParser.parseMessageType(parquetSchema),
+          catalystSchema,
+          caseSensitive = false,
+          useFieldId = false)
       }
     }
 }

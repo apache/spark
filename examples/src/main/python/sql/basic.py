@@ -197,6 +197,7 @@ def programmatic_schema_example(spark):
     # +-------+
     # $example off:programmatic_schema$
 
+
 if __name__ == "__main__":
     # $example on:init_session$
     spark = SparkSession \

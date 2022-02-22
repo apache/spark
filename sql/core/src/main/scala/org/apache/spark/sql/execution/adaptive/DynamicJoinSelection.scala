@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -51,17 +50,10 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
       mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
   }
 
-  private def selectJoinStrategy(
-      plan: LogicalPlan,
-      joinType: JoinType): Option[JoinStrategyHint] = plan match {
+  private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
       && stage.mapStats.isDefined =>
-      val demoteBroadcastHash = joinType match {
-        // doesn't make sense for outer joins since one side is preserved and join is not
-        // short circuited if the other side is empty
-        case LeftOuter | RightOuter | FullOuter => false
-        case _ => shouldDemoteBroadcastHashJoin(stage.mapStats.get)
-      }
+      val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
       val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
       if (demoteBroadcastHash && preferShuffleHash) {
         Some(SHUFFLE_HASH)
@@ -77,16 +69,16 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, hint) =>
+    case j @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
       var newHint = hint
       if (!hint.leftHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(left, joinType).foreach { strategy =>
+        selectJoinStrategy(left).foreach { strategy =>
           newHint = newHint.copy(leftHint =
             Some(hint.leftHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
       }
       if (!hint.rightHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(right, joinType).foreach { strategy =>
+        selectJoinStrategy(right).foreach { strategy =>
           newHint = newHint.copy(rightHint =
             Some(hint.rightHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }

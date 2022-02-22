@@ -507,7 +507,8 @@ def read_udfs(pickleSer, infile, eval_type):
             else:
                 return result
 
-    func = lambda _, it: map(mapper, it)
+    def func(_, it):
+        return map(mapper, it)
 
     # profiling is not supported for UDF
     return func, None, ser, ser

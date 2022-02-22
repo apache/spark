@@ -180,7 +180,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
-    ... except:
+    ... except BaseException:
     ...     pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
@@ -383,7 +383,7 @@ class LassoModel(LinearRegressionModelBase):
     >>> from shutil import rmtree
     >>> try:
     ...    rmtree(path)
-    ... except:
+    ... except BaseException:
     ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),
@@ -557,7 +557,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     >>> from shutil import rmtree
     >>> try:
     ...    rmtree(path)
-    ... except:
+    ... except BaseException:
     ...    pass
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(1, {0: 0.0})),

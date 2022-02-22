@@ -42,7 +42,6 @@ import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossMessage, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -64,10 +63,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
-
-  // If this CoarseGrainedExecutorBackend is changed to support multiple threads, then this may need
-  // to be changed so that we don't share the serializer instance across threads
-  private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   private var _resources = Map.empty[String, ResourceInformation]
 

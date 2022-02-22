@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-// scalastyle:off
 import java.io.File
 import java.nio.file.Path
 import java.util.{Locale, TimeZone}
@@ -27,8 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
-import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
+import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.config.Property
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -265,19 +265,21 @@ abstract class SparkFunSuite
   }
 
   class LogAppender(msg: String = "", maxEvents: Int = 1000)
-      extends AbstractAppender("logAppender", null, null) {
+      extends AbstractAppender("logAppender", null, null, true, Property.EMPTY_ARRAY) {
     private val _loggingEvents = new ArrayBuffer[LogEvent]()
     private var _threshold: Level = Level.INFO
 
     override def append(loggingEvent: LogEvent): Unit = loggingEvent.synchronized {
       val copyEvent = loggingEvent.toImmutable
       if (copyEvent.getLevel.isMoreSpecificThan(_threshold)) {
-        if (_loggingEvents.size >= maxEvents) {
-          val loggingInfo = if (msg == "") "." else s" while logging $msg."
-          throw new IllegalStateException(
-            s"Number of events reached the limit of $maxEvents$loggingInfo")
+        _loggingEvents.synchronized {
+          if (_loggingEvents.size >= maxEvents) {
+            val loggingInfo = if (msg == "") "." else s" while logging $msg."
+            throw new IllegalStateException(
+              s"Number of events reached the limit of $maxEvents$loggingInfo")
+          }
+          _loggingEvents.append(copyEvent)
         }
-        _loggingEvents.append(copyEvent)
       }
     }
 
@@ -285,6 +287,8 @@ abstract class SparkFunSuite
       _threshold = threshold
     }
 
-    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.filterNot(_ == null)
+    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.synchronized {
+      _loggingEvents.filterNot(_ == null)
+    }
   }
 }

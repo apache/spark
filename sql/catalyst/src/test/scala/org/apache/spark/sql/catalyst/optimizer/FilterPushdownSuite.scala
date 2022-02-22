@@ -1407,4 +1407,12 @@ class FilterPushdownSuite extends PlanTest {
       condition = Some("x.a".attr === "z.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-37828: Push down filters through RebalancePartitions") {
+    val originalQuery = RebalancePartitions(Seq.empty, testRelation).where('a > 3)
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = RebalancePartitions(Seq.empty, testRelation.where('a > 3)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }

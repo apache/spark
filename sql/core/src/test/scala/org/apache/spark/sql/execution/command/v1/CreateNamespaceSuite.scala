@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.command
 trait CreateNamespaceSuiteBase extends command.CreateNamespaceSuiteBase
     with command.TestsV1AndV2Commands {
   override def namespace: String = "db"
-  override def notFoundMsgPrefix: String = "Database"
 
   test("Create namespace using default warehouse path") {
     val ns = s"$catalog.$namespace"

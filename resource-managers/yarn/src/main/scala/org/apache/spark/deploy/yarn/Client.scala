@@ -183,8 +183,10 @@ private[spark] class Client(
       yarnClient.init(hadoopConf)
       yarnClient.start()
 
-      logInfo("Requesting a new application from cluster with %d NodeManagers"
-        .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      if (log.isDebugEnabled) {
+        logDebug("Requesting a new application from cluster with %d NodeManagers"
+          .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
+      }
 
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()

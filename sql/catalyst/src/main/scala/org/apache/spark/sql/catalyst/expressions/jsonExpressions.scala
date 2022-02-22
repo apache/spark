@@ -766,9 +766,9 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       ARRAY<STRUCT<`col`: BIGINT>>
+       ARRAY<STRUCT<col: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
-       ARRAY<STRUCT<`col`: BIGINT>>
+       ARRAY<STRUCT<col: BIGINT>>
   """,
   group = "json_funcs",
   since = "2.4.0")

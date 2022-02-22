@@ -72,7 +72,6 @@ case class ParquetWrite(
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
-    ParquetSchemaConverter.checkFieldNames(dataSchema)
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
 
@@ -81,6 +80,10 @@ case class ParquetWrite(
     conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, sqlConf.writeLegacyParquetFormat.toString)
 
     conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, sqlConf.parquetOutputTimestampType.toString)
+
+    conf.set(
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
+      sqlConf.parquetFieldIdWriteEnabled.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)

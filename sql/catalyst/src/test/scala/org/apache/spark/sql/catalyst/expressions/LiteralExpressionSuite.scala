@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -229,17 +229,6 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkStructLiteral(("de", 1, 2.0f))
     checkStructLiteral((1, ("fgh", 3.0)))
     checkStructLiteral((Period.ZERO, ("abc", Duration.ofDays(1))))
-  }
-
-  test("unsupported types (map and struct) in Literal.apply") {
-    def checkUnsupportedTypeInLiteral(v: Any): Unit = {
-      val errMsgMap = intercept[RuntimeException] {
-        Literal(v)
-      }
-      assert(errMsgMap.getMessage.startsWith("Unsupported literal type"))
-    }
-    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
-    checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
   }
 
   test("SPARK-24571: char literals") {
@@ -464,5 +453,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       checkEvaluation(Literal.create(duration, dt), result)
     }
+  }
+
+  test("SPARK-37967: Literal.create support ObjectType") {
+    checkEvaluation(
+      Literal.create(UTF8String.fromString("Spark SQL"), ObjectType(classOf[UTF8String])),
+      UTF8String.fromString("Spark SQL"))
   }
 }
