@@ -2068,7 +2068,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * exit with success status but client side exited with failed status. Spark can call
    * this method to stop SparkContext and pass client side correct exit code to scheduler backend.
    * Then scheduler backend should send the exit code to corresponding resource scheduler
-   * to keep consistens.
+   * to keep consistent.
    *
    * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
    */
