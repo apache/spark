@@ -42,12 +42,12 @@ public class JavaSparkContextSuite implements Serializable {
     String[] jars = new String[] {};
     java.util.Map<String, String> environment = new java.util.HashMap<>();
 
-    new JavaSparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
-    new JavaSparkContext("local", "name", new SparkConf()).stop();
-    new JavaSparkContext("local", "name").stop();
-    new JavaSparkContext("local", "name", "sparkHome", dummyJarFile).stop();
-    new JavaSparkContext("local", "name", "sparkHome", jars).stop();
-    new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop();
+    new JavaSparkContext(new SparkConf().setMaster("local").setAppName("name")).stop(0);
+    new JavaSparkContext("local", "name", new SparkConf()).stop(0);
+    new JavaSparkContext("local", "name").stop(0);
+    new JavaSparkContext("local", "name", "sparkHome", dummyJarFile).stop(0);
+    new JavaSparkContext("local", "name", "sparkHome", jars).stop(0);
+    new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop(0);
   }
 
   @Test
