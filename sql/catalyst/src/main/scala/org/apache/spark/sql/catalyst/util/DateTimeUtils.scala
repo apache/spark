@@ -1205,33 +1205,36 @@ object DateTimeUtils {
    *
    * @param unit Specifies the interval units in which to express the difference between
    *             the two timestamp parameters.
-   * @param ts1 A timestamp which the function subtracts from `ts2`.
-   * @param ts2 A timestamp from which the function subtracts `ts1`.
+   * @param startTs A timestamp which the function subtracts from `endTs`.
+   * @param endTs A timestamp from which the function subtracts `startTs`.
    * @param zoneId The time zone ID at which the operation is performed.
    * @return The time span between two timestamp values, in the units specified.
    */
-  def timestampDiff(unit: String, ts1: Long, ts2: Long, zoneId: ZoneId): Long = {
+  def timestampDiff(unit: String, startTs: Long, endTs: Long, zoneId: ZoneId): Long = {
     unit.toUpperCase(Locale.ROOT) match {
       case "MICROSECOND" =>
-        ts2 - ts1
+        endTs - startTs
       case "MILLISECOND" =>
-        (ts2 - ts1) / MICROS_PER_MILLIS
+        (endTs - startTs) / MICROS_PER_MILLIS
       case "SECOND" =>
-        (ts2 - ts1) / MICROS_PER_SECOND
+        (endTs - startTs) / MICROS_PER_SECOND
       case "MINUTE" =>
-        (ts2 - ts1) / MICROS_PER_MINUTE
+        (endTs - startTs) / MICROS_PER_MINUTE
       case "HOUR" =>
-        (ts2 - ts1) / MICROS_PER_HOUR
+        (endTs - startTs) / MICROS_PER_HOUR
       case "DAY" =>
-        (ts2 - ts1) / MICROS_PER_DAY
+        (endTs - startTs) / MICROS_PER_DAY
       case "WEEK" =>
-        (ts2 - ts1) / (MICROS_PER_DAY * DAYS_PER_WEEK)
+        (endTs - startTs) / (MICROS_PER_DAY * DAYS_PER_WEEK)
       case "MONTH" =>
-        ChronoUnit.MONTHS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId))
+        ChronoUnit.MONTHS.between(
+          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId))
       case "QUARTER" =>
-        ChronoUnit.MONTHS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId)) / 3
+        ChronoUnit.MONTHS.between(
+          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId)) / 3
       case "YEAR" =>
-        ChronoUnit.YEARS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId))
+        ChronoUnit.YEARS.between(
+          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId))
       case _ =>
         throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
     }
