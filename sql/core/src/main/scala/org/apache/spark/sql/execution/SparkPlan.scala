@@ -400,6 +400,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
           } catch {
             case e: Exception =>
               if (ins != null) {
+                finished = true
                 ins.close()
               }
               throw e
