@@ -1462,7 +1462,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz"), TimestampType),
         1580184371847000L)
     }
-    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+    withSQLConf(
+      SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
