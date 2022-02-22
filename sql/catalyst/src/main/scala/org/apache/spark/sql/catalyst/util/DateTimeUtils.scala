@@ -1232,6 +1232,8 @@ object DateTimeUtils {
         ChronoUnit.MONTHS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId)) / 3
       case "YEAR" =>
         ChronoUnit.YEARS.between(getLocalDateTime(ts1, zoneId), getLocalDateTime(ts2, zoneId))
+      case _ =>
+        throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
     }
   }
 }

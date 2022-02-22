@@ -1978,4 +1978,10 @@ object QueryExecutionErrors {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array("unit", "timestampadd", unit))
   }
+
+  def invalidUnitInTimestampDiff(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampdiff", unit))
+  }
 }
