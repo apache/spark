@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -29,7 +30,8 @@ class V2ExpressionBuilder(e: Expression) {
     val expression = generateExpression(e)
     expression.foreach {
       case generated: GeneralScalarExpression =>
-        generateSQL(e).foreach(sql => generated.setSql(sql))
+        val V2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
+        Some(V2ExpressionSQLBuilder.build(generated)).foreach(sql => generated.setSql(sql))
       case _ =>
     }
     expression
@@ -39,9 +41,9 @@ class V2ExpressionBuilder(e: Expression) {
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
     case attr: Attribute => Some(FieldReference.column(quoteIfNeeded(attr.name)))
     case IsNull(col) => generateExpression(col)
-      .map(c => new GeneralScalarExpression("IS NULL", Array[V2Expression](c)))
+      .map(c => new GeneralScalarExpression("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
-      .map(c => new GeneralScalarExpression("IS NOT NULL", Array[V2Expression](c)))
+      .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
     case b: BinaryOperator =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
@@ -70,50 +72,10 @@ class V2ExpressionBuilder(e: Expression) {
         val branchExpression = new GeneralScalarExpression(branchExpressions.toArray[V2Expression])
         if (elseValue.isDefined) {
           elseValue.flatMap(generateExpression).map { v =>
-            new GeneralScalarExpression("CASE WHEN", Array[V2Expression](branchExpression, v))
+            new GeneralScalarExpression("CASE_WHEN", Array[V2Expression](branchExpression, v))
           }
         } else {
-          Some(new GeneralScalarExpression("CASE WHEN", Array[V2Expression](branchExpression)))
-        }
-      } else {
-        None
-      }
-    // TODO supports other expressions
-    case _ => None
-  }
-
-  private def generateSQL(expr: Expression): Option[String] = expr match {
-    case Literal(value, dataType) => Some(LiteralValue(value, dataType).toString)
-    case a: Attribute => Some(quoteIfNeeded(a.name))
-    case IsNull(col) => generateSQL(col).map(c => s"$c IS NULL")
-    case IsNotNull(col) => generateSQL(col).map(c => s"$c IS NOT NULL")
-    case b: BinaryOperator =>
-      val l = generateSQL(b.left)
-      val r = generateSQL(b.right)
-      if (l.isDefined && r.isDefined) {
-        Some(s"(${l.get}) ${b.sqlOperator} (${r.get})")
-      } else {
-        None
-      }
-    case Not(EqualTo(left, right)) =>
-      val l = generateSQL(left)
-      val r = generateSQL(right)
-      if (l.isDefined && r.isDefined) {
-        Some(s"${l.get} != ${r.get}")
-      } else {
-        None
-      }
-    case Not(child) => generateSQL(child).map(v => s"NOT ($v)")
-    case CaseWhen(branches, elseValue) =>
-      val conditionsSQL = branches.map(_._1).flatMap(generateSQL)
-      val valuesSQL = branches.map(_._2).flatMap(generateSQL)
-      if (conditionsSQL.length == branches.length && valuesSQL.length == branches.length) {
-        val branchSQL =
-          conditionsSQL.zip(valuesSQL).map { case (c, v) => s" WHEN $c THEN $v" }.mkString
-        if (elseValue.isDefined) {
-          elseValue.flatMap(generateSQL).map(v => s"CASE$branchSQL ELSE $v END")
-        } else {
-          Some(s"CASE$branchSQL END")
+          Some(new GeneralScalarExpression("CASE_WHEN", Array[V2Expression](branchExpression)))
         }
       } else {
         None

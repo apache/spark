@@ -51,7 +51,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, Transform}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -1977,5 +1977,9 @@ object QueryExecutionErrors {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array("unit", "timestampadd", unit))
+  }
+
+  def unexpectedV2ExpressionError(expr: V2Expression): Throwable = {
+    new IllegalArgumentException(s"Unexpected V2 expression: $expr")
   }
 }

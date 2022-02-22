@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -194,65 +195,19 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
-  protected final val BINARY_OPERATION = Set("=", "!=", "<=>", "<", "<=", ">", ">=",
-    "+", "-", "*", "/", "%", "&&", "||", "AND", "OR", "&", "|", "^")
-
   /**
    * Converts V2 expression to String representing a SQL expression.
    * @param expr The V2 expression to be converted.
    * @return Converted value.
    */
   @Since("3.3.0")
-  def compileExpression(expr: Expression): Option[String] = expr match {
-    case lit: LiteralValue[_] => Some(lit.toString)
-    case f: FieldReference => Some(f.toString)
-    case e: GeneralScalarExpression if e.name() == "IS NULL" =>
-      assert(e.children().length == 1)
-      compileExpression(e.children()(0)).map(v => s"$v IS NULL")
-    case e: GeneralScalarExpression if e.name() == "IS NOT NULL" =>
-      assert(e.children().length == 1)
-      compileExpression(e.children()(0)).map(v => s"$v IS NOT NULL")
-    case e: GeneralScalarExpression if BINARY_OPERATION.contains(e.name()) =>
-      assert(e.children().length == 2)
-      val l = compileExpression(e.children()(0))
-      val r = compileExpression(e.children()(1))
-      if (l.isDefined && r.isDefined) {
-        Some(s"(${l.get}) ${e.name()} (${r.get})")
-      } else {
-        None
-      }
-    case e: GeneralScalarExpression if e.name() == "NOT" =>
-      assert(e.children().length == 1)
-      compileExpression(e.children()(0)).map(v => s"NOT ($v)")
-    case e: GeneralScalarExpression if e.name() == "CASE WHEN" =>
-      assert(e.children().length == 1 || e.children().length == 2)
-      assert(e.children()(0).isInstanceOf[GeneralScalarExpression])
-      val branchExpression = e.children()(0).asInstanceOf[GeneralScalarExpression]
-      val branchExpressions = branchExpression.children()
-      val branchSQL = branchExpressions.map {
-        case branch: GeneralScalarExpression =>
-          assert(branch.children().length == 2)
-          val c = compileExpression(branch.children()(0))
-          val v = compileExpression(branch.children()(1))
-          if (c.isDefined && v.isDefined) {
-            s" WHEN ${c.get} THEN ${v.get}"
-          } else {
-            return None
-          }
-        case _ => return None
-      }.mkString
-      if (e.children().length == 2) {
-        val elseSQL = compileExpression(e.children()(1))
-        if (elseSQL.isDefined) {
-          elseSQL.map(v => s"CASE$branchSQL ELSE $v END")
-        } else {
-          None
-        }
-      } else {
-        Some(s"CASE$branchSQL END")
-      }
-    // TODO supports other expressions
-    case _ => None
+  def compileExpression(expr: Expression): Option[String] = {
+    val V2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
+    try {
+      Some(V2ExpressionSQLBuilder.build(expr))
+    } catch {
+      case _: IllegalArgumentException => None
+    }
   }
 
   /**
