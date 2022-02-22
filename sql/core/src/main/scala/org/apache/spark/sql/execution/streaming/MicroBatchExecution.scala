@@ -314,20 +314,6 @@ class MicroBatchExecution(
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
         if (latestBatchId != 0) {
-          /* SPARK-38033: In some unexpected cases, commit and offset are inconsistent,
-            * and offset is not written into HDFS continuously, as follows:
-            *
-            * commits
-            * /tmp/streaming_xxxxxxxx/commits/113256
-            * /tmp/streaming_xxxxxxxx/commits/113257
-            * offsets
-            * /tmp/streaming_xxxxxxxx/offsets/113257
-            * /tmp/streaming_xxxxxxxx/offsets/113259
-            *
-            * When we start the streaming program, batch ${latestBatchId - 1} is 113258,
-            * but offsets 113258 doesn't exist, an exception will be thrown,resulting in
-            * the program cannot be started. As an improvement, we could probably do some
-            * simply analysis and give better error message. */
           val secondLatestOffsets = offsetLog.get(latestBatchId - 1).getOrElse {
             logError(s"Please check the checkpoint, batch ${latestBatchId - 1} doesn't exist. " +
               s"If the latest offset is $latestBatchId, the latest commit is ${latestBatchId - 2}" +
