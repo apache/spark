@@ -29,7 +29,8 @@ private[spark] trait SchedulerBackend {
   private val appId = "spark-application-" + System.currentTimeMillis
 
   def start(): Unit
-  def stop(exitCode: Int = 0): Unit
+  def stop(): Unit
+  def stop(exitCode: Int): Unit = stop()
   /**
    * Update the current offers and schedule tasks
    */

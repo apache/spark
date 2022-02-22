@@ -69,7 +69,7 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 private class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
   def start(): Unit = {}
-  def stop(exitCode: Int = 0): Unit = {}
+  def stop(exitCode: Int): Unit = {}
   def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
   def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
@@ -80,7 +80,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
   override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
   override def start(): Unit = {}
-  override def stop(exitCode: Int = 0): Unit = {}
+  override def stop(exitCode: Int): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
   override def killTaskAttempt(

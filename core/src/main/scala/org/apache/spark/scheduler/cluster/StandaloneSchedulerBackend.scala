@@ -127,7 +127,7 @@ private[spark] class StandaloneSchedulerBackend(
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop(exitCode: Int = 0): Unit = {
+  override def stop(): Unit = {
     stop(SparkAppHandle.State.FINISHED)
   }
 
