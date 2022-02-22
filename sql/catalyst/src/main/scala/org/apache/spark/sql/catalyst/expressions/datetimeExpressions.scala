@@ -3073,7 +3073,7 @@ case class ConvertTimezone(
           - "HOUR"
           - "MINUTE"
           - "SECOND"
-          - "MILLISECOND" - milliseconds
+          - "MILLISECOND"
           - "MICROSECOND"
       * quantity - this is the number of units of time that you want to add.
       * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
@@ -3139,5 +3139,83 @@ case class TimestampAdd(
       newSecond: Expression,
       newThird: Expression): TimestampAdd = {
     copy(unit = newFirst, quantity = newSecond, timestamp = newThird)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(unit, timestampStart, timestampEnd) - Gets the difference between the timestamps `timestampEnd` and `timestampStart` in the specified units.",
+  arguments = """
+    Arguments:
+      * unit - this indicates the units of the difference between the given timestamps.
+        Supported string values of `unit` are (case insensitive):
+          - "YEAR"
+          - "QUARTER" - 3 months
+          - "MONTH"
+          - "WEEK" - 7 days
+          - "DAY", "DAYOFYEAR"
+          - "HOUR"
+          - "MINUTE"
+          - "SECOND"
+          - "MILLISECOND"
+          - "MICROSECOND"
+      * timestampStart - A timestamp which the expression subtracts from `timestampEnd`.
+      * timestampEnd - A timestamp from which the expression subtracts `timestampStart`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
+       10
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class TimestampDiff(
+    unit: Expression,
+    timestampStart: Expression,
+    timestampEnd: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with TimeZoneAwareExpression {
+
+  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+    this(unit, quantity, timestamp, None)
+
+  override def first: Expression = unit
+  override def second: Expression = timestampStart
+  override def third: Expression = timestampEnd
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
+  override def dataType: DataType = LongType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestampEnd.dataType)
+
+  override def nullSafeEval(u: Any, microsStart: Any, microsEnd: Any): Any = {
+    DateTimeUtils.timestampDiff(
+      u.asInstanceOf[UTF8String].toString,
+      microsStart.asInstanceOf[Long],
+      microsEnd.asInstanceOf[Long],
+      zoneIdInEval)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    defineCodeGen(ctx, ev, (u, s, e) =>
+      s"""$dtu.timestampDiff($u.toString(), $s, $e, $zid)""")
+  }
+
+  override def prettyName: String = "timestampdiff"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): TimestampDiff = {
+    copy(unit = newFirst, timestampStart = newSecond, timestampEnd = newThird)
   }
 }
