@@ -219,7 +219,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         Some(t.location),
         actualQuery.output.map(_.name))
 
-      // For dynamic partition overwrite, we do not delete partition directories ahead.
+      // For staging dir partition overwrite, we do not delete partition directories ahead.
       // We write to staging directories and move to final partition directories after writing
       // job is done. So it is ok to have outputPath try to overwrite inputpath.
       if (overwrite && !insertCommand.stagingDirOverwrite) {
