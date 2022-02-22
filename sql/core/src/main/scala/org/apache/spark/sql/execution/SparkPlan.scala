@@ -386,10 +386,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 
     new NextIterator[InternalRow] {
-      private val taskContext: TaskContext = TaskContext.get()
-      if (taskContext != null) {
-        taskContext.addTaskCompletionListener[Unit] { _ => closeIfNeeded() }
-      }
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeIfNeeded()))
       private var sizeOfNextRow = ins.readInt()
       override def getNext(): InternalRow = {
         if (sizeOfNextRow >= 0) {
