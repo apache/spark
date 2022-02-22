@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
+import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -1200,6 +1200,19 @@ object DateTimeUtils {
     }
   }
 
+  private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
+    "MICROSECOND" -> ChronoUnit.MICROS.between,
+    "MILLISECOND" -> ChronoUnit.MILLIS.between,
+    "SECOND" -> ChronoUnit.SECONDS.between,
+    "MINUTE" -> ChronoUnit.MINUTES.between,
+    "HOUR" -> ChronoUnit.HOURS.between,
+    "DAY" -> ChronoUnit.DAYS.between,
+    "WEEK" -> ChronoUnit.WEEKS.between,
+    "MONTH" -> ChronoUnit.MONTHS.between,
+    "QUARTER" -> ((startTs: Temporal, endTs: Temporal) =>
+      ChronoUnit.MONTHS.between(startTs, endTs) / 3),
+    "YEAR" -> ChronoUnit.YEARS.between)
+
   /**
    * Gets the difference between two timestamps.
    *
@@ -1211,32 +1224,13 @@ object DateTimeUtils {
    * @return The time span between two timestamp values, in the units specified.
    */
   def timestampDiff(unit: String, startTs: Long, endTs: Long, zoneId: ZoneId): Long = {
-    unit.toUpperCase(Locale.ROOT) match {
-      case "MICROSECOND" =>
-        endTs - startTs
-      case "MILLISECOND" =>
-        (endTs - startTs) / MICROS_PER_MILLIS
-      case "SECOND" =>
-        (endTs - startTs) / MICROS_PER_SECOND
-      case "MINUTE" =>
-        (endTs - startTs) / MICROS_PER_MINUTE
-      case "HOUR" =>
-        (endTs - startTs) / MICROS_PER_HOUR
-      case "DAY" =>
-        (endTs - startTs) / MICROS_PER_DAY
-      case "WEEK" =>
-        (endTs - startTs) / (MICROS_PER_DAY * DAYS_PER_WEEK)
-      case "MONTH" =>
-        ChronoUnit.MONTHS.between(
-          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId))
-      case "QUARTER" =>
-        ChronoUnit.MONTHS.between(
-          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId)) / 3
-      case "YEAR" =>
-        ChronoUnit.YEARS.between(
-          getLocalDateTime(startTs, zoneId), getLocalDateTime(endTs, zoneId))
-      case _ =>
-        throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
+    val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
+    if (timestampDiffMap.contains(unitInUpperCase)) {
+      val startLocalTs = getLocalDateTime(startTs, zoneId)
+      val endLocalTs = getLocalDateTime(endTs, zoneId)
+      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+    } else {
+      throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
     }
   }
 }
