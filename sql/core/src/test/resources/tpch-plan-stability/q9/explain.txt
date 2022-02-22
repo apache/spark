@@ -190,7 +190,7 @@ Right keys [1]: [n_nationkey#20]
 Join condition: None
 
 (34) Project [codegen id : 6]
-Output [3]: [n_name#21 AS nation#23, year(o_orderdate#18) AS o_year#24, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(l_extendedprice#7 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#8 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true) as decimal(23,0))) - promote_precision(cast(CheckOverflow((promote_precision(ps_supplycost#15) * promote_precision(l_quantity#6)), DecimalType(21,0), true) as decimal(23,0)))), DecimalType(23,0), true) AS amount#25]
+Output [3]: [n_name#21 AS nation#23, year(o_orderdate#18) AS o_year#24, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(cast(l_extendedprice#7 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#8 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)) as decimal(23,0))) - promote_precision(cast(CheckOverflow((promote_precision(ps_supplycost#15) * promote_precision(l_quantity#6)), DecimalType(21,0)) as decimal(23,0)))), DecimalType(23,0)) AS amount#25]
 Input [8]: [l_quantity#6, l_extendedprice#7, l_discount#8, s_nationkey#11, ps_supplycost#15, o_orderdate#18, n_nationkey#20, n_name#21]
 
 (35) HashAggregate [codegen id : 6]

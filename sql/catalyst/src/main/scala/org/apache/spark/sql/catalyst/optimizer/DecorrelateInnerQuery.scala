@@ -599,6 +599,11 @@ object DecorrelateInnerQuery extends PredicateHelper {
               (newAggregate, joinCond, outerReferenceMap)
             }
 
+          case d: Distinct =>
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(d.child, parentOuterReferences, aggregated = true)
+            (d.copy(child = newChild), joinCond, outerReferenceMap)
+
           case j @ Join(left, right, joinType, condition, _) =>
             val outerReferences = collectOuterReferences(j.expressions)
             // Join condition containing outer references is not supported.
