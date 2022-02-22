@@ -1228,7 +1228,8 @@ object DateTimeUtils {
     if (timestampDiffMap.contains(unitInUpperCase)) {
       val startLocalTs = getLocalDateTime(startTs, zoneId)
       val endLocalTs = getLocalDateTime(endTs, zoneId)
-      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      val res = timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      res
     } else {
       throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
     }

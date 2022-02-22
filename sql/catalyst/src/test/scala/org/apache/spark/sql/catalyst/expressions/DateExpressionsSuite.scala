@@ -1947,4 +1947,69 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-38284: difference between two timestamps in units") {
+    // Check case-insensitivity
+    checkEvaluation(
+      TimestampDiff(
+        Literal("Hour"),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0)),
+        Literal(LocalDateTime.of(2022, 2, 15, 13, 57, 0))),
+      1L)
+    // Check nulls as input values
+    checkEvaluation(
+      TimestampDiff(
+        Literal.create(null, StringType),
+        Literal(LocalDateTime.of(2021, 2, 15, 12, 57, 0)),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampDiff(
+        Literal("MINUTE"),
+        Literal.create(null, TimestampType),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampDiff(
+        Literal("MINUTE"),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0)),
+        Literal.create(null, TimestampType)),
+      null)
+    // Check crossing the daylight saving time
+    checkEvaluation(
+      TimestampDiff(
+        Literal("HOUR"),
+        Literal(Instant.parse("2022-03-12T23:30:00Z")),
+        Literal(Instant.parse("2022-03-13T05:30:00Z")),
+        Some("America/Los_Angeles")),
+      6L)
+    // Check the leap year
+    checkEvaluation(
+      TimestampDiff(
+        Literal("DAY"),
+        Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
+        Literal(LocalDateTime.of(2020, 3, 1, 10, 11, 12)),
+        Some("America/Los_Angeles")),
+      2L)
+
+    Seq(
+      "YEAR", "QUARTER", "MONTH",
+      "WEEK", "DAY",
+      "HOUR", "MINUTE", "SECOND",
+      "MILLISECOND", "MICROSECOND"
+    ).foreach { unit =>
+      outstandingTimezonesIds.foreach { tz =>
+        Seq(TimestampNTZType, TimestampType).foreach { tsType =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+            (startTs: Expression, endTs: Expression) =>
+              TimestampDiff(
+                Literal(unit),
+                startTs,
+                endTs,
+                Some(tz)),
+            tsType, tsType)
+        }
+      }
+    }
+  }
 }
