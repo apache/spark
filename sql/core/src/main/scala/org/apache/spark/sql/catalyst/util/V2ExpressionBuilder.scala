@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryArithmetic, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -35,10 +36,14 @@ class V2ExpressionBuilder(e: Expression) {
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
     case b: BinaryOperator =>
-      val left = generateExpression(b.left)
-      val right = generateExpression(b.right)
-      if (left.isDefined && right.isDefined) {
-        Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+      if (!b.isInstanceOf[BinaryArithmetic] || SQLConf.get.ansiEnabled) {
+        val left = generateExpression(b.left)
+        val right = generateExpression(b.right)
+        if (left.isDefined && right.isDefined) {
+          Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+        } else {
+          None
+        }
       } else {
         None
       }
