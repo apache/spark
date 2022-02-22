@@ -1294,10 +1294,10 @@ class SparkContext:
         Notes
         -----
         A path can be added only once. Subsequent additions of the same path are ignored.
+        This API is experimental.
 
         Examples
         --------
-
         Creates a zipped file that contains a text file written '100'.
 
         >>> import zipfile
@@ -1310,7 +1310,8 @@ class SparkContext:
         ...     zipped.write(path, os.path.basename(path))
         >>> sc.addArchive(zip_path)
 
-        Read '100' as an integer and process with the data in the RDD.
+        Reads the '100' as an integer in the zipped file, and processes
+        it with the data in the RDD.
 
         >>> def func(iterator):
         ...    with open("%s/test.txt" % SparkFiles.get("test.zip")) as f:
@@ -1318,10 +1319,6 @@ class SparkContext:
         ...        return [x * int(v) for x in iterator]
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
-
-        Notes
-        -----
-        This API is experimental.
         """
         self._jsc.sc().addArchive(path)
 
