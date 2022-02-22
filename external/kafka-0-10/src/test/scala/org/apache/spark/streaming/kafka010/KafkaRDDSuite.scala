@@ -60,7 +60,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     try {
       try {
         if (sc != null) {
-          sc.stop()
+          sc.stop
           sc = null
         }
       } finally {
