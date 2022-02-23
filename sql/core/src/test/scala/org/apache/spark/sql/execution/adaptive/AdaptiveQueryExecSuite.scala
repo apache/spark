@@ -28,6 +28,7 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -123,6 +124,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSort(plan: SparkPlan): Seq[SortExec] = {
     collect(plan) {
       case s: SortExec => s
+    }
+  }
+
+  private def findTopLevelAggregate(plan: SparkPlan): Seq[BaseAggregateExec] = {
+    collect(plan) {
+      case agg: BaseAggregateExec => agg
     }
   }
 
@@ -2482,6 +2489,53 @@ class AdaptiveQueryExecSuite
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
             "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
       }
+    }
+  }
+
+  test("SPARK-38162: Optimize one row plan in AQE Optimizer") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 4).map(i => TestData(i, i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      // remove sort
+      val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM v where c1 = 1 order by c1, c2
+          |""".stripMargin)
+      assert(findTopLevelSort(origin1).size == 1)
+      assert(findTopLevelSort(adaptive1).isEmpty)
+
+      // convert group only aggregate to project
+      val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT distinct c1 FROM (SELECT /*+ repartition(c1) */ * FROM v where c1 = 1)
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin2).size == 2)
+      assert(findTopLevelAggregate(adaptive2).isEmpty)
+
+      // remove distinct in aggregate
+      val (origin3, adaptive3) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT sum(distinct c1) FROM (SELECT /*+ repartition(c1) */ * FROM v where c1 = 1)
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin3).size == 4)
+      assert(findTopLevelAggregate(adaptive3).size == 2)
+
+      // do not optimize if the aggregate is inside query stage
+      val (origin4, adaptive4) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT distinct c1 FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin4).size == 2)
+      assert(findTopLevelAggregate(adaptive4).size == 2)
+
+      val (origin5, adaptive5) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT sum(distinct c1) FROM v where c1 = 1
+          |""".stripMargin)
+      assert(findTopLevelAggregate(origin5).size == 4)
+      assert(findTopLevelAggregate(adaptive5).size == 4)
     }
   }
 }
