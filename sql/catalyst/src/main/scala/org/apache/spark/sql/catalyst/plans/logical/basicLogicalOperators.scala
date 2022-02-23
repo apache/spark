@@ -1346,7 +1346,11 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    // when withReplacement is true, PoissonSampler is applied in SampleExec,
+    // which may output more rows than child.maxRows.
+    if (withReplacement) None else child.maxRows
+  }
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Sample =

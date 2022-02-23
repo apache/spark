@@ -804,11 +804,6 @@
         <version>0.9.23</version>
       </dependency>
       <dependency>
-        <groupId>commons-net</groupId>
-        <artifactId>commons-net</artifactId>
-        <version>3.1</version>
-      </dependency>
-      <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
         <version>4.1.74.Final</version>
@@ -1181,7 +1176,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.3.0</version>
+        <version>42.3.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
