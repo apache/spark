@@ -159,7 +159,7 @@ package object util extends Logging {
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
 
     str.foreach {
       case '\'' => builder ++= s"\\\'"
