@@ -971,6 +971,12 @@ object DDLUtils extends Logging {
     }
   }
 
+  private def isSameOrSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
+    val path1 = fs.makeQualified(p1).toString + Path.SEPARATOR
+    val path2 = fs.makeQualified(p2).toString + Path.SEPARATOR
+    path1.startsWith(path2)
+  }
+
   /**
    * Throws exception if outputPath tries to overwrite inputpath.
    */
@@ -980,7 +986,9 @@ object DDLUtils extends Logging {
         r.location.rootPaths
     }.flatten
 
-    if (inputPaths.contains(outputPath)) {
+    val hadoopConf = SparkSession.getActiveSession.get.sessionState.newHadoopConf()
+    val fs = outputPath.getFileSystem(hadoopConf)
+    if (inputPaths.exists(path => isSameOrSubDir(outputPath, path, fs))) {
       throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
     }
   }
