@@ -409,7 +409,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         val df = spark.range(1000L).select('id,
           'id * 2 as "FLD1",
           'id * 12 as "FLD2",
-          lit("aaa") + 'id as "fld3")
+          lit(null).cast(DoubleType) + 'id as "fld3")
         df.write
           .mode(SaveMode.Overwrite)
           .bucketBy(10, "id", "FLD1", "FLD2")
@@ -425,7 +425,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
              |WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
         df2.createTempView("TBL2")
-        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+        sql("SELECT * FROM tbl2 WHERE fld3 IN (0,1)  ").queryExecution.executedPlan
       }
     }
   }
