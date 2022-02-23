@@ -1100,7 +1100,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38294: DDLUtils.verifyNotReadPath should check target is subDir") {
     withTempPath { path =>
-      withTable("t1", "t2", "t3", "t4") {
+      withTable("t1", "t2") {
         sql(
           s"""
              |CREATE TABLE t1 (id STRING, dt STRING)
@@ -1111,30 +1111,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-09') SELECT 10")
         sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
 
-        // non partition table with different path
         sql(
           s"""
              |CREATE TABLE t2 (id STRING)
              |USING PARQUET
-             |LOCATION '${path.getAbsolutePath}/dt=2020-09-08'
+             |LOCATION '${path.getAbsolutePath}/dt=2020-09-09'
             """.stripMargin)
         val e1 = intercept[AnalysisException] {
           sql("INSERT OVERWRITE TABLE t2 SELECT id FROM t1 WHERE dt='2020-09-10'")
         }
         assert(e1.getMessage.contains("Cannot overwrite a path that is also being read from."))
-
-        // non partition table with same path
-        sql(
-          s"""
-             |CREATE TABLE t3 (id string)
-             |USING PARQUET
-             |LOCATION '${path.getAbsolutePath}/dt=2020-09-10'
-            """.stripMargin)
-        sql("INSERT OVERWRITE TABLE t1 PARTITION(dt='2020-09-10') SELECT 1")
-        val e2 = intercept[AnalysisException] {
-          sql("INSERT OVERWRITE TABLE t3 SELECT id FROM t1 WHERE dt='2020-09-10'")
-        }
-        assert(e2.getMessage.contains("Cannot overwrite a path that is also being read from."))
       }
     }
   }
