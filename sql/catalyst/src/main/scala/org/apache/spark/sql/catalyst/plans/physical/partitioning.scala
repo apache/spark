@@ -296,17 +296,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     HashShuffleSpec(this, distribution)
 
   /**
-   * Checks if [[HashPartitioning]] is partitioned on exactly same full `clustering` keys of
-   * [[ClusteredDistribution]].
-   */
-  def isPartitionedOnFullKeys(distribution: ClusteredDistribution): Boolean = {
-    expressions.length == distribution.clustering.length &&
-      expressions.zip(distribution.clustering).forall {
-        case (l, r) => l.semanticEquals(r)
-      }
-  }
-
-  /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
