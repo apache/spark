@@ -138,11 +138,9 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       'a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && 'c > 1)),
       'a > 1 && 'b > 3 && 'c > 1)
 
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkCondition(
-        ('a > 1 || 'b > 3) && (('a > 1 || 'b > 3) && 'd > 0 && (('a > 1 || 'b > 3) && 'c > 1)),
-        ('a > 1 || 'b > 3) && 'd > 0 && 'c > 1)
-    }
+    checkCondition(
+      ('a > 1 || 'b > 3) && (('a > 1 || 'b > 3) && 'd > 0 && (('a > 1 || 'b > 3) && 'c > 1)),
+      ('a > 1 || 'b > 3) && 'd > 0 && 'c > 1)
 
     checkCondition(
       'a > 1 && 'b > 2 && 'a > 1 && 'c > 3,
