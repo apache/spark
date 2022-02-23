@@ -3534,7 +3534,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = ctx.replaceTableHeader.multipartIdentifier.parts.asScala.map(_.getText).toSeq
+    val table = visitMultipartIdentifier(ctx.replaceTableHeader.multipartIdentifier)
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
