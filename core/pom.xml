@@ -251,10 +251,6 @@
       <artifactId>RoaringBitmap</artifactId>
     </dependency>
     <dependency>
-      <groupId>commons-net</groupId>
-      <artifactId>commons-net</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-xml_${scala.binary.version}</artifactId>
     </dependency>

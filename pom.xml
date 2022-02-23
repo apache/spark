@@ -407,7 +407,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.novocode</groupId>
+      <groupId>com.github.sbt</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
@@ -804,14 +804,9 @@
         <version>0.9.23</version>
       </dependency>
       <dependency>
-        <groupId>commons-net</groupId>
-        <artifactId>commons-net</artifactId>
-        <version>3.1</version>
-      </dependency>
-      <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.73.Final</version>
+        <version>4.1.74.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1128,7 +1123,7 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.13.1</version>
+        <version>4.13.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1144,9 +1139,9 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.novocode</groupId>
+        <groupId>com.github.sbt</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.11</version>
+        <version>0.13.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1181,7 +1176,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.3.0</version>
+        <version>42.3.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>

@@ -116,7 +116,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     ):
         from pyspark.sql.context import SQLContext
 
-        self._session: Optional["SparkSession"] = None
         self._sql_ctx: Optional["SQLContext"] = None
 
         if isinstance(sql_ctx, SQLContext):
@@ -127,8 +126,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             # was kept with an warning because it's used intensively by third-party libraries.
             warnings.warn("DataFrame constructor is internal. Do not directly use it.")
             self._sql_ctx = sql_ctx
+            session = sql_ctx.sparkSession
         else:
-            self._session = sql_ctx
+            session = sql_ctx
+        self._session: "SparkSession" = session
 
         self._sc: SparkContext = sql_ctx._sc
         self._jdf: JavaObject = jdf
@@ -152,7 +153,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._sql_ctx = SQLContext._get_or_create(self._sc)
         return self._sql_ctx
 
-    @property  # type: ignore[misc]
+    @property
     def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
@@ -164,10 +165,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> type(df.sparkSession)
         <class 'pyspark.sql.session.SparkSession'>
         """
-        from pyspark.sql.session import SparkSession
-
-        if self._session is None:
-            self._session = SparkSession._getActiveSessionOrCreate()
         return self._session
 
     @property  # type: ignore[misc]
