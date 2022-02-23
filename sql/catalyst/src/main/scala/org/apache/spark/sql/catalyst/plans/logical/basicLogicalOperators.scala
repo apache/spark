@@ -87,6 +87,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
+  override lazy val distinctKeys: Set[AttributeSet] = {
+    if (child.distinctKeys.nonEmpty) {
+      projectDistinctKeys(child.distinctKeys.map(ExpressionSet(_)), projectList)
+    } else {
+      Set.empty
+    }
+  }
+
   override def metadataOutput: Seq[Attribute] =
     getTagValue(Project.hiddenOutputTag).getOrElse(Nil)
 
@@ -176,6 +184,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(ExpressionSet(predicates))
   }
 
+  override lazy val distinctKeys: Set[AttributeSet] = child.distinctKeys
+
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
     copy(child = newChild)
 }
@@ -225,6 +235,8 @@ case class Intersect(
   override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
+  override lazy val distinctKeys: Set[AttributeSet] = if (!isAll) Set(outputSet) else Set.empty
+
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None
@@ -250,6 +262,8 @@ case class Except(
   final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
+
+  override lazy val distinctKeys: Set[AttributeSet] = if (!isAll) Set(outputSet) else Set.empty
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
@@ -456,6 +470,13 @@ case class Join(
         right.constraints
       case _ =>
         ExpressionSet()
+    }
+  }
+
+  override lazy val distinctKeys: Set[AttributeSet] = {
+    joinType match {
+      case LeftExistence(_) => left.distinctKeys
+      case _ => Set.empty
     }
   }
 
@@ -734,6 +755,7 @@ case class Sort(
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
   final override val nodePatterns: Seq[TreePattern] = Seq(SORT)
+  override lazy val distinctKeys: Set[AttributeSet] = child.distinctKeys
   override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
@@ -977,6 +999,11 @@ case class Aggregate(
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
+  }
+
+  override lazy val distinctKeys: Set[AttributeSet] = {
+    val groupingExps = ExpressionSet(groupingExpressions) // handle group by a, a
+    projectDistinctKeys(Set(groupingExps), aggregateExpressions)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
@@ -1364,6 +1391,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
+  override lazy val distinctKeys: Set[AttributeSet] = Set(outputSet)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
 }
@@ -1377,6 +1405,7 @@ abstract class RepartitionOperation extends UnaryNode {
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
+  override lazy val distinctKeys: Set[AttributeSet] = child.distinctKeys
   def partitioning: Partitioning
 }
 
@@ -1469,6 +1498,7 @@ case class RebalancePartitions(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
+  override lazy val distinctKeys: Set[AttributeSet] = child.distinctKeys
 
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)

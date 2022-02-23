@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -48,9 +48,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         newAggregate
       }
 
-     case agg @ Aggregate(groupingExps, _, j: Join) if agg.groupOnly &&
-       j.distinctAttributes.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
-      Project(agg.output, j)
+     case agg @ Aggregate(groupingExps, _, j: Join)
+         if agg.groupOnly && j.distinctKeys.exists(_.subsetOf(AttributeSet(groupingExps))) =>
+      Project(agg.aggregateExpressions, j)
   }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
