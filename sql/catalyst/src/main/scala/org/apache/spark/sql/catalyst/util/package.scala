@@ -70,8 +70,9 @@ package object util extends Logging {
     file
   }
 
-  private def writeToByteArrayOutputStream(inStream: InputStream): ByteArrayOutputStream =
-    Utils.tryWithResource(new ByteArrayOutputStream) { outStream =>
+  private def writeToByteArrayOutputStream(inStream: InputStream): ByteArrayOutputStream = {
+    val outStream = new ByteArrayOutputStream
+    try {
       var reading = true
       while (reading) {
         inStream.read() match {
@@ -80,8 +81,11 @@ package object util extends Logging {
         }
       }
       outStream.flush()
-      outStream
+    } finally {
+      inStream.close()
     }
+    outStream
+  }
 
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n"), right.split("\n"))
