@@ -1123,7 +1123,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     }
   }
 
-  test("Don't fail on stream of window expressions") {
+  test("SPARK-38308: Properly handle Stream of window expressions") {
     val df = Seq(
       (1, 2, 3),
       (1, 3, 4),
