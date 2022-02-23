@@ -3166,6 +3166,12 @@ case class TimestampAdd(
     Examples:
       > SELECT _FUNC_('HOUR', timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
        8
+      > SELECT _FUNC_('MONTH', timestamp_ltz'2022-01-01 00:00:00', timestamp_ltz'2022-02-28 00:00:00');
+       1
+      > SELECT _FUNC_(SECOND, date'2022-01-01', timestamp'2021-12-31 23:59:50');
+       -10
+      > SELECT _FUNC_(YEAR, timestamp'2000-01-01 01:02:03.123456', timestamp'2010-01-01 01:02:03.123456');
+       10
   """,
   group = "datetime_funcs",
   since = "3.3.0")
