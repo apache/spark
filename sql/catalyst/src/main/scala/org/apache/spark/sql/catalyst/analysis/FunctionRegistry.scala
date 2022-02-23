@@ -154,10 +154,10 @@ object FunctionRegistryBase {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
           case e: InvocationTargetException =>
-            e.getCause match {
+            e.getCause() match {
               // Propagate Error Class AnalysisExceptions
-              case a: AnalysisException if a.getErrorClass().nonEmpty => throw a
-              case a: Exception => throw new AnalysisException(a.getCause.getMessage)
+              case a: AnalysisException if (a.getErrorClass() != null) => throw a
+              case e: Exception => throw new AnalysisException(e.getMessage)
             }
         }
       }
