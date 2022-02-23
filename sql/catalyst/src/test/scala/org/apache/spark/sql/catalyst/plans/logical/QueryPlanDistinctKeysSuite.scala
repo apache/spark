@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.types.IntegerType
 
@@ -31,8 +31,9 @@ class QueryPlanDistinctKeysSuite extends PlanTest {
   private val a = AttributeReference("a", IntegerType)()
   private val b = AttributeReference("b", IntegerType)()
   private val c = AttributeReference("c", IntegerType)()
-  private val d = a.as("d")
-  private val e = b.as("e")
+  private val d = a.as("aliased_a")
+  private val e = b.as("aliased_b")
+  private val f = Alias(a + 1, (a + 1).toString)()
   private val testRelation = LocalRelation(a, b, c)
   private val x = testRelation.as("x")
   private val y = testRelation.as("y")
@@ -57,6 +58,11 @@ class QueryPlanDistinctKeysSuite extends PlanTest {
     checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, d, e),
       Set(AttributeSet(Seq(a, b)), AttributeSet(Seq(a, e.toAttribute)),
         AttributeSet(Seq(b, d.toAttribute)), AttributeSet(Seq(d.toAttribute, e.toAttribute))))
+    checkDistinctAttributes(testRelation.groupBy()(sum('c)), Set(AttributeSet.empty))
+    checkDistinctAttributes(testRelation.groupBy('a)('a, 'a % 10, d, sum('b)),
+      Set(AttributeSet(Seq(a)), AttributeSet(Seq(d.toAttribute))))
+    checkDistinctAttributes(testRelation.groupBy(f.child, 'b)(f, 'b, sum('c)),
+      Set(AttributeSet(Seq(f.toAttribute, b))))
   }
 
   test("Distinct distinct attributes") {
