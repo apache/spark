@@ -26,6 +26,7 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
+// md: codegen生成一个新的class时的核心接口
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
  * (whole stage codegen).

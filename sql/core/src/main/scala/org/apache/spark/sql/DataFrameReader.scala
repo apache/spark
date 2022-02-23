@@ -187,6 +187,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
   }
 
+  // md: json()也好，csv()也好，load()也好，本质上是构建一个最底层的Dataset和对应的logicalPlan，然后在这基础上通过调用
+  //  Dataset的API堆叠更多的操作形成更复杂的logicalPlan
   /**
    * Loads input in as a `DataFrame`, for data sources that support multiple paths.
    * Only works if the source is a HadoopFsRelationProvider.
@@ -205,6 +207,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenReadingError()
     }
 
+    // md: 先尝试去寻找v2的实现方案，再找v1的实现方案
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).flatMap { provider =>
       DataSourceV2Utils.loadV2Source(sparkSession, provider, userSpecifiedSchema, extraOptions,
         source, paths: _*)
@@ -221,6 +224,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
+      // md: 直接调用某个class的apply方法，等同于new操作了（好处是某些场景下可以链式调用）
       DataSource.apply(
         sparkSession,
         paths = finalPaths,

@@ -641,6 +641,7 @@ object DataSource extends Logging {
     }
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
+    // md: 通过spi的方式来寻找对应数据源的实现
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     try {

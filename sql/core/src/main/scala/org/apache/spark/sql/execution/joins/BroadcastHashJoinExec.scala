@@ -63,6 +63,8 @@ case class BroadcastHashJoinExec(
     val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)
     buildSide match {
       case BuildLeft =>
+        // md: 这里好理解，因为需要左表做build表，通过broadcast将其分发出去，所以会在[[EnsureRequirements]]中
+        //  感知这种分区模式并插入broadcastExchangeExec逻辑
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
       case BuildRight =>
         UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
@@ -77,6 +79,7 @@ case class BroadcastHashJoinExec(
           case c: PartitioningCollection => expandOutputPartitioning(c)
           case other => other
         }
+      // md: 这里好理解，因为build表已经是一个hash表，且全局广播（理论上就一个分区），所以join的结果集的分区是由stream表决定
       case _ => streamedPlan.outputPartitioning
     }
   }
@@ -105,6 +108,7 @@ case class BroadcastHashJoinExec(
     })
   }
 
+  // md: 没有看懂，也不清楚在什么场景使用？
   // Expands the given hash partitioning by substituting streamed keys with build keys.
   // For example, if the expressions for the given partitioning are Seq("a", "b", "c")
   // where the streamed keys are Seq("b", "c") and the build keys are Seq("x", "y"),
@@ -139,9 +143,16 @@ case class BroadcastHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
+    // md: 既然在EnsureRequirements里增加了BroadcastExchangeExec算子，为什么这里还需要再做一次broadcast？
+    //  因为，这个buildPlan其实就是BroadcastExchangeExec算子，只不过这里没有做强转而已；
+    //  从内部代码可以看到，broadcast的时候是先执行了collect操作，也就是driver先将结果集整体收集上来，然后再分发出去
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     if (isNullAwareAntiJoin) {
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
+        // md: 这里的broadcastRelation，本质上是一个句柄，从driver侧先做了一次broadcast操作，将数据分发给每个executor；
+        //  然后再创建broadcastRelation句柄对象并序列化到rdd代码中，然后当代码传递到executor再反序列化出来执行时，
+        //  再对这个句柄调用其value()接口，这个时候内部利用broadcastRelation的状态变量，在executor本地（blockManager）
+        //  将这个广播表的数据读出来做hash表使用
         val hashed = broadcastRelation.value.asReadOnlyCopy()
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
         if (hashed == EmptyHashedRelation) {
@@ -156,6 +167,8 @@ case class BroadcastHashJoinExec(
           )
           streamedIter.filter(row => {
             val lookupKey: UnsafeRow = keyGenerator(row)
+            // md: 因为只要有一个列为null，那么不管antijoin还是semi join，都是false;
+            //  所以这里需要单独识别，而不能直接对"不匹配"做一个取反
             if (lookupKey.anyNull()) {
               false
             } else {

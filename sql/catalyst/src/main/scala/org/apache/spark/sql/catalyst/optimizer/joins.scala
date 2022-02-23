@@ -341,6 +341,7 @@ trait JoinSelectionHelper {
     )
   }
 
+  // md: 通过递归logicalPlan，最终从rdd和Datasource以及中间子节点中，一层层统计出最后一层数据的大小；具体的统计算法如何？
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
@@ -360,6 +361,7 @@ trait JoinSelectionHelper {
 
   def canBuildBroadcastLeft(joinType: JoinType): Boolean = {
     joinType match {
+      // md: 因为被broadcast的表，在单个分区不匹配，无法确定在其他分区是否匹配，所以没办法反查outer部分
       case _: InnerLike | RightOuter => true
       case _ => false
     }
@@ -491,6 +493,8 @@ trait JoinSelectionHelper {
    * use the size of bytes here as estimation.
    */
   private def muchSmaller(a: LogicalPlan, b: LogicalPlan, conf: SQLConf): Boolean = {
+    // md: 也就是说，a表比b表的1/3还要小；为什么需要这个约定？我理解如果a和b表大小接近，那构建hash的代价相对就很大，
+    //  还不如使用sort-merge-join更划算；为什么默认是'3'倍？这个应该是一种经验值，当然也可以修改
     a.stats.sizeInBytes * conf.getConf(SQLConf.SHUFFLE_HASH_JOIN_FACTOR) <= b.stats.sizeInBytes
   }
 

@@ -281,6 +281,8 @@ class CodegenContext extends Logging {
    *         When a variable is compacted into an array, the max size of the array for compaction
    *         is given by `MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
+  // md: 这个代码应该是指，往codegen生成的class中，增加一个可变的属性，这样生成的code对应的processNext
+  //  方法中可以无缝引用这个属性；
   def addMutableState(
       javaType: String,
       variableName: String,
@@ -502,6 +504,7 @@ class CodegenContext extends Logging {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
     } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
+      // md: 因为不仅仅java方法有大小限制，类也有大小限制，所以如果单个类文件大小也超过了限制，就在同一个文件中生成内部嵌套类
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 

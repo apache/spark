@@ -196,6 +196,7 @@ trait PredicateHelper extends AliasHelper with Logging {
    * - `canEvaluate(EqualTo(a,c), R)` returns `false`
    * - `canEvaluate(Literal(1), R)` returns `true` as literals CAN be evaluated on any plan
    */
+    // md: 本质就是只通过一个关系（中的数据），能否完整评估某个表达式的值
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
 

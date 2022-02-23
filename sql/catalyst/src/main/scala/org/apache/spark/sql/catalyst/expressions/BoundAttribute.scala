@@ -80,6 +80,7 @@ object BindReferences extends Logging {
             s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
       } else {
+        // md: 这里的绑定，实际上是在确定源头字段的过程
         BoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

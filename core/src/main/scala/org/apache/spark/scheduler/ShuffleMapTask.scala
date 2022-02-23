@@ -98,6 +98,8 @@ private[spark] class ShuffleMapTask(
     val mapId = if (SparkEnv.get.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
       partitionId
     } else context.taskAttemptId()
+
+    // md: 从这里可以看到，对于shuffleMap类型的Task，对应rdd最终的结果就是要写入到shuffle空间去；
     dep.shuffleWriterProcessor.write(rdd, dep, mapId, context, partition)
   }
 

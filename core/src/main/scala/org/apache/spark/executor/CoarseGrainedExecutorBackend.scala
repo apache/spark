@@ -414,6 +414,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     System.exit(0)
   }
 
+  // md: 这里才是spark进程真正拉起的地方
   def run(
       arguments: Arguments,
       backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>

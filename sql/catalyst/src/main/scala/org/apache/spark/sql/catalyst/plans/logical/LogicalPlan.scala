@@ -167,6 +167,8 @@ abstract class LogicalPlan
 trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
+
+  // md: 叶子节点是可以通过本身数据源等角度来读取统计信息，而中间节点则通过"子节点+本身的逻辑"来推算其数据量和统计信息
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics = throw new UnsupportedOperationException
 }

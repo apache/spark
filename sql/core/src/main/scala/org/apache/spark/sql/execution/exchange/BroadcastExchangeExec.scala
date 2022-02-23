@@ -134,6 +134,7 @@ case class BroadcastExchangeExec(
               interruptOnCancel = true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
+            // md: 这里既然对某个child调用了collect操作，所以数据是先被driver统一收集到了，然后再由driver分发出去的
             val (numRows, input) = child.executeCollectIterator()
             longMetric("numOutputRows") += numRows
             if (numRows >= maxBroadcastRows) {
@@ -145,6 +146,7 @@ case class BroadcastExchangeExec(
             longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
             // Construct the relation.
+            // md: data in memory
             val relation = mode.transform(input, Some(numRows))
 
             val dataSize = relation match {
@@ -166,6 +168,7 @@ case class BroadcastExchangeExec(
             val beforeBroadcast = System.nanoTime()
             longMetric("buildTime") += NANOSECONDS.toMillis(beforeBroadcast - beforeBuild)
 
+            // md: 真正再由driver将整个relation广播出去
             // SPARK-39983 - Broadcast the relation without caching the unserialized object.
             val broadcasted = sparkContext.broadcastInternal(relation, serializedOnly = true)
             longMetric("broadcastTime") += NANOSECONDS.toMillis(

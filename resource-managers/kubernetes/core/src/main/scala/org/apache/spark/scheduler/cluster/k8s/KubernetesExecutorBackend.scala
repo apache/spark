@@ -46,6 +46,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       resourceProfileId: Int,
       podName: String)
 
+  // md: 在entrypoint.sh中可以看到，在executor拉起时会创建当前这个backend然后运行executor
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, String) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile, execId) =>

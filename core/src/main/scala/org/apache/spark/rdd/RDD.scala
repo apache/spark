@@ -323,6 +323,9 @@ abstract class RDD[T: ClassTag](
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
+      // md: 调用getOrCompute，因为在rdd开发中用户调用了persist的api，在执行rdd时就会主动将当前rdd的数据
+      //  写入到storageLevel对应的blockManager里，下一次如果要迭代这些数据（比如failOver时，就会从本地存储中去
+      //  获取数据，从而加快failover的速度
       getOrCompute(split, context)
     } else {
       computeOrReadCheckpoint(split, context)
@@ -854,6 +857,7 @@ abstract class RDD[T: ClassTag](
       preservesPartitioning)
   }
 
+  // md: 通过这种方式，构建一个新的RDD，同时可以按照分区方式来处理数据，同时回调真正的rdd对应的数据处理逻辑
   /**
    * [performance] Spark's internal mapPartitionsWithIndex method that skips closure cleaning.
    * It is a performance API to be used carefully only if we are sure that the RDD elements are
@@ -870,6 +874,7 @@ abstract class RDD[T: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false,
       isOrderSensitive: Boolean = false): RDD[U] = withScope {
+    // md: 这里通过创建一个新的rdd，就可以把相关需要延迟计算的逻辑分装进来；等到后续rdd被调用时再执行这些逻辑
     new MapPartitionsRDD(
       this,
       (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
@@ -1169,6 +1174,7 @@ abstract class RDD[T: ClassTag](
     val cleanOp = sc.clean(op)
     val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
     val mergeResult = (_: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
+    // md: 真正执行了整个rdd
     sc.runJob(this, foldPartition, mergeResult)
     jobResult
   }
@@ -1849,6 +1855,7 @@ abstract class RDD[T: ClassTag](
 
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
+    // md： 为什么只调用head()？因为调用了head之后就会移除第一个元素，所以多次调用就可以了
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 

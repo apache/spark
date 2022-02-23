@@ -225,6 +225,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   4. Pick cartesian product if join type is inner like.
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
+      // md: scala的unapply方法的"解析"过程，从调用者的角度看有些
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond,
           _, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
@@ -261,6 +262,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        // md： 从代码可以看到，sortMergeJoin只能在等值join或者能找到等值条件的join中被使用，因为sort和merge以及前面的shuffle过程，
+        //  都是围绕这些被提炼出来的join key而展开的：首先按照join key来做ClusteredDistribution，将不同的数据按照join key来做hash分桶
+        //  并shuffle数据；然后是sort，在单个shuffle分桶内按照join key来排序；最后是merge，基于排完序的左右两个表做merge操作；
         def createSortMergeJoin() = {
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
@@ -271,6 +275,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createCartesianProduct() = {
+          // md： 这里为什么必须是inner like呢？因为CartesianProduct本身就是面向inner join场景的，其实现本身也无法高效处理outer的情况
           if (joinType.isInstanceOf[InnerLike]) {
             // `CartesianProductExec` can't implicitly evaluate equal join condition, here we should
             // pass the original condition which includes both equal and non-equal conditions.
@@ -286,6 +291,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
             .getOrElse {
+              // md: 可以看到，BNLJ是一种兜底模式，如果连这也搞不定，只能OOM报错了; 另外，BNLJ能够兜底也是因为
+              //  其能够正确支持所有join类型对应的语义，如各种left、right、exist等等
               // This join could be very slow or OOM
               val buildSide = getSmallerSide(left, right)
               Seq(joins.BroadcastNestedLoopJoinExec(
@@ -374,6 +381,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           createJoinWithoutHint()
         } else {
           createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            // md: 从hint可知，cartesianProduct首先依赖shuffle操作，然后相同的两个partition在同一个task内部做Nested-Loop-Join
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
             .getOrElse(createJoinWithoutHint())
         }

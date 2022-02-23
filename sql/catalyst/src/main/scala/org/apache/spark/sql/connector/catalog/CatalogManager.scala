@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
 private[sql]
+// md: spark有一个sessionCatalog，用来管理内部的tempTable，view等等，同时也要管理externalCatalog，用来对接外部的元信息服务
 class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {

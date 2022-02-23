@@ -55,6 +55,8 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   val numPartitionsInRdd2 = rdd2.partitions.length
 
+  // md: 通过把两个rdd的partition编码在一起，这样就可以通过一个partition的index知道对应的两条数据，在左右两个不同的的rdd中的哪个分区里，
+  //  可以构建一个全局唯一的partition index
   override def getPartitions: Array[Partition] = {
     // create the cross product split
     val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)

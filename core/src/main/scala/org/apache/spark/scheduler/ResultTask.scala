@@ -89,6 +89,7 @@ private[spark] class ResultTask[T, U](
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
+    // md: 真正开始调用rdd的Iterator来产生数据，并向上返回结果
     func(context, rdd.iterator(partition, context))
   }
 

@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+// md: 这是属于v2的数据源命名方式，通过table的概念来
 /**
  * The base interface for v2 data sources which don't have a real catalog. Implementations must
  * have a public, 0-arg constructor.

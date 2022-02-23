@@ -491,7 +491,13 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
+    // md: 所以，从这里可以看到，从rdd tree最顶层的节点开始搜索，构建的是resultStage（只有一个）；
+    //  然后再继续递归往下搜索，最终找到内部一个个的ShuffleMapStage，从而把整个树切分成多个stage。
+    //  所以从root到leaf的搜索过程可以看到，stageId是越来越大的；
     val id = nextStageId.getAndIncrement()
+    // md: 所以，从这里可以看到，从rdd tree最顶层的节点开始搜索，构建的是resultStage（只有一个）；
+    //  然后再继续递归往下搜索，最终找到内部一个个的ShuffleMapStage，从而把整个树切分成多个stage。
+    //  所以从root到leaf的搜索过程可以看到，stageId是越来越大的；
     val stage = new ShuffleMapStage(
       id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker,
       resourceProfile.id)
@@ -622,7 +628,11 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
+    // md: 从这里可以看到，所有parent都计算完成之后，再给当前stage赋值对应的id，也就是说顶层的stage对应的
+    //  id会更大，在执行的时候就从stageId小到大的顺序来调度；
     val id = nextStageId.getAndIncrement()
+    // md: 全局只有一个ResultStage，在结构上属于RDD-tree的顶部，在执行上属于最晚执行的,而其parent其实是rdd-tree
+    //  的子节点树构成
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
       callSite, resourceProfile.id)
     stageIdToStage(id) = stage
@@ -630,6 +640,7 @@ private[spark] class DAGScheduler(
     stage
   }
 
+  // md: 以shuffleDep对应的rdd为根，然后继续往planTree下面搜索，继续把不同的stage切分出来
   /**
    * Get or create the list of parent stages for the given shuffle dependencies. The new
    * Stages will be created with the provided firstJobId.
@@ -657,6 +668,8 @@ private[spark] class DAGScheduler(
         val (shuffleDeps, _) = getShuffleDependenciesAndResourceProfiles(toVisit)
         shuffleDeps.foreach { shuffleDep =>
           if (!shuffleIdToMapStage.contains(shuffleDep.shuffleId)) {
+            // md: 注意，这里的ancestor（祖先），其实是从数据流依赖关系角度来看的，其实就是RDD tree的
+            //  子节点，与我们经常认为树的根（root）是祖先不同；
             ancestors.prepend(shuffleDep)
             waitingForVisit.prepend(shuffleDep.rdd)
           } // Otherwise, the dependency and its ancestors have already been registered.
@@ -691,6 +704,14 @@ private[spark] class DAGScheduler(
       if (!visited(toVisit)) {
         visited += toVisit
         Option(toVisit.getResourceProfile).foreach(resourceProfiles += _)
+        // md: 通过下面的代码，可以把当前rdd直接依赖的所有shuffleDep搜索出来而忽略或者压缩掉中间的
+        //  narrowDep，通过这种方式来拆分不同的stage，比如这个树：
+        //        A
+        //     /SD  \ND
+        //   B        C
+        //  /SD \ND  /SD \ND
+        //  D   E   F    G
+        //  上面的树中，如果对A进行搜索，最终会找到B、F两个parent（shuffleDep），而A--C--G则成为一起编译执行的单元（narrowDep）
         toVisit.dependencies.foreach {
           case shuffleDep: ShuffleDependency[_, _, _] =>
             parents += shuffleDep
@@ -769,6 +790,14 @@ private[spark] class DAGScheduler(
     missing.toList
   }
 
+  // md: 递归把整个rdd-tree的partition都提前计算好，因为(https://issues.apache
+  //  .org/jira/browse/SPARK-23626)说明：
+  //  DAGScheduler becomes a bottleneck in cluster when multiple JobSubmitted events has to be
+  //  processed as DAGSchedulerEventProcessLoop is single threaded and it will block other tasks
+  //  in queue like TaskCompletion.
+  //  The JobSubmitted event is time consuming depending on the nature of the job
+  //  (Example: calculating parent stage dependencies, shuffle dependencies, partitions)
+  //  and thus it blocks all the events to be processed.
   /** Invoke `.partitions` on the given RDD and all of its ancestors  */
   private def eagerlyComputePartitionsForRddAndAncestors(rdd: RDD[_]): Unit = {
     val startTime = System.nanoTime
@@ -930,6 +959,7 @@ private[spark] class DAGScheduler(
     assert(partitions.nonEmpty)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
+    // md: 这类事件都是通过内部事件管理器来接收和回调处理的
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       Utils.cloneProperties(properties)))
@@ -1241,6 +1271,8 @@ private[spark] class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
+      // md: 这里对整个rddTree做top-down的遍历，根据shuffleDep分割出不同的stage来（一个resultStage、0个
+      //  或多个ShuffleMapStage）
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
@@ -1341,6 +1373,7 @@ private[spark] class DAGScheduler(
     }
   }
 
+  // md: 先递归把所有未提交的parent stage提交和执行；从这里可以
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage): Unit = {
     val jobId = activeJobForStage(stage)
@@ -1348,6 +1381,7 @@ private[spark] class DAGScheduler(
       logDebug(s"submitStage($stage (name=${stage.name};" +
         s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
+        // md: 这里sort就可以看到，对于stage来说，也是根据stageId从小到大的方式来调度执行；
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
@@ -1426,6 +1460,7 @@ private[spark] class DAGScheduler(
     mergerLocs
   }
 
+  // md: 如果依赖的stage都已经计算完成，就开始提交当前stage的task
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -1523,6 +1558,8 @@ private[spark] class DAGScheduler(
       RDDCheckpointData.synchronized {
         taskBinaryBytes = stage match {
           case stage: ShuffleMapStage =>
+            // md: SPARK下发的代码是当前stage对应的rdd结构，这样在其他executor上就可以反序列化出
+            //  整个stage中rdd的所有上下文信息
             JavaUtils.bufferToArray(
               closureSerializer.serialize((stage.rdd, stage.shuffleDep): AnyRef))
           case stage: ResultStage =>
@@ -1536,6 +1573,8 @@ private[spark] class DAGScheduler(
         logWarning(s"Broadcasting large task binary with size " +
           s"${Utils.bytesToString(taskBinaryBytes.length)}")
       }
+      // md: 将rdd的代码序列化之后再广播出去，然后返回一个代码所在位置的引用；等到某个task真正被调度执行时，
+      //  再从block manager中获取到对应广播过来的代码
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
@@ -1562,6 +1601,9 @@ private[spark] class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = partitions(id)
             stage.pendingPartitions += id
+            // md: 从这里我们可以看出：从代码逻辑角度，一个task包含了stage所有代码，就是该stage中rdd链中所有逻辑；
+            //  而从数据角度来看，每个task关联了一个partition（对应的index、location等信息）。所以，运行一个task
+            //  就相当于以完整stage的代码，运行一个partition的数据；
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber, taskBinary,
               part, stage.numPartitions, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
@@ -1588,6 +1630,7 @@ private[spark] class DAGScheduler(
     if (tasks.nonEmpty) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      // md: 从这里可以看到：taskset就是属于某个具体的stage的一批task，用来一起提交；
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
         stage.resourceProfileId))

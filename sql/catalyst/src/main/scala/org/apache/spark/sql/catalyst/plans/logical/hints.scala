@@ -162,6 +162,7 @@ case object SHUFFLE_HASH extends JoinStrategyHint {
     "SHUFFLE_HASH")
 }
 
+// md: 从注释里可以看出来，这个shuffle-and-replicate NL，就是cartesian product join，也就是cross join
 /**
  * The hint for shuffle-and-replicate nested loop join, a.k.a. cartesian product join.
  */

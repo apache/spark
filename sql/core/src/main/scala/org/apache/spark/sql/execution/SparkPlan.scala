@@ -52,6 +52,7 @@ object SparkPlan {
   private[execution] def newPlanId(): Int = nextPlanId.getAndIncrement()
 }
 
+// md: 物理算子
 /**
  * The base class for physical operators.
  *
@@ -178,6 +179,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies how data is ordered in each partition. */
   def outputOrdering: Seq[SortOrder] = Nil
 
+  // md: 当前算子表达对自己的子节点的排序要求；这样在查询优化时会按照这些要求，主动的插入排序算子，确保当前算子可以执行
   /** Specifies sort order for each partition requirements on the input data for this operator. */
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
@@ -427,6 +429,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     results.toArray
   }
 
+  /**
+   * md: 这里已经计算完成了，虽然返回的是一个Iterator，内部是一个hashRelation
+   */
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum

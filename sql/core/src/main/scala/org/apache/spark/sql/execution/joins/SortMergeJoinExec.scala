@@ -33,13 +33,21 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.collection.BitSet
 
+// TODO 问题是：
+//  1. 按照什么字段来排序的？ leftKeys
+//  2. 怎么排序的？排序发生的时机是怎么样的？ 在执行当前算子前，通过EnsureRequirements确保分区按hash方式对齐、shuffle且排序
+//  3. 排序字段与分区字段是什么关系？左右表的排序字段之间是什么关系？
+//   排序和分区字段都是leftkeys，可以通过[[requiredChildOrdering]]和[[requiredChildDistribution]]来确定
 /**
  * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
+    // md: 参与join的左表的列（部分）
     leftKeys: Seq[Expression],
+    // md: 参与join的右表的列（部分）
     rightKeys: Seq[Expression],
     joinType: JoinType,
+    // md: 参与join剩余的条件
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
@@ -91,6 +99,7 @@ case class SortMergeJoinExec(
     }
   }
 
+  // md: 同时要求左右表按照等值join的列来排序（以及分区）
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
@@ -128,6 +137,7 @@ case class SortMergeJoinExec(
     val spillSize = longMetric("spillSize")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
+    // md: 因为是sort merge，所以在前一个阶段已经为不同的partition做排序了，因此leftIter和rightIter已经是排序过了
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
@@ -145,6 +155,7 @@ case class SortMergeJoinExec(
         case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
+            // md： 这里为什么要用external结构？因为相同key值得记录行可能非常多（比如，k=1、1、2...2、3、3，中间有1亿个2），需要有spill能力支持才行，
             private[this] var currentRightMatches: ExternalAppendOnlyUnsafeRowArray = _
             private[this] var rightMatchesIterator: Iterator[UnsafeRow] = null
             private[this] val smjScanner = new SortMergeJoinScanner(
@@ -160,6 +171,9 @@ case class SortMergeJoinExec(
             )
             private[this] val joinRow = new JoinedRow
 
+            // md: 大概的逻辑: 每次先从stream表前进一条数据，然后再前进buffer表，找到一批匹配相同key的数据，
+            //  然后暂存到buffer区内；后续再前进stream表，复用buffer区已经等值匹配的数据，然后做join条件判断并输出；
+            //  持续这个过程；
             if (smjScanner.findNextInnerJoinRows()) {
               currentRightMatches = smjScanner.getBufferedMatches
               currentLeftRow = smjScanner.getStreamedRow
@@ -172,6 +186,7 @@ case class SortMergeJoinExec(
                   if (smjScanner.findNextInnerJoinRows()) {
                     currentRightMatches = smjScanner.getBufferedMatches
                     currentLeftRow = smjScanner.getStreamedRow
+                    // md： 因为上一条streamed记录消费了buffer区的所有记录，所以这里找到一条新的streamed行，重新再获取一次buffer区的迭代器，再循环一此
                     rightMatchesIterator = currentRightMatches.generateIterator()
                   } else {
                     currentRightMatches = null
@@ -224,6 +239,11 @@ case class SortMergeJoinExec(
           new RightOuterIterator(
             smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
 
+          // md: 从源码上可以看到，inner、left outer和right outer，都只要缓存一侧的表即可，然后迭代另一侧的表的行记录，在buffer中找匹配
+          //  的记录，如果匹配的话则多次迭代把所有匹配的行记录都输出，如果不匹配对outer join单独输出一行带null列的记录即可；
+          //
+          // md: 但是对于full outer来说，必须左右两侧的表都缓存才行，因为左表和右边都有可能存在不匹配的情况，需要先从buffer角度的全局匹配都
+          //  执行完之后，再review一次哪些buffer行未被另一侧表的任意一行匹配到，如果有的话就以outer方式输出（所以需要buffer起来，最终可能再输出一次）
         case FullOuter =>
           val leftNullRow = new GenericInternalRow(left.output.length)
           val rightNullRow = new GenericInternalRow(right.output.length)
@@ -261,6 +281,11 @@ case class SortMergeJoinExec(
 
             override def advanceNext(): Boolean = {
               while (smjScanner.findNextInnerJoinRows()) {
+                // todo-md： 这里稍微有一点点性能浪费，因为semi join时只需要找到一条匹配的记录，但下面是把所有等值key的记录都找出来放到buffer区，
+                //  然后再做条件匹配并短路匹配；如果某个join key存在data skew时（且其中有一条数据满足semi join条件），可能导致严重的性能浪费；
+
+                // md: 这个问题可以向社区提issue来优化！！为了内存效率等，可以控制buffer的上限来分批来加载数据然后匹配，然后再分批加载数据再匹配；
+                //  不过，数据扫描是少不了，顶多就是减少spill的概率；
                 val currentRightMatches = smjScanner.getBufferedMatches
                 currentLeftRow = smjScanner.getStreamedRow
                 if (currentRightMatches != null && currentRightMatches.length > 0) {
@@ -269,6 +294,7 @@ case class SortMergeJoinExec(
                     joinRow(currentLeftRow, rightMatchesIterator.next())
                     if (boundCondition(joinRow)) {
                       numOutputRows += 1
+                      // md： 因为left semi如果join条件匹配成功，只需要输出左表一条数据，因此这里直接跳出即可
                       return true
                     }
                   }
@@ -300,6 +326,7 @@ case class SortMergeJoinExec(
             override def advanceNext(): Boolean = {
               while (smjScanner.findNextOuterJoinRows()) {
                 currentLeftRow = smjScanner.getStreamedRow
+                // md: 这里必须找到所有的记录，因为anti是所有右表都不满足条件时才需要返回左表
                 val currentRightMatches = smjScanner.getBufferedMatches
                 if (currentRightMatches == null || currentRightMatches.length == 0) {
                   numOutputRows += 1
@@ -309,6 +336,7 @@ case class SortMergeJoinExec(
                 val rightMatchesIterator = currentRightMatches.generateIterator()
                 while (!found && rightMatchesIterator.hasNext) {
                   joinRow(currentLeftRow, rightMatchesIterator.next())
+                  // md： 为什么要输出左边和右边，不是left semi和left anti么，因为参与boundCondition判断的是左右两行的数据
                   if (boundCondition(joinRow)) {
                     found = true
                   }
@@ -324,6 +352,7 @@ case class SortMergeJoinExec(
             override def getRow: InternalRow = currentLeftRow
           }.toScala
 
+          // md: where xxx in (select x from ...)
         case j: ExistenceJoin =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
@@ -1271,9 +1300,11 @@ private[joins] class SortMergeJoinScanner(
     eagerCleanupResources: () => Unit,
     onlyBufferFirstMatch: Boolean = false) {
   private[this] var streamedRow: InternalRow = _
+  // md: 在匹配到之后，通过leftKeys而做了Projection之后的结果，也就是stream表中找到"key值相同的一大块数据的第一条"，然后提取出对应的joinKey的值
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
   // Note: this is guaranteed to never have any null columns:
+  // md: 对buffer行数据按照rightKeys做了Projection之后的结果，也就是buffered表中找到"key值相同的一大块数据的第一条"，然后提取出对应的joinKey的值
   private[this] var bufferedRowKey: InternalRow = _
   /**
    * The join key for the rows buffered in `bufferedMatches`, or null if `bufferedMatches` is empty
@@ -1305,6 +1336,7 @@ private[joins] class SortMergeJoinScanner(
    *         results.
    */
   final def findNextInnerJoinRows(): Boolean = {
+    // md: 为什么这里不允许有null的列？因为是inner join，在join key中只要存在一个null列值，join就失败
     while (advancedStreamed() && streamedRowKey.anyNull) {
       // Advance the streamed side of the join until we find the next row whose join key contains
       // no nulls or we hit the end of the streamed iterator.
@@ -1316,6 +1348,9 @@ private[joins] class SortMergeJoinScanner(
       false
     } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
       // The new streamed row has the same join key as the previous row, so return the same matches.
+      // md: 这里是因为：先找到buffer和stream表匹配的各自第一条数据（b1和s1），然后把buffer表中与b1相同有相同key的所有数据放到buffer区，
+      //  最后迭代stream表把所有与s1有相同key的所有行数据，与当前buffer区中的数据做join；通过这种方式分段地完成左右两边的匹配和输出过程，
+      //  且只需要缓存一侧的数据，正常buffer表应该是偏小一点的（通过join reorder来确保这件事情，猜测）
       true
     } else if (bufferedRow == null) {
       // The streamed row's join key does not match the current batch of buffered rows and there are
@@ -1332,6 +1367,7 @@ private[joins] class SortMergeJoinScanner(
         } else {
           assert(!bufferedRowKey.anyNull)
           comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
+          // md: 两个有序列表交叉前进，如果两边的值不一样的话
           if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
           else if (comp < 0) advancedStreamed()
         }
@@ -1379,6 +1415,7 @@ private[joins] class SortMergeJoinScanner(
           var comp = 1
           do {
             comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
+            // md： 从下面可以看出来，当前这个方法只关心单边outer join的情况，也就是comp <=0 的场景才输出
           } while (comp > 0 && advancedBufferedToRowWithNullFreeJoinKey())
           if (comp == 0) {
             // We have found matches, so buffer them (this updates matchJoinKey)
@@ -1588,6 +1625,10 @@ private class SortMergeFullOuterJoinScanner(
 
   private[this] var leftIndex: Int = 0
   private[this] var rightIndex: Int = 0
+  // md: 为什么这里不用ExternalAppendOnlyUnsafeRowArray？SPARK-13450、SPARK-32104、SPARK-24985已经反馈这个问题了，
+  //  即在遇到大量joinKey值相同时，也就是data skew时导致OOM。这里因为需要用bitset来做反向记录并查找，如果用了ExternalAppendOnlyUnsafeRowArray
+  //  那就要解决两个问题：1）这个spill结构支持按下标寻址，哪怕落盘，也要能找出某个下标的那行数据；2）如果记录非常之多，那bitset也需要升级
+  //  成spill能力，比如有100亿行数据倾斜（join key相同），对应的bitset也有100亿位，也有1.16GB的内存消耗
   private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
   private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
   private[this] var leftMatched: BitSet = new BitSet(1)
@@ -1640,7 +1681,9 @@ private class SortMergeFullOuterJoinScanner(
     leftIndex = 0
     rightIndex = 0
 
+    // md： 先找出左右两张表都与当前join key值相等的记录，放到两个不同的buffer中去
     while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
+      // md: 如果某个key对应的记录数特别多，这个buffer可能会oom，怎么办？为什么没有使用spillable array？
       leftMatches += leftRow.copy()
       advancedLeft()
     }
@@ -1649,6 +1692,7 @@ private class SortMergeFullOuterJoinScanner(
       advancedRight()
     }
 
+    // md: 确保matches（实际记录）与matched（描述后续join过程中是否匹配的bitset）两边对齐，无论是长度还是on/off的bit位
     if (leftMatches.size <= leftMatched.capacity) {
       leftMatched.clearUntil(leftMatches.size)
     } else {
@@ -1683,6 +1727,7 @@ private class SortMergeFullOuterJoinScanner(
         rightIndex += 1
       }
       rightIndex = 0
+      // md: 通过两个bitset来快速定位到未匹配上的行，然后直接拼接一个全是null值的右表列，就可以完成leftOuter部分
       if (!leftMatched.get(leftIndex)) {
         // the left row has never matched any right row, join it with null row
         joinedRow(leftMatches(leftIndex), rightNullRow)
@@ -1692,6 +1737,7 @@ private class SortMergeFullOuterJoinScanner(
       leftIndex += 1
     }
 
+    // md： 同理，通过另一个bitset完成rightOuter部分的逻辑
     while (rightIndex < rightMatches.size) {
       if (!rightMatched.get(rightIndex)) {
         // the right row has never matched any left row, join it with null row
@@ -1710,6 +1756,12 @@ private class SortMergeFullOuterJoinScanner(
 
   def getJoinedRow(): JoinedRow = joinedRow
 
+  // MD: 核心过程：1）左表和右表先找到第一行数据，不能有null值列，因为是等值join；
+  //  2）如果左表行compare右表行较小，那就输出左表行+右表null值的新的join row，并前进左表找下一行；
+  //  3）如果左表行比右表行大，则反过来；
+  //  4）如果两个表的join key相同，则把所有相同的数据都收录到左右两个buffer区;
+  //  5）然后循环这两个buffer区，形成新的join row，去检查其他condition是否满足，如果满足就输出row，不满足就通过bitset打标；
+  //  6）无论是左buffer还是右buffer，只要有不满足join条件的行，就需要再构建一个join row，对应另一边的列都是null值，从而完成full outer部分的输出；
   def advanceNext(): Boolean = {
     // If we already buffered some matching rows, use them directly
     if (leftIndex < leftMatches.size || rightIndex < rightMatches.size) {

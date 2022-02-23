@@ -143,6 +143,9 @@ trait CodegenSupport extends SparkPlan {
     }
   }
 
+  // md: 这里的consume方法，本质上是指"生成消费row数据的代码",所以为了将整个逻辑串联起来，需要递归调用父节点的
+  //  的consume方法，从Iterator的pull模型直接改成了push模型，也就是从获取到数据，到后续的执行逻辑，一步步的从叶子
+  //  节点往上驱动
   /**
    * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
    *
@@ -189,6 +192,8 @@ trait CodegenSupport extends SparkPlan {
     val confEnabled = conf.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val paramLength = CodeGenerator.calculateParamLength(output) + (if (row != null) 1 else 0)
+    // md: 通过这个变量，表示需要将rdd-tree上不同的Operator，独立执行codegen并生成对应的方法，然后相互调用方法
+    //  从而避免过于庞大的单个方法，JIT反而有机会介入优化
     val consumeFunc = if (confEnabled && requireAllOutput
         && CodeGenerator.isValidParamLength(paramLength)) {
       constructDoConsumeFunction(ctx, inputVars, row)
@@ -459,6 +464,7 @@ trait InputRDDCodegen extends CodegenSupport {
     // Inline mutable state since an InputRDDCodegen is used once in a task for WholeStageCodegen
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
       forceInline = true)
+    // md: 这里的row变量，是指在codegen代码中对应一行row数据的变量名
     val row = ctx.freshName("row")
 
     val outputVars = if (createUnsafeProjection) {

@@ -166,7 +166,7 @@ trait HashJoin extends JoinCodegenSupport {
 
     if (hashedRelation == EmptyHashedRelation) {
       Iterator.empty
-    } else if (hashedRelation.keyIsUnique) {
+    } else if (hashedRelation.keyIsUnique) {// md: 这个优化很关键，对于hash join场景
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))
@@ -215,6 +215,8 @@ trait HashJoin extends JoinCodegenSupport {
         new RowIterator {
           private var found = false
           override def advanceNext(): Boolean = {
+            // md: 虽然通过hash key找到一批匹配的build表数据，但是不代表这些数据都满足条件，而outer join必须要求
+            //  所有数据都不满足条件时，才输出null值；所以需要对通过hashKey得到的粗筛结果集再做一次精确筛选
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
@@ -247,6 +249,7 @@ trait HashJoin extends JoinCodegenSupport {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
+        // md: left semi是不允许join key有null值的，这个之前不清楚！
         !key.anyNull && matched != null &&
           (condition.isEmpty || boundCondition(joinedRow(current, matched)))
       }
@@ -275,6 +278,7 @@ trait HashJoin extends JoinCodegenSupport {
         val exists = !key.anyNull && matched != null &&
           (condition.isEmpty || boundCondition(joinedRow(current, matched)))
         result.setBoolean(0, exists)
+        // md： 看起来这种join无论如何都会输出stream表的数据，只不过要额外输出一个匹配列
         joinedRow(current, result)
       }
     } else {
@@ -305,10 +309,12 @@ trait HashJoin extends JoinCodegenSupport {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
+        // md: stream表的key有null值，就表示不匹配，也就满足anti-join的条件（与前面不太一样？？）
         key.anyNull || matched == null ||
           (condition.isDefined && !boundCondition(joinedRow(current, matched)))
       }
     } else {
+      // md: 因为被broadcast的表，本质上只是broadcast了join key对应的hash表而非真实数据，所以没办法反查outer部分
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val buildIter = hashedRelation.get(key)

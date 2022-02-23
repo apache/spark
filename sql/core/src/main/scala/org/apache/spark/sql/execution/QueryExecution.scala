@@ -412,6 +412,7 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
+      // md: 下面会做join key reorder的事情，但不是join table reorder
       EnsureRequirements(),
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
@@ -422,6 +423,8 @@ object QueryExecution {
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      // md: 在前面所有的sparkPlan（physical plan）都生成完成之后，并且所有rule规则都应用完成之后，最后再做codegen的塌陷折叠，
+      //  这样就可以尽最大可能的实现wholeCodegen，让更多的算子聚合在一起，为后续真正执行做准备；
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil

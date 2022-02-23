@@ -40,14 +40,19 @@ class UnsafeCartesianRDD(
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
+    // md: [[CartesianRDD]]里面是直接迭代两个Iterator，做join操作；但是对于超大的表来说性能不可接受；
+    //  所以在这里通过一个数组来缓冲数据；
     val rowArray = new ExternalAppendOnlyUnsafeRowArray(inMemoryBufferThreshold, spillThreshold)
 
+    // md: 对右表构建可复用的空间（在内存和磁盘中）来做迭代；
+    //  为什么对右表做buffer，一般join-reorder之后形成left-deep tree，左表数量预估大于右表，所以缓存右表整体代价更低
     val partition = split.asInstanceOf[CartesianPartition]
     rdd2.iterator(partition.s2, context).foreach(rowArray.add)
 
     // Create an iterator from rowArray
     def createIter(): Iterator[UnsafeRow] = rowArray.generateIterator()
 
+    // md: 这里看起来是直接利用scala语言而创建一个迭代器(list或者seq)
     val resultIter =
       for (x <- rdd1.iterator(partition.s1, context);
            y <- createIter()) yield (x, y)
@@ -56,7 +61,7 @@ class UnsafeCartesianRDD(
   }
 }
 
-
+// md: cartesianJoin会有shuffle吗？难道是在同一个进程来运行的吗？
 case class CartesianProductExec(
     left: SparkPlan,
     right: SparkPlan,
@@ -82,6 +87,8 @@ case class CartesianProductExec(
       rightResults,
       conf.cartesianProductExecBufferInMemoryThreshold,
       conf.cartesianProductExecBufferSpillThreshold)
+    // md: 通过map创建一个新的RDD（拼接到整个rdd-tree上去），并包装了对依赖算子（底层）的调用，同时对迭代器数据嵌入当前算子真正的join处理逻辑；
+    //  然后，在真正执行时通过对顶层的plan递归调用doExecute，就可以一层层的执行rdd，然后就会真正触发整个计算流（可以画个图）
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {

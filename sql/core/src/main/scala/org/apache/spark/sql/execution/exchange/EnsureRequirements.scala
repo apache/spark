@@ -27,6 +27,8 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
+// md: 为了保障数据输出的partitioning需求，满足上层节点计算所需的数据distribution；如何保障？通过插入特殊的
+//  exchange算子来达到目的
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
  * of input data meets the
@@ -49,6 +51,7 @@ case class EnsureRequirements(
 
   private def ensureDistributionAndOrdering(
       originalChildren: Seq[SparkPlan],
+      //md: 这个是当前节点给其子节点（依赖节点）的数据分布要求
       requiredChildDistributions: Seq[Distribution],
       requiredChildOrderings: Seq[Seq[SortOrder]],
       shuffleOrigin: ShuffleOrigin): Seq[SparkPlan] = {
@@ -69,6 +72,8 @@ case class EnsureRequirements(
     // Get the indexes of children which have specified distribution requirements and need to be
     // co-partitioned.
     val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
+      // md: 为什么ClusteredDistribution需要？因为这种分布是按照某几个列聚集的特性来确定的，
+      //  所以为了后续语义正确，该算子的所有依赖节点(children)都是按照这几个列聚集才行
       case (_: ClusteredDistribution, _) => true
       case _ => false
     }.map(_._2)
@@ -114,6 +119,7 @@ case class EnsureRequirements(
       //   HashPartitioning(5) <-> HashPartitioning(6)
       // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
       // HashPartitioning(6).
+      // MD: 这里看不太懂
       val shouldConsiderMinParallelism = specs.forall(p =>
         !p._2.canCreatePartitioning || children(p._1).isInstanceOf[ShuffleExchangeLike]
       )
@@ -125,11 +131,15 @@ case class EnsureRequirements(
       val bestSpecOpt = if (candidateSpecs.isEmpty) {
         None
       } else {
+        // MD: 这里的分桶为什么没有考虑1-n的分区关系？
+        // MD: 如何防止分区级别倾斜？
         // When choosing specs, we should consider those children with no `ShuffleExchangeLike` node
         // first. For instance, if we have:
         //   A: (No_Exchange, 100) <---> B: (Exchange, 120)
         // it's better to pick A and change B to (Exchange, 100) instead of picking B and insert a
         // new shuffle for A.
+        // MD: 优先选择plan本身不是shuffleExchangeLike的节点，这样就可以减少一次shuffle；
+        //  对于已经确定需要shuffle的表，只是更换一次size，而对于原来不需要shuffle的表，优先选择其已有的分区逻辑
         val candidateSpecsWithoutShuffle = candidateSpecs.filter { case (k, _) =>
           !children(k).isInstanceOf[ShuffleExchangeLike]
         }
@@ -151,8 +161,9 @@ case class EnsureRequirements(
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if allCompatible || !childrenIndexes.contains(idx) =>
-          child
+        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+          // md: 无需协分布的
+        child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             child
@@ -177,6 +188,7 @@ case class EnsureRequirements(
       }
     }
 
+    // MD: 先shuffle再order
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.

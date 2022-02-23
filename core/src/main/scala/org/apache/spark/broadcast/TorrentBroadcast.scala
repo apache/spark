@@ -151,6 +151,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
     } else {
       // Store a copy of the broadcast variable in the driver so that tasks run on the driver
       // do not create a duplicate copy of the broadcast variable's value.
+      // md: 为什么这里要存储一次，而下面也要存储一次？
       if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
         throw new SparkException(s"Failed to store $broadcastId in BlockManager")
       }

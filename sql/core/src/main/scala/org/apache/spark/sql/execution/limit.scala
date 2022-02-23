@@ -210,6 +210,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
     copy(child = newChild)
 }
 
+// md: 本质就是topN，但是为了避免与spark原生的top接口发生语义冲突，所以换了名称。那原生的top接口，具体是什么语义呢？
 /**
  * Take the first `limit` elements and then drop the first `offset` elements in the child's single
  * output partition.

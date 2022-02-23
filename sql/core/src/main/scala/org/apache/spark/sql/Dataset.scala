@@ -4157,6 +4157,8 @@ class Dataset[T] private[sql](
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
       QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+        // md: 进入qe可以看到，executedPlan是一个lazy变量，对应的是这个dataset的physical plan，在得到这个变量的过程会关联计算内部的
+        //  逻辑执行计划，因而再依赖parse、analysis、optimization等前置过程；
         qe.executedPlan.resetMetrics()
         action(qe.executedPlan)
       }

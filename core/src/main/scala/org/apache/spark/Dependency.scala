@@ -48,6 +48,14 @@ abstract class Dependency[T] extends Serializable {
  */
 @DeveloperApi
 abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
+  // md: 通过这种方式，把上下游的分区关联在一起（通过对应的分区index值，所以需要在rdd层面把不同分区做编码）
+  //  所以，本质上"宽"还是"窄"，是从被依赖分区角度来看的，也就是被依赖分区如果有多个依赖方，那就是宽依赖，如果只有一个依赖方
+  //  那就是窄依赖。即使是"窄"依赖，也可以由多个被依赖方；本质上，一个rdd的partition如果依赖多个上游的partition，只要这些
+  //  被依赖的上游partition在全局范围也只被依赖一次，那就可以把这相关的上下游partition所对应的计算都放在一个stage里，然后
+  //  在同一个进程内pipeline执行（lazy模式），从而避免了网络交互的开销；反过来，如果是宽依赖的话，因为同一个partition被
+  //  多个下游partition依赖，因此必须得先计算出来结果，然后再分发给不同的下游partition（如果每个下游都独立算一遍这些上游
+  //  partition，那就太浪费了）；所以，这里就切出了不同的stage了，即这些计算之间必须有一个明显的"先完成后使用"的边界；
+  //  shuffle的本质就是：数据的分布不满足新的计算分布的需求，所以需要重分布！
   /**
    * Get the parent partitions for a child partition.
    * @param partitionId a partition of the child RDD

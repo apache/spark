@@ -33,7 +33,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{DataType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
-
+// md: 这种是属于v1的数据源形态和命名方式：xxxFormat
 /**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */

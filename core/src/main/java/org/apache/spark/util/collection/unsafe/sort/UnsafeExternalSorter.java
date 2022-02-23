@@ -227,6 +227,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     final UnsafeSorterSpillWriter spillWriter =
       new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
         inMemSorter.numRecords());
+    // md: 每个spill请求，都是通过一个独立的writer去写文件；等到执行结束就需要统一释放掉文件；
+    //  所以这里把这些writer对象管理起来，等到后续可以批量释放
     spillWriters.add(spillWriter);
     spillIterator(inMemSorter.getSortedIterator(), spillWriter);
 
@@ -490,6 +492,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     UnsafeAlignedOffset.putSize(base, pageCursor, length);
     pageCursor += uaoSize;
+    // md: 真正的数据是放到这个新分配的page里
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
     inMemSorter.insertRecord(recordAddress, prefix, prefixIsNull);

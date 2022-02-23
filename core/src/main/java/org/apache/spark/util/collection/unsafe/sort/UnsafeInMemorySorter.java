@@ -240,6 +240,8 @@ public final class UnsafeInMemorySorter {
     if (!hasSpaceForAnotherRecord()) {
       throw new IllegalStateException("There is no space for new record");
     }
+    // md: 这里array中存储的只是放入到内存空间中的地址位置（通过unsafe获取得到），这样就可以通过array数组中的对象地址
+    //  （unsafe数组中的offset值），找到对应的record
     if (prefixIsNull && radixSortSupport != null) {
       // Swap forward a non-null record to make room for this one at the beginning of the array.
       array.set(pos, array.get(nullBoundaryPos));
