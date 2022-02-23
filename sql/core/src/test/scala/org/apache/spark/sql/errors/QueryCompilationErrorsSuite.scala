@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
+import org.apache.spark.sql.functions.{col, grouping, grouping_id, sum, to_timestamp}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class StringLongClass(a: String, b: Long)
@@ -167,5 +167,25 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.message ===
       "The feature is not supported: " +
       "Pandas UDF aggregate expressions don't support pivot.")
+  }
+
+  test("INVALID_PARAMETER_VALUE: Invalid value for duration/time inputs to time/session window") {
+    val df = Seq(
+      (1, "2020-10-10 01:00:00", "2010-09-09 03:00:00"),
+      (2, "2019-08-08 07:30:20", "2022-01-01 01:00:20"),
+      (2, "2021-04-04 04:44:44", "2021-06-06 06:36:36"),
+      (1, "1995-05-05 05:55:55", "1999-09-09 02:22:22")
+    ).toDF("id", "time1", "time2")
+      .withColumn("time1", to_timestamp(col("time1")))
+      .withColumn("time2", to_timestamp(col("time2")))
+    df.createOrReplaceTempView("df")
+
+    val e = intercept[AnalysisException] {
+      sql("SELECT * FROM df GROUP BY id, WINDOW(time1, NULL, '5 minutes') ORDER BY id")
+    }
+    assert(e.errorClass === Some("INVALID_PARAMETER_VALUE"))
+    assert(e.message ===
+      "The value of parameter(s) 'Duration/Time' in window function is invalid: " +
+        "The duration and time inputs to window must be an integer, long or string literal.")
   }
 }

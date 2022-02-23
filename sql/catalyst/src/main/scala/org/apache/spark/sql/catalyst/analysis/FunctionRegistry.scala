@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
+import java.lang.reflect.InvocationTargetException
 import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 import scala.reflect.ClassTag
-
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -34,7 +33,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-
 
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
@@ -153,7 +151,12 @@ object FunctionRegistryBase {
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
-          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+          case e: InvocationTargetException =>
+            e.getCause match {
+              // Propagate Error Class AnalysisExceptions
+              case a: AnalysisException if a.getErrorClass().nonEmpty => throw a
+              case a: Exception => throw new AnalysisException(a.getCause.getMessage)
+            }
         }
       }
     }
