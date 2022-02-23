@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
  */
 class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
-  test("Dynamic partitions require appropriate constructor") {
+  test("Staging dir overwrite require appropriate constructor") {
 
     // you cannot instantiate a two-arg client with dynamic partitions
     // enabled.
@@ -34,7 +34,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
     // check the contents of the message and rethrow if unexpected.
     // this preserves the stack trace of the unexpected
     // exception.
-    if (!ex.toString.contains("Dynamic Partition Overwrite")) {
+    if (!ex.toString.contains("Staging Dir Overwrite")) {
       fail(s"Wrong text in caught exception $ex", ex)
     }
   }
