@@ -26,8 +26,8 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions.
  * <p>
- * The currently supported expressions:
  * <table border="1">
+ *  <caption>The currently supported expressions:</caption>
  *  <tr>
  *   <th>Expression name</th>
  *   <th>SQL scalar expression</th>
