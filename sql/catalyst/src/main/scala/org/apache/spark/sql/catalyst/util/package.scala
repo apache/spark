@@ -56,19 +56,6 @@ package object util extends Logging {
     writeToByteArrayOutputStream(classLoader.getResourceAsStream(resource)).toByteArray
   }
 
-  private def writeToByteArrayOutputStream(inStream: InputStream): ByteArrayOutputStream =
-    Utils.tryWithResource(new ByteArrayOutputStream) { outStream =>
-      var reading = true
-      while (reading) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-      outStream
-    }
-
   def resourceToString(
       resource: String,
       encoding: String = UTF_8.name(),
@@ -82,6 +69,19 @@ package object util extends Logging {
     }
     file
   }
+
+  private def writeToByteArrayOutputStream(inStream: InputStream): ByteArrayOutputStream =
+    Utils.tryWithResource(new ByteArrayOutputStream) { outStream =>
+      var reading = true
+      while (reading) {
+        inStream.read() match {
+          case -1 => reading = false
+          case c => outStream.write(c)
+        }
+      }
+      outStream.flush()
+      outStream
+    }
 
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n"), right.split("\n"))
