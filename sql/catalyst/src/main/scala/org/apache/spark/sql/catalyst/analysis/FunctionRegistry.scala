@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
 import java.lang.reflect.InvocationTargetException
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
