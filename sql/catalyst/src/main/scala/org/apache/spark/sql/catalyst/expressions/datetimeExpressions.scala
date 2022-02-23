@@ -3057,3 +3057,87 @@ case class ConvertTimezone(
     copy(sourceTz = newFirst, targetTz = newSecond, sourceTs = newThird)
   }
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(unit, quantity, timestamp) - Adds the specified number of units to the given timestamp.",
+  arguments = """
+    Arguments:
+      * unit - this indicates the units of datetime that you want to add.
+        Supported string values of `unit` are (case insensitive):
+          - "YEAR"
+          - "QUARTER" - 3 months
+          - "MONTH"
+          - "WEEK" - 7 days
+          - "DAY", "DAYOFYEAR"
+          - "HOUR"
+          - "MINUTE"
+          - "SECOND"
+          - "MILLISECOND" - milliseconds
+          - "MICROSECOND"
+      * quantity - this is the number of units of time that you want to add.
+      * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', 8, timestamp_ntz'2022-02-11 20:30:00');
+       2022-02-12 04:30:00
+      > SELECT _FUNC_('MONTH', 1, timestamp_ltz'2022-01-31 00:00:00');
+       2022-02-28 00:00:00
+      > SELECT _FUNC_(SECOND, -10, date'2022-01-01');
+       2021-12-31 23:59:50
+      > SELECT _FUNC_(YEAR, 10, timestamp'2000-01-01 01:02:03.123456');
+       2010-01-01 01:02:03.123456
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class TimestampAdd(
+    unit: Expression,
+    quantity: Expression,
+    timestamp: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with TimeZoneAwareExpression {
+
+  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+    this(unit, quantity, timestamp, None)
+
+  override def first: Expression = unit
+  override def second: Expression = quantity
+  override def third: Expression = timestamp
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
+  override def dataType: DataType = timestamp.dataType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
+
+  override def nullSafeEval(u: Any, q: Any, micros: Any): Any = {
+    DateTimeUtils.timestampAdd(
+      u.asInstanceOf[UTF8String].toString,
+      q.asInstanceOf[Int],
+      micros.asInstanceOf[Long],
+      zoneIdInEval)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    defineCodeGen(ctx, ev, (u, q, micros) =>
+      s"""$dtu.timestampAdd($u.toString(), $q, $micros, $zid)""")
+  }
+
+  override def prettyName: String = "timestampadd"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): TimestampAdd = {
+    copy(unit = newFirst, quantity = newSecond, timestamp = newThird)
+  }
+}

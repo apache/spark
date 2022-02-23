@@ -47,6 +47,7 @@
 
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
+    <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
@@ -74,9 +75,28 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>net.alchim31.maven</groupId>
+          <artifactId>scala-maven-plugin</artifactId>
+          <configuration>
+            <excludes>
+              <exclude>${volcano.exclude}</exclude>
+            </excludes>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -206,6 +226,19 @@
           <artifactId>aws-java-sdk-bundle</artifactId>
           <version>1.11.375</version>
           <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>volcano</id>
+      <properties>
+        <volcano.exclude></volcano.exclude>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>io.fabric8</groupId>
+          <artifactId>volcano-client</artifactId>
+          <version>${kubernetes-client.version}</version>
         </dependency>
       </dependencies>
     </profile>

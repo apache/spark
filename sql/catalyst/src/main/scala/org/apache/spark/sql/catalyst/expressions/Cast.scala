@@ -293,10 +293,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    */
   def typeCheckFailureMessage: String
 
-  override def toString: String = {
-    val ansi = if (ansiEnabled) "ansi_" else ""
-    s"${ansi}cast($child as ${dataType.simpleString})"
-  }
+  override def toString: String = s"cast($child as ${dataType.simpleString})"
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (canCast(child.dataType, dataType)) {

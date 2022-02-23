@@ -51,11 +51,11 @@ Uses the local `minikube` cluster, this requires that `minikube` 1.7.3 or greate
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
-### `docker-for-desktop`
+### `docker-desktop`
 
 Since July 2018 Docker for Desktop provide an optional Kubernetes cluster that can be enabled as described in this 
 [blog post](https://blog.docker.com/2018/07/kubernetes-is-now-available-in-docker-desktop-stable-channel/).  Assuming 
-this is enabled using this backend will auto-configure itself from the `docker-for-desktop` context that Docker creates 
+this is enabled using this backend will auto-configure itself from the `docker-desktop` context that Docker creates
 in your `~/.kube/config` file. If your config file is in a different location you should set the `KUBECONFIG` 
 environment variable appropriately.
 
@@ -139,7 +139,7 @@ properties to Maven.  For example:
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
-                            -Dspark.kubernetes.test.deployMode=docker-for-desktop \
+                            -Dspark.kubernetes.test.deployMode=docker-desktop \
                             -Dtest.include.tags=k8s
                             
                             
@@ -172,7 +172,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark.kubernetes.test.deployMode</code></td>
     <td>
       The integration test backend to use.  Acceptable values are <code>minikube</code>, 
-      <code>docker-for-desktop</code> and <code>cloud</code>.
+      <code>docker-desktop</code> and <code>cloud</code>.
     <td><code>minikube</code></td>
   </tr>
   <tr>

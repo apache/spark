@@ -204,6 +204,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 
+  override def flatArguments: Iterator[Any] = Iterator(child)
+
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 

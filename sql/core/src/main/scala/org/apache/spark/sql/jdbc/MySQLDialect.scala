@@ -38,25 +38,22 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
 
+  // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          Some(s"VAR_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          Some(s"VAR_SAMP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          Some(s"STDDEV_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+          Some(s"STDDEV_SAMP(${f.inputs().head})")
         case _ => None
       }
     )

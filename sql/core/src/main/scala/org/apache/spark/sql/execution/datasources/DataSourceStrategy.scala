@@ -61,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
+object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -115,7 +115,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
             Some(Alias(AnsiCast(Literal(partValue), field.dataType,
               Option(conf.sessionLocalTimeZone)), field.name)())
           case _ =>
-            Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
+            val castExpression =
+              Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone),
+                ansiEnabled = false)
+            Some(Alias(castExpression, field.name)())
         }
       } else {
         throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(

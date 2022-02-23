@@ -165,9 +165,17 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   def withAllParquetReaders(code: => Unit): Unit = {
     // test the row-based reader
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withClue("Parquet-mr reader") {
+        code
+      }
+    }
     // test the vectorized reader
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withClue("Vectorized reader") {
+        code
+      }
+    }
   }
 
   def withAllParquetWriters(code: => Unit): Unit = {
