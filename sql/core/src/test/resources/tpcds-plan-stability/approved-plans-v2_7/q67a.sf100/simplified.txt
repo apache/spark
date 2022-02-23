@@ -9,7 +9,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                 Exchange [i_category] #1
                   Union
                     WholeStageCodegen (8)
-                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id] #2
                             WholeStageCodegen (7)
@@ -63,7 +63,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy] #7
                             WholeStageCodegen (16)
                               HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (26)
@@ -72,7 +72,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy] #8
                             WholeStageCodegen (25)
                               HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (35)
@@ -81,7 +81,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year] #9
                             WholeStageCodegen (34)
                               HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (44)
@@ -90,7 +90,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class,i_brand,i_product_name] #10
                             WholeStageCodegen (43)
                               HashAggregate [i_category,i_class,i_brand,i_product_name,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (53)
@@ -99,7 +99,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class,i_brand] #11
                             WholeStageCodegen (52)
                               HashAggregate [i_category,i_class,i_brand,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (62)
@@ -108,7 +108,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category,i_class] #12
                             WholeStageCodegen (61)
                               HashAggregate [i_category,i_class,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (71)
@@ -117,7 +117,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange [i_category] #13
                             WholeStageCodegen (70)
                               HashAggregate [i_category,sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
                     WholeStageCodegen (80)
@@ -126,6 +126,6 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                           Exchange #14
                             WholeStageCodegen (79)
                               HashAggregate [sumsales] [sum,isEmpty,sum,isEmpty]
-                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2), true), 0.00)),sumsales,sum,isEmpty]
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price as decimal(12,2))) * promote_precision(cast(ss_quantity as decimal(12,2)))), DecimalType(18,2)), 0.00)),sumsales,sum,isEmpty]
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
