@@ -156,3 +156,44 @@ To load files with paths matching a given modified time range, you can use:
 {% include_example load_with_modified_time_filter  r/RSparkSQLExample.R %}
 </div>
 </div>
+
+### Scan parallelism
+
+`parallel` is used to set the expected parallelism while reading data from files. We will fall back to 
+using `spark.sql.files.maxPartitionBytes` to determine the parallelism if it is not set.
+Please note that Spark can not guarantee the parallelism exactly is `parallel`. 
+
+To set the parallelism when reading data files, you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example load_with_parallel scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example load_with_parallel java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example load_with_parallel python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example load_with_parallel r/RSparkSQLExample.R %}
+</div>
+
+<div data-lang="SQL"  markdown="1">
+{% highlight sql %}
+
+CREATE TEMPORARY VIEW parquetTable
+USING org.apache.spark.sql.parquet
+OPTIONS (
+  path "examples/src/main/resources/people.parquet",
+  parallel "100"
+)
+
+SELECT * FROM parquetTable
+
+{% endhighlight %}
+</div>
+</div>

@@ -169,6 +169,17 @@ public class JavaSQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     // $example off:load_with_modified_time_filter$
+    // $example on:load_with_parallel$
+    Dataset<Row> testParallelDF = spark.read().format("parquet")
+        .option("parallel", "100")
+        .load("examples/src/main/resources/dir1/dir2");
+    testParallelDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file2.parquet|
+    // +-------------+
+    // $example off:load_with_parallel$
   }
 
   private static void runBasicDataSourceExample(SparkSession spark) {
