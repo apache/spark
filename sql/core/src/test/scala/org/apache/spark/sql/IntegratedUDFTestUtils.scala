@@ -82,7 +82,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  *
  * To use it in Scala API and SQL:
  * {{{
- *   sql("SELECT udf_name(1)").show()
+ *   sql("SELECT udf_name(1)")
  *   val df = Seq(
  *     (536361, "85123A", 2, 17850),
  *     (536362, "85123B", 4, 17850),
