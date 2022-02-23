@@ -71,13 +71,26 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  *   df.select(pandasTestUDF(df("id")))
  * }}}
  *
- * For Grouped Aggregate Pandas UDF, it defines an UDF that calculate the count using pandas.
- * UDF returns the count of given column, so the input and output length could be different.
+ * For Grouped Aggregate Pandas UDF, it defines an UDF that calculates the count using pandas.
+ * The UDF returns the count of the given column. In this way, UDF is virtually not no-op.
  *
  * To register Grouped Aggregate Pandas UDF in SQL:
  * {{{
  *   val groupedAggPandasTestUDF = TestGroupedAggPandasUDF(name = "udf_name")
  *   registerTestUDF(groupedAggPandasTestUDF, spark)
+ * }}}
+ *
+ * To use it in Scala API and SQL:
+ * {{{
+ *   sql("SELECT udf_name(1)").show()
+ *   val df = Seq(
+ *     (536361, "85123A", 2, 17850),
+ *     (536362, "85123B", 4, 17850),
+ *     (536363, "86123A", 6, 17851)
+ *   ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+ *
+ *   df.groupBy("CustomerID").agg(expr("udf_name(Quantity)"))
+ *   df.groupBy("CustomerID").agg(groupedAggPandasTestUDF(df("Quantity")))
  * }}}
  */
 object IntegratedUDFTestUtils extends SQLHelper {
@@ -383,6 +396,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   @pandas_udf("double")
    *   def pandas_count(v: pd.Series) -> int:
    *       return v.count()
+   *
    *   count_col = pandas_count(df['v'])
    * }}}
    */
@@ -399,18 +413,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         accumulator = null),
       dataType = IntegerType,
       pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-      udfDeterministic = true) {
-
-      override def builder(e: Seq[Expression]): Expression = {
-        assert(e.length == 1, "Defined UDF only has one column")
-        val expr = e.head
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
-        val pythonUDF = new PythonUDFWithoutId(
-          super.builder(Cast(expr, IntegerType) :: Nil).asInstanceOf[PythonUDF])
-        Cast(pythonUDF, expr.dataType)
-      }
-    }
+      udfDeterministic = true)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
@@ -471,6 +474,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def registerTestUDF(testUDF: TestUDF, session: SparkSession): Unit = testUDF match {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
+    case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalaUDF => session.udf.register(udf.name, udf.udf)
     case other => throw new RuntimeException(s"Unknown UDF class [${other.getClass}]")
   }
