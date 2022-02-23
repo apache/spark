@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import org.apache.spark.{broadcast, SparkEnv, TaskContext}
+import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -386,7 +386,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 
     new NextIterator[InternalRow] {
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeIfNeeded()))
       private var sizeOfNextRow = ins.readInt()
       override def getNext(): InternalRow = {
         if (sizeOfNextRow >= 0) {
@@ -398,12 +397,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
             sizeOfNextRow = ins.readInt()
             row
           } catch {
-            case e: Exception =>
-              if (ins != null) {
-                finished = true
-                ins.close()
-              }
-              throw e
+            case t: Throwable if ins != null =>
+              ins.close()
+              throw t
           }
         } else {
           finished = true
