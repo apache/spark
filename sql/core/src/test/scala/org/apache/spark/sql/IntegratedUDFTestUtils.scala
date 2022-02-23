@@ -76,8 +76,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  *
  * To register Grouped Aggregate Pandas UDF in SQL:
  * {{{
- *   val groupedAggregatePandasTestUDF = TestGroupedAggregatePandasUDF(name = "udf_name")
- *   registerTestUDF(groupedAggregatePandasTestUDF, spark)
+ *   val groupedAggPandasTestUDF = TestGroupedAggPandasUDF(name = "udf_name")
+ *   registerTestUDF(groupedAggPandasTestUDF, spark)
  * }}}
  */
 object IntegratedUDFTestUtils extends SQLHelper {
