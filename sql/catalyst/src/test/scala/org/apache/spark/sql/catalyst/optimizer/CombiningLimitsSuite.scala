@@ -159,6 +159,19 @@ class CombiningLimitsSuite extends PlanTest {
     )
   }
 
+  test("SPARK-38271: PoissonSampler may output more rows than child.maxRows") {
+    val query = testRelation.select().sample(0, 0.2, true, 1)
+    assert(query.maxRows.isEmpty)
+    val optimized = Optimize.execute(query.analyze)
+    assert(optimized.maxRows.isEmpty)
+    // can not eliminate Limit since Sample.maxRows is None
+    checkPlanAndMaxRow(
+      query.limit(10),
+      query.limit(10),
+      10
+    )
+  }
+
   test("SPARK-33497: Eliminate Limit if Deduplicate max rows not larger than Limit") {
     checkPlanAndMaxRow(
       testRelation.deduplicate("a".attr).limit(10),

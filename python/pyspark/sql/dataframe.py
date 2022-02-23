@@ -116,7 +116,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     ):
         from pyspark.sql.context import SQLContext
 
-        self._session: Optional["SparkSession"] = None
         self._sql_ctx: Optional["SQLContext"] = None
 
         if isinstance(sql_ctx, SQLContext):
@@ -127,8 +126,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             # was kept with an warning because it's used intensively by third-party libraries.
             warnings.warn("DataFrame constructor is internal. Do not directly use it.")
             self._sql_ctx = sql_ctx
+            session = sql_ctx.sparkSession
         else:
-            self._session = sql_ctx
+            session = sql_ctx
+        self._session: "SparkSession" = session
 
         self._sc: SparkContext = sql_ctx._sc
         self._jdf: JavaObject = jdf
@@ -152,7 +153,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             self._sql_ctx = SQLContext._get_or_create(self._sc)
         return self._sql_ctx
 
-    @property  # type: ignore[misc]
+    @property
     def sparkSession(self) -> "SparkSession":
         """Returns Spark session that created this :class:`DataFrame`.
 
@@ -164,10 +165,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> type(df.sparkSession)
         <class 'pyspark.sql.session.SparkSession'>
         """
-        from pyspark.sql.session import SparkSession
-
-        if self._session is None:
-            self._session = SparkSession._getActiveSessionOrCreate()
         return self._session
 
     @property  # type: ignore[misc]
@@ -1799,26 +1796,31 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
+        >>> df = spark.createDataFrame(
+        ...     [("Bob", 13, 40.3, 150.5), ("Alice", 12, 37.8, 142.3), ("Tom", 11, 44.1, 142.2)],
+        ...     ["name", "age", "weight", "height"],
+        ... )
         >>> df.describe(['age']).show()
-        +-------+------------------+
-        |summary|               age|
-        +-------+------------------+
-        |  count|                 2|
-        |   mean|               3.5|
-        | stddev|2.1213203435596424|
-        |    min|                 2|
-        |    max|                 5|
-        +-------+------------------+
-        >>> df.describe().show()
-        +-------+------------------+-----+
-        |summary|               age| name|
-        +-------+------------------+-----+
-        |  count|                 2|    2|
-        |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
-        |    min|                 2|Alice|
-        |    max|                 5|  Bob|
-        +-------+------------------+-----+
+        +-------+----+
+        |summary| age|
+        +-------+----+
+        |  count|   3|
+        |   mean|12.0|
+        | stddev| 1.0|
+        |    min|  11|
+        |    max|  13|
+        +-------+----+
+
+        >>> df.describe(['age', 'weight', 'height']).show()
+        +-------+----+------------------+-----------------+
+        |summary| age|            weight|           height|
+        +-------+----+------------------+-----------------+
+        |  count|   3|                 3|                3|
+        |   mean|12.0| 40.73333333333333|            145.0|
+        | stddev| 1.0|3.1722757341273704|4.763402145525822|
+        |    min|  11|              37.8|            142.2|
+        |    max|  13|              44.1|            150.5|
+        +-------+----+------------------+-----------------+
 
         See Also
         --------
@@ -1851,39 +1853,34 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Examples
         --------
-        >>> df.summary().show()
-        +-------+------------------+-----+
-        |summary|               age| name|
-        +-------+------------------+-----+
-        |  count|                 2|    2|
-        |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
-        |    min|                 2|Alice|
-        |    25%|                 2| null|
-        |    50%|                 2| null|
-        |    75%|                 5| null|
-        |    max|                 5|  Bob|
-        +-------+------------------+-----+
+        >>> df = spark.createDataFrame(
+        ...     [("Bob", 13, 40.3, 150.5), ("Alice", 12, 37.8, 142.3), ("Tom", 11, 44.1, 142.2)],
+        ...     ["name", "age", "weight", "height"],
+        ... )
+        >>> df.select("age", "weight", "height").summary().show()
+        +-------+----+------------------+-----------------+
+        |summary| age|            weight|           height|
+        +-------+----+------------------+-----------------+
+        |  count|   3|                 3|                3|
+        |   mean|12.0| 40.73333333333333|            145.0|
+        | stddev| 1.0|3.1722757341273704|4.763402145525822|
+        |    min|  11|              37.8|            142.2|
+        |    25%|  11|              37.8|            142.2|
+        |    50%|  12|              40.3|            142.3|
+        |    75%|  13|              44.1|            150.5|
+        |    max|  13|              44.1|            150.5|
+        +-------+----+------------------+-----------------+
 
-        >>> df.summary("count", "min", "25%", "75%", "max").show()
-        +-------+---+-----+
-        |summary|age| name|
-        +-------+---+-----+
-        |  count|  2|    2|
-        |    min|  2|Alice|
-        |    25%|  2| null|
-        |    75%|  5| null|
-        |    max|  5|  Bob|
-        +-------+---+-----+
-
-        To do a summary for specific columns first select them:
-
-        >>> df.select("age", "name").summary("count").show()
-        +-------+---+----+
-        |summary|age|name|
-        +-------+---+----+
-        |  count|  2|   2|
-        +-------+---+----+
+        >>> df.select("age", "weight", "height").summary("count", "min", "25%", "75%", "max").show()
+        +-------+---+------+------+
+        |summary|age|weight|height|
+        +-------+---+------+------+
+        |  count|  3|     3|     3|
+        |    min| 11|  37.8| 142.2|
+        |    25%| 11|  37.8| 142.2|
+        |    75%| 13|  44.1| 150.5|
+        |    max| 13|  44.1| 150.5|
+        +-------+---+------+------+
 
         See Also
         --------

@@ -4281,6 +4281,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
     }
   }
+
+  test("SPARK-38173: Quoted column cannot be recognized correctly " +
+    "when quotedRegexColumnNames is true") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT `(C3)?+.+`,T.`C1` * `C2` AS CC
+            |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
+            |""".stripMargin),
+        Row(3, 2, 6) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

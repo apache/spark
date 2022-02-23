@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -2649,6 +2649,46 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
           withSQLConf("hive.exec.max.dynamic.partitions" -> "3") {
             sql(insertSQL)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38215: Hive Insert Dir should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> s"$isConvertedCtas") {
+                withTempDir { dir =>
+                  val df = sql(
+                    s"""
+                       |INSERT OVERWRITE LOCAL DIRECTORY '${dir.getAbsolutePath}'
+                       |STORED AS $format
+                       |SELECT 1
+                  """.stripMargin)
+                  val insertIntoDSDir = df.queryExecution.analyzed.collect {
+                    case _: InsertIntoDataSourceDirCommand => true
+                  }.headOption
+                  val insertIntoHiveDir = df.queryExecution.analyzed.collect {
+                    case _: InsertIntoHiveDirCommand => true
+                  }.headOption
+                  if (isConverted && isConvertedCtas) {
+                    assert(insertIntoDSDir.nonEmpty)
+                    assert(insertIntoHiveDir.isEmpty)
+                  } else {
+                    assert(insertIntoDSDir.isEmpty)
+                    assert(insertIntoHiveDir.nonEmpty)
+                  }
+                }
+              }
+            }
           }
         }
       }

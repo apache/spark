@@ -34,6 +34,10 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
   }
 
+  override protected def roleSpecificSchedulerNameConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_SCHEDULER_NAME
+  }
+
   override protected def userFeatureStepsConf: ConfigEntry[_] = {
     Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
   }

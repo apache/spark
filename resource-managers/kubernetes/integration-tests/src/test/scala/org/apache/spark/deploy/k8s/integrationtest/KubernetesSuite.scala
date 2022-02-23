@@ -181,7 +181,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
-  before {
+  protected def setUpTest(): Unit = {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
     driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
@@ -193,6 +193,10 @@ class KubernetesSuite extends SparkFunSuite
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
+  }
+
+  before {
+    setUpTest()
   }
 
   after {
