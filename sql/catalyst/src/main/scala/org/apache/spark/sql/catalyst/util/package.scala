@@ -49,13 +49,24 @@ package object util extends Logging {
   }
 
   def fileToString(file: File, encoding: Charset = UTF_8): String = {
-    new String(toByteArray(new FileInputStream(file)), encoding)
+    val inStream = new FileInputStream(file)
+    try {
+      new String(ByteStreams.toByteArray(inStream), encoding)
+    } finally {
+      inStream.close()
+    }
+
   }
 
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
-    toByteArray(classLoader.getResourceAsStream(resource))
+    val inStream = classLoader.getResourceAsStream(resource)
+    try {
+      ByteStreams.toByteArray(inStream)
+    } finally {
+      inStream.close()
+    }
   }
 
   def resourceToString(
@@ -70,14 +81,6 @@ package object util extends Logging {
       out.write(str)
     }
     file
-  }
-
-  private def toByteArray(inStream: InputStream): Array[Byte] = {
-    try {
-      ByteStreams.toByteArray(inStream)
-    } finally {
-      inStream.close()
-    }
   }
 
   def sideBySide(left: String, right: String): Seq[String] = {
