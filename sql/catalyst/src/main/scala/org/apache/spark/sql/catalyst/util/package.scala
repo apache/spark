@@ -47,44 +47,27 @@ package object util extends Logging {
   }
 
   def fileToString(file: File, encoding: Charset = UTF_8): String = {
-    val inStream = new FileInputStream(file)
-    val outStream = new ByteArrayOutputStream
-    try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
-      inStream.close()
-    }
-    new String(outStream.toByteArray, encoding)
+    new String(writeToByteArrayOutputStream(new FileInputStream(file)).toByteArray, encoding)
   }
 
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
-    val inStream = classLoader.getResourceAsStream(resource)
-    val outStream = new ByteArrayOutputStream
-    try {
+    writeToByteArrayOutputStream(classLoader.getResourceAsStream(resource)).toByteArray
+  }
+
+  private def writeToByteArrayOutputStream(inStream: InputStream): ByteArrayOutputStream =
+    Utils.tryWithResource(new ByteArrayOutputStream) { outStream =>
       var reading = true
-      while ( reading ) {
+      while (reading) {
         inStream.read() match {
           case -1 => reading = false
           case c => outStream.write(c)
         }
       }
       outStream.flush()
+      outStream
     }
-    finally {
-      inStream.close()
-    }
-    outStream.toByteArray
-  }
 
   def resourceToString(
       resource: String,
