@@ -808,6 +808,15 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
+  def foundDuplicateFieldInFieldIdLookupModeError(
+      requiredId: Int, matchedFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredId": $matchedFields
+         |in id mapping mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
   def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable): Throwable = {
     new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
@@ -1962,5 +1971,11 @@ object QueryExecutionErrors {
 
   def unsupportedDropNamespaceRestrictError(): Throwable = {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
+
+  def invalidUnitInTimestampAdd(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampadd", unit))
   }
 }

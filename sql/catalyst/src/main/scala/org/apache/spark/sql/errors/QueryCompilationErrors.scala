@@ -2375,4 +2375,12 @@ object QueryCompilationErrors {
     new AnalysisException(
       "Sinks cannot request distribution and ordering in continuous execution mode")
   }
+
+  def invalidScaleParameterRoundBase(function: String): Throwable = {
+    new AnalysisException(s"The 'scale' parameter of function '$function' must be an int constant.")
+  }
+
+  def invalidNumberOfFunctionParameters(function: String): Throwable = {
+    new AnalysisException(s"Invalid number of parameters to the function '$function'.")
+  }
 }

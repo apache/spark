@@ -520,6 +520,18 @@ class FileIndexSuite extends SharedSparkSession {
       SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
     }
   }
+
+  test("SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
+    "references") {
+    withTable("t") {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification") {
+
+        sql("CREATE TABLE t (c1 int) USING PARQUET")
+        assert(sql("SELECT * FROM t WHERE c1 = 1 AND 2 > 1").count() == 0)
+      }
+    }
+  }
 }
 
 object DeletionRaceFileSystem {

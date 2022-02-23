@@ -573,6 +573,7 @@ Below is a list of all the keywords in Spark SQL.
 |THEN|reserved|non-reserved|reserved|
 |TIME|reserved|non-reserved|reserved|
 |TIMESTAMP|non-reserved|non-reserved|non-reserved|
+|TIMESTAMPADD|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|

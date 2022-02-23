@@ -1150,4 +1150,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "MISSING_COLUMN",
       Array("c.y", "x"))
   }
+
+  test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
+    Seq("mean", "abs").foreach { func =>
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c)
+           |SELECT t.c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING ${func}(t.c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c, false d)
+           |SELECT (t.c AND t.d) c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING ${func}(c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+    }
+  }
 }
