@@ -407,13 +407,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION =
-    buildConf("spark.sql.requireAllClusterKeysForHashPartition")
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION =
+    buildConf("spark.sql.requireAllClusterKeysForDistribution")
       .internal()
-      .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
-        "of the children, to eliminate the shuffle for the operator that needs its children to " +
-        "be hash partitioned, such as AGGREGATE and WINDOW node. This is to avoid data skews " +
-        "which can lead to significant performance regression if shuffle is eliminated.")
+      .doc("When true, the planner requires all the clustering keys as the partition keys " +
+        "(with same ordering) of the children, to eliminate the shuffle for the operator that " +
+        "requires its children be clustered distributed, such as AGGREGATE and WINDOW node. " +
+        "This is to avoid data kews which can lead to significant performance regression if " +
+        "shuffle is eliminated.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -3961,9 +3962,6 @@ class SQLConf extends Serializable with Logging {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
-
-  def requireAllClusterKeysForHashPartition: Boolean =
-    getConf(REQUIRE_ALL_CLUSTER_KEYS_FOR_HASH_PARTITION)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 

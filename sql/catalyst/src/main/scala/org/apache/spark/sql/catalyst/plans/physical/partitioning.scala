@@ -72,10 +72,15 @@ case object AllTuples extends Distribution {
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located in the same partition.
+ *
+ * @param requiredAllClusterKeys When true, `Partitioning` which satisfies this distribution,
+ *                               must match all `clustering` expressions in the same ordering.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
+    requiredNumPartitions: Option[Int] = None,
+    requiredAllClusterKeys: Boolean = SQLConf.get.getConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION)) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -87,6 +92,19 @@ case class ClusteredDistribution(
       s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(clustering, numPartitions)
+  }
+
+  /**
+   * Checks if `expressions` match all `clustering` expressions in the same ordering.
+   *
+   * `Partitioning` should call this to check its expressions when `requiredAllClusterKeys`
+   * is set to true.
+   */
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
+    expressions.length == clustering.length &&
+      expressions.zip(clustering).forall {
+        case (l, r) => l.semanticEquals(r)
+      }
   }
 }
 
@@ -261,13 +279,11 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case c @ ClusteredDistribution(requiredClustering, _) =>
-          if (SQLConf.get.requireAllClusterKeysForHashPartition) {
-            // Checks `HashPartitioning` is partitioned on exactly full clustering keys of
-            // `ClusteredDistribution`. Opt in this feature with enabling
-            // "spark.sql.requireAllClusterKeysForHashPartition", can help avoid potential data
-            // skewness for some jobs.
-            isPartitionedOnFullKeys(c)
+        case c @ ClusteredDistribution(requiredClustering, _, requiredAllClusterKeys) =>
+          if (requiredAllClusterKeys) {
+            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
           } else {
             expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
@@ -341,8 +357,15 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, _, requiredAllClusterKeys) =>
+          val expressions = ordering.map(_.child)
+          if (requiredAllClusterKeys) {
+            // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
@@ -543,7 +566,7 @@ case class HashShuffleSpec(
     // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
     // the join keys.
     if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-      partitioning.isPartitionedOnFullKeys(distribution)
+      distribution.areAllClusterKeysMatched(partitioning.expressions)
     } else {
       true
     }
