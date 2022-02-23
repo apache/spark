@@ -72,7 +72,7 @@ select map_contains_key(map('1', 'a', '2', 'b'), 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array_contains(map_keys(map('1', 'a', '2', 'b')), 1)' due to data type mismatch: Input to function array_contains should have been array followed by a value with same element type, but it's [array<string>, int].; line 1 pos 7
+cannot resolve 'map_contains_key(map('1', 'a', '2', 'b'), 1)' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<string,string>, int].; line 1 pos 7
 
 
 -- !query
@@ -81,4 +81,4 @@ select map_contains_key(map(1, 'a', 2, 'b'), '1')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'array_contains(map_keys(map(1, 'a', 2, 'b')), '1')' due to data type mismatch: Input to function array_contains should have been array followed by a value with same element type, but it's [array<int>, string].; line 1 pos 7
+cannot resolve 'map_contains_key(map(1, 'a', 2, 'b'), '1')' due to data type mismatch: Input to function map_contains_key should have been map followed by a value with same key type, but it's [map<int,string>, string].; line 1 pos 7

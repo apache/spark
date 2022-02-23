@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
@@ -352,34 +352,41 @@ trait Unevaluable extends Expression {
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
- *
- * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
- * case class constructor, and define a normal constructor that accepts only the original
- * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
- * works correctly, the implementation should also override flatArguments method and sql method.
  */
-trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
-  override def nullable: Boolean = child.nullable
-  override def dataType: DataType = child.dataType
+trait RuntimeReplaceable extends Expression {
+  def replacement: Expression
+
+  override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+  override def nullable: Boolean = replacement.nullable
+  override def dataType: DataType = replacement.dataType
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
-  override lazy val preCanonicalized: Expression = child.preCanonicalized
+  override lazy val preCanonicalized: Expression = replacement.preCanonicalized
 
-  /**
-   * Only used to generate SQL representation of this expression.
-   *
-   * Implementations should override this with original parameters
-   */
-  def exprsReplaced: Seq[Expression]
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+}
 
-  override def sql: String = mkString(exprsReplaced.map(_.sql))
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
-
-  def mkString(childrenString: Seq[String]): String = {
-    prettyName + childrenString.mkString("(", ", ", ")")
+/**
+ * An add-on of [[RuntimeReplaceable]]. It makes `replacement` the child of the expression, to
+ * inherit the analysis rules for it, such as type coercion. The implementation should put
+ * `replacement` in the case class constructor, and define a normal constructor that accepts only
+ * the original parameters. For an example, see [[TryAdd]]. To make sure the explain plan and
+ * expression SQL works correctly, the implementation should also implement the `parameters` method.
+ */
+trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplaceable =>
+  override def child: Expression = replacement
+  def parameters: Seq[Expression]
+  override def flatArguments: Iterator[Any] = parameters.iterator
+  // This method is used to generate a SQL string with transformed inputs. This is necessary as
+  // the actual inputs are not the children of this expression.
+  def makeSQLString(childrenSQL: Seq[String]): String = {
+    prettyName + childrenSQL.mkString("(", ", ", ")")
   }
+  final override def sql: String = makeSQLString(parameters.map(_.sql))
 }
 
 /**
@@ -388,29 +395,13 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
  * with other databases. For example, we use this to support every, any/some aggregates by rewriting
  * them with Min and Max respectively.
  */
-trait UnevaluableAggregate extends DeclarativeAggregate {
-
-  override def nullable: Boolean = true
-
-  override lazy val aggBufferAttributes =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "aggBufferAttributes", this)
-
-  override lazy val initialValues: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "initialValues", this)
-
-  override lazy val updateExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "updateExpressions", this)
-
-  override lazy val mergeExpressions: Seq[Expression] =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "mergeExpressions", this)
-
-  override lazy val evaluateExpression: Expression =
-    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
-      "evaluateExpression", this)
+abstract class RuntimeReplaceableAggregate extends AggregateFunction with RuntimeReplaceable {
+  def aggBufferSchema: StructType = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
+  def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
+  def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+    "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
 }
 
 /**
