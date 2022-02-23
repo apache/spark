@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryArithmetic, BinaryOperator, CaseWhen, EqualTo, Expression, IsNotNull, IsNull, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -25,6 +25,9 @@ import org.apache.spark.sql.internal.SQLConf
  * The builder to generate V2 expressions from catalyst expressions.
  */
 class V2ExpressionBuilder(e: Expression) {
+
+  val BINARY_ARITHMETIC_WITH_ANSI: Set[BinaryOperator] =
+    Set(Add, Subtract, Multiply, Divide, IntegralDivide, Remainder, Pmod)
 
   def build(): Option[V2Expression] = generateExpression(e)
 
@@ -36,7 +39,7 @@ class V2ExpressionBuilder(e: Expression) {
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
     case b: BinaryOperator =>
-      if (!b.isInstanceOf[BinaryArithmetic] || SQLConf.get.ansiEnabled) {
+      if (!BINARY_ARITHMETIC_WITH_ANSI.contains(b) || SQLConf.get.ansiEnabled) {
         val left = generateExpression(b.left)
         val right = generateExpression(b.right)
         if (left.isDefined && right.isDefined) {
