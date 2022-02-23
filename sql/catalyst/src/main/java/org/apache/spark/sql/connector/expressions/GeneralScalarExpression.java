@@ -64,23 +64,23 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td><</td>
- *   <td><pre>expr1 < expr2</pre></td>
+ *   <td>&lt;</td>
+ *   <td><pre>expr1 &lt; expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td><=</td>
- *   <td><pre>expr1 <= expr2</pre></td>
+ *   <td>&lt;=</td>
+ *   <td><pre>expr1 &lt;= expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>></td>
- *   <td><pre>expr1 > expr2</pre></td>
+ *   <td>&gt;</td>
+ *   <td><pre>expr1 &gt; expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>>=</td>
- *   <td><pre>expr1 >= expr2</pre></td>
+ *   <td>&gt;=</td>
+ *   <td><pre>expr1 &gt;= expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
@@ -109,8 +109,8 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>&&</td>
- *   <td><pre>expr1 && expr2</pre></td>
+ *   <td>&amp;&amp;</td>
+ *   <td><pre>expr1 &amp;&amp; expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
@@ -129,8 +129,8 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>&</td>
- *   <td><pre>expr1 & expr2</pre></td>
+ *   <td>&amp;</td>
+ *   <td><pre>expr1 &amp; expr2</pre></td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
