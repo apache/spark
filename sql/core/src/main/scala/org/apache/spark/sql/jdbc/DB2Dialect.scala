@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.types._
 
@@ -28,6 +30,7 @@ private object DB2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
+  // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
@@ -35,6 +38,24 @@ private object DB2Dialect extends JdbcDialect {
           assert(f.inputs().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"VARIANCE($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VARIANCE_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVARIANCE(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVARIANCE_SAMP(${f.inputs().head}, ${f.inputs().last})")
         case _ => None
       }
     )
@@ -100,5 +121,29 @@ private object DB2Dialect extends JdbcDialect {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
+          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
+  }
+
+  override def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
+    }
   }
 }

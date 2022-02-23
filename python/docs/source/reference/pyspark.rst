@@ -53,6 +53,7 @@ Spark Context APIs
 
     SparkContext.PACKAGE_EXTENSIONS
     SparkContext.accumulator
+    SparkContext.addArchive
     SparkContext.addFile
     SparkContext.addPyFile
     SparkContext.applicationId

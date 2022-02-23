@@ -299,7 +299,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
     }
-    kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
+    kubernetesConf.schedulerName
       .foreach(executorPod.getSpec.setSchedulerName)
 
     SparkPod(executorPod, containerWithLifecycle)

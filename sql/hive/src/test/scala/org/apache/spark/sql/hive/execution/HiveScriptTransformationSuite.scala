@@ -621,4 +621,21 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       assert(e.contains("java.lang.ArithmeticException: long overflow"))
     }
   }
+
+  test("SPARK-38075: ORDER BY with LIMIT should not add fake rows") {
+    withTempView("v") {
+      val df = Seq((1), (2), (3)).toDF("a")
+      df.createTempView("v")
+      checkAnswer(sql(
+        """
+          |SELECT TRANSFORM(a)
+          |  USING 'cat' AS (a)
+          |FROM v
+          |ORDER BY a
+          |LIMIT 10
+          |""".stripMargin),
+        identity,
+        Row("1") :: Row("2") :: Row("3") :: Nil)
+    }
+  }
 }

@@ -305,7 +305,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "MISSING_COLUMN",
-    Array("havingCondition", "max('b)"))
+    Array("havingCondition", "max(b)"))
 
   errorTest(
     "unresolved star expansion in max",

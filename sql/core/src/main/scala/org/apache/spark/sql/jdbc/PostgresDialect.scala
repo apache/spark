@@ -36,6 +36,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
 
+  // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {

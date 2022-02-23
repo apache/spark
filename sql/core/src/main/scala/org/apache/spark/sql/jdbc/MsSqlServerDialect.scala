@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -37,6 +40,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
@@ -146,5 +152,16 @@ private object MsSqlServerDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case _ => super.classifyException(message, e)
+    }
   }
 }

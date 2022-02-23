@@ -132,7 +132,7 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("A one-item executor list") {
-    ExecutorRollPolicy.values.foreach { value =>
+    ExecutorRollPolicy.values.filter(_ != ExecutorRollPolicy.OUTLIER_NO_FALLBACK).foreach { value =>
       assertEquals(
         Some(execWithSmallestID.id),
         plugin.invokePrivate(_choose(Seq(execWithSmallestID), value)))
@@ -215,5 +215,48 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
     assertEquals(
       plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)),
       plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Return None if there are no outliers") {
+    assertEquals(None, plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect an average task duration outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1, 300,
+      20, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect a total task duration outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1000, 1000,
+      0, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+  }
+
+  test("Policy: OUTLIER_NO_FALLBACK - Detect a total GC time outlier") {
+    val outlier = new ExecutorSummary("9999", "host:port", true, 1,
+      0, 0, 1, 0, 0,
+      3, 0, 1, 100,
+      1000, 0, 0,
+      0, false, 0, new Date(1639300001000L),
+      Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
+      false, Set())
+    assertEquals(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)),
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 }
