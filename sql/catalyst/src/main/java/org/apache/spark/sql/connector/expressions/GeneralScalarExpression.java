@@ -36,24 +36,24 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <th>Since version</th>
  *  </tr>
  *  <tr>
- *   <td> IS_NULL </td>
- *   <td>expr IS NULL</td>
+ *   <td><pre>IS_NULL</pre></td>
+ *   <td><pre>expr IS NULL</pre></td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td> IS_NOT_NULL </td>
- *   <td>expr IS NOT NULL</td>
+ *   <td><pre>IS_NOT_NULL</pre></td>
+ *   <td><pre>expr IS NOT NULL</pre></td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  <tr>
- *   <td> = </td>
- *   <td>expr1 = expr2</td>
+ *   <td><pre>=</pre></td>
+ *   <td><pre>expr1 = expr2</pre></td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td> != </td>
+ *   <td><pre>!=</pre></td>
  *   <td><pre>expr1 != expr2</pre></td>
  *   <td>No</td>
  *   <td>3.3.0</td>
