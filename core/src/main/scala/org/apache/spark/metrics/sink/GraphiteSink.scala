@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import com.codahale.metrics.graphite.{Graphite, GraphiteReporter, GraphiteUDP}
 
+import org.apache.spark.SparkException
 import org.apache.spark.metrics.MetricsSystem
 
 private[spark] class GraphiteSink(
@@ -42,11 +43,13 @@ private[spark] class GraphiteSink(
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
   if (!propertyToOption(GRAPHITE_KEY_HOST).isDefined) {
-    throw new Exception("Graphite sink requires 'host' property.")
+    throw new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Array("host"), cause = null)
   }
 
   if (!propertyToOption(GRAPHITE_KEY_PORT).isDefined) {
-    throw new Exception("Graphite sink requires 'port' property.")
+    throw new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      messageParameters = Array("port"), cause = null)
   }
 
   val host = propertyToOption(GRAPHITE_KEY_HOST).get
@@ -69,7 +72,8 @@ private[spark] class GraphiteSink(
   val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase(Locale.ROOT)) match {
     case Some("udp") => new GraphiteUDP(host, port)
     case Some("tcp") | None => new Graphite(host, port)
-    case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
+    case Some(p) => throw new SparkException(errorClass = "GRAPHITE_SINK_INVALID_PROTOCOL",
+      messageParameters = Array(p), cause = null)
   }
 
   val filter = propertyToOption(GRAPHITE_KEY_REGEX) match {
