@@ -573,7 +573,7 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
-        return cast(np.ndarray, self._to_pandas().values)
+        return self.to_pandas().values
 
     @property
     def values(self) -> np.ndarray:
