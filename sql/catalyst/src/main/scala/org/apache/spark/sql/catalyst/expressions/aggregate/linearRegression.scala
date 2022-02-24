@@ -17,22 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, Literal, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{REGR_AGG, TreePattern}
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DecimalType, DoubleType, LongType, NumericType}
-
-trait RegressionAggregate
-  extends UnevaluableAggregate with ImplicitCastInputTypes with BinaryLike[Expression]{
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(REGR_AGG)
-}
+import org.apache.spark.sql.types.{AbstractDataType, NumericType}
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Returns the number of non-null number pairs in a group.
+    _FUNC_(expr) - Returns the number of non-null number pairs in a group.
   """,
   examples = """
     Examples:
@@ -45,28 +36,14 @@ trait RegressionAggregate
   """,
   group = "agg_funcs",
   since = "3.3.0")
-case class RegrCount(left: Expression, right: Expression) extends RegressionAggregate {
-
-  override def prettyName: String = "regr_count"
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = LongType
-
+case class RegrCount(left: Expression, right: Expression)
+  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override lazy val replacement: Expression = Count(Seq(left, right))
+  override def nodeName: String = "regr_count"
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrCount =
     this.copy(left = newLeft, right = newRight)
-}
-
-trait RegrAvg extends RegressionAggregate {
-
-  def avgInputExpression: Expression
-
-  override def dataType: DataType = avgInputExpression.dataType match {
-    case DecimalType.Fixed(p, s) =>
-      DecimalType.bounded(p + 4, s + 4)
-    case _ => DoubleType
-  }
 }
 
 @ExpressionDescription(
@@ -85,15 +62,15 @@ trait RegrAvg extends RegressionAggregate {
   """,
   group = "agg_funcs",
   since = "3.3.0")
-case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
-
-  override def prettyName: String = "regr_avgx"
-
-  override def avgInputExpression: Expression = right
-
+case class RegrAvgX(left: Expression, right: Expression)
+  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override lazy val replacement: Expression =
+    Average(If(And(IsNotNull(left), IsNotNull(right)), right, Literal.create(null, right.dataType)))
+  override def nodeName: String = "regr_avgx"
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrAvgX =
-    copy(left = newLeft, right = newRight)
+    this.copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -112,13 +89,13 @@ case class RegrAvgX(left: Expression, right: Expression) extends RegrAvg {
   """,
   group = "agg_funcs",
   since = "3.3.0")
-case class RegrAvgY(left: Expression, right: Expression) extends RegrAvg {
-
-  override def prettyName: String = "regr_avgy"
-
-  override def avgInputExpression: Expression = left
-
+case class RegrAvgY(left: Expression, right: Expression)
+  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override lazy val replacement: Expression =
+    Average(If(And(IsNotNull(left), IsNotNull(right)), left, Literal.create(null, left.dataType)))
+  override def nodeName: String = "regr_avgy"
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrAvgY =
-    copy(left = newLeft, right = newRight)
+    this.copy(left = newLeft, right = newRight)
 }
