@@ -1,0 +1,28 @@
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.11.0-1028-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+ToByteArray with fileSize 1024 bytes :    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+toByteArray: byte by byte copy                        1              1           0          0.0      781310.0       1.0X
+toByteArray: use Guava api                            0              0           0          0.2        6100.0     128.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.11.0-1028-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+ToByteArray with fileSize 1048576 bytes :  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+toByteArray: byte by byte copy                      812            817           4          0.0   812133973.0       1.0X
+toByteArray: use Guava api                            1              1           0          0.0     1002514.0     810.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.11.0-1028-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+ToByteArray with fileSize 10485760 bytes :  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+toByteArray: byte by byte copy                      8203           8206           4          0.0  8203332962.0       1.0X
+toByteArray: use Guava api                            18             20           2          0.0    18325138.0     447.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.11.0-1028-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+ToByteArray with fileSize 104857600 bytes :  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+toByteArray: byte by byte copy                      82543          82671         181          0.0 82542615028.0       1.0X
+toByteArray: use Guava api                            182            195          24          0.0   182350535.0     452.7X
+
