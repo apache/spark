@@ -3083,11 +3083,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DATETIME_JAVA8API_IN_COLLECT_ENABLED =
-    buildConf("spark.sql.datetime.java8APIInCollect.enabled")
+  val DATETIME_DECODE_AS_JAVA8_ENABLED =
+    buildConf("spark.sql.datetime.decodeAsJava8.enabled")
       .doc("If the configuration property is set to true, java.time.Instant and " +
         "java.time.LocalDate classes of Java 8 API are used as external types for " +
-        "Catalyst's TimestampType and DateType in the collect action. If it is set to false, " +
+        "Catalyst's TimestampType and DateType in rows decoding. If it is set to false, " +
         "java.sql.Timestamp and java.sql.Date are used for the same purpose.")
       .version("3.3.0")
       .booleanConf
@@ -3914,6 +3914,8 @@ class SQLConf extends Serializable with Logging {
     getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
+
+  def datetimeDecodeAsJava8Enabled: Boolean = getConf(DATETIME_DECODE_AS_JAVA8_ENABLED)
 
   def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 

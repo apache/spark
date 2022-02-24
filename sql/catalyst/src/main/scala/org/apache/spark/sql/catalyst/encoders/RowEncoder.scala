@@ -284,7 +284,7 @@ object RowEncoder {
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (SQLConf.get.datetimeDecodeAsJava8Enabled) {
         createDeserializerForInstant(input)
       } else {
         createDeserializerForSqlTimestamp(input)
@@ -294,7 +294,7 @@ object RowEncoder {
       createDeserializerForLocalDateTime(input)
 
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (SQLConf.get.datetimeDecodeAsJava8Enabled) {
         createDeserializerForLocalDate(input)
       } else {
         createDeserializerForSqlDate(input)

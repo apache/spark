@@ -46,7 +46,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
-        .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+        .set(SQLConf.DATETIME_DECODE_AS_JAVA8_ENABLED, true)
 
 
       val sparkSession = SparkSession.builder()
