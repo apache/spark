@@ -208,7 +208,6 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.
       clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
-      clonedSpark.sessionState.conf.setConf(SQLConf.ANSI_ENABLED, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       val ignoreIfAnsiOn = clonedSpark.sessionState.conf.ansiEnabled &&
