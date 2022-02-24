@@ -38,7 +38,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   protected def viewTypeString: String
-  def formattedViewName(viewName: String): String
+  protected def formattedViewName(viewName: String): String
   protected def tableIdentifier(viewName: String): TableIdentifier
 
   def createView(
@@ -457,7 +457,7 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
 
 class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
-  override def formattedViewName(viewName: String): String = viewName
+  override protected def formattedViewName(viewName: String): String = viewName
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName)
   }
@@ -469,7 +469,7 @@ class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
 class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
-  override def formattedViewName(viewName: String): String = {
+  override protected def formattedViewName(viewName: String): String = {
     s"$db.$viewName"
   }
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
@@ -497,7 +497,7 @@ class OneTableCatalog extends InMemoryCatalog {
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
-  override def formattedViewName(viewName: String): String = s"$db.$viewName"
+  override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db))
   }
