@@ -3083,6 +3083,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val DATETIME_JAVA8API_IN_COLLECT_ENABLED =
+    buildConf("spark.sql.datetime.java8APIInCollect.enabled")
+      .doc("If the configuration property is set to true, java.time.Instant and " +
+        "java.time.LocalDate classes of Java 8 API are used as external types for " +
+        "Catalyst's TimestampType and DateType in the collect action. If it is set to false, " +
+        "java.sql.Timestamp and java.sql.Date are used for the same purpose.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(DATETIME_JAVA8API_ENABLED.defaultValue.get)
+
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
     .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
       "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
