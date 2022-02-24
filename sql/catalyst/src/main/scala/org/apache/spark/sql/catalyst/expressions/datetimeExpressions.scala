@@ -3144,7 +3144,7 @@ case class TimestampAdd(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unit, startTimestamp, endTimestamp) - Gets the difference between the timestamps `endTimestamp` and `startTimestamp` in the specified units.",
+  usage = "_FUNC_(unit, startTimestamp, endTimestamp) - Gets the difference between the timestamps `endTimestamp` and `startTimestamp` in the specified units by truncating the fraction part.",
   arguments = """
     Arguments:
       * unit - this indicates the units of the difference between the given timestamps.
