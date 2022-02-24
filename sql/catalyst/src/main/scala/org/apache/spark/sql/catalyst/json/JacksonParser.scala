@@ -204,9 +204,12 @@ class JacksonParser(
         case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
-            case "NaN" => Float.NaN
-            case "Infinity" => Float.PositiveInfinity
-            case "-Infinity" => Float.NegativeInfinity
+            case "NaN" if options.allowNonNumericNumbers =>
+              Float.NaN
+            case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
+              Float.PositiveInfinity
+            case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
+              Float.NegativeInfinity
             case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
               parser, VALUE_STRING, FloatType)
           }
@@ -220,9 +223,12 @@ class JacksonParser(
         case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
-            case "NaN" => Double.NaN
-            case "Infinity" => Double.PositiveInfinity
-            case "-Infinity" => Double.NegativeInfinity
+            case "NaN" if options.allowNonNumericNumbers =>
+              Double.NaN
+            case "+INF" | "+Infinity" | "Infinity" if options.allowNonNumericNumbers =>
+              Double.PositiveInfinity
+            case "-INF" | "-Infinity" if options.allowNonNumericNumbers =>
+              Double.NegativeInfinity
             case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
               parser, VALUE_STRING, DoubleType)
           }

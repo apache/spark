@@ -111,9 +111,11 @@ object FunctionRegistryBase {
       name: String,
       since: Option[String]): (ExpressionInfo, Seq[Expression] => T) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
-    // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
-    // constructor and contains non-parameter `child` and should not be used as function builder.
-    val constructors = if (classOf[RuntimeReplaceable].isAssignableFrom(runtimeClass)) {
+    // For `InheritAnalysisRules`, skip the constructor with most arguments, which is the main
+    // constructor and contains non-parameter `replacement` and should not be used as
+    // function builder.
+    val isRuntime = classOf[InheritAnalysisRules].isAssignableFrom(runtimeClass)
+    val constructors = if (isRuntime) {
       val all = runtimeClass.getConstructors
       val maxNumArgs = all.map(_.getParameterCount).max
       all.filterNot(_.getParameterCount == maxNumArgs)
@@ -324,7 +326,36 @@ object FunctionRegistry {
 
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
-  // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
+  // ==============================================================================================
+  //                          The guideline for adding SQL functions
+  // ==============================================================================================
+  // To add a SQL function, we usually need to create a new `Expression` for the function, and
+  // implement the function logic in both the interpretation code path and codegen code path of the
+  // `Expression`. We also need to define the type coercion behavior for the function inputs, by
+  // extending `ImplicitCastInputTypes` or updating type coercion rules directly.
+  //
+  // It's much simpler if the SQL function can be implemented with existing expression(s). There are
+  // a few cases:
+  //   - The function is simply an alias of another function. We can just register the same
+  //     expression with a different function name, e.g. `expression[Rand]("random", true)`.
+  //   - The function is mostly the same with another function, but has a different parameter list.
+  //     We can use `RuntimeReplaceable` to create a new expression, which can customize the
+  //     parameter list and analysis behavior (type coercion). The `RuntimeReplaceable` expression
+  //     will be replaced by the actual expression at the end of analysis. See `Left` as an example.
+  //   - The function can be implemented by combining some existing expressions. We can use
+  //     `RuntimeReplaceable` to define the combination. See `ParseToDate` as an example.
+  //     We can also inherit the analysis behavior from the replacement expression, by
+  //     mixing `InheritAnalysisRules`. See `TryAdd` as an example.
+  //   - Similarly, we can use `RuntimeReplaceableAggregate` to implement new aggregate functions.
+  //
+  // Sometimes, multiple functions share the same/similar expression replacement logic and it's
+  // tedious to create many similar `RuntimeReplaceable` expressions. We can use `ExpressionBuilder`
+  // to share the replacement logic. See `ParseToTimestampLTZExpressionBuilder` as an example.
+  //
+  // With these tools, we can even implement a new SQL function with a Java (static) method, and
+  // then create a `RuntimeReplaceable` expression to call the Java method with `Invoke` or
+  // `StaticInvoke` expression. By doing so we don't need to implement codegen for new functions
+  // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
@@ -336,7 +367,7 @@ object FunctionRegistry {
     expression[Inline]("inline"),
     expressionGeneratorOuter[Inline]("inline_outer"),
     expression[IsNaN]("isnan"),
-    expression[IfNull]("ifnull"),
+    expression[Nvl]("ifnull", setAlias = true),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
@@ -565,8 +596,9 @@ object FunctionRegistry {
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
-    expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
-    expression[ParseToTimestampLTZ]("to_timestamp_ltz"),
+    // We keep the 2 expression builders below to have different function docs.
+    expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
     expression[TruncDate]("trunc"),
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -578,13 +610,15 @@ object FunctionRegistry {
     expression[SessionWindow]("session_window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
-    expression[MakeTimestampNTZ]("make_timestamp_ntz"),
-    expression[MakeTimestampLTZ]("make_timestamp_ltz"),
+    // We keep the 2 expression builders below to have different function docs.
+    expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
-    expression[DatePart]("date_part"),
     expression[Extract]("extract"),
+    // We keep the `DatePartExpressionBuilder` to have different function docs.
+    expressionBuilder("date_part", DatePartExpressionBuilder, setAlias = true),
     expression[DateFromUnixDate]("date_from_unix_date"),
     expression[UnixDate]("unix_date"),
     expression[SecondsToTimestamp]("timestamp_seconds"),
@@ -806,12 +840,13 @@ object FunctionRegistry {
   }
 
   private def expressionBuilder[T <: ExpressionBuilder : ClassTag](
-      name: String, builder: T, setAlias: Boolean = false)
-  : (String, (ExpressionInfo, FunctionBuilder)) = {
+      name: String,
+      builder: T,
+      setAlias: Boolean = false): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, None)
     val funcBuilder = (expressions: Seq[Expression]) => {
       assert(expressions.forall(_.resolved), "function arguments must be resolved.")
-      val expr = builder.build(expressions)
+      val expr = builder.build(name, expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
@@ -915,5 +950,5 @@ object TableFunctionRegistry {
 }
 
 trait ExpressionBuilder {
-  def build(expressions: Seq[Expression]): Expression
+  def build(funcName: String, expressions: Seq[Expression]): Expression
 }

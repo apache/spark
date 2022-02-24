@@ -217,8 +217,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // AND                                               conjunction
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
-    checkKeywordsExistsInExplain(sql("select 'a' || 1 + 2"),
-      "Project [null AS (concat(a, 1) + 2)#x]")
+    checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
+      "Project [13", " AS (concat(1, 1) + 2)#x")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
       "Project [-1b AS concat((1 - 2), b)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
@@ -232,12 +232,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain for these functions; use range to avoid constant folding") {
-    val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
+    val df = sql("select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
-        "x AS nvl2(id, x, y)#x]")
+      "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
+        "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
