@@ -29,6 +29,11 @@ import java.nio.file.Files;
  * as an in-memory LongBuffer.
  */
 public class ShuffleIndexInformation {
+
+  // The estimate of `ShuffleIndexInformation` memory footprint which is relevant in case of small
+  // index files (i.e. storing only 2 offsets = 16 bytes).
+  static final int INSTANCE_MEMORY_FOOTPRINT = 176;
+
   /** offsets as long buffer */
   private final LongBuffer offsets;
 
@@ -47,9 +52,7 @@ public class ShuffleIndexInformation {
    */
   public int getRetainedMemorySize() {
     // SPARK-33206: here the offsets' capacity is multiplied by 8 as offsets stores long values.
-    // And the extra 176 bytes is the estimate of the `ShuffleIndexInformation` memory footprint
-    // which is relevant in case of small index files (i.e. storing only 2 offsets = 16 bytes).
-    return (offsets.capacity() << 3) + 176;
+    return (offsets.capacity() << 3) + INSTANCE_MEMORY_FOOTPRINT;
   }
 
   /**

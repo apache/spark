@@ -65,6 +65,7 @@ public class ShuffleIndexInformationSuite {
     assertEquals(sortBlock0.length(), s.getIndex(1).getOffset());
     assertEquals(sortBlock1.length(), s.getIndex(1).getLength());
 
-    assertEquals((3 * 8) + 176, s.getRetainedMemorySize());
+    assertEquals((3 * 8) + ShuffleIndexInformation.INSTANCE_MEMORY_FOOTPRINT,
+      s.getRetainedMemorySize());
   }
 }

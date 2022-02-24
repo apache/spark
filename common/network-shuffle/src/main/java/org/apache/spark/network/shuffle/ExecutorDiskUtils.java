@@ -38,7 +38,7 @@ public class ExecutorDiskUtils {
     // Unfortunately, we cannot just call the normalization code that java.io.File
     // uses, since it is in the package-private class java.io.FileSystem.
     // So we are creating a File just to get the normalized path back to intern it.
-    // Finally a new File is built and returned with this interned normalized path.
+    // We return this interned normalized path.
     final String normalizedInternedPath = new File(notNormalizedPath).getPath().intern();
     return normalizedInternedPath;
   }
