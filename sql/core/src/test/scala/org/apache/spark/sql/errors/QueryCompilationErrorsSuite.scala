@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.functions.{grouping, grouping_id}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
+ import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
+
 
 case class StringLongClass(a: String, b: Long)
 
@@ -100,69 +102,93 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
     assert(e.message ===
       "The argument_index of string format cannot contain position 0$.")
+  }
 
   test("CANNOT_USE_MIXTURE") {
+    import IntegratedUDFTestUtils._
+
     val df = Seq(
       (536361, "85123A", 2, 17850),
       (536362, "85123B", 4, 17850),
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
-      val errMsg = intercept[AnalysisException] {
-        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
-          sort(grouping)
-      }
-      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-      assert(errMsg.message ===
-        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    val e = intercept[AnalysisException] {
+        val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+        df.groupBy("CustomerId")
+          .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
     }
+
+    assert(e.errorClass === Some("CANNOT_USE_MIXTURE"))
+    assert(e.message ===
+      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
   }
+
   test("UNSUPPORTED_JOIN_CONDITION") {
-    val df = Seq(
+    import IntegratedUDFTestUtils._
+
+    val df1 = Seq(
       (536361, "85123A", 2, 17850),
       (536362, "85123B", 4, 17850),
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
-      val errMsg = intercept[AnalysisException] {
-        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
-          sort(grouping)
-      }
-      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-      assert(errMsg.message ===
-        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    val df2 = Seq(
+      ("Bob", 17850),
+      ("Alice", 17850),
+      ("Tom", 17851)
+    ).toDF("CustomerName", "CustomerID")
+
+    val e = intercept[AnalysisException] {
+        val pythonTestUDF = TestPythonUDF(name = "python_udf")
+        df1.join(
+          df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
+
+    assert(e.errorClass === Some("UNSUPPORTED_JOIN_CONDITION"))
+    assert(e.message ===
+      "Using PythonUDF in join condition of join type LeftOuter is not supported")
   }
+
   test("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION") {
+    import IntegratedUDFTestUtils._
+
     val df = Seq(
       (536361, "85123A", 2, 17850),
       (536362, "85123B", 4, 17850),
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
-      val errMsg = intercept[AnalysisException] {
-        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
-          sort(grouping)
-      }
-      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-      assert(errMsg.message ===
-        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+
+    val e = intercept[AnalysisException] {
+        val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+        df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
     }
+
+    assert(e.errorClass === Some("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION"))
+    assert(e.message ===
+      "Pivot does not support Pandas UDF aggregate expressions.")
   }
-  test("UNSUPPORTED_STREAMING_AGGREGATION") {
-    val df = Seq(
-      (536361, "85123A", 2, 17850),
-      (536362, "85123B", 4, 17850),
-      (536363, "86123A", 6, 17851)
-    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
-    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
-      val errMsg = intercept[AnalysisException] {
-        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
-          sort(grouping)
-      }
-      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
-      assert(errMsg.message ===
-        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    }
-  }
+
+   test("UNSUPPORTED_STREAMING_AGGREGATION") {
+     import IntegratedUDFTestUtils._
+
+     val e = intercept[StreamingQueryException] {
+       val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+       val lines = spark.readStream
+         .format("socket")
+         .option("host", "localhost")
+         .option("port", 9999)
+         .load()
+
+       val words = lines.as[String].flatMap(_.split(" "))
+       val wordCounts = words.groupBy("value").agg(pandasTestUDF(words("value")))
+
+       val query = wordCounts.writeStream
+         .outputMode("complete")
+         .format("console")
+         .start()
+
+       query.awaitTermination()
+     }
+     
+     assert(e.message contains "Streaming aggregation doesn't support group aggregate pandas UDF")
+   }
 }
