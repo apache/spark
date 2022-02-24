@@ -46,10 +46,10 @@ case class RegrCount(left: Expression, right: Expression)
     this.copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in
-                            a group.
+     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in a group.
   """,
   examples = """
     Examples:
@@ -62,6 +62,7 @@ case class RegrCount(left: Expression, right: Expression)
   """,
   group = "agg_funcs",
   since = "3.3.0")
+// scalastyle:on line.size.limit
 case class RegrAvgX(left: Expression, right: Expression)
   extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
   override lazy val replacement: Expression =
@@ -73,10 +74,10 @@ case class RegrAvgX(left: Expression, right: Expression)
     this.copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in
-                            a group.
+     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in a group.
   """,
   examples = """
     Examples:
@@ -89,6 +90,7 @@ case class RegrAvgX(left: Expression, right: Expression)
   """,
   group = "agg_funcs",
   since = "3.3.0")
+// scalastyle:on line.size.limit
 case class RegrAvgY(left: Expression, right: Expression)
   extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
   override lazy val replacement: Expression =
