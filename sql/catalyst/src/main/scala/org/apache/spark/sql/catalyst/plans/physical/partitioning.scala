@@ -73,13 +73,13 @@ case object AllTuples extends Distribution {
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located in the same partition.
  *
- * @param requiredAllClusterKeys When true, `Partitioning` which satisfies this distribution,
- *                               must match all `clustering` expressions in the same ordering.
+ * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
+ *                              must match all `clustering` expressions in the same ordering.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
     requiredNumPartitions: Option[Int] = None,
-    requiredAllClusterKeys: Boolean = SQLConf.get.getConf(
+    requireAllClusterKeys: Boolean = SQLConf.get.getConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION)) extends Distribution {
   require(
     clustering != Nil,
@@ -97,7 +97,7 @@ case class ClusteredDistribution(
   /**
    * Checks if `expressions` match all `clustering` expressions in the same ordering.
    *
-   * `Partitioning` should call this to check its expressions when `requiredAllClusterKeys`
+   * `Partitioning` should call this to check its expressions when `requireAllClusterKeys`
    * is set to true.
    */
   def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
@@ -279,8 +279,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case c @ ClusteredDistribution(requiredClustering, _, requiredAllClusterKeys) =>
-          if (requiredAllClusterKeys) {
+        case c @ ClusteredDistribution(requiredClustering, _, requireAllClusterKeys) =>
+          if (requireAllClusterKeys) {
             // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
             // `ClusteredDistribution`.
             c.areAllClusterKeysMatched(expressions)
@@ -346,9 +346,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case c @ ClusteredDistribution(requiredClustering, _, requiredAllClusterKeys) =>
+        case c @ ClusteredDistribution(requiredClustering, _, requireAllClusterKeys) =>
           val expressions = ordering.map(_.child)
-          if (requiredAllClusterKeys) {
+          if (requireAllClusterKeys) {
             // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
             // `ClusteredDistribution`.
             c.areAllClusterKeysMatched(expressions)
