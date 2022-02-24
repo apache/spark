@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.connector.util;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.LiteralValue;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The builder to generate SQL from V2 expressions.

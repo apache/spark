@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, BitwiseAnd, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralScalarExpression, LiteralValue, Expression => V2Expression}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
