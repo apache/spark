@@ -55,7 +55,6 @@ package object util extends Logging {
     } finally {
       inStream.close()
     }
-
   }
 
   def resourceToBytes(
