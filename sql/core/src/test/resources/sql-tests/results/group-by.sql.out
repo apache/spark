@@ -470,7 +470,7 @@ SELECT every(1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every(1)' due to data type mismatch: Input to function 'every' should have been boolean, but it's [int].; line 1 pos 7
+cannot resolve 'every(1)' due to data type mismatch: argument 1 requires boolean type, however, '1' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -479,7 +479,7 @@ SELECT some(1S)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(1S)' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
+cannot resolve 'some(1S)' due to data type mismatch: argument 1 requires boolean type, however, '1S' is of smallint type.; line 1 pos 7
 
 
 -- !query
@@ -488,7 +488,7 @@ SELECT any(1L)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'any(1L)' due to data type mismatch: Input to function 'any' should have been boolean, but it's [bigint].; line 1 pos 7
+cannot resolve 'any(1L)' due to data type mismatch: argument 1 requires boolean type, however, '1L' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -497,7 +497,7 @@ SELECT every("true")
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every('true')' due to data type mismatch: Input to function 'every' should have been boolean, but it's [string].; line 1 pos 7
+cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -506,7 +506,7 @@ SELECT bool_and(1.0)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_and(1.0BD)' due to data type mismatch: Input to function 'bool_and' should have been boolean, but it's [decimal(2,1)].; line 1 pos 7
+cannot resolve 'bool_and(1.0BD)' due to data type mismatch: argument 1 requires boolean type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
 
 
 -- !query
@@ -515,7 +515,7 @@ SELECT bool_or(1.0D)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'bool_or(1.0D)' due to data type mismatch: Input to function 'bool_or' should have been boolean, but it's [double].; line 1 pos 7
+cannot resolve 'bool_or(1.0D)' due to data type mismatch: argument 1 requires boolean type, however, '1.0D' is of double type.; line 1 pos 7
 
 
 -- !query

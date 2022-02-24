@@ -174,7 +174,13 @@ case class StreamingSymmetricHashJoinExec(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter ||
     joinType == LeftSemi,
     errorMessageForJoinType)
-  require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
+
+  // The assertion against join keys is same as hash join for batch query.
+  require(leftKeys.length == rightKeys.length &&
+    leftKeys.map(_.dataType)
+      .zip(rightKeys.map(_.dataType))
+      .forall(types => types._1.sameType(types._2)),
+    "Join keys from two sides should have same length and types")
 
   private val storeConf = new StateStoreConf(conf)
   private val hadoopConfBcast = sparkContext.broadcast(

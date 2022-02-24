@@ -26,6 +26,7 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkDateTimeException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -1112,25 +1113,15 @@ case class GetTimestamp(
   group = "datetime_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class ParseToTimestampNTZ(
-    left: Expression,
-    format: Option[Expression],
-    child: Expression) extends RuntimeReplaceable {
-
-  def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestamp(left, format, TimestampNTZType))
+object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+    }
   }
-
-  def this(left: Expression) = this(left, None, Cast(left, TimestampNTZType))
-
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
-
-  override def prettyName: String = "to_timestamp_ntz"
-  override def dataType: DataType = TimestampNTZType
-
-  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampNTZ =
-    copy(child = newChild)
 }
 
 /**
@@ -1159,25 +1150,15 @@ case class ParseToTimestampNTZ(
   group = "datetime_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class ParseToTimestampLTZ(
-    left: Expression,
-    format: Option[Expression],
-    child: Expression) extends RuntimeReplaceable {
-
-  def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestamp(left, format, TimestampType))
+object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+    }
   }
-
-  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
-
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
-
-  override def prettyName: String = "to_timestamp_ltz"
-  override def dataType: DataType = TimestampType
-
-  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampLTZ =
-    copy(child = newChild)
 }
 
 abstract class ToTimestamp
@@ -1606,12 +1587,19 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 case class DatetimeSub(
     start: Expression,
     interval: Expression,
-    child: Expression) extends RuntimeReplaceable {
-  override def exprsReplaced: Seq[Expression] = Seq(start, interval)
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+
+  override def parameters: Seq[Expression] = Seq(start, interval)
+
+  override def makeSQLString(childrenSQL: Seq[String]): String = {
+    childrenSQL.mkString(" - ")
+  }
+
   override def toString: String = s"$start - $interval"
-  override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
-  override protected def withNewChildInternal(newChild: Expression): DatetimeSub =
-    copy(child = newChild)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
 }
 
 /**
@@ -1991,25 +1979,48 @@ case class MonthsBetween(
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
-  extends RuntimeReplaceable {
+case class ParseToDate(
+    left: Expression,
+    format: Option[Expression],
+    timeZoneId: Option[String] = None)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = format.map { f =>
+    Cast(GetTimestamp(left, f, TimestampType, timeZoneId), DateType, timeZoneId)
+  }.getOrElse(Cast(left, DateType, timeZoneId)) // backwards compatibility
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), Cast(GetTimestamp(left, format, TimestampType), DateType))
+    this(left, Option(format))
   }
 
   def this(left: Expression) = {
-    // backwards compatibility
-    this(left, None, Cast(left, DateType))
+    this(left, None)
   }
-
-  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
 
   override def prettyName: String = "to_date"
 
-  override protected def withNewChildInternal(newChild: Expression): ParseToDate =
-    copy(child = newChild)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Some(timeZoneId))
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  override def children: Seq[Expression] = left +: format.toSeq
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // Note: ideally this function should only take string input, but we allow more types here to
+    // be backward compatible.
+    TypeCollection(StringType, DateType, TimestampType, TimestampNTZType) +:
+      format.map(_ => StringType).toSeq
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    if (format.isDefined) {
+      copy(left = newChildren.head, format = Some(newChildren.last))
+    } else {
+      copy(left = newChildren.head)
+    }
+  }
 }
 
 /**
@@ -2043,23 +2054,44 @@ case class ParseToTimestamp(
     left: Expression,
     format: Option[Expression],
     override val dataType: DataType,
-    child: Expression) extends RuntimeReplaceable {
+    timeZoneId: Option[String] = None)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = format.map { f =>
+    GetTimestamp(left, f, dataType, timeZoneId)
+  }.getOrElse(Cast(left, dataType, timeZoneId))
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), SQLConf.get.timestampType,
-      GetTimestamp(left, format, SQLConf.get.timestampType))
+    this(left, Option(format), SQLConf.get.timestampType)
   }
 
   def this(left: Expression) =
-    this(left, None, SQLConf.get.timestampType, Cast(left, SQLConf.get.timestampType))
+    this(left, None, SQLConf.get.timestampType)
 
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+  override def nodeName: String = "to_timestamp"
 
-  override def prettyName: String = "to_timestamp"
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
-  override protected def withNewChildInternal(newChild: Expression): ParseToTimestamp =
-    copy(child = newChild)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Some(timeZoneId))
+
+  override def children: Seq[Expression] = left +: format.toSeq
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // Note: ideally this function should only take string input, but we allow more types here to
+    // be backward compatible.
+    TypeCollection(StringType, DateType, TimestampType, TimestampNTZType) +:
+      format.map(_ => StringType).toSeq
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    if (format.isDefined) {
+      copy(left = newChildren.head, format = Some(newChildren.last))
+    } else {
+      copy(left = newChildren.head)
+    }
+  }
 }
 
 trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
@@ -2410,32 +2442,22 @@ case class MakeDate(
   group = "datetime_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class MakeTimestampNTZ(
-    year: Expression,
-    month: Expression,
-    day: Expression,
-    hour: Expression,
-    min: Expression,
-    sec: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled,
-    child: Expression) extends RuntimeReplaceable {
-  def this(
-      year: Expression,
-      month: Expression,
-      day: Expression,
-      hour: Expression,
-      min: Expression,
-      sec: Expression) = {
-    this(year, month, day, hour, min, sec, failOnError = SQLConf.get.ansiEnabled,
-      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
+object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 6) {
+      MakeTimestamp(
+        expressions(0),
+        expressions(1),
+        expressions(2),
+        expressions(3),
+        expressions(4),
+        expressions(5),
+        dataType = TimestampNTZType)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+    }
   }
-
-  override def prettyName: String = "make_timestamp_ntz"
-
-  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -2469,45 +2491,23 @@ case class MakeTimestampNTZ(
   group = "datetime_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class MakeTimestampLTZ(
-    year: Expression,
-    month: Expression,
-    day: Expression,
-    hour: Expression,
-    min: Expression,
-    sec: Expression,
-    timezone: Option[Expression],
-    failOnError: Boolean = SQLConf.get.ansiEnabled,
-    child: Expression) extends RuntimeReplaceable {
-  def this(
-     year: Expression,
-     month: Expression,
-     day: Expression,
-     hour: Expression,
-     min: Expression,
-     sec: Expression) = {
-    this(year, month, day, hour, min, sec, None, failOnError = SQLConf.get.ansiEnabled,
-      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampType))
+object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 6 || numArgs == 7) {
+      MakeTimestamp(
+        expressions(0),
+        expressions(1),
+        expressions(2),
+        expressions(3),
+        expressions(4),
+        expressions(5),
+        expressions.drop(6).lastOption,
+        dataType = TimestampType)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+    }
   }
-
-  def this(
-      year: Expression,
-      month: Expression,
-      day: Expression,
-      hour: Expression,
-      min: Expression,
-      sec: Expression,
-      timezone: Expression) = {
-    this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
-      MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
-  }
-
-  override def prettyName: String = "make_timestamp_ltz"
-
-  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -2699,7 +2699,7 @@ case class MakeTimestamp(
     })
   }
 
-  override def prettyName: String = "make_timestamp"
+  override def nodeName: String = "make_timestamp"
 
 //  override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
   override protected def withNewChildrenInternal(
@@ -2720,8 +2720,7 @@ object DatePart {
 
   def parseExtractField(
       extractField: String,
-      source: Expression,
-      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+      source: Expression): Expression = extractField.toUpperCase(Locale.ROOT) match {
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
     case "YEAROFWEEK" => YearOfWeek(source)
     case "QUARTER" | "QTR" => Quarter(source)
@@ -2734,29 +2733,8 @@ object DatePart {
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
-    case _ => errorHandleFunc
-  }
-
-  def toEquivalentExpr(field: Expression, source: Expression): Expression = {
-    if (!field.foldable) {
-      throw QueryCompilationErrors.unfoldableFieldUnsupportedError
-    }
-    val fieldEval = field.eval()
-    if (fieldEval == null) {
-      Literal(null, DoubleType)
-    } else {
-      val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-
-      def analysisException =
-        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
-
-      source.dataType match {
-        case _: AnsiIntervalType | CalendarIntervalType =>
-          ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
-        case _ =>
-          DatePart.parseExtractField(fieldStr, source, analysisException)
-      }
-    }
+    case _ =>
+      throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
   }
 }
 
@@ -2793,20 +2771,17 @@ object DatePart {
   group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class DatePart(field: Expression, source: Expression, child: Expression)
-  extends RuntimeReplaceable {
-
-  def this(field: Expression, source: Expression) = {
-    this(field, source, DatePart.toEquivalentExpr(field, source))
+object DatePartExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      val field = expressions(0)
+      val source = expressions(1)
+      Extract(field, source, Extract.createExpr(funcName, field, source))
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+    }
   }
-
-  override def flatArguments: Iterator[Any] = Iterator(field, source)
-  override def exprsReplaced: Seq[Expression] = Seq(field, source)
-
-  override def prettyName: String = "date_part"
-
-  override protected def withNewChildInternal(newChild: Expression): DatePart =
-    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -2862,23 +2837,45 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
-case class Extract(field: Expression, source: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class Extract(field: Expression, source: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(field: Expression, source: Expression) = {
-    this(field, source, DatePart.toEquivalentExpr(field, source))
+  def this(field: Expression, source: Expression) =
+    this(field, source, Extract.createExpr("extract", field, source))
+
+  override def parameters: Seq[Expression] = Seq(field, source)
+
+  override def makeSQLString(childrenSQL: Seq[String]): String = {
+    getTagValue(FunctionRegistry.FUNC_ALIAS) match {
+      case Some("date_part") => s"$prettyName(${childrenSQL.mkString(", ")})"
+      case _ => s"$prettyName(${childrenSQL.mkString(" FROM ")})"
+    }
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(field, source)
-
-  override def exprsReplaced: Seq[Expression] = Seq(field, source)
-
-  override def mkString(childrenString: Seq[String]): String = {
-    prettyName + childrenString.mkString("(", " FROM ", ")")
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
   }
+}
 
-  override protected def withNewChildInternal(newChild: Expression): Extract =
-    copy(child = newChild)
+object Extract {
+  def createExpr(funcName: String, field: Expression, source: Expression): Expression = {
+    // both string and null literals are allowed.
+    if ((field.dataType == StringType || field.dataType == NullType) && field.foldable) {
+      val fieldStr = field.eval().asInstanceOf[UTF8String]
+      if (fieldStr == null) {
+        Literal(null, DoubleType)
+      } else {
+        source.dataType match {
+          case _: AnsiIntervalType | CalendarIntervalType =>
+            ExtractIntervalPart.parseExtractField(fieldStr.toString, source)
+          case _ =>
+            DatePart.parseExtractField(fieldStr.toString, source)
+        }
+      }
+    } else {
+      throw QueryCompilationErrors.requireLiteralParameter(funcName, "field", "string")
+    }
+  }
 }
 
 /**
