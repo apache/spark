@@ -387,7 +387,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
     new NextIterator[InternalRow] {
       private var sizeOfNextRow = ins.readInt()
-      private def next(): InternalRow = {
+      private def _next(): InternalRow = {
         val bs = new Array[Byte](sizeOfNextRow)
         ins.readFully(bs)
         val row = new UnsafeRow(nFields)
@@ -398,7 +398,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       override def getNext(): InternalRow = {
         if (sizeOfNextRow >= 0) {
           try {
-            next()
+            _next()
           } catch {
             case t: Throwable if ins != null =>
               ins.close()
