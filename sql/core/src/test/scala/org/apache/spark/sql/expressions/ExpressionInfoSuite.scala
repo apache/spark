@@ -194,14 +194,6 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
 
-    // The examples of the following expressions have different results when ANSI mode is on.
-    val ignoreSetWhenAnsiEnabled = Set(
-      classOf[GreaterThan].getName,
-      classOf[MakeDate].getName,
-      classOf[MakeTimestamp].getName,
-      "org.apache.spark.sql.catalyst.expressions.MakeTimestampLTZExpressionBuilder$",
-      classOf[Size].getName
-    )
     val parFuncs = new ParVector(spark.sessionState.functionRegistry.listFunction().toVector)
     parFuncs.foreach { funcId =>
       // Examples can change settings. We clone the session to prevent tests clashing.
@@ -210,9 +202,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       clonedSpark.sessionState.conf.setConf(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
-      val ignoreIfAnsiOn = clonedSpark.sessionState.conf.ansiEnabled &&
-        ignoreSetWhenAnsiEnabled.contains(className)
-      if (!ignoreSet.contains(className) && !ignoreIfAnsiOn) {
+      if (!ignoreSet.contains(className)) {
         withClue(s"Function '${info.getName}', Expression class '$className'") {
           val example = info.getExamples
           checkExampleSyntax(example)
