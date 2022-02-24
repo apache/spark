@@ -46,6 +46,18 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <td><pre>expr IS NOT NULL</pre></td>
  *   <td>No</td>
  *   <td>3.3.0</td>
+ *  <tr>
+ *   <td>=</td>
+ *   <td><pre>expr1 = expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>!=</td>
+ *   <td><pre>expr1 != expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
  *  </tr>
  * </table>
  *
@@ -55,7 +67,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
   private Expression[] children;
-  private String sql;
 
   public GeneralScalarExpression(String name, Expression[] children) {
     this.name = name;
@@ -67,19 +78,12 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   @Override
   public String toString() {
-    if (sql == null) {
-      V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
-      try {
-        this.sql = builder.build(this);
-      } catch (Throwable e) {
-        // Attempt to get SQL failed.
-      }
-    }
-    if (sql == null) {
+    V2ExpressionSQLBuilder builder = new V2ExpressionSQLBuilder();
+    try {
+      return builder.build(this);
+    } catch (Throwable e) {
       return name + "(" +
         Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
-    } else {
-      return sql;
     }
   }
 }
