@@ -3083,15 +3083,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val DATETIME_DECODE_AS_JAVA8_ENABLED =
-    buildConf("spark.sql.datetime.decodeAsJava8.enabled")
-      .doc("If the configuration property is set to true, java.time.Instant and " +
-        "java.time.LocalDate classes of Java 8 API are used as external types for " +
-        "Catalyst's TimestampType and DateType in rows decoding. If it is set to false, " +
-        "java.sql.Timestamp and java.sql.Date are used for the same purpose.")
+  val LEGACY_DATETIME_DECODE_ENABLED =
+    buildConf("spark.sql.legacy.datetimeDecode.enabled")
+      .doc("If the configuration property is set to true, java.sql.Timestamp and " +
+        "java.sql.Date are used as external types for " +
+        "Catalyst's TimestampType and DateType in rows decoding when the property " +
+        s"${DATETIME_JAVA8API_ENABLED.key} is true (otherwise it is ignored).")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(DATETIME_JAVA8API_ENABLED.defaultValue.get)
+      .createWithDefault(false)
 
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
     .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
@@ -3915,7 +3915,7 @@ class SQLConf extends Serializable with Logging {
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
-  def datetimeDecodeAsJava8Enabled: Boolean = getConf(DATETIME_DECODE_AS_JAVA8_ENABLED)
+  def legacyDatetimeDecodeEnabled: Boolean = getConf(LEGACY_DATETIME_DECODE_ENABLED)
 
   def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 

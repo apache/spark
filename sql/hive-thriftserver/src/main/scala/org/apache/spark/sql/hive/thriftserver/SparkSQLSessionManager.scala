@@ -63,7 +63,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       } else {
         sqlContext.newSession()
       }
-      ctx.setConf(SQLConf.DATETIME_DECODE_AS_JAVA8_ENABLED, true)
+      ctx.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
       val hiveSessionState = session.getSessionState
       setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
       setConfMap(ctx, hiveSessionState.getHiveVariables)
