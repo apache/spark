@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import List, Optional, Tuple, TypeVar
+from typing import Generic, List, Optional, Tuple, TypeVar
 
 import sys
 
@@ -409,7 +409,7 @@ class MulticlassMetrics(JavaModelWrapper):
         return self.call("logLoss", eps)
 
 
-class RankingMetrics(JavaModelWrapper):
+class RankingMetrics(JavaModelWrapper, Generic[T]):
     """
     Evaluator for ranking algorithms.
 
