@@ -77,7 +77,7 @@ case class RegrAvgX(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-     _FUNC_(expr1, expr2) - Returns the average of the independent variable for non-null pairs in a group.
+     _FUNC_(expr1, expr2) - Returns the average of the dependent variable for non-null pairs in a group, where `expr1` is the dependent variable and `expr2` is the independent variable.
   """,
   examples = """
     Examples:
