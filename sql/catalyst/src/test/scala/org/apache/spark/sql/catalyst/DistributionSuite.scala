@@ -254,17 +254,17 @@ class DistributionSuite extends SparkFunSuite {
   test("Partitioning.numPartitions must match Distribution.requiredNumPartitions to satisfy it") {
     checkSatisfied(
       SinglePartition,
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(10)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
       false)
   }
 
