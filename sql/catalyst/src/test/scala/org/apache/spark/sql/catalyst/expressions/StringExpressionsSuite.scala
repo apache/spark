@@ -117,10 +117,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     testElt("hello", 1, "hello", "world")
     testElt(null, 1, null, "world")
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      // ANSI will throw SparkArrayIndexOutOfBoundsException
-      testElt(null, null, "hello", "world")
-    }
+    testElt(null, null, "hello", "world")
 
     // Invalid ranges
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
