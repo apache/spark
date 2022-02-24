@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
@@ -25,6 +26,28 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions.
+ * <p>
+ * <table border="1">
+ *  <caption>The currently supported expressions:</caption>
+ *  <tr>
+ *   <th>Expression name</th>
+ *   <th>SQL scalar expression</th>
+ *   <th>ANSI enabled</th>
+ *   <th>Since version</th>
+ *  </tr>
+ *  <tr>
+ *   <td>IS_NULL</td>
+ *   <td><pre>expr IS NULL</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>IS_NOT_NULL</td>
+ *   <td><pre>expr IS NOT NULL</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ * </table>
  *
  * @since 3.3.0
  */
@@ -53,7 +76,8 @@ public class GeneralScalarExpression implements Expression, Serializable {
       }
     }
     if (sql == null) {
-      return name + "(" + children.toString() + ")";
+      return name + "(" +
+        Arrays.stream(children).map(child -> child.toString()).reduce((a,b) -> a + "," + b) + ")";
     } else {
       return sql;
     }

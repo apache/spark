@@ -29,7 +29,7 @@ import java.util.List;
  * The builder to generate SQL from V2 expressions.
  */
 public class V2ExpressionSQLBuilder {
-  public String build(Expression expr) throws Throwable {
+  public String build(Expression expr) {
     if (expr instanceof LiteralValue) {
       return visitLiteral((LiteralValue) expr);
     } else if (expr instanceof FieldReference) {

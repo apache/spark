@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryOperator, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, BitwiseAnd, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralScalarExpression, LiteralValue, Expression => V2Expression}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -28,10 +28,18 @@ class V2ExpressionBuilder(e: Expression) {
 
   def build(): Option[V2Expression] = generateExpression(e)
 
-  private def isNotBinaryArithmeticCareAnsi(expr: Expression) = expr match {
-    case _: Add | _: Subtract | _: Multiply | _: Divide |
-         _: IntegralDivide | _: Remainder | _: Pmod => false
-    case _ => true
+  private def buildEnabled(b: BinaryArithmetic) = b match {
+    case add: Add if add.failOnError => true
+    case sub: Subtract if sub.failOnError => true
+    case mul: Multiply if mul.failOnError => true
+    case div: Divide if div.failOnError => true
+    case intDiv: IntegralDivide if intDiv.failOnError => true
+    case r: Remainder if r.failOnError => true
+    case p: Pmod if p.failOnError => true
+    case _: BitwiseAnd => true
+    case _: BitwiseOr => true
+    case _: BitwiseXor => true
+    case _ => false
   }
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
@@ -41,7 +49,8 @@ class V2ExpressionBuilder(e: Expression) {
       .map(c => new GeneralScalarExpression("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
-    case b: BinaryOperator if isNotBinaryArithmeticCareAnsi(b) || SQLConf.get.ansiEnabled =>
+    case b: BinaryOperator
+      if !b.isInstanceOf[BinaryArithmetic] || buildEnabled(b.asInstanceOf[BinaryArithmetic]) =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
       if (left.isDefined && right.isDefined) {
