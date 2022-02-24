@@ -51,11 +51,11 @@ object FileToByteArrayBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark(s"ToByteArray with $fileSie ", 1, output = output)
 
-    benchmark.addCase("toByteArray") { _: Int =>
+    benchmark.addCase("toByteArray: byte by byte copy") { _: Int =>
       toByteArray(file)
     }
 
-    benchmark.addCase("toByteArray Use Guava") { _: Int =>
+    benchmark.addCase("toByteArray: use Guava api") { _: Int =>
       toByteArrayUseGuava(fileForGuavaApi)
     }
     benchmark.run()
