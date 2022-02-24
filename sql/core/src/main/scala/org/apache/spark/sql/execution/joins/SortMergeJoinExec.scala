@@ -1590,8 +1590,6 @@ private class SortMergeFullOuterJoinScanner(
   private[this] var rightIndex: Int = 0
   private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
   private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
-  private[this] var leftMatched: BitSet = new BitSet(1)
-  private[this] var rightMatched: BitSet = new BitSet(1)
 
   advancedLeft()
   advancedRight()
@@ -1648,17 +1646,6 @@ private class SortMergeFullOuterJoinScanner(
       rightMatches += rightRow.copy()
       advancedRight()
     }
-
-    if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clearUntil(leftMatches.size)
-    } else {
-      leftMatched = new BitSet(leftMatches.size)
-    }
-    if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clearUntil(rightMatches.size)
-    } else {
-      rightMatched = new BitSet(rightMatches.size)
-    }
   }
 
   /**
@@ -1675,31 +1662,13 @@ private class SortMergeFullOuterJoinScanner(
       while (rightIndex < rightMatches.size) {
         joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
         if (boundCondition(joinedRow)) {
-          leftMatched.set(leftIndex)
-          rightMatched.set(rightIndex)
           rightIndex += 1
           return true
         }
         rightIndex += 1
       }
       rightIndex = 0
-      if (!leftMatched.get(leftIndex)) {
-        // the left row has never matched any right row, join it with null row
-        joinedRow(leftMatches(leftIndex), rightNullRow)
-        leftIndex += 1
-        return true
-      }
       leftIndex += 1
-    }
-
-    while (rightIndex < rightMatches.size) {
-      if (!rightMatched.get(rightIndex)) {
-        // the right row has never matched any left row, join it with null row
-        joinedRow(leftNullRow, rightMatches(rightIndex))
-        rightIndex += 1
-        return true
-      }
-      rightIndex += 1
     }
 
     // There are no more valid matches in the left and right buffers
