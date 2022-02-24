@@ -395,7 +395,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         sizeOfNextRow = ins.readInt()
         row
       }
- 
+
       override def getNext(): InternalRow = {
         if (sizeOfNextRow >= 0) {
           try {
