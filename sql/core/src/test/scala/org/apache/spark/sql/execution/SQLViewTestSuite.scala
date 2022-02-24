@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -38,7 +38,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   protected def viewTypeString: String
-  protected def formattedViewName(viewName: String): String
+  def formattedViewName(viewName: String): String
   protected def tableIdentifier(viewName: String): TableIdentifier
 
   def createView(
@@ -408,6 +408,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 }
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {
+
+  def createDatasetView(df: DataFrame, viewName: String): Unit
+
   test("SPARK-37202: temp view should capture the function registered by catalog API") {
     val funcName = "tempFunc"
     withUserDefinedFunction(funcName -> true) {
@@ -435,24 +438,45 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
         s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
     }
   }
+
+  test("back compatibility: skip cyclic reference check when storeAnalyzedPlan = true") {
+    val viewName = formattedViewName("v")
+    withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+      withView(viewName) {
+        createDatasetView(sql("SELECT 1"), "v")
+        createDatasetView(sql(s"SELECT * FROM $viewName"), "v")
+        checkViewOutput(viewName, Seq(Row(1)))
+
+        createView("v", "SELECT 2", replace = true)
+        createView("v", s"SELECT * FROM $viewName", replace = true)
+        checkViewOutput(viewName, Seq(Row(2)))
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
-  override protected def formattedViewName(viewName: String): String = viewName
+  override def formattedViewName(viewName: String): String = viewName
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName)
+  }
+  override def createDatasetView(df: DataFrame, viewName: String): Unit = {
+    df.createOrReplaceTempView(viewName)
   }
 }
 
 class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
-  override protected def formattedViewName(viewName: String): String = {
+  override def formattedViewName(viewName: String): String = {
     s"$db.$viewName"
   }
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db))
+  }
+  override def createDatasetView(df: DataFrame, viewName: String): Unit = {
+    df.createOrReplaceGlobalTempView(viewName)
   }
 }
 
@@ -473,7 +497,7 @@ class OneTableCatalog extends InMemoryCatalog {
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
-  override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
+  override def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db))
   }

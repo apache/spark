@@ -614,7 +614,11 @@ object ViewHelper extends SQLConfHelper with Logging {
     }.getOrElse(false)
     if (replace && uncache) {
       logDebug(s"Try to uncache ${name.quotedString} before replacing.")
-      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      if (!conf.storeAnalyzedPlanForView) {
+        // Skip cyclic check because when stored analyzed plan for view, the depended
+        // view is already converted to the underlying tables. So no cyclic views.
+        checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      }
       CommandUtils.uncacheTableOrView(session, name.quotedString)
     }
     if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
