@@ -204,10 +204,23 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         (options, None)
       }
 
+    val fs = tablePath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    val isSymlinkTextFormat = SymlinkTextInputFormatUtil.isSymlinkTextFormat(relation.tableMeta)
+
+    val symlinkTargets = if (isSymlinkTextFormat) {
+      SymlinkTextInputFormatUtil.getTargetPathsFromSymlink(fs, tablePath)
+    } else {
+      Nil
+    }
+
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
-        Seq(tablePath)
+        if (isSymlinkTextFormat) {
+          symlinkTargets
+        } else {
+          Seq(tablePath)
+        }
       } else {
         // By convention (for example, see CatalogFileIndex), the definition of a
         // partitioned table's paths depends on whether that table has any actual partitions.
@@ -220,6 +233,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         if (paths.isEmpty) {
           Seq(tablePath)
+        } else if (isSymlinkTextFormat) {
+          paths.flatMap(path => SymlinkTextInputFormatUtil.getTargetPathsFromSymlink(fs, path))
         } else {
           paths
         }
@@ -264,11 +279,15 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     } else {
-      val rootPath = tablePath
+      val rootPaths = if (isSymlinkTextFormat) {
+        symlinkTargets
+      } else {
+        Seq(tablePath)
+      }
       withTableCreationLock(tableIdentifier, {
         val cached = getCached(
           tableIdentifier,
-          Seq(rootPath),
+          rootPaths,
           metastoreSchema,
           fileFormatClass,
           None)
@@ -278,7 +297,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
-                paths = rootPath.toString :: Nil,
+                paths = rootPaths.map(_.toString),
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = hiveBucketSpec,
                 // Do not interpret the 'path' option at all when tables are read using the Hive

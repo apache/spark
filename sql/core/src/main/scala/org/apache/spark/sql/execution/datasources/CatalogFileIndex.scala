@@ -72,12 +72,21 @@ class CatalogFileIndex(
       val startTime = System.nanoTime()
       val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
         sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
-      val partitions = selectedPartitions.map { p =>
+      val isSymlinkTextFormat = SymlinkTextInputFormatUtil.isSymlinkTextFormat(table)
+      val partitions = selectedPartitions.flatMap { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
-        PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        if (isSymlinkTextFormat) {
+          SymlinkTextInputFormatUtil.getTargetPathsFromSymlink(fs, path).map { targetPath =>
+            PartitionPath(
+              p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+              targetPath.makeQualified(fs.getUri, fs.getWorkingDirectory))
+          }
+        } else {
+          Some(PartitionPath(
+            p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+            path.makeQualified(fs.getUri, fs.getWorkingDirectory)))
+        }
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val timeNs = System.nanoTime() - startTime
