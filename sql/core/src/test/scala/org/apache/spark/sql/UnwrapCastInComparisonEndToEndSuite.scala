@@ -191,18 +191,27 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   }
 
   test("SPARK-36607: Support BooleanType in UnwrapCastInBinaryComparison") {
+    def verifyCastBoolean(df: DataFrame, query: String, answer: Seq[Row]): Unit =
+      if (conf.ansiEnabled) {
+        intercept[AnalysisException] {
+          df.where(query).collect()
+        }
+      } else {
+        checkAnswer(df.where(query), answer)
+      }
+
     withTable(t) {
       Seq(Some(true), Some(false), None).toDF().write.saveAsTable(t)
       val df = spark.table(t)
 
-      checkAnswer(df.where("value = -1"), Seq.empty)
-      checkAnswer(df.where("value = 0"), Row(false))
-      checkAnswer(df.where("value = 1"), Row(true))
-      checkAnswer(df.where("value = 2"), Seq.empty)
-      checkAnswer(df.where("value <=> -1"), Seq.empty)
-      checkAnswer(df.where("value <=> 0"), Row(false))
-      checkAnswer(df.where("value <=> 1"), Row(true))
-      checkAnswer(df.where("value <=> 2"), Seq.empty)
+      verifyCastBoolean(df, "value = -1", Seq.empty)
+      verifyCastBoolean(df, "value = 0", Seq(Row(false)))
+      verifyCastBoolean(df, "value = 1", Seq(Row(true)))
+      verifyCastBoolean(df, "value = 2", Seq.empty)
+      verifyCastBoolean(df, "value <=> -1", Seq.empty)
+      verifyCastBoolean(df, "value <=> 0", Seq(Row(false)))
+      verifyCastBoolean(df, "value <=> 1", Seq(Row(true)))
+      verifyCastBoolean(df, "value <=> 2", Seq.empty)
     }
   }
 
