@@ -230,6 +230,19 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     }
   }
 
+  test("SPARK-36194: Remove aggregation from aggregation") {
+    val originalQuery = relation
+      .groupBy('a)('a, count('b).as("cnt"))
+      .groupBy('a, 'cnt)('a, 'cnt)
+      .analyze
+    val correctAnswer = relation
+      .groupBy('a)('a, count('b).as("cnt"))
+      .select('a, 'cnt)
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-36194: Negative case: The grouping expressions not same") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       val originalQuery = x.groupBy('a, 'b)('a, 'b)
@@ -272,5 +285,14 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, originalQuery.analyze)
     }
+  }
+
+  test("SPARK-36194: Negative case: Remove aggregation from contains non-deterministic") {
+    val query = relation
+      .groupBy('a)('a, (count('b) + rand(0)).as("cnt"))
+      .groupBy('a, 'cnt)('a, 'cnt)
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, query)
   }
 }

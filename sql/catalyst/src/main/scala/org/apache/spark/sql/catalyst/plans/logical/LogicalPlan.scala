@@ -31,7 +31,7 @@ abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
   with LogicalPlanStats
-  with LogicalPlanDistinctAttributes
+  with LogicalPlanDistinctKeys
   with QueryPlanConstraints
   with Logging {
 

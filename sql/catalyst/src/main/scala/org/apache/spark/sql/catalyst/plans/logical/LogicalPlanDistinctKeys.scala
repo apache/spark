@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.ExpressionSet
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
 
 /**
  * A trait to add distinct attributes to [[LogicalPlan]]. For example:
  * {{{
- *   SELECT a, a FROM Tab1 GROUP BY a, b
- *   // returns a
+ *   SELECT a, b, SUM(c) FROM Tab1 GROUP BY a, b
+ *   // returns a, b
  * }}}
  */
-trait LogicalPlanDistinctAttributes { self: LogicalPlan =>
-  def distinctAttributes: Set[ExpressionSet] = {
-    DistinctAttributesVisitor.visit(self)
-  }
+trait LogicalPlanDistinctKeys { self: LogicalPlan =>
+  lazy val distinctKeys: Set[AttributeSet] = DistinctKeyVisitor.visit(self)
 }
