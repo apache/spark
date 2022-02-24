@@ -49,7 +49,7 @@ object FileToByteArrayBenchmark extends BenchmarkBase {
     FileUtils.writeByteArrayToFile(file, bytes)
     FileUtils.writeByteArrayToFile(fileForGuavaApi, bytes)
 
-    val benchmark = new Benchmark(s"ToByteArray with $fileSie ", 1, output = output)
+    val benchmark = new Benchmark(s"ToByteArray with fileSize $fileSie bytes ", 1, output = output)
 
     benchmark.addCase("toByteArray: byte by byte copy") { _: Int =>
       toByteArray(file)
