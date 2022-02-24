@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Locale
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, UnsupportedFileSystemException}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
@@ -690,7 +690,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
 
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[UnsupportedFileSystemException] {
         sql(
           s"""
              |INSERT OVERWRITE LOCAL DIRECTORY 'abc://a'
@@ -699,7 +699,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            """.stripMargin)
       }.getMessage
 
-      assert(e.contains("Wrong FS: abc://a, expected: file:///"))
+      assert(e.contains("No FileSystem for scheme \"abc\""))
     }
   }
 
