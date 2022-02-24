@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, Offset, SerializedOffset, Source, StreamingExecutionRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 
 class TriggerAvailableNowSuite extends FileStreamSourceTest {
@@ -145,6 +146,12 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
 
         val q = startQuery()
 
+        def makeDataFrame(a: Seq[Int]): DataFrame = if (SQLConf.get.ansiEnabled) {
+          a.map(_.toLong).toDF()
+        } else {
+          a.map(_.toString).toDF()
+        }
+
         try {
           assert(q.awaitTermination(streamingTimeout.toMillis))
           // only one batch has data in both sources, thus counted, see SPARK-24050
@@ -153,7 +160,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
           checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"),
-            Seq(1, 2, 3, 7, 8, 9).map(_.toString).toDF())
+            makeDataFrame(Seq(1, 2, 3, 7, 8, 9)))
         } finally {
           q.stop()
         }
@@ -172,7 +179,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           q2.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
-          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 12).map(_.toString).toDF())
+          checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (makeDataFrame(1 to 12)))
         } finally {
           q2.stop()
         }
