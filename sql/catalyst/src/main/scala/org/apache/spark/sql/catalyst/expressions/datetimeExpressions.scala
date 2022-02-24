@@ -2514,10 +2514,10 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
-    "The result data type is consistent with the value of configuration `spark.sql.timestampType`." +
-    "If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on " +
-    "invalid inputs. Otherwise, it will throw an error instead.",
+  usage = """_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields.
+    The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+    If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+  """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
