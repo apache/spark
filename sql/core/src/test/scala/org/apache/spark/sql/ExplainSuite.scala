@@ -218,7 +218,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
     checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
-      "Project [13 AS (concat(1, 1) + 2)#x")
+      "Project [13", " AS (concat(1, 1) + 2)#x")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
       "Project [-1b AS concat((1 - 2), b)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
