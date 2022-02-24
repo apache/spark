@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
@@ -47,6 +47,10 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       } else {
         newAggregate
       }
+
+     case agg @ Aggregate(groupingExps, _, j: Join)
+         if agg.groupOnly && j.distinctKeys.exists(_.subsetOf(AttributeSet(groupingExps))) =>
+      Project(agg.aggregateExpressions, j)
   }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {

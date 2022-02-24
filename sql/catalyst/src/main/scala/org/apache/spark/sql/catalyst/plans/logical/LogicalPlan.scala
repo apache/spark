@@ -32,6 +32,7 @@ abstract class LogicalPlan
   with AnalysisHelper
   with LogicalPlanStats
   with QueryPlanConstraints
+  with QueryPlanDistinctKeys
   with Logging {
 
   /**
