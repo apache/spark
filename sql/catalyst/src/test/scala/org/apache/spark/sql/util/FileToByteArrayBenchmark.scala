@@ -26,7 +26,7 @@ import org.apache.commons.lang3.RandomUtils
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 /**
- * Benchmark for ByteStreams.toByteArray vs byte by byte copy
+ * Benchmark for ByteStreams.toByteArray vs Copy file to ByteArrayOutputStream byte by byte copy
  * To run this benchmark:
  * {{{
  *   1. without sbt:
