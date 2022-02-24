@@ -2942,15 +2942,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Validate a replace table statement and return the [[TableIdentifier]].
-   */
-  override def visitReplaceTableHeader(
-      ctx: ReplaceTableHeaderContext): Seq[String] = withOrigin(ctx) {
-    val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText).toSeq
-    multipartIdentifier
-  }
-
-  /**
    * Parse a qualified name to a multipart name.
    */
   override def visitQualifiedName(ctx: QualifiedNameContext): Seq[String] = withOrigin(ctx) {
@@ -3543,7 +3534,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val table = visitMultipartIdentifier(ctx.replaceTableHeader.multipartIdentifier())
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
