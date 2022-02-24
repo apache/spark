@@ -1465,12 +1465,9 @@ class DataFrameAggregateSuite extends QueryTest
 
     def isShuffleExecByRequirement(
         plan: ShuffleExchangeExec,
-        desiredClusterColumns: Seq[String],
-        desiredNumPartitions: Int): Boolean = plan match {
-      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS)
-        if partitionExpressionsColumns(op.expressions) === desiredClusterColumns &&
-          op.numPartitions === desiredNumPartitions => true
-
+        desiredClusterColumns: Seq[String]): Boolean = plan match {
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS) =>
+        partitionExpressionsColumns(op.expressions) === desiredClusterColumns
       case _ => false
     }
 
@@ -1478,7 +1475,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "false") {
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true") {
 
       val grouped = df
         // repartition by sub group keys which satisfies ClusteredDistribution(group keys)
@@ -1488,15 +1485,13 @@ class DataFrameAggregateSuite extends QueryTest
 
       checkAnswer(grouped, Seq(Row("a", 1, 1), Row("a", 2, 2), Row("b", 1, 7)))
 
-      val numPartitions = spark.sqlContext.conf.getConf(SQLConf.SHUFFLE_PARTITIONS)
-
       val shuffleByRequirement = grouped.queryExecution.executedPlan.flatMap {
         case a if a.isInstanceOf[BaseAggregateExec] =>
           a.children.head match {
             case InputAdapter(s: ShuffleExchangeExec)
-              if isShuffleExecByRequirement(s, Seq("key1", "key2"), numPartitions) => Some(s)
+              if isShuffleExecByRequirement(s, Seq("key1", "key2")) => Some(s)
             case s: ShuffleExchangeExec
-              if isShuffleExecByRequirement(s, Seq("key1", "key2"), numPartitions) => Some(s)
+              if isShuffleExecByRequirement(s, Seq("key1", "key2")) => Some(s)
             case _ => None
           }
 
