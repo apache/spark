@@ -3224,7 +3224,7 @@ private[spark] object Utils extends Logging {
    * @param alreadySorted
    * @return
    */
-  def median(sizes: Array[Long], alreadySorted: Boolean = false): Long = {
+  def median(sizes: Array[Long], alreadySorted: Boolean): Long = {
     val len = sizes.length
     val sortedSize = if (alreadySorted) sizes else sizes.sorted
     len match {
