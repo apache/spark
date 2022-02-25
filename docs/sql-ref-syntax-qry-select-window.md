@@ -109,7 +109,7 @@ SELECT * FROM employees;
 | Alex|      Sales| 30000|   33|
 +-----+-----------+------+-----+
 
-SELECT name, dept, RANK() OVER (PARTITION BY dept ORDER BY salary) AS rank FROM employees;
+SELECT name, dept, salary, RANK() OVER (PARTITION BY dept ORDER BY salary) AS rank FROM employees;
 +-----+-----------+------+----+
 | name|       dept|salary|rank|
 +-----+-----------+------+----+
@@ -125,7 +125,7 @@ SELECT name, dept, RANK() OVER (PARTITION BY dept ORDER BY salary) AS rank FROM 
 | Jeff|  Marketing| 35000|   3|
 +-----+-----------+------+----+
 
-SELECT name, dept, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary ROWS BETWEEN
+SELECT name, dept, salary, DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary ROWS BETWEEN
     UNBOUNDED PRECEDING AND CURRENT ROW) AS dense_rank FROM employees;
 +-----+-----------+------+----------+
 | name|       dept|salary|dense_rank|
