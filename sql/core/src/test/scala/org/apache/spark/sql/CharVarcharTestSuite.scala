@@ -332,8 +332,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(c STRUCT<c: $typeName(5)>) USING $format")
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
-      val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+      val e = intercept[RuntimeException](sql("INSERT INTO t SELECT struct('123456')"))
+      assert(e.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
     }
   }
 

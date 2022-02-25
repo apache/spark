@@ -45,7 +45,7 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
+struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query output
 2021-07-10 21:30:45.678
 

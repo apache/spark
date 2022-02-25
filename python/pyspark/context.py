@@ -35,6 +35,7 @@ from typing import (
     List,
     NoReturn,
     Optional,
+    Sequence,
     Tuple,
     Type,
     TYPE_CHECKING,
@@ -570,7 +571,7 @@ class SparkContext:
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
-            self._accumulatorServer = None
+            self._accumulatorServer = None  # type: ignore[assignment]
         with SparkContext._lock:
             SparkContext._active_spark_context = None  # type: ignore[assignment]
 
@@ -1213,11 +1214,11 @@ class SparkContext:
         """
         if accum_param is None:
             if isinstance(value, int):
-                accum_param = accumulators.INT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.INT_ACCUMULATOR_PARAM)
             elif isinstance(value, float):
-                accum_param = accumulators.FLOAT_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.FLOAT_ACCUMULATOR_PARAM)
             elif isinstance(value, complex):
-                accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM  # type: ignore[attr-defined]
+                accum_param = cast("AccumulatorParam[T]", accumulators.COMPLEX_ACCUMULATOR_PARAM)
             else:
                 raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
@@ -1276,6 +1277,50 @@ class SparkContext:
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         importlib.invalidate_caches()
+
+    def addArchive(self, path: str) -> None:
+        """
+        Add an archive to be downloaded with this Spark job on every node.
+        The `path` passed can be either a local file, a file in HDFS
+        (or other Hadoop-supported filesystems), or an HTTP, HTTPS or
+        FTP URI.
+
+        To access the file in Spark jobs, use :meth:`SparkFiles.get` with the
+        filename to find its download/unpacked location. The given path should
+        be one of .zip, .tar, .tar.gz, .tgz and .jar.
+
+        .. versionadded:: 3.3.0
+
+        Notes
+        -----
+        A path can be added only once. Subsequent additions of the same path are ignored.
+        This API is experimental.
+
+        Examples
+        --------
+        Creates a zipped file that contains a text file written '100'.
+
+        >>> import zipfile
+        >>> from pyspark import SparkFiles
+        >>> path = os.path.join(tempdir, "test.txt")
+        >>> zip_path = os.path.join(tempdir, "test.zip")
+        >>> with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipped:
+        ...     with open(path, "w") as f:
+        ...         _ = f.write("100")
+        ...     zipped.write(path, os.path.basename(path))
+        >>> sc.addArchive(zip_path)
+
+        Reads the '100' as an integer in the zipped file, and processes
+        it with the data in the RDD.
+
+        >>> def func(iterator):
+        ...    with open("%s/test.txt" % SparkFiles.get("test.zip")) as f:
+        ...        v = int(f.readline())
+        ...        return [x * int(v) for x in iterator]
+        >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+        [100, 200, 300, 400]
+        """
+        self._jsc.sc().addArchive(path)
 
     def setCheckpointDir(self, dirName: str) -> None:
         """
@@ -1421,7 +1466,7 @@ class SparkContext:
         self,
         rdd: "RDD[T]",
         partitionFunc: Callable[[Iterable[T]], Iterable[U]],
-        partitions: Optional[List[int]] = None,
+        partitions: Optional[Sequence[int]] = None,
         allowLocal: bool = False,
     ) -> List[U]:
         """

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -37,17 +38,11 @@ case class DropNamespaceExec(
     val nsCatalog = catalog.asNamespaceCatalog
     val ns = namespace.toArray
     if (nsCatalog.namespaceExists(ns)) {
-      // The default behavior of `SupportsNamespace.dropNamespace()` is cascading,
-      // so make sure the namespace to drop is empty.
-      if (!cascade) {
-        if (catalog.asTableCatalog.listTables(ns).nonEmpty
-          || nsCatalog.listNamespaces(ns).nonEmpty) {
+      try {
+        nsCatalog.dropNamespace(ns, cascade)
+      } catch {
+        case _: NonEmptyNamespaceException =>
           throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
-        }
-      }
-
-      if (!nsCatalog.dropNamespace(ns)) {
-        throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
       }
     } else if (!ifExists) {
       throw QueryCompilationErrors.noSuchNamespaceError(ns)

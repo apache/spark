@@ -481,6 +481,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     spark.sql("drop temporary function fStringLength")
   }
 
+  test("SPARK-38130: array_sort with lambda of non-orderable items") {
+    val df6 = Seq((Array[Map[String, Int]](Map("a" -> 1), Map("b" -> 2, "c" -> 3),
+      Map()), "x")).toDF("a", "b")
+    checkAnswer(
+      df6.selectExpr("array_sort(a, (x, y) -> cardinality(x) - cardinality(y))"),
+      Seq(
+        Row(Seq[Map[String, Int]](Map(), Map("a" -> 1), Map("b" -> 2, "c" -> 3))))
+    )
+  }
+
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),

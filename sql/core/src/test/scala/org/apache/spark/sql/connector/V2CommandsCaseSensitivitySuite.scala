@@ -46,7 +46,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+          val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -70,7 +70,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+          val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = CreateTableAsSelect(
             UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -95,7 +95,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
-          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+          val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedDBObjectName(Array("table_name"), isNamespace = false),
@@ -119,7 +119,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
-          val tableSpec = TableSpec(None, Map.empty, None, Map.empty,
+          val tableSpec = TableSpec(Map.empty, None, Map.empty,
             None, None, None, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedDBObjectName(Array("table_name"), isNamespace = false),

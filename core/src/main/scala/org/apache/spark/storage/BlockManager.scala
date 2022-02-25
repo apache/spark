@@ -1143,7 +1143,8 @@ private[spark] class BlockManager(
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
         if (blockSize > 0 && buf.size() == 0) {
-          throw new IllegalStateException("Empty buffer received for non empty block")
+          throw new IllegalStateException("Empty buffer received for non empty block " +
+            s"when fetching remote block $blockId from $loc")
         }
         buf
       } catch {
@@ -1155,7 +1156,8 @@ private[spark] class BlockManager(
             // Give up trying anymore locations. Either we've tried all of the original locations,
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
-            logWarning(s"Failed to fetch block after $totalFailureCount fetch failures. " +
+            logWarning(s"Failed to fetch remote block $blockId " +
+              s"from [${locations.mkString(", ")}] after $totalFailureCount fetch failures. " +
               s"Most recent failure cause:", e)
             return None
           }

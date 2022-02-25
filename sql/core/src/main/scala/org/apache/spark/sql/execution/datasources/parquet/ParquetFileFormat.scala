@@ -119,6 +119,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
       sparkSession.sessionState.conf.parquetOutputTimestampType.toString)
 
+    conf.set(
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
+      sparkSession.sessionState.conf.parquetFieldIdWriteEnabled.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
@@ -217,8 +221,6 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
@@ -406,10 +408,6 @@ class ParquetFileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
-  }
-
-  override def supportFieldName(name: String): Boolean = {
-    !name.matches(".*[ ,;{}()\n\t=].*")
   }
 }
 

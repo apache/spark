@@ -1768,15 +1768,25 @@ object functions {
   def cbrt(columnName: String): Column = cbrt(Column(columnName))
 
   /**
-   * Computes the ceiling of the given value.
+   * Computes the ceiling of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def ceil(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("ceil"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
+
+  /**
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def ceil(e: Column): Column = withExpr { Ceil(e.expr) }
+  def ceil(e: Column): Column = ceil(e, lit(0))
 
   /**
-   * Computes the ceiling of the given column.
+   * Computes the ceiling of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1888,15 +1898,25 @@ object functions {
   def factorial(e: Column): Column = withExpr { Factorial(e.expr) }
 
   /**
-   * Computes the floor of the given value.
+   * Computes the floor of the given value of `e` to `scale` decimal places.
+   *
+   * @group math_funcs
+   * @since 3.3.0
+   */
+  def floor(e: Column, scale: Column): Column = withExpr {
+    UnresolvedFunction(Seq("floor"), Seq(e.expr, scale.expr), isDistinct = false)
+  }
+
+  /**
+   * Computes the floor of the given value of `e` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def floor(e: Column): Column = withExpr { Floor(e.expr) }
+  def floor(e: Column): Column = floor(e, lit(0))
 
   /**
-   * Computes the floor of the given column.
+   * Computes the floor of the given column value to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2752,7 +2772,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    new BinaryLPad(str.expr, lit(len).expr, lit(pad).expr)
+    BinaryPad("lpad", str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -2841,7 +2861,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    new BinaryRPad(str.expr, lit(len).expr, lit(pad).expr)
+    BinaryPad("rpad", str.expr, lit(len).expr, lit(pad).expr)
   }
 
   /**
@@ -3621,7 +3641,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers. Note that the duration is a fixed length of
@@ -3677,7 +3697,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers. Note that the duration is a fixed length of
@@ -3722,7 +3742,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                       valid duration identifiers.
@@ -3750,7 +3770,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
    *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
    *                    valid duration identifiers.
@@ -3787,7 +3807,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time column must be of TimestampType.
+   *                   The time column must be of TimestampType or TimestampNTZType.
    * @param gapDuration A column specifying the timeout of the session. It could be static value,
    *                    e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
    *                    duration dynamically based on the input row.

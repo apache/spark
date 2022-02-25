@@ -25,17 +25,16 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
 from pyspark.sql.types import DecimalType, IntegralType
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class NumOpsTest(OpsTestBase):
     """Unit tests for arithmetic operations of numeric data types.
 
     A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
@@ -450,7 +449,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
 
 @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
-class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class IntegralExtensionOpsTest(OpsTestBase):
     @property
     def intergral_extension_psers(self):
         return [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in self.integral_extension_dtypes]
@@ -590,7 +589,7 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 @unittest.skipIf(
     not extension_float_dtypes_available, "pandas extension float dtypes are not available"
 )
-class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class FractionalExtensionOpsTest(OpsTestBase):
     @property
     def fractional_extension_psers(self):
         return [

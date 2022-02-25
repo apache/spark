@@ -51,8 +51,8 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       val showDDL = getShowCreateDDL(t, false)
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
-        "`a` INT,",
-        "`b` STRING)",
+        "a INT,",
+        "b STRING)",
         defaultUsing,
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
@@ -89,11 +89,11 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       val showDDL = getShowCreateDDL(t, false)
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
-        "`a` BIGINT NOT NULL,",
-        "`b` BIGINT,",
-        "`c` BIGINT,",
-        "`extraCol` ARRAY<INT>,",
-        "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>)",
+        "a BIGINT NOT NULL,",
+        "b BIGINT,",
+        "c BIGINT,",
+        "extraCol ARRAY<INT>,",
+        "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>)",
         defaultUsing,
         "OPTIONS (",
         "'from' = '0',",
@@ -128,9 +128,9 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       val showDDL = getShowCreateDDL(t, false)
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
-        "`a` INT,",
-        "`b` STRING,",
-        "`ts` TIMESTAMP)",
+        "a INT,",
+        "b STRING,",
+        "ts TIMESTAMP)",
         defaultUsing,
         "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
         "CLUSTERED BY (b)",

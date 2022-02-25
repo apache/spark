@@ -104,7 +104,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
       AvroMatchedField(catalystSchema("shared2"), 3, avroSchema.getField("shared2"))
     ))
     assertThrows[IncompatibleSchemaException] {
-      helper.validateNoExtraAvroFields()
+      helper.validateNoExtraRequiredAvroFields()
     }
     helper.validateNoExtraCatalystFields(ignoreNullable = true)
     assertThrows[IncompatibleSchemaException] {
@@ -132,5 +132,28 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     assertThrows[IncompatibleSchemaException] {
       helperNullable.validateNoExtraCatalystFields(ignoreNullable = false)
     }
+  }
+
+  test("SPARK-34378: validateNoExtraRequiredAvroFields detects required and ignores nullable") {
+    val avroSchema = SchemaBuilder.record("record").fields()
+      .requiredInt("foo")
+      .nullableInt("bar", 1)
+      .optionalInt("baz")
+      .endRecord()
+
+    val catalystFull =
+      new StructType().add("foo", IntegerType).add("bar", IntegerType).add("baz", IntegerType)
+
+    def testValidation(catalystFieldToRemove: String): Unit = {
+      val filteredSchema = StructType(catalystFull.filterNot(_.name == catalystFieldToRemove))
+      new AvroUtils.AvroSchemaHelper(avroSchema, filteredSchema, Seq(""), Seq(""), false)
+        .validateNoExtraRequiredAvroFields()
+    }
+
+    assertThrows[IncompatibleSchemaException] {
+      testValidation("foo")
+    }
+    testValidation("bar")
+    testValidation("baz")
   }
 }

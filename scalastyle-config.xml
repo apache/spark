@@ -264,6 +264,12 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">scala\.concurrent\.ExecutionContext\.Implicits\.global</parameter></parameters>
+    <customMessage> User queries can use global thread pool, causing starvation and eventual OOM.
+      Thus, Spark-internal APIs should not use this thread pool</customMessage>
+  </check>
+
   <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
     <customMessage><![CDATA[
@@ -316,6 +322,11 @@ This file is divided into 3 sections:
   <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
     <customMessage>Omit braces in case clauses.</customMessage>
+  </check>
+
+  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">new (java\.lang\.)?(Byte|Integer|Long|Short)\(</parameter></parameters>
+    <customMessage>Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors.</customMessage>
   </check>
 
   <!-- SPARK-16877: Avoid Java annotations -->

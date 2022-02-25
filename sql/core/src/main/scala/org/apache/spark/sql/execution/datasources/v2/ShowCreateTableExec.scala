@@ -36,7 +36,7 @@ case class ShowCreateTableExec(
     output: Seq[Attribute],
     table: Table) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
     showCreateTable(table, builder)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
@@ -127,9 +127,7 @@ case class ShowCreateTableExec(
     val showProps = table.properties.asScala
       .filterKeys(key => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key)
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
-        && !tableOptions.contains(key)
-        && !key.equals(TableCatalog.PROP_EXTERNAL)
-      )
+        && !tableOptions.contains(key))
     if (showProps.nonEmpty) {
       val props = showProps.toSeq.sortBy(_._1).map {
         case (key, value) =>

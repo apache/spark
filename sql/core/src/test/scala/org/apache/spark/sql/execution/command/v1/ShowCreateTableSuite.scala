@@ -53,16 +53,16 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
-           |LOCATION '/tmp'
+           |LOCATION 'file:/tmp'
         """.stripMargin)
       val showDDL = getShowCreateDDL(t)
       assert(showDDL === Array(
         s"CREATE TABLE $fullName (",
-        "`b` BIGINT,",
-        "`c` BIGINT,",
-        "`extraCol` ARRAY<INT>,",
-        "`<another>` STRUCT<`x`: INT, `y`: ARRAY<BOOLEAN>>,",
-        "`a` BIGINT NOT NULL)",
+        "b BIGINT,",
+        "c BIGINT,",
+        "extraCol ARRAY<INT>,",
+        "`<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>,",
+        "a BIGINT NOT NULL)",
         "USING parquet",
         "OPTIONS (",
         "'from' = '0',",
@@ -89,7 +89,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
         s" CLUSTERED BY (a) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -104,7 +104,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
         s" CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -120,7 +120,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING, `c` DECIMAL(2,1)) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
         s" PARTITIONED BY (c) CLUSTERED BY (a) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
@@ -136,7 +136,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( `a` INT, `b` STRING, `c` DECIMAL(2,1)) USING json" +
+      val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
         s" PARTITIONED BY (c) CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS"
       assert(getShowCreateDDL(t).mkString(" ") == expected)
     }
