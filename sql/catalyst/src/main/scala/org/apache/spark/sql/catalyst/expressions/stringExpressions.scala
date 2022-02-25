@@ -474,7 +474,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
-        BinaryStringPredicate(funcName, expressions(0), expressions(1))
+        BinaryPredicate(funcName, expressions(0), expressions(1))
       } else {
         createStringPredicate(expressions(0), expressions(1))
       }
@@ -483,7 +483,6 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
     }
   }
 
-  protected def funcName: String
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
@@ -496,10 +495,10 @@ object StringPredicate {
   }
 }
 
-case class BinaryStringPredicate(funcName: String, left: Expression, right: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
+case class BinaryPredicate(override val prettyName: String, left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  private lazy val realFuncName = funcName match {
+  private lazy val realFuncName = prettyName match {
     case "startswith" => "startsWith"
     case "endswith" => "endsWith"
     case name => name
@@ -513,13 +512,12 @@ case class BinaryStringPredicate(funcName: String, left: Expression, right: Expr
         Seq(left, right),
         Seq(BinaryType, BinaryType))
 
-  override def prettyName: String = funcName
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
-  override def children: Seq[Expression] = Seq(left, right)
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): Expression = {
-    copy(left = newChildren(0), right = newChildren(1))
+        newLeft: Expression,
+        newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
   }
 }
 
@@ -544,8 +542,6 @@ case class BinaryStringPredicate(funcName: String, left: Expression, right: Expr
   group = "string_funcs"
 )
 object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     Contains(left, right)
   }
@@ -584,8 +580,6 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   group = "string_funcs"
 )
 object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     StartsWith(left, right)
   }
@@ -624,8 +618,6 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   group = "string_funcs"
 )
 object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
-  override protected def funcName: String = "contains"
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     EndsWith(left, right)
   }
