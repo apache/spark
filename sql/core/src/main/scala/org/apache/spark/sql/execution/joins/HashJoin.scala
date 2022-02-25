@@ -739,15 +739,24 @@ object HashJoin extends CastSupport with SQLConfHelper {
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
-      cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+      Cast(
+        child = BoundReference(0, LongType, nullable = false),
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     } else {
       val shiftedBits =
         keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
       val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
       // build the schema for unpacking the required key
-      cast(BitwiseAnd(
+      val castChild = BitwiseAnd(
         ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
-        Literal(mask)), keys(index).dataType)
+        Literal(mask))
+      Cast(
+        child = castChild,
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     }
   }
 }
