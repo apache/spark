@@ -456,7 +456,7 @@ case class Lower(child: Expression)
 }
 
 /** A base trait for functions that compare two strings or binaries, returning a boolean. */
-abstract class StringPredicate extends BinaryExpression
+abstract class StringBinaryPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: UTF8String, r: UTF8String): Boolean
@@ -486,9 +486,9 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
-object StringPredicate {
+object StringBinaryPredicate {
   def unapply(expr: Expression): Option[Expression] = expr match {
-    case _: StringPredicate => Some(expr)
+    case _: StringBinaryPredicate => Some(expr)
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
@@ -505,18 +505,18 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
   }
 
   override lazy val replacement =
-      StaticInvoke(
-        classOf[ByteArrayMethods],
-        BooleanType,
-        realFuncName,
-        Seq(left, right),
-        Seq(BinaryType, BinaryType))
+    StaticInvoke(
+      classOf[ByteArrayMethods],
+      BooleanType,
+      realFuncName,
+      Seq(left, right),
+      Seq(BinaryType, BinaryType))
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
 
   override protected def withNewChildrenInternal(
-        newLeft: Expression,
-        newRight: Expression): Expression = {
+      newLeft: Expression,
+      newRight: Expression): Expression = {
     copy(left = newLeft, right = newRight)
   }
 }
@@ -547,12 +547,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class Contains(left: Expression, right: Expression) extends StringPredicate {
+case class Contains(left: Expression, right: Expression) extends StringBinaryPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
-  override def prettyName: String = "contains"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
@@ -585,12 +584,11 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+case class StartsWith(left: Expression, right: Expression) extends StringBinaryPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
-  override def prettyName: String = "startswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
@@ -623,12 +621,11 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+case class EndsWith(left: Expression, right: Expression) extends StringBinaryPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
-  override def prettyName: String = "endswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
