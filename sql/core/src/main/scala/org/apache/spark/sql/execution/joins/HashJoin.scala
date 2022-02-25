@@ -705,6 +705,13 @@ trait HashJoin extends JoinCodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
+    // TODO: support BooleanType, DateType and TimestampType
+    keys.forall(_.dataType.isInstanceOf[IntegralType]) &&
+      keys.map(_.dataType.defaultSize).sum <= 8
+  }
+
   /**
    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
    *
@@ -712,9 +719,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
    */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
-    // TODO: support BooleanType, DateType and TimestampType
-    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
-      || keys.map(_.dataType.defaultSize).sum > 8) {
+    if (!canRewriteAsLongType(keys)) {
       return keys
     }
 
@@ -736,6 +741,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
    * determine the number of bits to shift
    */
   def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    assert(canRewriteAsLongType(keys))
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
