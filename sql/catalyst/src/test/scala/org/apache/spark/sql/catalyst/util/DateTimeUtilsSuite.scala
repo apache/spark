@@ -999,7 +999,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(timestampDiff(
         "SECOND",
         date(2022, 2, 14, 11, 27, 0, 1001, zid),
-        date(2022, 2, 14, 11, 27, 0, 1001, zid),
+        date(2022, 2, 14, 11, 27, 0, 1002, zid),
         zid) === 0)
       assert(timestampDiff(
         "MINUTE",
@@ -1009,7 +1009,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(timestampDiff(
         "HOUR",
         date(2022, 2, 14, 11, 0, 1, 0, zid),
-        date(2022, 2, 15, 11, 0, 1, 0, zid),
+        date(2022, 2, 15, 11, 0, 1, 2, zid),
         zid) === 24)
       assert(timestampDiff(
         "DAY",
@@ -1017,15 +1017,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         date(2022, 3, 1, 11, 1, 0, 0, zid),
         zid) === 1)
       assert(timestampDiff("WEEK",
-        date(2022, 2, 14, 11, 43, 0, 1, zid), date(2022, 2, 21, 11, 43, 0, 1, zid), zid) === 1)
+        date(2022, 2, 14, 11, 43, 0, 1, zid), date(2022, 2, 21, 11, 42, 59, 1, zid), zid) === 0)
       assert(timestampDiff("MONTH",
         date(2022, 2, 14, 11, 43, 0, 1, zid), date(2022, 12, 14, 11, 43, 0, 1, zid), zid) === 10)
       assert(timestampDiff("QUARTER",
-        date(1900, 2, 1, 0, 0, 0, 1, zid), date(1900, 5, 1, 0, 0, 0, 1, zid), zid) === 1)
+        date(1900, 2, 1, 0, 0, 0, 1, zid), date(1900, 5, 1, 2, 0, 0, 1, zid), zid) === 1)
       assert(timestampDiff(
         "YEAR",
         date(9998, 1, 1, 0, 0, 0, 1, zid),
-        date(9999, 1, 1, 0, 0, 0, 1, zid),
+        date(9999, 1, 1, 0, 0, 1, 2, zid),
         zid) === 1)
       assert(timestampDiff(
         "YEAR",
