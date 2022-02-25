@@ -735,6 +735,22 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       }
     }
   }
+
+  test("SPARK-38322: Support query stage show runtime statistics in formatted explain mode") {
+    val df = Seq(1, 2).toDF("c").distinct()
+    val statistics = "Statistics(sizeInBytes=32.0 B, rowCount=2)"
+
+    checkKeywordsNotExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
+
+    df.collect()
+    checkKeywordsExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
+  }
 }
 
 case class ExplainSingleData(id: Int)
