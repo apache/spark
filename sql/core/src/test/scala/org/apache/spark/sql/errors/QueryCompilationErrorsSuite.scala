@@ -22,7 +22,6 @@ import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
  import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 case class StringLongClass(a: String, b: Long)
 
 case class StringIntClass(a: String, b: Int)
