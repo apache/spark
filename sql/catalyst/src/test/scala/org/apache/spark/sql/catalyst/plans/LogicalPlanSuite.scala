@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
@@ -92,5 +93,13 @@ class LogicalPlanSuite extends SparkFunSuite {
       Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())
     assert(result.sameResult(expected))
+  }
+
+  test("SPARK-38286: Union's maxRows and maxRowsPerPartition may overflow") {
+    val query1 = Range(0, Long.MaxValue, 1, 1)
+    val query2 = Range(0, 100, 1, 10)
+    val query = query1.union(query2)
+    assert(query.maxRows.isEmpty)
+    assert(query.maxRowsPerPartition.isEmpty)
   }
 }
