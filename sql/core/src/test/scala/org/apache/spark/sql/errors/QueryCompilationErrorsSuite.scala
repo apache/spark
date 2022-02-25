@@ -188,7 +188,6 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
        query.awaitTermination()
      }
-     
      assert(e.message contains "Streaming aggregation doesn't support group aggregate pandas UDF")
    }
 }
