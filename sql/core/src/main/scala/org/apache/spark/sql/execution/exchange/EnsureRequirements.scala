@@ -187,8 +187,7 @@ case class EnsureRequirements(
   }
 
   private def checkDataSourceSpec(shuffleSpec: ShuffleSpec): Boolean = {
-    shuffleSpec.isInstanceOf[DataSourceShuffleSpec] && {
-      val spec = shuffleSpec.asInstanceOf[DataSourceShuffleSpec]
+    def check(spec: DataSourceShuffleSpec): Boolean = {
       val attributes = spec.partitioning.expressions.flatMap(_.collectLeaves())
       val clustering = spec.distribution.clustering
 
@@ -199,6 +198,11 @@ case class EnsureRequirements(
       } else {
         true // already validated in `DataSourcePartitioning.satisfies`
       }
+    }
+    shuffleSpec match {
+      case spec: DataSourceShuffleSpec => check(spec)
+      case ShuffleSpecCollection(specs) => specs.exists(checkDataSourceSpec)
+      case _ => false
     }
   }
 

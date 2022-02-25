@@ -123,8 +123,8 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
         }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
 
         if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
-          // Not all of the `InputPartitions` implements `HasPartitionKey`. Therefore, skip
-          // Storage-Partitioned Join.
+          // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip
+          // creating DataSourcePartitioning
           None
         } else {
           val partKeyType = cd.clustering.map(_.dataType)

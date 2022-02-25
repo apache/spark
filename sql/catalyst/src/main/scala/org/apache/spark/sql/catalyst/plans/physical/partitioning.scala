@@ -664,6 +664,8 @@ case class DataSourceShuffleSpec(
                 ordering.compare(l, r) == 0
               }
             }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
     case _ => false
   }
 

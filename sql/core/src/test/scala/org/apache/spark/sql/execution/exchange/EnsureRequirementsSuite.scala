@@ -724,6 +724,35 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case other => fail(other.toString)
     }
 
+    // partition collections
+    plan1 = DummySparkPlan(
+      outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
+    )
+    plan2 = DummySparkPlan(
+      outputPartitioning = PartitioningCollection(Seq(
+        DataSourcePartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4),
+        HashPartitioning(exprA :: exprC :: Nil, 4))
+      )
+    )
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, left: DataSourcePartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
+        assert(left.expressions === Seq(bucket(4, exprA), bucket(16, exprB)))
+      case other => fail(other.toString)
+    }
+    smjExec = SortMergeJoinExec(
+      exprA :: exprC :: Nil, exprA :: exprB :: Nil, Inner, None, plan2, plan1)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, right: DataSourcePartitioning, _, _), _), _) =>
+        assert(right.expressions === Seq(bucket(4, exprA), bucket(16, exprB)))
+      case other => fail(other.toString)
+    }
+
     // bucket + years transforms from both sides
     plan1 = DummySparkPlan(
       outputPartitioning = DataSourcePartitioning(bucket(4, exprA) :: years(exprB) :: Nil, 4)
