@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.Collections
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
@@ -407,5 +408,47 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     val shuffles = collectShuffles(df.queryExecution.executedPlan)
     assert(shuffles.nonEmpty, "should add shuffle when partition keys mismatch")
+  }
+
+  test("data source partitioning + dynamic partition filtering") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, items_schema, items_partitions,
+        Distributions.clustered(items_partitions.toArray))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchases_schema, purchases_partitions,
+        Distributions.clustered(purchases_partitions.toArray))
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+          s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      // number of unique partitions changed after dynamic filtering - should throw exception
+      var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
+          s"i.id = p.item_id AND i.id = 3")
+      val e = intercept[SparkException](df.collect())
+      assert(e.getMessage.contains("number of unique partition values"))
+
+      // dynamic filtering doesn't change partitioning so storage-partitioned join should kick in
+      df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
+          s"i.id = p.item_id AND i.id > 0")
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+      checkAnswer(df, Seq(Row(303.5)))
+    }
   }
 }

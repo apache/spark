@@ -300,9 +300,10 @@ class InMemoryTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1) {
+      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
+        val ref = partitioning.head.references().head
         filters.foreach {
-          case In(attrName, values) if attrName == partitioning.head.name =>
+          case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map(_.toString).toSet
             data = data.filter(partition => {
               val key = partition.asInstanceOf[BufferedRows].keyString

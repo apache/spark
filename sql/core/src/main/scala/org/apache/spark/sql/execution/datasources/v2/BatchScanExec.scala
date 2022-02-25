@@ -79,13 +79,13 @@ case class BatchScanExec(
           }
 
           val newRows = new InternalRowSet(p.expressions.map(_.dataType))
-          newRows ++ newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          newRows ++= newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
           val oldRows = p.partitionValuesOpt.get
 
           if (oldRows.size != newRows.size) {
             throw new SparkException("Data source must have preserved the original partitioning " +
                 "during runtime filtering: the number of unique partition values obtained " +
-                s"through HasPartitionKey changed: before $oldRows.size, after $newRows.size")
+                s"through HasPartitionKey changed: before ${oldRows.size}, after ${newRows.size}")
           }
 
           if (!oldRows.forall(newRows.contains)) {
