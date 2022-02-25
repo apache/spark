@@ -2344,8 +2344,9 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     copy(endDate = newLeft, startDate = newRight)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day) - Create date from year, month and day fields.",
+  usage = "_FUNC_(year, month, day) - Create date from year, month and day fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2356,15 +2357,12 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     Examples:
       > SELECT _FUNC_(2013, 7, 15);
        2013-07-15
-      > SELECT _FUNC_(2019, 13, 1);
-       NULL
       > SELECT _FUNC_(2019, 7, NULL);
-       NULL
-      > SELECT _FUNC_(2019, 2, 30);
        NULL
   """,
   group = "datetime_funcs",
   since = "3.0.0")
+// scalastyle:on line.size.limit
 case class MakeDate(
     year: Expression,
     month: Expression,
@@ -2418,7 +2416,7 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. ",
+  usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2462,7 +2460,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. ",
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2483,8 +2481,6 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
-      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
-       NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
   """,
@@ -2512,8 +2508,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
-    "The result data type is consistent with the value of configuration `spark.sql.timestampType`",
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. The result data type is consistent with the value of configuration `spark.sql.timestampType`. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2537,8 +2532,6 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
        2019-07-01 00:00:00
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
        2019-06-30 23:59:01
-      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
-       NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
   """,

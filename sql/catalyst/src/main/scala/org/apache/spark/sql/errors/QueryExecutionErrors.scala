@@ -1951,7 +1951,7 @@ object QueryExecutionErrors {
       s"The input string '$input' does not match the given number format: '$format'")
   }
 
-  def MultipleBucketTransformsError(): Throwable = {
+  def multipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
   }
 

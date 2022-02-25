@@ -221,7 +221,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val pl = plan.asInstanceOf[Project].projectList
 
     assert(pl(0).dataType == DoubleType)
-    assert(pl(1).dataType == DoubleType)
+    if (!SQLConf.get.ansiEnabled) {
+      assert(pl(1).dataType == DoubleType)
+    }
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)

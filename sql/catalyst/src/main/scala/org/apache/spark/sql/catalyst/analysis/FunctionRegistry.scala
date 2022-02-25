@@ -493,6 +493,8 @@ object FunctionRegistry {
     expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
     expression[RegrCount]("regr_count"),
+    expression[RegrAvgX]("regr_avgx"),
+    expression[RegrAvgY]("regr_avgy"),
 
     // string functions
     expression[Ascii]("ascii"),
