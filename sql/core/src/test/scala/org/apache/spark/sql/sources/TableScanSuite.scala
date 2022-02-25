@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -105,6 +106,19 @@ case class AllDataTypesScan(
         Row(i, i.toString),
           Row(Seq(s"str_$i", s"str_${i + 1}"),
             Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
+    }
+  }
+}
+
+class LegacyTimestampSource extends RelationProvider {
+  override def createRelation(ctx: SQLContext, parameters: Map[String, String]): BaseRelation = {
+    new BaseRelation() with TableScan {
+      override val sqlContext: SQLContext = ctx
+      override val schema: StructType = StructType(StructField("col", TimestampType) :: Nil)
+      override def buildScan(): RDD[Row] = {
+        sqlContext.sparkContext.parallelize(
+          Row(java.sql.Timestamp.valueOf("2020-01-01 12:34:56")) :: Nil)
+      }
     }
   }
 }
@@ -419,5 +433,31 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
     val planned = sql("SELECT * FROM student").queryExecution.executedPlan
     val comments = planned.schema.fields.map(_.getComment().getOrElse("NO_COMMENT")).mkString(",")
     assert(comments === "SN,SA,NO_COMMENT")
+  }
+
+  test("SPARK-38315: control decoding of datetime as Java 8 classes") {
+    val tableName = "relationProviderWithLegacyTimestamps"
+    def scanTable(): Unit = {
+      withTable (tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (col TIMESTAMP)
+             |USING org.apache.spark.sql.sources.LegacyTimestampSource
+             """.stripMargin)
+        spark.table(tableName).collect()
+      }
+    }
+
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val e = intercept[SparkException] {
+        scanTable()
+      }.getCause
+      assert(e.isInstanceOf[java.lang.RuntimeException])
+      assert(e.getMessage.contains("Error while encoding"))
+
+      withSQLConf(SQLConf.LEGACY_DATETIME_ENCODER_ENABLED.key -> "true") {
+        scanTable()
+      }
+    }
   }
 }

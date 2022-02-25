@@ -100,7 +100,7 @@ object RowEncoder {
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         createSerializerForJavaInstant(inputObject)
       } else {
         createSerializerForSqlTimestamp(inputObject)
@@ -109,7 +109,7 @@ object RowEncoder {
     case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         createSerializerForJavaLocalDate(inputObject)
       } else {
         createSerializerForSqlDate(inputObject)
@@ -227,7 +227,7 @@ object RowEncoder {
   def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeDecodeEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         ObjectType(classOf[java.time.Instant])
       } else {
         ObjectType(classOf[java.sql.Timestamp])
@@ -235,7 +235,7 @@ object RowEncoder {
     case TimestampNTZType =>
       ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeDecodeEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         ObjectType(classOf[java.time.LocalDate])
       } else {
         ObjectType(classOf[java.sql.Date])
@@ -284,7 +284,7 @@ object RowEncoder {
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeDecodeEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         createDeserializerForInstant(input)
       } else {
         createDeserializerForSqlTimestamp(input)
@@ -294,7 +294,7 @@ object RowEncoder {
       createDeserializerForLocalDateTime(input)
 
     case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeDecodeEnabled) {
+      if (SQLConf.get.datetimeJava8ApiEnabled && !SQLConf.get.legacyDatetimeEncoderEnabled) {
         createDeserializerForLocalDate(input)
       } else {
         createDeserializerForSqlDate(input)
