@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, IsNull, Literal, Or, RuntimeReplaceableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, IsNull, Literal, Or, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.types.{AbstractDataType, DoubleType, NumericType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, NumericType}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -236,4 +236,114 @@ case class RegrSYY(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSYY =
     this.copy(left = newLeft, right = newRight)
+}
+
+abstract class Regression(val left: Expression, val right: Expression)
+  extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override def nullable: Boolean = true
+  override def dataType: DataType = DoubleType
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+
+  protected val count = AttributeReference("count", DoubleType, nullable = false)()
+  protected val meanX = AttributeReference("meanX", DoubleType, nullable = false)()
+  protected val meanY = AttributeReference("meanY", DoubleType, nullable = false)()
+  protected val c2 = AttributeReference("c2", DoubleType, nullable = false)()
+  protected val m2X = AttributeReference("m2X", DoubleType, nullable = false)()
+
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, meanX, meanY, c2, m2X)
+
+  override val initialValues: Seq[Expression] = Array.fill(5)(Literal(0.0))
+
+  override lazy val updateExpressions: Seq[Expression] = {
+    lazy val newCount = count + 1.0
+    lazy val oldMeanX = meanX
+    lazy val newMeanX = oldMeanX + (right - oldMeanX) / newCount
+    lazy val oldMeanY = meanY
+    lazy val newMeanY = oldMeanY + (left - oldMeanY) / newCount
+    lazy val newC2 = c2 + (right - oldMeanX) * (left - newMeanY)
+    lazy val newM2X = m2X + (right - oldMeanX) * (right - newMeanX)
+
+    val isNull = left.isNull || right.isNull
+    Seq(
+      If(isNull, count, newCount),
+      If(isNull, meanX, newMeanX),
+      If(isNull, meanY, newMeanY),
+      If(isNull, c2, newC2),
+      If(isNull, m2X, newM2X)
+    )
+  }
+
+  override val mergeExpressions: Seq[Expression] = {
+    lazy val count1 = count.left
+    lazy val count2 = count.right
+    lazy val newCount = count1 + count2
+    lazy val newM2X =
+      m2X.left + m2X.right + count1 * count2 * Pow(meanX.left - meanX.right, 2) / newCount
+    lazy val deltaX = meanX.right - meanX.left
+    lazy val deltaY = meanY.right - meanY.left
+    lazy val newC2 = c2.left + c2.right + deltaX * deltaY * count1 * count2 / newCount
+    lazy val newMeanX = meanX.left + deltaX * count2 / newCount
+    lazy val newMeanY = meanY.left + deltaY * count2 / newCount
+
+    Seq(newCount, newMeanX, newMeanY, newC2, newM2X)
+  }
+
+  override lazy val evaluateExpression: Expression =
+    If(EqualTo(count, Literal(0.0)), Literal(null, dataType), doEvaluateExpression)
+
+  protected def doEvaluateExpression: Expression
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+       1.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class RegrSlope(
+    override val left: Expression,
+    override val right: Expression) extends Regression(left, right) {
+  override def prettyName: String = "regr_slope"
+  override val doEvaluateExpression = c2 / m2X
+  override protected def withNewChildrenInternal(
+                                                  newLeft: Expression, newRight: Expression): RegrSlope =
+    copy(left = newLeft, right = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1,1), (2,2), (3,3) AS tab(y, x);
+       0.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class RegrIntercept(
+    override val left: Expression,
+    override val right: Expression) extends Regression(left, right) {
+  override def prettyName: String = "regr_intercept"
+  override val doEvaluateExpression = {
+    val slope = c2 / m2X
+    meanY - slope * meanX
+  }
+  override protected def withNewChildrenInternal(
+                                                  newLeft: Expression, newRight: Expression): RegrIntercept =
+    copy(left = newLeft, right = newRight)
 }
