@@ -135,7 +135,7 @@ Input [4]: [l_partkey#11, l_suppkey#12, sum#17, isEmpty#18]
 Keys [2]: [l_partkey#11, l_suppkey#12]
 Functions [1]: [sum(l_quantity#13)]
 Aggregate Attributes [1]: [sum(l_quantity#13)#20]
-Results [3]: [CheckOverflow((0.5 * promote_precision(cast(sum(l_quantity#13)#20 as decimal(21,1)))), DecimalType(22,1), true) AS (0.5 * sum(l_quantity))#21, l_partkey#11, l_suppkey#12]
+Results [3]: [CheckOverflow((0.5 * promote_precision(cast(sum(l_quantity#13)#20 as decimal(21,1)))), DecimalType(22,1)) AS (0.5 * sum(l_quantity))#21, l_partkey#11, l_suppkey#12]
 
 (22) Filter [codegen id : 4]
 Input [3]: [(0.5 * sum(l_quantity))#21, l_partkey#11, l_suppkey#12]

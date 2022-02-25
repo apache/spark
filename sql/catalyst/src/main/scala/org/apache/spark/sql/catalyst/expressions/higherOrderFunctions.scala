@@ -388,18 +388,13 @@ case class ArraySort(
     checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
         argument.dataType match {
-          case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+          case ArrayType(_, _) =>
             if (function.dataType == IntegerType) {
               TypeCheckResult.TypeCheckSuccess
             } else {
               TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
                 "IntegerType")
             }
-          case ArrayType(dt, _) =>
-            val dtSimple = dt.catalogString
-            TypeCheckResult.TypeCheckFailure(
-              s"$prettyName does not support sorting array of type $dtSimple which is not " +
-                "orderable")
           case _ =>
             TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
         }
@@ -452,6 +447,8 @@ object ArraySort {
         If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
   }
 
+  // Default Comparator only works for orderable types.
+  // This is validated by the underlying LessTan and GreaterThan
   val defaultComparator: LambdaFunction = {
     val left = UnresolvedNamedLambdaVariable(Seq("left"))
     val right = UnresolvedNamedLambdaVariable(Seq("right"))

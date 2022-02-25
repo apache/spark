@@ -18,11 +18,11 @@
 - case: toDF
   main: |
     from pyspark.sql.types import (
-      IntegerType,
-      Row,
-      StructType,
-      StringType,
-      StructField,
+        IntegerType,
+        Row,
+        StructType,
+        StringType,
+        StructField,
     )
     from collections import namedtuple
     from pyspark.sql import SparkSession
@@ -60,3 +60,70 @@
     rdd_named_tuple.toDF(sampleRatio=0.4)
     rdd_named_tuple.toDF(["a", "b"], sampleRatio=0.4)
     rdd_named_tuple.toDF(struct)
+
+
+- case: rddMethods
+  main: |
+    from operator import add
+    from typing import Iterable, Set, Tuple
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    sc = spark.sparkContext
+
+    def f1(x: int) -> str:
+        return str(x)
+
+    reveal_type(sc.range(10).map(f1))
+
+    def f2(x: int) -> Iterable[int]:
+        return range(x)
+
+    reveal_type(sc.range(10).flatMap(f2))
+
+    reveal_type(sc.parallelize([("a", 1), ("b", 0)]).filter(lambda x: x[1] != 0))
+
+    reveal_type(sc.parallelize([("a", 1), ("b", 0)]).max())
+
+    reveal_type(sc.range(10).reduce(add))
+
+    def seq_func(xs: Set[str], x: int) -> Set[str]:
+        xs.add(str(x % 11))
+        return xs
+
+    def comb_func(xs: Set[str], ys: Set[str]) -> Set[str]:
+        xs.update(ys)
+        return xs
+
+    zero: Set[str] = set()
+
+    reveal_type(sc.parallelize([("a", 1)]).aggregateByKey(zero, seq_func, comb_func))
+
+  out: |
+     main:11: note: Revealed type is "pyspark.rdd.RDD[builtins.str*]"
+     main:16: note: Revealed type is "pyspark.rdd.RDD[builtins.int*]"
+     main:18: note: Revealed type is "pyspark.rdd.RDD[Tuple[builtins.str, builtins.int]]"
+     main:20: note: Revealed type is "Tuple[builtins.str, builtins.int]"
+     main:22: note: Revealed type is "builtins.int"
+     main:34: note: Revealed type is "pyspark.rdd.RDD[Tuple[builtins.str, builtins.set[builtins.str]]]"
+
+- case: rddMethodsErrors
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    sc = spark.sparkContext
+
+    def f1(x: str) -> str:
+        return x
+
+    sc.range(10).map(f1)
+
+    def f2(x: int) -> str:
+        return str(x)
+
+    sc.range(10).reduce(f2)
+
+  out: |
+    main:9: error: Argument 1 to "map" of "RDD" has incompatible type "Callable[[str], str]"; expected "Callable[[int], str]"  [arg-type]
+    main:14: error: Argument 1 to "reduce" of "RDD" has incompatible type "Callable[[int], str]"; expected "Callable[[int, int], int]"  [arg-type]

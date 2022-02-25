@@ -98,7 +98,11 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   }
 
   testVarPop()
+  testVarPop(true)
   testVarSamp()
+  testVarSamp(true)
   testStddevPop()
+  testStddevPop(true)
   testStddevSamp()
+  testStddevSamp(true)
 }

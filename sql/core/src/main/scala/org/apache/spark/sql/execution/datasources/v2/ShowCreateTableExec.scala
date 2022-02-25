@@ -36,7 +36,7 @@ case class ShowCreateTableExec(
     output: Seq[Attribute],
     table: Table) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
     showCreateTable(table, builder)
     Seq(InternalRow(UTF8String.fromString(builder.toString)))
   }
