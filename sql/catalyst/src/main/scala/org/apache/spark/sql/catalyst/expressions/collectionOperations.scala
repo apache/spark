@@ -90,8 +90,6 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
        4
       > SELECT _FUNC_(map('a', 1, 'b', 2));
        2
-      > SELECT _FUNC_(NULL);
-       -1
   """,
   since = "1.5.0",
   group = "collection_funcs")
