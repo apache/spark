@@ -204,7 +204,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileExpression(expr: Expression): Option[String] = {
     val V2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
     try {
-      Some(V2ExpressionSQLBuilder.build(expr))
+      expr match {
+        case _: FieldReference => Some(V2ExpressionSQLBuilder.build(expr)).map(quoteIdentifier)
+        case _: GeneralScalarExpression => Some(V2ExpressionSQLBuilder.build(expr))
+      }
     } catch {
       case _: IllegalArgumentException => None
     }
@@ -219,59 +222,20 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        min.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            Some(s"MIN(${quoteIdentifier(field.fieldNames.head)})")
-          case expr: GeneralScalarExpression =>
-            compileExpression(expr).map(v => s"MIN($v)")
-        }
+        compileExpression(min.column).map(v => s"MIN($v)")
       case max: Max =>
-        max.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            Some(s"MAX(${quoteIdentifier(field.fieldNames.head)})")
-          case expr: GeneralScalarExpression =>
-            compileExpression(expr).map(v => s"MAX($v)")
-        }
+        compileExpression(max.column).map(v => s"MAX($v)")
       case count: Count =>
-        val sql = count.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralScalarExpression =>
-            val compiledValue = compileExpression(expr)
-            if (compiledValue.isEmpty) return None
-            compiledValue.get
-        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        Some(s"COUNT($distinct$sql)")
+        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
       case sum: Sum =>
-        val sql = sum.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralScalarExpression =>
-            val compiledValue = compileExpression(expr)
-            if (compiledValue.isEmpty) return None
-            compiledValue.get
-        }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        Some(s"SUM($distinct$sql)")
+        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        val sql = avg.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralScalarExpression =>
-            val compiledValue = compileExpression(expr)
-            if (compiledValue.isEmpty) return None
-            compiledValue.get
-        }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        Some(s"AVG($distinct$sql)")
+        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
       case _ => None
     }
   }

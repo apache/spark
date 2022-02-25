@@ -30,31 +30,7 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * <p>
  * The currently supported SQL aggregate functions:
  * <ol>
- *  <li><pre>Expression name: IS_NULL</pre><pre>SQL scalar expression: `expr IS NULL`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: IS_NOT_NULL</pre><pre>SQL scalar expression: `expr IS NOT NULL`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: =</pre><pre>SQL scalar expression: `expr1 = expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: !=</pre><pre>SQL scalar expression: `expr1 != expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &lt;&gt;</pre><pre>SQL scalar expression: `expr1 &lt;&gt; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &lt;=&gt;</pre><pre>SQL scalar expression: `expr1 &lt;=&gt; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &lt;</pre><pre>SQL scalar expression: `expr1 &lt; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &lt;=</pre><pre>SQL scalar expression: `expr1 &lt;= expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &gt;</pre><pre>SQL scalar expression: `expr1 &gt; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &gt;=</pre><pre>SQL scalar expression: `expr1 &gt;= expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: +</pre><pre>SQL scalar expression: `expr1 + expr2`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: -</pre><pre>SQL scalar expression: `expr1 - expr2`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: *</pre><pre>SQL scalar expression: `expr1 * expr2`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: /</pre><pre>SQL scalar expression: `expr1 / expr2`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: %</pre><pre>SQL scalar expression: `expr1 % expr2`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: pmod</pre><pre>SQL scalar expression: `pmod(expr1, expr2)`</pre> ANSI enabled: Yes, Since 3.3.0</li>
- *  <li><pre>Expression name: &amp;&amp;</pre><pre>SQL scalar expression: `expr1 &amp;&amp; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: ||</pre><pre>SQL scalar expression: `expr1 || expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: AND</pre><pre>SQL scalar expression: `expr1 AND expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: OR</pre><pre>SQL scalar expression: `expr1 OR expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: &amp;</pre><pre>SQL scalar expression: `expr1 &amp; expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: |</pre><pre>SQL scalar expression: `expr1 | expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: ^</pre><pre>SQL scalar expression: `expr1 ^ expr2`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: NOT</pre><pre>SQL scalar expression: `NOT expr`</pre> ANSI enabled: No, Since 3.3.0</li>
- *  <li><pre>Expression name: CASE_WHEN</pre><pre>SQL scalar expression: `CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END`</pre> ANSI enabled: No, Since 3.3.0</li>
+ *  <li><pre>Name: &lt;&gt;</pre><pre>SQL semantic: `expr1 &lt;&gt; expr2`</pre> ANSI enabled: No, Since version 3.3.0</li>
  * </ol>
  *
  * @since 3.3.0

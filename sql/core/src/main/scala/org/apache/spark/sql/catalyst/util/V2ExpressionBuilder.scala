@@ -27,14 +27,14 @@ class V2ExpressionBuilder(e: Expression) {
 
   def build(): Option[V2Expression] = generateExpression(e)
 
-  private def buildEnabled(b: BinaryArithmetic) = b match {
-    case add: Add if add.failOnError => true
-    case sub: Subtract if sub.failOnError => true
-    case mul: Multiply if mul.failOnError => true
-    case div: Divide if div.failOnError => true
-    case intDiv: IntegralDivide if intDiv.failOnError => true
-    case r: Remainder if r.failOnError => true
-    case p: Pmod if p.failOnError => true
+  private def canTranslate(b: BinaryArithmetic) = b match {
+    case add: Add => add.failOnError
+    case sub: Subtract => sub.failOnError
+    case mul: Multiply => mul.failOnError
+    case div: Divide => div.failOnError
+    case intDiv: IntegralDivide => intDiv.failOnError
+    case r: Remainder => r.failOnError
+    case p: Pmod => p.failOnError
     case _: BitwiseAnd => true
     case _: BitwiseOr => true
     case _: BitwiseXor => true
@@ -49,7 +49,7 @@ class V2ExpressionBuilder(e: Expression) {
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
     case b: BinaryOperator
-      if !b.isInstanceOf[BinaryArithmetic] || buildEnabled(b.asInstanceOf[BinaryArithmetic]) =>
+      if !b.isInstanceOf[BinaryArithmetic] || canTranslate(b.asInstanceOf[BinaryArithmetic]) =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
       if (left.isDefined && right.isDefined) {

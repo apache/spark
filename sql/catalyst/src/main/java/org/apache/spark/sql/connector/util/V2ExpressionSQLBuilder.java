@@ -83,8 +83,12 @@ public class V2ExpressionSQLBuilder {
     return literalValue.toString();
   }
 
-  protected String visitFieldReference(FieldReference fieldReference) {
-    return fieldReference.toString();
+  protected String visitFieldReference(FieldReference fieldRef) {
+    if (fieldRef.fieldNames().length != 1) {
+      throw new IllegalArgumentException(
+        "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+    }
+    return fieldRef.fieldNames()[0];
   }
 
   protected String visitIsNull(String v) {
