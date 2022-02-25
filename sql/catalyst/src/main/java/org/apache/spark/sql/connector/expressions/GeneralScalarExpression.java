@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions.
  * <p>
- * The currently supported SQL aggregate functions:
+ * The currently supported SQL scalar expressions:
  * <ol>
  *  <li><pre>Expression name: IS_NULL</pre><pre>SQL scalar expression: `expr IS NULL`</pre> ANSI enabled: No, Since 3.3.0</li>
  *  <li><pre>Expression name: IS_NOT_NULL</pre><pre>SQL scalar expression: `expr IS NOT NULL`</pre> ANSI enabled: No, Since 3.3.0</li>
