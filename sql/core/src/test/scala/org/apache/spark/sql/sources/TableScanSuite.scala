@@ -444,7 +444,9 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |CREATE TABLE $tableName (col TIMESTAMP)
              |USING org.apache.spark.sql.sources.LegacyTimestampSource
              """.stripMargin)
-        spark.table(tableName).collect()
+        checkAnswer(
+          spark.table(tableName),
+          Row(java.sql.Timestamp.valueOf("2020-01-01 12:34:56")) :: Nil)
       }
     }
 
