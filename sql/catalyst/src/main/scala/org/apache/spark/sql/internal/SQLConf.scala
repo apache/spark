@@ -744,6 +744,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PROPAGATE_DISTINCT_KEYS_ENABLED =
+    buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
+      .internal()
+      .doc("When true, the query optimizer will propagate a set of distinct attributes from the " +
+        "current node and use it to optimize query.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -3898,6 +3907,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def propagateDistinctKeysEnabled: Boolean = getConf(PROPAGATE_DISTINCT_KEYS_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
