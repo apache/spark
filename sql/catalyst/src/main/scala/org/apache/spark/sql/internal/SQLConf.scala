@@ -413,7 +413,7 @@ object SQLConf {
       .doc("When true, the planner requires all the clustering keys as the partition keys " +
         "(with same ordering) of the children, to eliminate the shuffle for the operator that " +
         "requires its children be clustered distributed, such as AGGREGATE and WINDOW node. " +
-        "This is to avoid data kews which can lead to significant performance regression if " +
+        "This is to avoid data skews which can lead to significant performance regression if " +
         "shuffle is eliminated.")
       .version("3.3.0")
       .booleanConf
