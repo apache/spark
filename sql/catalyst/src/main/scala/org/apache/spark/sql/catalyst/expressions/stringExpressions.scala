@@ -470,7 +470,7 @@ abstract class StringPredicate extends BinaryExpression
 }
 
 trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
-  override def build(expressions: Seq[Expression]): Expression = {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
@@ -539,8 +539,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryContains(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class BinaryContains(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -552,11 +552,10 @@ case class BinaryContains(left: Expression, right: Expression, child: Expression
         Seq(BinaryType, BinaryType)))
   }
 
-  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def parameters: Seq[Expression] = left :: right :: Nil
   override def prettyName: String = "contains"
   override protected def withNewChildInternal(newChild: Expression): BinaryContains =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 @ExpressionDescription(
@@ -603,8 +602,8 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryStartsWith(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class BinaryStartsWith(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -616,11 +615,10 @@ case class BinaryStartsWith(left: Expression, right: Expression, child: Expressi
         Seq(BinaryType, BinaryType)))
   }
 
-  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def parameters: Seq[Expression] = left :: right :: Nil
   override def prettyName: String = "startswith"
   override protected def withNewChildInternal(newChild: Expression): BinaryStartsWith =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 @ExpressionDescription(
@@ -667,8 +665,8 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
-case class BinaryEndsWith(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class BinaryEndsWith(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -680,11 +678,10 @@ case class BinaryEndsWith(left: Expression, right: Expression, child: Expression
         Seq(BinaryType, BinaryType)))
   }
 
-  override def exprsReplaced: Seq[Expression] = left :: right :: Nil
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def parameters: Seq[Expression] = left :: right :: Nil
   override def prettyName: String = "endswith"
   override protected def withNewChildInternal(newChild: Expression): BinaryEndsWith =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 /**
