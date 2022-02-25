@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, UpCast}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.functions.{grouping, grouping_id}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.NumericType
 
 case class StringLongClass(a: String, b: Long)
 
@@ -37,7 +34,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     val msg1 = intercept[AnalysisException] {
       sql("select 'value1' as a, 1L as b").as[StringIntClass]
     }.message
-    assert(msg1 ==
+    assert(msg1 ===
       s"""
          |Cannot up cast b from bigint to int.
          |The type path of the target object is:
@@ -51,7 +48,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         " named_struct('a', 'value1', 'b', cast(1.0 as decimal(38,18))) as b")
         .as[ComplexClass]
     }.message
-    assert(msg2 ==
+    assert(msg2 ===
       s"""
          |Cannot up cast b.`b` from decimal(38,18) to bigint.
          |The type path of the target object is:
@@ -62,19 +59,46 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
        """.stripMargin.trim + " of the field in the target object")
   }
 
-  test("UNSUPPORTED_FEATURE: UpCast only support DecimalType as AbstractDataType") {
-    val df = sql("select 1 as value")
-
-    val msg = intercept[AnalysisException] {
-      val plan = Project(
-        Seq(Alias(UpCast(UnresolvedAttribute("value"), NumericType), "value")()),
-        df.logicalPlan)
-
-      Dataset.ofRows(spark, plan)
-    }.message
-    assert(msg.contains("The feature is not supported: " +
-      "UpCast only support DecimalType as AbstractDataType yet," +
-      " but got: org.apache.spark.sql.types.NumericType"))
+  test("UNSUPPORTED_GROUPING_EXPRESSION: filter with grouping/grouping_Id expression") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq("grouping", "grouping_id").foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max"))
+          .filter(s"$grouping(CustomerId)=17850")
+      }
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+    }
   }
 
+  test("UNSUPPORTED_GROUPING_EXPRESSION: Sort with grouping/grouping_Id expression") {
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    Seq(grouping("CustomerId"), grouping_id("CustomerId")).foreach { grouping =>
+      val errMsg = intercept[AnalysisException] {
+        df.groupBy("CustomerId").agg(Map("Quantity" -> "max")).
+          sort(grouping)
+      }
+      assert(errMsg.errorClass === Some("UNSUPPORTED_GROUPING_EXPRESSION"))
+      assert(errMsg.message ===
+        "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    }
+  }
+
+  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+    val e = intercept[AnalysisException] {
+      sql("select format_string('%0$s', 'Hello')")
+    }
+    assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
+    assert(e.message ===
+      "The argument_index of string format cannot contain position 0$.")
+  }
 }

@@ -765,7 +765,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       withTempView("v1") {
-        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        }
         withSQLConf(
           USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
           ANSI_ENABLED.key -> "true") {
@@ -838,7 +840,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
         sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
         sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
-        sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        }
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))

@@ -60,6 +60,9 @@ private[spark] class KubeConfigBackend(var context: String)
   }
 
   override def cleanUp(): Unit = {
+    if (defaultClient != null) {
+      defaultClient.close()
+    }
     super.cleanUp()
   }
 

@@ -226,7 +226,7 @@ Right keys [2]: [cr_order_number#18, cr_item_sk#17]
 Join condition: None
 
 (23) Project [codegen id : 7]
-Output [7]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, (cs_quantity#3 - coalesce(cr_return_quantity#19, 0)) AS sales_cnt#23, CheckOverflow((promote_precision(cast(cs_ext_sales_price#4 as decimal(8,2))) - promote_precision(cast(coalesce(cr_return_amount#20, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#24]
+Output [7]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, (cs_quantity#3 - coalesce(cr_return_quantity#19, 0)) AS sales_cnt#23, CheckOverflow((promote_precision(cast(cs_ext_sales_price#4 as decimal(8,2))) - promote_precision(cast(coalesce(cr_return_amount#20, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#24]
 Input [13]: [cs_item_sk#1, cs_order_number#2, cs_quantity#3, cs_ext_sales_price#4, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, d_year#15, cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
 
 (24) Scan parquet default.store_sales
@@ -308,7 +308,7 @@ Right keys [2]: [sr_ticket_number#39, sr_item_sk#38]
 Join condition: None
 
 (42) Project [codegen id : 14]
-Output [7]: [d_year#36, i_brand_id#31, i_class_id#32, i_category_id#33, i_manufact_id#34, (ss_quantity#27 - coalesce(sr_return_quantity#40, 0)) AS sales_cnt#44, CheckOverflow((promote_precision(cast(ss_ext_sales_price#28 as decimal(8,2))) - promote_precision(cast(coalesce(sr_return_amt#41, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#45]
+Output [7]: [d_year#36, i_brand_id#31, i_class_id#32, i_category_id#33, i_manufact_id#34, (ss_quantity#27 - coalesce(sr_return_quantity#40, 0)) AS sales_cnt#44, CheckOverflow((promote_precision(cast(ss_ext_sales_price#28 as decimal(8,2))) - promote_precision(cast(coalesce(sr_return_amt#41, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#45]
 Input [13]: [ss_item_sk#25, ss_ticket_number#26, ss_quantity#27, ss_ext_sales_price#28, i_brand_id#31, i_class_id#32, i_category_id#33, i_manufact_id#34, d_year#36, sr_item_sk#38, sr_ticket_number#39, sr_return_quantity#40, sr_return_amt#41]
 
 (43) Scan parquet default.web_sales
@@ -390,7 +390,7 @@ Right keys [2]: [wr_order_number#60, wr_item_sk#59]
 Join condition: None
 
 (61) Project [codegen id : 21]
-Output [7]: [d_year#57, i_brand_id#52, i_class_id#53, i_category_id#54, i_manufact_id#55, (ws_quantity#48 - coalesce(wr_return_quantity#61, 0)) AS sales_cnt#65, CheckOverflow((promote_precision(cast(ws_ext_sales_price#49 as decimal(8,2))) - promote_precision(cast(coalesce(wr_return_amt#62, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#66]
+Output [7]: [d_year#57, i_brand_id#52, i_class_id#53, i_category_id#54, i_manufact_id#55, (ws_quantity#48 - coalesce(wr_return_quantity#61, 0)) AS sales_cnt#65, CheckOverflow((promote_precision(cast(ws_ext_sales_price#49 as decimal(8,2))) - promote_precision(cast(coalesce(wr_return_amt#62, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#66]
 Input [13]: [ws_item_sk#46, ws_order_number#47, ws_quantity#48, ws_ext_sales_price#49, i_brand_id#52, i_class_id#53, i_category_id#54, i_manufact_id#55, d_year#57, wr_item_sk#59, wr_order_number#60, wr_return_quantity#61, wr_return_amt#62]
 
 (62) Union
@@ -499,7 +499,7 @@ Right keys [2]: [cr_order_number#93, cr_item_sk#92]
 Join condition: None
 
 (85) Project [codegen id : 32]
-Output [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, (cs_quantity#80 - coalesce(cr_return_quantity#94, 0)) AS sales_cnt#23, CheckOverflow((promote_precision(cast(cs_ext_sales_price#81 as decimal(8,2))) - promote_precision(cast(coalesce(cr_return_amount#95, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#24]
+Output [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, (cs_quantity#80 - coalesce(cr_return_quantity#94, 0)) AS sales_cnt#23, CheckOverflow((promote_precision(cast(cs_ext_sales_price#81 as decimal(8,2))) - promote_precision(cast(coalesce(cr_return_amount#95, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#24]
 Input [13]: [cs_item_sk#78, cs_order_number#79, cs_quantity#80, cs_ext_sales_price#81, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, d_year#90, cr_item_sk#92, cr_order_number#93, cr_return_quantity#94, cr_return_amount#95]
 
 (86) Scan parquet default.store_sales
@@ -562,7 +562,7 @@ Right keys [2]: [sr_ticket_number#110, sr_item_sk#109]
 Join condition: None
 
 (100) Project [codegen id : 39]
-Output [7]: [d_year#107, i_brand_id#102, i_class_id#103, i_category_id#104, i_manufact_id#105, (ss_quantity#98 - coalesce(sr_return_quantity#111, 0)) AS sales_cnt#44, CheckOverflow((promote_precision(cast(ss_ext_sales_price#99 as decimal(8,2))) - promote_precision(cast(coalesce(sr_return_amt#112, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#45]
+Output [7]: [d_year#107, i_brand_id#102, i_class_id#103, i_category_id#104, i_manufact_id#105, (ss_quantity#98 - coalesce(sr_return_quantity#111, 0)) AS sales_cnt#44, CheckOverflow((promote_precision(cast(ss_ext_sales_price#99 as decimal(8,2))) - promote_precision(cast(coalesce(sr_return_amt#112, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#45]
 Input [13]: [ss_item_sk#96, ss_ticket_number#97, ss_quantity#98, ss_ext_sales_price#99, i_brand_id#102, i_class_id#103, i_category_id#104, i_manufact_id#105, d_year#107, sr_item_sk#109, sr_ticket_number#110, sr_return_quantity#111, sr_return_amt#112]
 
 (101) Scan parquet default.web_sales
@@ -625,7 +625,7 @@ Right keys [2]: [wr_order_number#127, wr_item_sk#126]
 Join condition: None
 
 (115) Project [codegen id : 46]
-Output [7]: [d_year#124, i_brand_id#119, i_class_id#120, i_category_id#121, i_manufact_id#122, (ws_quantity#115 - coalesce(wr_return_quantity#128, 0)) AS sales_cnt#65, CheckOverflow((promote_precision(cast(ws_ext_sales_price#116 as decimal(8,2))) - promote_precision(cast(coalesce(wr_return_amt#129, 0.00) as decimal(8,2)))), DecimalType(8,2), true) AS sales_amt#66]
+Output [7]: [d_year#124, i_brand_id#119, i_class_id#120, i_category_id#121, i_manufact_id#122, (ws_quantity#115 - coalesce(wr_return_quantity#128, 0)) AS sales_cnt#65, CheckOverflow((promote_precision(cast(ws_ext_sales_price#116 as decimal(8,2))) - promote_precision(cast(coalesce(wr_return_amt#129, 0.00) as decimal(8,2)))), DecimalType(8,2)) AS sales_amt#66]
 Input [13]: [ws_item_sk#113, ws_order_number#114, ws_quantity#115, ws_ext_sales_price#116, i_brand_id#119, i_class_id#120, i_category_id#121, i_manufact_id#122, d_year#124, wr_item_sk#126, wr_order_number#127, wr_return_quantity#128, wr_return_amt#129]
 
 (116) Union
@@ -677,10 +677,10 @@ Arguments: [i_brand_id#85 ASC NULLS FIRST, i_class_id#86 ASC NULLS FIRST, i_cate
 (125) SortMergeJoin [codegen id : 51]
 Left keys [4]: [i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12]
 Right keys [4]: [i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88]
-Join condition: (CheckOverflow((promote_precision(cast(sales_cnt#75 as decimal(17,2))) / promote_precision(cast(sales_cnt#134 as decimal(17,2)))), DecimalType(37,20), true) < 0.90000000000000000000)
+Join condition: (CheckOverflow((promote_precision(cast(sales_cnt#75 as decimal(17,2))) / promote_precision(cast(sales_cnt#134 as decimal(17,2)))), DecimalType(37,20)) < 0.90000000000000000000)
 
 (126) Project [codegen id : 51]
-Output [10]: [d_year#90 AS prev_year#137, d_year#15 AS year#138, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#134 AS prev_yr_cnt#139, sales_cnt#75 AS curr_yr_cnt#140, (sales_cnt#75 - sales_cnt#134) AS sales_cnt_diff#141, CheckOverflow((promote_precision(cast(sales_amt#76 as decimal(19,2))) - promote_precision(cast(sales_amt#135 as decimal(19,2)))), DecimalType(19,2), true) AS sales_amt_diff#142]
+Output [10]: [d_year#90 AS prev_year#137, d_year#15 AS year#138, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#134 AS prev_yr_cnt#139, sales_cnt#75 AS curr_yr_cnt#140, (sales_cnt#75 - sales_cnt#134) AS sales_cnt_diff#141, CheckOverflow((promote_precision(cast(sales_amt#76 as decimal(19,2))) - promote_precision(cast(sales_amt#135 as decimal(19,2)))), DecimalType(19,2)) AS sales_amt_diff#142]
 Input [14]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#75, sales_amt#76, d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#134, sales_amt#135]
 
 (127) TakeOrderedAndProject

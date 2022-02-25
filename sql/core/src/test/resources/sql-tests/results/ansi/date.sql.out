@@ -470,39 +470,33 @@ struct<date_sub(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
 -- !query
 select date_add('2011-11-11', int_str) from date_view
 -- !query schema
-struct<>
+struct<date_add(2011-11-11, int_str):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), date_view.int_str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'date_view.int_str' is of string type.; line 1 pos 7
+2011-11-12
 
 
 -- !query
 select date_sub('2011-11-11', int_str) from date_view
 -- !query schema
-struct<>
+struct<date_sub(2011-11-11, int_str):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), date_view.int_str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'date_view.int_str' is of string type.; line 1 pos 7
+2011-11-10
 
 
 -- !query
 select date_add(date_str, 1) from date_view
 -- !query schema
-struct<>
+struct<date_add(date_str, 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(date_view.date_str, 1)' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+2011-11-12
 
 
 -- !query
 select date_sub(date_str, 1) from date_view
 -- !query schema
-struct<>
+struct<date_sub(date_str, 1):date>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(date_view.date_str, 1)' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+2011-11-10
 
 
 -- !query
@@ -581,20 +575,17 @@ NULL
 -- !query
 select date_str - date '2001-09-28' from date_view
 -- !query schema
-struct<>
+struct<(date_str - DATE '2001-09-28'):interval day>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(date_view.date_str - DATE '2001-09-28')' due to data type mismatch: argument 1 requires date type, however, 'date_view.date_str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+3696 00:00:00.000000000
 
 
 -- !query
 select date '2001-09-28' - date_str from date_view
 -- !query schema
-struct<>
+struct<(DATE '2001-09-28' - date_str):interval day>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '(DATE '2001-09-28' - date_view.date_str)' due to data type mismatch: differing types in '(DATE '2001-09-28' - date_view.date_str)' (date and string).; line 1 pos 7
+-3696 00:00:00.000000000
 
 
 -- !query
