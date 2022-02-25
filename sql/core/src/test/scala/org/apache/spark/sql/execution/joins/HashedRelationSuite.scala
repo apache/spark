@@ -30,6 +30,7 @@ import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -610,14 +611,19 @@ class HashedRelationSuite extends SharedSparkSession {
     val keys = Seq(BoundReference(0, ByteType, false),
       BoundReference(1, IntegerType, false),
       BoundReference(2, ShortType, false))
-    val packed = HashJoin.rewriteKeyExpr(keys)
-    val unsafeProj = UnsafeProjection.create(packed)
-    val packedKeys = unsafeProj(row)
+    // Rewrite and exacting key expressions should not cause exception when ANSI mode is on.
+    Seq("false", "true").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val packed = HashJoin.rewriteKeyExpr(keys)
+        val unsafeProj = UnsafeProjection.create(packed)
+        val packedKeys = unsafeProj(row)
 
-    Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
-      val key = HashJoin.extractKeyExprAt(keys, i)
-      val proj = UnsafeProjection.create(key)
-      assert(proj(packedKeys).get(0, dt) == -i - 1)
+        Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
+          val key = HashJoin.extractKeyExprAt(keys, i)
+          val proj = UnsafeProjection.create(key)
+          assert(proj(packedKeys).get(0, dt) == -i - 1)
+        }
+      }
     }
   }
 
