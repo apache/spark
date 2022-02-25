@@ -55,6 +55,10 @@ case class RegrCount(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        2.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        3.0
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
@@ -83,6 +87,10 @@ case class RegrAvgX(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        1.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
        1.6666666666666667
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
