@@ -161,9 +161,6 @@
   "UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION" : {
     "message" : [ "Pivot does not support Pandas UDF aggregate expressions." ]
   },
-  "UNSUPPORTED_STREAMING_AGGREGATION" : {
-    "message" : [ "Streaming aggregation doesn't support group aggregate pandas UDF" ]
-  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"

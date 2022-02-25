@@ -1333,9 +1333,7 @@ object QueryCompilationErrors {
   }
 
   def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_STREAMING_AGGREGATION",
-      messageParameters = Array.empty)
+    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
   }
 
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {

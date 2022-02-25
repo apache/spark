@@ -165,28 +165,4 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.message ===
       "Pivot does not support Pandas UDF aggregate expressions.")
   }
-
-   test("UNSUPPORTED_STREAMING_AGGREGATION") {
-     import IntegratedUDFTestUtils._
-
-     val e = intercept[StreamingQueryException] {
-       val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
-       val lines = spark.readStream
-         .format("socket")
-         .option("host", "localhost")
-         .option("port", 9999)
-         .load()
-
-       val words = lines.as[String].flatMap(_.split(" "))
-       val wordCounts = words.groupBy("value").agg(pandasTestUDF(words("value")))
-
-       val query = wordCounts.writeStream
-         .outputMode("complete")
-         .format("console")
-         .start()
-
-       query.awaitTermination()
-     }
-     assert(e.message contains "Streaming aggregation doesn't support group aggregate pandas UDF")
-   }
 }
