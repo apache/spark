@@ -97,7 +97,15 @@ object JDBCRDD extends Logging {
    * Returns None for an unhandled filter.
    */
   def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+    def isEnclosedInBackticks(colName: String): Boolean =
+      colName.startsWith("`") && colName.endsWith("`")
+
+    def quote(colName: String): String =
+      if (!isEnclosedInBackticks(colName)) {
+        dialect.quoteIdentifier(colName)
+      } else {
+        dialect.quoteIdentifier(colName.substring(1, colName.length - 1))
+      }
 
     Option(f match {
       case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
