@@ -3090,6 +3090,7 @@ object SQLConf {
         "Catalyst's TimestampType and DateType in rows decoding when the property " +
         s"${DATETIME_JAVA8API_ENABLED.key} is true (otherwise it is ignored).")
       .version("3.3.0")
+      .internal()
       .booleanConf
       .createWithDefault(false)
 
