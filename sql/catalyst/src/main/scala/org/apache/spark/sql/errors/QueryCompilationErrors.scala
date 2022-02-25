@@ -1332,10 +1332,6 @@ object QueryCompilationErrors {
       s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
   }
 
-  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
-    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
-  }
-
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new AnalysisException(
       "Stream-stream join without equality predicate is not supported", plan = Some(plan))

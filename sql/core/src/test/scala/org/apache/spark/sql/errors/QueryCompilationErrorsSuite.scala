@@ -19,7 +19,6 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
- import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class StringLongClass(a: String, b: Long)
