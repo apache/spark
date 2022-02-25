@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions.
  * <p>
- * The currently supported SQL aggregate functions:
+ * The currently supported SQL scalar expressions:
  * <ol>
  *  <li><pre>Name: &lt;&gt;</pre><pre>SQL semantic: `expr1 &lt;&gt; expr2`</pre> ANSI enabled: No, Since version 3.3.0</li>
  * </ol>
