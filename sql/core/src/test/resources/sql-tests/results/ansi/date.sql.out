@@ -671,7 +671,7 @@ struct<timestampadd(MICROSECOND, 1001, TIMESTAMP '2022-02-25 01:02:03.123'):time
 
 
 -- !query
-select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456')
 -- !query schema
 struct<timestampadd(MILLISECOND, -1, TIMESTAMP '2022-02-25 01:02:03.456'):timestamp>
 -- !query output
@@ -687,7 +687,7 @@ struct<timestampadd(SECOND, 58, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(MINUTE, -100, date'2022-02-25')
+select date_add(MINUTE, -100, date'2022-02-25')
 -- !query schema
 struct<timestampadd(MINUTE, -100, DATE '2022-02-25'):timestamp>
 -- !query output
@@ -703,7 +703,7 @@ struct<timestampadd(HOUR, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(DAY, 367, date'2022-02-25')
+select date_add(DAY, 367, date'2022-02-25')
 -- !query schema
 struct<timestampadd(DAY, 367, DATE '2022-02-25'):timestamp>
 -- !query output
@@ -719,7 +719,7 @@ struct<timestampadd(WEEK, -4, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 
 
 -- !query
-select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03')
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03')
 -- !query schema
 struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-25 01:02:03'):timestamp>
 -- !query output
@@ -735,7 +735,7 @@ struct<timestampadd(QUARTER, 5, DATE '2022-02-25'):timestamp>
 
 
 -- !query
-select dateadd(YEAR, 1, date'2022-02-25')
+select date_add(YEAR, 1, date'2022-02-25')
 -- !query schema
 struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
 -- !query output
