@@ -1028,7 +1028,8 @@ class DataFrameAggregateSuite extends QueryTest
       val error = intercept[AnalysisException] {
         sql("SELECT COUNT_IF(x) FROM tempView")
       }
-      assert(error.message.contains("function count_if requires boolean type"))
+      assert(error.message.contains("cannot resolve 'count_if(tempview.x)' due to data type " +
+        "mismatch: argument 1 requires boolean type, however, 'tempview.x' is of string type"))
     }
   }
 
