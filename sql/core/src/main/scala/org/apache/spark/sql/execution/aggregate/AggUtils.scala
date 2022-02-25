@@ -299,6 +299,42 @@ object AggUtils {
         child = child)
     }
 
+    // We have to make sure the physical plans for streaming aggregation should be placed to
+    // the same stage except partial aggregation. It may not work because the new stage after
+    // partial aggregation starts with another aggregation instead of state store restore exec.
+
+    // We can make a change for aggregate exec to receive the exact required child distribution,
+    // to make sure all physical plans for streaming aggregation are all requiring the same, but
+    // we don't have an exact information for required number of partitions as of now, so we
+    // should defer the required child distribution till state rule has been applied, and then
+    // it is going to be non-trivial to replace required child distribution from aggregate exec.
+
+    // Instead, we can introduce a specially crafted physical node at the first of the stage,
+    // which effectively pass-through the inputs, but able to change the required child
+    // distribution in the state rule. In state rule, we change the required child distribution
+    // with same one we use for state store restore exec. After the change, based on the relaxed
+    // requirement of clustered distribution, further aggregate execs will follow the output
+    // partitioning of the first node.
+
+    // Note that, requiring the exact number of partitions from the first node, is backward
+    // compatible. There are two major cases we need to consider:
+    // 1. child had partitioned with sub-group or group with different order, and had same number
+    //    of partitions with default number of shuffle partitions.
+    // 2. child had partitioned with sub-group or group with different order, and had different
+    //    number of partitions compared to the default number of shuffle partitions.
+    // In former, StateStoreRestoreExec and StateStoreSaveExec would have required the exact number
+    // of partitions, which the child output partitioning would not satisfy, hence shuffle will
+    // happen once before the operator. The steps would be different with the steps described in
+    // the method doc. Placing a new node moves the shuffle to the prior of new node, which
+    // makes the steps be effectively same as described in the method doc, and it does not lead
+    // the wrong behavior/output.
+    // In latter, the first aggregate exec after partial aggregate would have triggered the
+    // shuffle before, and now, new node will do it instead. The output partitioning will satisfy
+    // remaining nodes for aggregation.
+
+    val statePartitioningExec: SparkPlan = StatefulOperatorPartitioningExec(
+      clustering = groupingAttributes, child = partialAggregate)
+
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -311,7 +347,7 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialAggregate)
+        child = statePartitioningExec)
     }
 
     val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
@@ -424,7 +460,6 @@ object AggUtils {
       // this is to reduce amount of rows to shuffle
       MergingSessionsExec(
         requiredChildDistributionExpressions = None,
-        requiredChildDistributionOption = None,
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -438,6 +473,14 @@ object AggUtils {
       partialAggregate
     }
 
+    // Unlike streaming aggregation, this starts with stateful operator at the new stage, hence
+    // we can rely on the most strict required child distribution in the first node, and let
+    // following nodes having on par or relaxed required child distribution to follow the
+    // output partitioning.
+
+    // This is backward compatible as long as we require the same child distribution in the
+    // stateful operator.
+
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None,
@@ -447,8 +490,7 @@ object AggUtils {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       MergingSessionsExec(
-        requiredChildDistributionExpressions = None,
-        requiredChildDistributionOption = Some(restored.requiredChildDistribution),
+        requiredChildDistributionExpressions = Some(groupingWithoutSessionAttributes),
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -519,7 +561,6 @@ object AggUtils {
 
         MergingSessionsExec(
           requiredChildDistributionExpressions = Some(groupingWithoutSessionsAttributes),
-          requiredChildDistributionOption = None,
           groupingExpressions = groupingAttributes,
           sessionExpression = sessionExpression,
           aggregateExpressions = aggExpressions,

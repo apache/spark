@@ -132,6 +132,9 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
+      case StatefulOperatorPartitioningExec(clustering, _, child) =>
+        StatefulOperatorPartitioningExec(clustering, Some(numStateStores), child)
+
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,
                StateStoreRestoreExec(_, None, _, child))) =>

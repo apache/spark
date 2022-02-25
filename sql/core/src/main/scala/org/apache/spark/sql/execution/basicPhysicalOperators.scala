@@ -40,10 +40,17 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
+  extends BaseProjectExec(projectList, child) {
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ProjectExec =
+    copy(child = newChild)
+}
+
+abstract class BaseProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
-    with CodegenSupport
-    with AliasAwareOutputPartitioning
-    with AliasAwareOutputOrdering {
+  with CodegenSupport
+  with AliasAwareOutputPartitioning
+  with AliasAwareOutputOrdering {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -109,9 +116,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |""".stripMargin
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): ProjectExec =
-    copy(child = newChild)
 }
 
 trait GeneratePredicateHelper extends PredicateHelper {
