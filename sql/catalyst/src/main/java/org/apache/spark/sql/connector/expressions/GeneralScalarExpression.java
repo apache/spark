@@ -36,28 +36,153 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *   <th>Since version</th>
  *  </tr>
  *  <tr>
- *   <td>&nbsp;IS_NULL&nbsp;</td>
- *   <td>&nbsp;expr IS NULL&nbsp;</td>
+ *   <td>IS_NULL</td>
+ *   <td>expr IS NULL</td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>&nbsp;IS_NOT_NULL&nbsp;</td>
- *   <td>&nbsp;expr IS NOT NULL&nbsp;</td>
+ *   <td>IS_NOT_NULL</td>
+ *   <td>expr IS NOT NULL</td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  <tr>
- *   <td>&nbsp;=&nbsp;</td>
- *   <td>&nbsp;expr1 = expr2&nbsp;</td>
+ *   <td>=</td>
+ *   <td>expr1 = expr2</td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  </tr>
  *  <tr>
- *   <td>&nbsp;!=&nbsp;</td>
- *   <td>&nbsp;expr1 != expr2&nbsp;</td>
+ *   <td>!=</td>
+ *   <td>expr1 != expr2</td>
  *   <td>No</td>
  *   <td>3.3.0</td>
  *  </tr>
+ *  <tr>
+ *   <td>&lt;&gt;</td>
+ *   <td><pre>expr1 &lt;&gt; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&lt;=&gt;</td>
+ *   <td><pre>expr1 &lt;=&gt; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&lt;</td>
+ *   <td><pre>expr1 &lt; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&lt;=</td>
+ *   <td><pre>expr1 &lt;= expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&gt;</td>
+ *   <td><pre>expr1 &gt; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&gt;=</td>
+ *   <td><pre>expr1 &gt;= expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>+</td>
+ *   <td><pre>expr1 + expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>-</td>
+ *   <td><pre>expr1 - expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>*</td>
+ *   <td><pre>expr1 * expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>/</td>
+ *   <td><pre>expr1 / expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>%</td>
+ *   <td><pre>expr1 % expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>pmod</td>
+ *   <td><pre>expr1 pmod expr2</pre></td>
+ *   <td>Yes</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&amp;&amp;</td>
+ *   <td><pre>expr1 &amp;&amp; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>||</td>
+ *   <td><pre>expr1 || expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>AND</td>
+ *   <td><pre>expr1 AND expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>OR</td>
+ *   <td><pre>expr1 OR expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>&amp;</td>
+ *   <td><pre>expr1 &amp; expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>|</td>
+ *   <td><pre>expr1 | expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>^</td>
+ *   <td><pre>expr1 ^ expr2</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>NOT</td>
+ *   <td><pre>NOT expr</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
+ *  </tr>
+ *  <tr>
+ *   <td>CASE_WHEN</td>
+ *   <td><pre>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</pre></td>
+ *   <td>No</td>
+ *   <td>3.3.0</td>
  *  </tr>
  * </table>
  *
